@@ -17,16 +17,22 @@ export default function SignupPage() {
   const [success, setSuccess] = useState(false);
 
   const redirectBase = useMemo(() => {
-    if (typeof window !== "undefined") {
-      return process.env.NEXT_PUBLIC_SITE_URL || window.location.origin;
-    }
-    return process.env.NEXT_PUBLIC_SITE_URL || "";
+    const base = process.env.NEXT_PUBLIC_SITE_URL;
+    return base && base.startsWith("http") ? base : "";
   }, []);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
+
+    if (!redirectBase) {
+      setError(
+        "Missing NEXT_PUBLIC_SITE_URL. Set it to https://app.getflowetic.com in Vercel Environment Variables."
+      );
+      setLoading(false);
+      return;
+    }
 
     const { data, error } = await supabase.auth.signUp({
       email,
@@ -38,11 +44,7 @@ export default function SignupPage() {
     });
 
     if (error) {
-      const msg = error.message || "Sign up failed";
-      const friendly = msg.match(/redirect/i)
-        ? "Supabase rejected the redirect URL. Confirm Supabase Auth Site URL is https://app.getflowetic.com and that https://app.getflowetic.com/auth/callback is in Additional Redirect URLs."
-        : msg;
-      setError(friendly);
+      setError(error.message || "Sign up failed");
       setLoading(false);
       return;
     }
@@ -65,9 +67,7 @@ export default function SignupPage() {
           <p className="mt-2 text-sm text-gray-600">
             We sent a confirmation link to <span className="font-medium">{email}</span>.
           </p>
-          <p className="mt-4 text-sm text-gray-500">
-            Open the link to finish signing in.
-          </p>
+          <p className="mt-4 text-sm text-gray-500">Open the link to finish signing in.</p>
           <div className="mt-6">
             <Link className="text-sm font-medium text-blue-600 hover:text-blue-700" href="/login">
               Back to sign in
