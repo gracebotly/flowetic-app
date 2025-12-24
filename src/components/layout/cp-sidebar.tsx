@@ -3,14 +3,17 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { cn } from "@/lib/utils"
+import { useLocalStorageBoolean } from "@/lib/use-local-storage"
 import {
   Users,
   LayoutDashboard,
   Zap,
   ClipboardList,
   Settings as SettingsIcon,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react"
-import { cn } from "@/lib/utils"
 
 type NavItem = { href: string; label: string; icon: React.ComponentType<{ size?: number; className?: string }> }
 
@@ -24,15 +27,60 @@ const NAV: NavItem[] = [
 
 export function ControlPanelSidebar() {
   const pathname = usePathname()
+  const [collapsed, setCollapsed] = useLocalStorageBoolean("cp_collapsed", true)
+  const width = collapsed ? 88 : 240
+
+  const NavItem = ({ href, label, Icon, active }: { href: string; label: string; Icon: any; active: boolean }) => {
+    const content = (
+      <Link
+        href={href}
+        aria-label={label}
+        className={cn(
+          "mx-2 my-1 flex flex-col items-center gap-1 rounded-lg px-2 py-3 outline-none",
+          "focus-visible:ring-2 focus-visible:ring-white/40",
+          active ? "bg-blue-500 text-white" : "text-gray-400 hover:bg-white/5"
+        )}
+      >
+        <Icon size={24} className={cn(active ? "text-white" : "text-gray-300")} />
+        {!collapsed && <span className="text-[12px] font-medium leading-4 text-center">{label}</span>}
+      </Link>
+    )
+    // Tooltips only when collapsed (icons only)
+    return collapsed ? (
+      <Tooltip>
+        <TooltipTrigger asChild>{content}</TooltipTrigger>
+        <TooltipContent side="right">{label}</TooltipContent>
+      </Tooltip>
+    ) : (
+      content
+    )
+  }
+
   return (
     <TooltipProvider>
       <aside
-        className="flex h-screen w-22 flex-col justify-between"
-        style={{ width: 88, backgroundColor: "hsl(var(--sidebar-bg))" }}
+        className="flex h-screen flex-col justify-between"
+        style={{ width, backgroundColor: "hsl(var(--sidebar-bg))" }}
+        aria-label="Control Panel Sidebar"
       >
-        {/* Logo */}
+        {/* Header with logo + toggle */}
         <div className="border-b border-white/10 p-4">
-          <div className="mx-auto h-10 w-10 rounded-lg bg-blue-500 text-center text-white font-bold leading-10">GF</div>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-blue-500 text-center text-white font-bold leading-10">GF</div>
+              {!collapsed && <div className="text-white/90 font-semibold">Getflowetic</div>}
+            </div>
+            <button
+              onClick={() => setCollapsed(!collapsed)}
+              className={cn(
+                "ml-2 h-8 w-8 rounded-md border border-white/15 bg-white/5 text-white hover:bg-white/10 flex items-center justify-center"
+              )}
+              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              title={collapsed ? "Expand" : "Collapse"}
+            >
+              {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+            </button>
+          </div>
         </div>
 
         {/* Nav */}
@@ -40,32 +88,14 @@ export function ControlPanelSidebar() {
           {NAV.map((item) => {
             const Icon = item.icon
             const active = pathname.startsWith(item.href)
-            return (
-              <Tooltip key={item.href}>
-                <TooltipTrigger asChild>
-                  <Link
-                    href={item.href}
-                    aria-label={item.label}
-                    className={cn(
-                      "mx-2 my-1 flex flex-col items-center gap-1 rounded-lg px-2 py-3 outline-none",
-                      "focus-visible:ring-2 focus-visible:ring-white/40",
-                      active ? "bg-blue-500 text-white" : "text-gray-400 hover:bg-white/5"
-                    )}
-                  >
-                    <Icon size={24} className={cn(active ? "text-white" : "text-gray-300")} />
-                    <span className="text-[12px] font-medium leading-4">{item.label}</span>
-                  </Link>
-                </TooltipTrigger>
-                <TooltipContent side="right">{item.label}</TooltipContent>
-              </Tooltip>
-            )
+            return <NavItem key={item.href} href={item.href} label={item.label} Icon={Icon} active={active} />
           })}
         </nav>
 
         {/* Profile */}
         <div className="border-t border-white/10 p-3 text-center">
           <div className="mx-auto h-8 w-8 rounded-full bg-gray-600 text-white text-[12px] font-bold leading-8">AG</div>
-          <div className="mt-1 text-[10px] text-gray-400">Agency</div>
+          {!collapsed && <div className="mt-1 text-[10px] text-gray-400">Agency</div>}
         </div>
       </aside>
     </TooltipProvider>
