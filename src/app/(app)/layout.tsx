@@ -38,36 +38,11 @@ export default async function AppLayout({
                 </Link>
               </div>
                
-              {/* Navigation Links */}
-              <div className="hidden sm:ml-8 sm:flex sm:space-x-8">
-                <Link
-                  href="/dashboard"
-                  className="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-900 border-b-2 border-transparent hover:border-gray-300"
-                >
-                  🏠 Dashboard
-                </Link>
-                <Link
-                  href="/interfaces"
-                  className="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-500 border-b-2 border-transparent hover:border-gray-300 hover:text-gray-700"
-                >
-                  📊 Interfaces
-                </Link>
-                <Link
-                  href="/sources"
-                  className="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-500 border-b-2 border-transparent hover:border-gray-300 hover:text-gray-700"
-                >
-                  🔌 Sources
-                </Link>
-                <Link
-                  href="/settings"
-                  className="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-500 border-b-2 border-transparent hover:border-gray-300 hover:text-gray-700"
-                >
-                  ⚙️ Settings
-                </Link>
-                {/* New: Control Panel entry to the new shell */}
+              {/* Single entry to the new Control Panel shell */}
+              <div className="hidden sm:ml-8 sm:flex sm:space-x-3">
                 <Link
                   href="/control-panel/connections"
-                  className="inline-flex items-center px-2 py-1 ml-4 rounded-md bg-blue-50 text-blue-700 text-sm font-medium hover:bg-blue-100"
+                  className="inline-flex items-center px-3 py-1.5 rounded-md bg-blue-50 text-blue-700 text-sm font-medium hover:bg-blue-100"
                 >
                   Control Panel
                 </Link>
