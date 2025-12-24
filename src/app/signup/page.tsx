@@ -1,12 +1,10 @@
 "use client";
 
-import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
 export default function SignupPage() {
-  const supabase = createClient();
   const router = useRouter();
 
   const [name, setName] = useState("");
@@ -27,36 +25,37 @@ export default function SignupPage() {
     setError(null);
 
     if (!redirectBase) {
-      setError(
-        "Missing NEXT_PUBLIC_SITE_URL. Set it to https://app.getflowetic.com in Vercel Environment Variables."
-      );
+      setError("Missing NEXT_PUBLIC_SITE_URL. Set it to https://app.getflowetic.com in Vercel → Environment Variables.");
       setLoading(false);
       return;
     }
 
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { name },
-        emailRedirectTo: `${redirectBase}/auth/callback`,
-      },
-    });
+    try {
+      const res = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, password }),
+      });
+      const body = await res.json();
 
-    if (error) {
-      setError(error.message || "Sign up failed");
+      if (!res.ok || !body.ok) {
+        setError((body?.message || "Sign up failed") + (body?.hint ? ` — ${body.hint}` : ""));
+        setLoading(false);
+        return;
+      }
+
+      if (body?.hasSession) {
+        router.push("/dashboard");
+        router.refresh();
+        return;
+      }
+
+      setSuccess(true);
       setLoading(false);
-      return;
+    } catch {
+      setError("Network error during signup.");
+      setLoading(false);
     }
-
-    if (data?.session) {
-      router.push("/dashboard");
-      router.refresh();
-      return;
-    }
-
-    setSuccess(true);
-    setLoading(false);
   };
 
   if (success) {
