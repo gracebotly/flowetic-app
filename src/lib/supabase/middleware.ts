@@ -7,9 +7,20 @@ const PUBLIC_PATHS = [
   "/signup",
   "/auth/callback",
   "/auth/auth-code-error",
+  // Explicitly allow the auth API we need during signup
+  "/api/auth/signup",
 ];
 
 export async function updateSession(request: NextRequest) {
+  // Allow preflight and API routes to pass through
+  if (request.method === "OPTIONS") {
+    return NextResponse.next({ request });
+  }
+  const pathname = request.nextUrl.pathname;
+  if (pathname.startsWith("/api/")) {
+    return NextResponse.next({ request });
+  }
+
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -35,7 +46,6 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const pathname = request.nextUrl.pathname;
   const isPublic = PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"));
 
   if (!user && !isPublic) {
