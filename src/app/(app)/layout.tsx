@@ -1,58 +1,68 @@
-import { createClient } from "@/lib/supabase/server";
-import { redirect } from "next/navigation";
-import Link from "next/link";
-import { LogoutButton } from "@/components/logout-button";
-
-export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) redirect("/login");
-
+import { createClient } from "@/lib/supabase/server"
+import { redirect } from "next/navigation"
+import Link from "next/link"
+import { LogoutButton } from "@/components/logout-button"
+ 
+export default async function AppLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+ 
+  if (!user) {
+    redirect('/login')
+  }
+ 
+  // Get user's tenant
   const { data: membership } = await supabase
-    .from("memberships")
-    .select("tenant_id, role, tenants(name)")
-    .eq("user_id", user.id)
-    .limit(1)
-    .single();
-
-  const tenantName = (membership?.tenants as any)?.name ?? "Workspace";
-
+    .from('memberships')
+    .select('tenant_id, tenants(name)')
+    .eq('user_id', user.id)
+    .single()
+ 
+  const tenantName = (membership?.tenants as any)?.name || 'My Workspace'
+ 
   return (
     <div className="min-h-screen bg-gray-50">
-      <nav className="border-b bg-white">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-8">
-            <Link href="/dashboard" className="text-lg font-bold text-blue-600">
-              Getflowetic
-            </Link>
-            <div className="hidden sm:flex items-center gap-6 text-sm">
-              <Link href="/dashboard" className="text-gray-700 hover:text-gray-900">
-                Dashboard
-              </Link>
-              <Link href="/sources" className="text-gray-700 hover:text-gray-900">
-                Sources
-              </Link>
-              <Link href="/interfaces" className="text-gray-700 hover:text-gray-900">
-                Interfaces
-              </Link>
-              <Link href="/settings" className="text-gray-700 hover:text-gray-900">
-                Settings
-              </Link>
+      {/* Top Navigation */}
+      <nav className="bg-white border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between h-16">
+            <div className="flex">
+              {/* Logo */}
+              <div className="flex-shrink-0 flex items-center">
+                <Link href="/dashboard" className="text-xl font-bold text-blue-600">
+                  Getflowetic
+                </Link>
+              </div>
+               
+              {/* Single entry to the new Control Panel shell */}
+              <div className="hidden sm:ml-8 sm:flex sm:space-x-3">
+                <Link
+                  href="/control-panel/connections"
+                  className="inline-flex items-center px-3 py-1.5 rounded-md bg-blue-50 text-blue-700 text-sm font-medium hover:bg-blue-100"
+                >
+                  Control Panel
+                </Link>
+              </div>
             </div>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <span className="hidden sm:inline text-sm text-gray-500">{tenantName}</span>
-            <span className="hidden sm:inline text-sm text-gray-700">{user.email}</span>
-            <LogoutButton />
+             
+            {/* Right side */}
+            <div className="flex items-center space-x-4">
+              <span className="text-sm text-gray-500">{tenantName}</span>
+              <span className="text-sm text-gray-700">{user.email}</span>
+              <LogoutButton />
+            </div>
           </div>
         </div>
       </nav>
-
-      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">{children}</main>
+ 
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+        {children}
+      </main>
     </div>
-  );
+  )
 }
