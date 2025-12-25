@@ -45,7 +45,8 @@ export function ControlPanelSidebar({ userEmail, plan }: { userEmail: string; pl
           active ? "bg-blue-500 text-white" : "text-gray-400 hover:bg-white/5"
         )}
       >
-        <Icon size={22} className={cn(active ? "text-white" : "text-gray-300")} />
+        {/* Nav icons: standardize to 20px so they visually match the logo tile below */}
+        <Icon size={20} className={cn(active ? "text-white" : "text-gray-300")} />
         {!collapsed && <span className="text-[11px] font-medium leading-4 text-center">{label}</span>}
       </Link>
     )
@@ -67,10 +68,13 @@ export function ControlPanelSidebar({ userEmail, plan }: { userEmail: string; pl
         style={{ width, backgroundColor: "hsl(var(--sidebar-bg))" }}
         aria-label="Control Panel Sidebar"
       >
-        {/* Header: icon only (no brand text) + toggle */}
+        {/* Header: icon tile only (no brand text) + toggle, sized to match nav button visuals */}
         <div className="border-b border-white/10 p-2">
           <div className="flex items-center justify-between">
-            <div className="h-9 w-9 rounded-lg bg-blue-500 text-center text-white font-bold leading-9">GF</div>
+            {/* Logo tile matches nav icon visual area */}
+            <div className="mx-1 my-1 flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500 text-center text-white font-bold">
+              <span className="text-[11px] leading-none">GF</span>
+            </div>
             <button
               onClick={() => setCollapsed(!collapsed)}
               className="ml-1 flex h-7 w-7 items-center justify-center rounded-md border border-white/15 bg-white/5 text-white hover:bg-white/10"
