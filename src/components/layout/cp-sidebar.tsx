@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils"
 import { useLocalStorageBoolean } from "@/lib/use-local-storage"
 import { AccountCardPanel } from "./account-popover"
 import {
+  MessageSquare,
   Users,
   LayoutDashboard,
   Zap,
@@ -20,6 +21,7 @@ import * as Popover from "@radix-ui/react-popover"
 type NavItem = { href: string; label: string; icon: React.ComponentType<{ size?: number; className?: string }> }
 
 const NAV: NavItem[] = [
+  { href: "/control-panel/chat", label: "Chat", icon: MessageSquare },
   { href: "/control-panel/clients", label: "Clients", icon: Users },
   { href: "/control-panel/dashboards", label: "Dashboards", icon: LayoutDashboard },
   { href: "/control-panel/connections", label: "Connections", icon: Zap },
