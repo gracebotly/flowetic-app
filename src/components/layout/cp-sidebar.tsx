@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import { useLocalStorageBoolean } from "@/lib/use-local-storage"
+import { AccountPopoverCard } from "./account-popover"
 import {
   Users,
   LayoutDashboard,
@@ -14,6 +15,8 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react"
+import * as Popover from "@radix-ui/react-popover"
+import { useRef } from "react"
 
 type NavItem = { href: string; label: string; icon: React.ComponentType<{ size?: number; className?: string }> }
 
@@ -25,7 +28,7 @@ const NAV: NavItem[] = [
   { href: "/control-panel/settings", label: "Settings", icon: SettingsIcon },
 ]
 
-export function ControlPanelSidebar() {
+export function ControlPanelSidebar({ userEmail, plan }: { userEmail: string; plan: string }) {
   const pathname = usePathname()
   const [collapsed, setCollapsed] = useLocalStorageBoolean("cp_collapsed", true)
   const width = collapsed ? 88 : 240
@@ -45,7 +48,6 @@ export function ControlPanelSidebar() {
         {!collapsed && <span className="text-[12px] font-medium leading-4 text-center">{label}</span>}
       </Link>
     )
-    // Tooltips only when collapsed (icons only)
     return collapsed ? (
       <Tooltip>
         <TooltipTrigger asChild>{content}</TooltipTrigger>
@@ -63,7 +65,7 @@ export function ControlPanelSidebar() {
         style={{ width, backgroundColor: "hsl(var(--sidebar-bg))" }}
         aria-label="Control Panel Sidebar"
       >
-        {/* Header with logo + toggle */}
+        {/* Header */}
         <div className="border-b border-white/10 p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -72,9 +74,7 @@ export function ControlPanelSidebar() {
             </div>
             <button
               onClick={() => setCollapsed(!collapsed)}
-              className={cn(
-                "ml-2 h-8 w-8 rounded-md border border-white/15 bg-white/5 text-white hover:bg-white/10 flex items-center justify-center"
-              )}
+              className="ml-2 flex h-8 w-8 items-center justify-center rounded-md border border-white/15 bg-white/5 text-white hover:bg-white/10"
               aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
               title={collapsed ? "Expand" : "Collapse"}
             >
@@ -92,10 +92,21 @@ export function ControlPanelSidebar() {
           })}
         </nav>
 
-        {/* Profile */}
-        <div className="border-t border-white/10 p-3 text-center">
-          <div className="mx-auto h-8 w-8 rounded-full bg-gray-600 text-white text-[12px] font-bold leading-8">AG</div>
-          {!collapsed && <div className="mt-1 text-[10px] text-gray-400">Agency</div>}
+        {/* Profile trigger + popover */}
+        <div className="border-t border-white/10 p-3">
+          <Popover.Root>
+            <Popover.Trigger asChild>
+              <button className="w-full rounded-md text-center outline-none focus-visible:ring-2 focus-visible:ring-white/40">
+                <div className="mx-auto h-8 w-8 rounded-full bg-gray-600 text-white text-[12px] font-bold leading-8">AG</div>
+                {!collapsed && <div className="mt-1 text-[10px] text-gray-400">Agency</div>}
+              </button>
+            </Popover.Trigger>
+            <Popover.Portal>
+              <Popover.Content side="right" align="end" sideOffset={12} className="z-50 outline-none">
+                <AccountPopoverCard email={userEmail} plan={plan} />
+              </Popover.Content>
+            </Popover.Portal>
+          </Popover.Root>
         </div>
       </aside>
     </TooltipProvider>
