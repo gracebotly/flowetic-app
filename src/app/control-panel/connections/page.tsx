@@ -12,7 +12,7 @@ export default function ConnectionsPage() {
   const platforms = useMemo(
     () => [
       {
-        key: "vapi",
+        id: "vapi",
         title: "Vapi" as const,
         subtitle: "Voice agent platform",
         state: "connected" as const,
@@ -22,7 +22,7 @@ export default function ConnectionsPage() {
         todayCount: 1247,
       },
       {
-        key: "retell",
+        id: "retell",
         title: "Retell" as const,
         subtitle: "Voice agent platform",
         state: "error" as const,
@@ -30,7 +30,7 @@ export default function ConnectionsPage() {
         colors: { bg: "#fee2e2", fg: "#dc2626" },
       },
       {
-        key: "n8n",
+        id: "n8n",
         title: "n8n" as const,
         subtitle: "Workflow automation",
         state: "not_connected" as const,
@@ -39,7 +39,7 @@ export default function ConnectionsPage() {
         description: "Connect to start receiving workflow events and automation data.",
       },
       {
-        key: "mastra",
+        id: "mastra",
         title: "Mastra" as const,
         subtitle: "AI orchestration framework",
         state: "not_connected" as const,
@@ -47,7 +47,7 @@ export default function ConnectionsPage() {
         colors: { bg: "#ede9fe", fg: "#7c3aed" },
       },
       {
-        key: "crewai",
+        id: "crewai",
         title: "CrewAI" as const,
         subtitle: "Multi-agent runtime",
         state: "not_connected" as const,
@@ -55,7 +55,7 @@ export default function ConnectionsPage() {
         colors: { bg: "#e0e7ff", fg: "#4f46e5" },
       },
       {
-        key: "pydantic",
+        id: "pydantic",
         title: "Pydantic AI" as const,
         subtitle: "Typed AI workflow framework",
         state: "not_connected" as const,
@@ -110,9 +110,10 @@ export default function ConnectionsPage() {
       {/* Grid */}
       <section className="px-8 py-8">
         <div className="grid gap-6" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))" }}>
-          {filtered.map((p) => (
-            <PlatformCard key={p.key} {...p} />
-          ))}
+          {filtered.map((p) => {
+            const { id, ...cardProps } = p
+            return <PlatformCard key={id} {...cardProps} />
+          })}
         </div>
       </section>
     </div>
