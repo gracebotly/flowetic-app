@@ -5,8 +5,9 @@ import { usePathname } from "next/navigation"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import { useLocalStorageBoolean } from "@/lib/use-local-storage"
-import { AccountPopoverCard } from "./account-popover"
+import { AccountCardPanel } from "./account-popover"
 import {
+  MessageSquare,
   Users,
   LayoutDashboard,
   Zap,
@@ -16,11 +17,11 @@ import {
   ChevronRight,
 } from "lucide-react"
 import * as Popover from "@radix-ui/react-popover"
-import { useRef } from "react"
 
 type NavItem = { href: string; label: string; icon: React.ComponentType<{ size?: number; className?: string }> }
 
 const NAV: NavItem[] = [
+  { href: "/control-panel/chat", label: "Chat", icon: MessageSquare },
   { href: "/control-panel/clients", label: "Clients", icon: Users },
   { href: "/control-panel/dashboards", label: "Dashboards", icon: LayoutDashboard },
   { href: "/control-panel/connections", label: "Connections", icon: Zap },
@@ -30,31 +31,34 @@ const NAV: NavItem[] = [
 
 export function ControlPanelSidebar({ userEmail, plan }: { userEmail: string; plan: string }) {
   const pathname = usePathname()
+  // collapsed = true -> 64px icons-only; false -> 120px icons + tiny labels
   const [collapsed, setCollapsed] = useLocalStorageBoolean("cp_collapsed", true)
-  const width = collapsed ? 88 : 240
 
-  const NavItem = ({ href, label, Icon, active }: { href: string; label: string; Icon: any; active: boolean }) => {
-    const content = (
+  const width = collapsed ? 64 : 120
+
+  const NavEntry = ({ href, label, Icon, active }: { href: string; label: string; Icon: any; active: boolean }) => {
+    const base = (
       <Link
         href={href}
         aria-label={label}
         className={cn(
-          "mx-2 my-1 flex flex-col items-center gap-1 rounded-lg px-2 py-3 outline-none",
+          "mx-1 my-1 flex flex-col items-center gap-1 rounded-lg px-1.5 py-2 outline-none",
           "focus-visible:ring-2 focus-visible:ring-white/40",
           active ? "bg-blue-500 text-white" : "text-gray-400 hover:bg-white/5"
         )}
       >
-        <Icon size={24} className={cn(active ? "text-white" : "text-gray-300")} />
-        {!collapsed && <span className="text-[12px] font-medium leading-4 text-center">{label}</span>}
+        <Icon size={22} className={cn(active ? "text-white" : "text-gray-300")} />
+        {!collapsed && <span className="text-[11px] font-medium leading-4 text-center">{label}</span>}
       </Link>
     )
+    // Tooltips only when collapsed
     return collapsed ? (
       <Tooltip>
-        <TooltipTrigger asChild>{content}</TooltipTrigger>
+        <TooltipTrigger asChild>{base}</TooltipTrigger>
         <TooltipContent side="right">{label}</TooltipContent>
       </Tooltip>
     ) : (
-      content
+      base
     )
   }
 
@@ -65,45 +69,44 @@ export function ControlPanelSidebar({ userEmail, plan }: { userEmail: string; pl
         style={{ width, backgroundColor: "hsl(var(--sidebar-bg))" }}
         aria-label="Control Panel Sidebar"
       >
-        {/* Header */}
-        <div className="border-b border-white/10 p-4">
+        {/* Header: icon only (no brand text) + toggle */}
+        <div className="border-b border-white/10 p-2">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-blue-500 text-center text-white font-bold leading-10">GF</div>
-              {!collapsed && <div className="text-white/90 font-semibold">Getflowetic</div>}
-            </div>
+            <div className="h-9 w-9 rounded-lg bg-blue-500 text-center text-white font-bold leading-9">GF</div>
             <button
               onClick={() => setCollapsed(!collapsed)}
-              className="ml-2 flex h-8 w-8 items-center justify-center rounded-md border border-white/15 bg-white/5 text-white hover:bg-white/10"
+              className="ml-1 flex h-7 w-7 items-center justify-center rounded-md border border-white/15 bg-white/5 text-white hover:bg-white/10"
               aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
               title={collapsed ? "Expand" : "Collapse"}
             >
-              {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+              {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
             </button>
           </div>
         </div>
 
         {/* Nav */}
-        <nav className="flex flex-1 flex-col items-stretch py-2">
+        <nav className="flex flex-1 flex-col items-stretch py-1">
           {NAV.map((item) => {
             const Icon = item.icon
             const active = pathname.startsWith(item.href)
-            return <NavItem key={item.href} href={item.href} label={item.label} Icon={Icon} active={active} />
+            return <NavEntry key={item.href} href={item.href} label={item.label} Icon={Icon} active={active} />
           })}
         </nav>
 
-        {/* Profile trigger + popover */}
-        <div className="border-t border-white/10 p-3">
+        {/* Bottom avatar trigger and working popover */}
+        <div className="border-t border-white/10 p-2">
           <Popover.Root>
-            <Popover.Trigger asChild>
-              <button className="w-full rounded-md text-center outline-none focus-visible:ring-2 focus-visible:ring-white/40">
-                <div className="mx-auto h-8 w-8 rounded-full bg-gray-600 text-white text-[12px] font-bold leading-8">AG</div>
-                {!collapsed && <div className="mt-1 text-[10px] text-gray-400">Agency</div>}
-              </button>
+            {/* Use Popover.Trigger directly (not asChild) to avoid event swallowing */}
+            <Popover.Trigger
+              className="w-full rounded-md text-center outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+              aria-label="Open account menu"
+            >
+              <div className="mx-auto h-8 w-8 rounded-full bg-gray-600 text-white text-[12px] font-bold leading-8">AG</div>
+              {!collapsed && <div className="mt-1 text-[10px] text-gray-400">Agency</div>}
             </Popover.Trigger>
             <Popover.Portal>
               <Popover.Content side="right" align="end" sideOffset={12} className="z-50 outline-none">
-                <AccountPopoverCard email={userEmail} plan={plan} />
+                <AccountCardPanel email={userEmail} plan={plan} />
               </Popover.Content>
             </Popover.Portal>
           </Popover.Root>
