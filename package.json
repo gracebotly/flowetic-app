@@ -12,11 +12,22 @@
     "@copilotkit/react-core": "^1.50.1",
     "@copilotkit/react-ui": "^1.50.1",
     "@copilotkit/runtime": "^1.50.1",
+    "@radix-ui/react-dialog": "^1.0.5",
+    "@radix-ui/react-dropdown-menu": "^2.0.6",
+    "@radix-ui/react-popover": "^1.0.7",
+    "@radix-ui/react-tabs": "^1.0.7",
+    "@radix-ui/react-tooltip": "^1.0.7",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.89.0",
+    "@tanstack/react-table": "^8.13.2",
+    "@tremor/react": "^3.14.0",
+    "class-variance-authority": "^0.7.0",
+    "clsx": "^2.1.0",
+    "lucide-react": "^0.453.0",
     "next": "16.1.1",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "tailwind-merge": "^2.2.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
