@@ -84,7 +84,10 @@ export function AccountPopoverCard({
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-semibold">{plan}</span>
                     {plan.toLowerCase().includes("premium") ? (
-                      <ShieldCheck size={16} className="text-emerald-300" title="Premium" />
+                      <>
+                        <ShieldCheck size={16} className="text-emerald-300" aria-hidden="true" />
+                        <span className="sr-only">Premium</span>
+                      </>
                     ) : null}
                   </div>
                   <div className="mt-0.5 flex items-center gap-2 text-xs text-white/90">
