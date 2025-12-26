@@ -1,14 +1,9 @@
 import { NextRequest } from "next/server";
-import { streamText } from "ai";
 import { openai } from "@ai-sdk/openai";
+import { streamText } from "ai";
 
 export const runtime = "nodejs";
 
-/**
- * Master Agent (MVP)
- * NOTE: This is a placeholder "agent" endpoint. We will later replace internals with Mastra.
- * For now: takes { messages } and streams assistant output.
- */
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const messages = body?.messages ?? [];
@@ -16,9 +11,16 @@ export async function POST(req: NextRequest) {
   const result = streamText({
     model: openai("gpt-4o-mini"),
     system:
-      "You are GetFlowetic's Master Agent. Be concise. Help the user build and edit dashboards. Ask only the minimum questions needed to move toward a preview.",
+      "You are GetFlowetic's Master Agent. Be concise. Help the user build and edit dashboards. When you describe actions, prefer short terminal-friendly steps.",
     messages,
   });
 
-  return result.toDataStreamResponse();
+  // Return plain text so the UI doesn't show protocol chunks.
+  // This is an SSE-style streaming response.
+  return new Response(result.textStream, {
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+    },
+  });
 }
