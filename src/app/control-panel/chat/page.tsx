@@ -145,54 +145,10 @@ export default function ChatPage() {
     <div className="min-h-screen">
       
 
-      {/* Spec header bar (dark) */}
-      <div className="mx-8 mt-3 flex h-[48px] items-center justify-between rounded-xl border border-white/10 bg-[#1f2937] px-4 text-white">
-        
-
-        <div className="inline-flex items-center gap-2 rounded-lg bg-white/10 p-1">
-          <button
-            type="button"
-            onClick={() => setView("terminal")}
-            title="Terminal"
-            className={
-              view === "terminal"
-                ? "inline-flex h-9 w-9 items-center justify-center rounded-md bg-blue-500 text-white"
-                : "inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-300 hover:bg-white/5 hover:text-gray-100"
-            }
-          >
-            <TerminalIcon size={18} />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setView("preview")}
-            title="Preview"
-            className={
-              view === "preview"
-                ? "inline-flex h-9 w-9 items-center justify-center rounded-md bg-blue-500 text-white"
-                : "inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-300 hover:bg-white/5 hover:text-gray-100"
-            }
-          >
-            <Eye size={18} />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setView("deploy")}
-            title="Deploy"
-            className={
-              view === "deploy"
-                ? "inline-flex h-9 w-9 items-center justify-center rounded-md bg-blue-500 text-white"
-                : "inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-300 hover:bg-white/5 hover:text-gray-100"
-            }
-          >
-            <Rocket size={18} />
-          </button>
-        </div>
-      </div>
+      
 
       {/* Split layout 40/60 */}
-      <div className="mx-8 mb-8 mt-3 flex min-h-[calc(100vh-180px)] overflow-hidden rounded-xl border border-gray-200 bg-white">
+      <div className="mx-8 mb-8 mt-4 flex h-[calc(100vh-140px)] overflow-hidden rounded-xl border border-gray-200 bg-white">
         {/* LEFT: chat (40%) */}
         <div className="flex w-[40%] min-w-[360px] flex-col border-r border-gray-200 bg-[#f9fafb]">
           {/* messages */}
@@ -266,12 +222,56 @@ export default function ChatPage() {
 
         {/* RIGHT: dynamic panel (60%) */}
         <div className="flex w-[60%] flex-col">
+          {/* Right panel header with mode buttons */}
+          <div className="flex items-center justify-between border-b border-gray-200 bg-white px-4 py-2">
+            <div className="text-sm font-semibold text-gray-900">
+              {view === "terminal" ? "Current Changes" : view === "preview" ? "Dashboard Preview" : "Deploy"}
+            </div>
+
+            <div className="inline-flex items-center gap-1 rounded-lg bg-gray-100 p-1">
+              <button
+                type="button"
+                title="Terminal"
+                onClick={() => setView("terminal")}
+                className={
+                  view === "terminal"
+                    ? "inline-flex h-9 w-9 items-center justify-center rounded-md bg-blue-500 text-white"
+                    : "inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-white"
+                }
+              >
+                <TerminalIcon size={18} />
+              </button>
+
+              <button
+                type="button"
+                title="Preview"
+                onClick={() => setView("preview")}
+                className={
+                  view === "preview"
+                    ? "inline-flex h-9 w-9 items-center justify-center rounded-md bg-blue-500 text-white"
+                    : "inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-white"
+                }
+              >
+                <Eye size={18} />
+              </button>
+
+              <button
+                type="button"
+                title="Deploy"
+                onClick={() => setView("deploy")}
+                className={
+                  view === "deploy"
+                    ? "inline-flex h-9 w-9 items-center justify-center rounded-md bg-blue-500 text-white"
+                    : "inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-white"
+                }
+              >
+                <Rocket size={18} />
+              </button>
+            </div>
+          </div>
           {/* Terminal View */}
           {view === "terminal" ? (
-            <div className="flex h-full flex-col bg-[#1e1e1e]">
-              <div className="border-b border-[#3d3d3d] bg-[#2d2d2d] px-4 py-3 text-[13px] text-[#cccccc]">
-                Current Changes
-              </div>
+            <div className="flex flex-1 flex-col bg-[#1e1e1e]">
               <div className="flex-1 overflow-y-auto px-4 py-4 font-mono text-[13px] leading-6 text-[#d4d4d4]">
                 {logs.map((l) => {
                   const icon =
@@ -311,28 +311,23 @@ export default function ChatPage() {
 
           {/* Preview View */}
           {view === "preview" ? (
-            <div className="flex h-full flex-col bg-white">
+            <div className="flex flex-1 flex-col bg-white">
               <div className="flex items-center justify-between border-b border-gray-200 bg-[#f9fafb] px-4 py-3 text-[13px] text-gray-900">
-                <div className="flex items-center gap-3">
-                  <div>Dashboard Preview</div>
-
-                  {/* Device toggles */}
-                  <div className="inline-flex items-center gap-1 rounded-lg bg-gray-200 p-1">
-                    {(["desktop", "tablet", "mobile"] as const).map((d) => (
-                      <button
-                        key={d}
-                        type="button"
-                        onClick={() => setPreviewDevice(d)}
-                        className={
-                          previewDevice === d
-                            ? "rounded-md bg-blue-500 px-3 py-1 text-xs font-medium text-white"
-                            : "rounded-md px-3 py-1 text-xs font-medium text-gray-700 hover:bg-white/60"
-                        }
-                      >
-                        {d}
-                      </button>
-                    ))}
-                  </div>
+                <div className="inline-flex items-center gap-1 rounded-lg bg-gray-200 p-1">
+                  {(["desktop", "tablet", "mobile"] as const).map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => setPreviewDevice(d)}
+                      className={
+                        previewDevice === d
+                          ? "rounded-md bg-blue-500 px-3 py-1 text-xs font-medium text-white"
+                          : "rounded-md px-3 py-1 text-xs font-medium text-gray-700 hover:bg-white/60"
+                      }
+                    >
+                      {d}
+                    </button>
+                  ))}
                 </div>
 
                 <button
@@ -382,7 +377,7 @@ export default function ChatPage() {
 
           {/* Deploy View */}
           {view === "deploy" ? (
-            <div className="flex h-full items-center justify-center bg-white">
+            <div className="flex flex-1 items-center justify-center bg-white">
               <div className="mx-auto w-full max-w-[480px] px-6 py-12 text-center">
                 <CheckCircle size={64} className="mx-auto mb-6 text-emerald-500" />
                 <div className="mb-2 text-2xl font-semibold text-gray-900">Ready to Deploy?</div>
