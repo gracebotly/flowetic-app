@@ -149,7 +149,7 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="min-h-screen">
+    <div className="h-full">
       
 
       <div className="mx-8 mt-4 flex justify-end">
