@@ -13,34 +13,38 @@ import {
   Paperclip,
   MessageCircle,
   Mic,
+  ArrowLeft,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 type ViewMode = "terminal" | "preview" | "publish";
+
 type Role = "user" | "assistant" | "system";
 type Msg = { id: string; role: Role; content: string };
 
 type LogType = "info" | "success" | "error" | "running";
 type TerminalLog = { id: string; type: LogType; text: string; detail?: string };
 
-type Props = {
-  showEnterVibeButton?: boolean; // only on /control-panel/chat
-};
+interface ChatWorkspaceProps {
+  showEnterVibeButton?: boolean;
+}
 
-export function ChatWorkspace({ showEnterVibeButton = false }: Props) {
+export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProps) {
   const [view, setView] = useState<ViewMode>("terminal");
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-
   const [chatMode, setChatMode] = useState<"chat" | "voice">("chat");
   const [isListening, setIsListening] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [previewDevice, setPreviewDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
   const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
+
+  // MVP: hardcoded dashboard + version IDs until we have real objects from Supabase
   const [previewDashboardId] = useState("demo-dashboard");
   const [previewVersionId] = useState("v1");
 
+  // Terminal logs
   const [logs, setLogs] = useState<TerminalLog[]>([
     {
       id: "l1",
@@ -51,6 +55,7 @@ export function ChatWorkspace({ showEnterVibeButton = false }: Props) {
     },
   ]);
 
+  // Messages
   const [messages, setMessages] = useState<Msg[]>([
     {
       id: "m1",
@@ -86,6 +91,7 @@ export function ChatWorkspace({ showEnterVibeButton = false }: Props) {
     setInput("");
     setIsLoading(true);
 
+    // Default right panel to terminal so users see "what's happening"
     setView("terminal");
     addLog("running", "Analyzing request...");
 
@@ -95,9 +101,7 @@ export function ChatWorkspace({ showEnterVibeButton = false }: Props) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           messages: [
-            ...renderedMessages
-              .filter((m) => m.role !== "system")
-              .map((m) => ({ role: m.role === "assistant" ? "assistant" : m.role, content: m.content })),
+            ...renderedMessages.map((m) => ({ role: m.role === "assistant" ? "assistant" : m.role, content: m.content })),
             { role: "user", content: trimmed },
           ],
         }),
@@ -119,20 +123,28 @@ export function ChatWorkspace({ showEnterVibeButton = false }: Props) {
         const { value, done } = await reader.read();
         if (done) break;
         assistantText += decoder.decode(value, { stream: true });
+        // Optional: could show partial streaming in UI later
       }
 
       assistantText = assistantText.trim();
 
+      // Add assistant response
       setMessages((prev) => [
         ...prev,
         { id: crypto.randomUUID(), role: "assistant", content: assistantText || "(empty response)" },
       ]);
 
       addLog("success", "Response received");
+
+      
     } catch (e: any) {
       setMessages((prev) => [
         ...prev,
-        { id: crypto.randomUUID(), role: "assistant", content: `Sorry—something went wrong. ${e?.message ?? ""}` },
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: `Sorry—something went wrong. ${e?.message ?? ""}`,
+        },
       ]);
       addLog("error", "Error", e?.message ?? "Unknown error");
     } finally {
@@ -141,9 +153,9 @@ export function ChatWorkspace({ showEnterVibeButton = false }: Props) {
   }
 
   return (
-    <div className="h-full w-full">
-      {showEnterVibeButton ? (
-        <div className="mb-3 flex justify-end">
+    <div>
+      {showEnterVibeButton && (
+        <div className="mb-4 flex justify-end">
           <Link
             href="/vibe/chat"
             className="rounded-md border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
@@ -151,69 +163,63 @@ export function ChatWorkspace({ showEnterVibeButton = false }: Props) {
             Enter Vibe Mode
           </Link>
         </div>
-      ) : null}
+      )}
 
-      {/* Workspace */}
-      <div className="flex h-[calc(100vh-140px)] w-full overflow-hidden rounded-xl border border-gray-200 bg-white">
-        {/* LEFT: chat */}
+      {/* Split layout 40/60 */}
+      <div className="flex h-[calc(100vh-64px)] w-full overflow-hidden rounded-xl border border-gray-200 bg-white">
+        {/* LEFT: chat (40%) */}
         <div className="flex w-[40%] min-w-[360px] flex-col border-r border-gray-200 bg-[#f9fafb]">
+          {/* messages */}
           <div className="flex-1 overflow-y-auto p-4">
             {renderedMessages.map((m) => {
               if (m.role === "system") {
                 return (
-                  <div key={m.id} className="mx-auto my-3 w-fit rounded-md bg-gray-100 px-3 py-2 text-center text-[13px] text-gray-500">
+                  <div
+                    key={m.id}
+                    className="mx-auto my-3 w-fit rounded-md bg-gray-100 px-3 py-2 text-center text-[13px] text-gray-500"
+                  >
                     {m.content}
                   </div>
                 );
               }
+
               const isUser = m.role === "user";
               return (
-                <div key={m.id} className="mb-3">
-                  <div className={isUser ? "ml-auto max-w-[85%]" : "mr-auto max-w-[85%]"}>
-                    <div className="mb-1 flex items-center justify-between gap-2">
-                      <div className="text-[11px] font-semibold text-gray-500">{isUser ? "You" : "Flowetic AI"}</div>
-                      <CopyButton text={m.content} />
-                    </div>
-                    <div
-                      className={
-                        isUser
-                          ? "rounded-[12px] rounded-br-[4px] bg-blue-500 px-4 py-3 text-sm text-white"
-                          : "rounded-[12px] rounded-bl-[4px] border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900"
-                      }
-                    >
-                      <div className="whitespace-pre-wrap">{m.content}</div>
+                <div
+                  key={m.id}
+                  className={`mb-4 flex ${isUser ? "justify-end" : "justify-start"}`}
+                >
+                  <div
+                    className={`max-w-[80%] rounded-lg px-4 py-3 ${
+                      isUser
+                        ? "bg-blue-500 text-white"
+                        : "bg-white border border-gray-200 text-gray-900"
+                    }`}
+                  >
+                    <div className="whitespace-pre-wrap text-[14px] leading-6">
+                      {m.content}
                     </div>
                   </div>
                 </div>
               );
             })}
-
-            {isLoading ? (
-              <div className="mr-auto max-w-[85%]">
-                <div className="rounded-[12px] rounded-bl-[4px] border border-gray-200 bg-white px-4 py-3 text-sm text-gray-700">
-                  <span className="inline-flex gap-1">
-                    <span className="animate-pulse">●</span>
-                    <span className="animate-pulse [animation-delay:150ms]">●</span>
-                    <span className="animate-pulse [animation-delay:300ms]">●</span>
-                  </span>
-                </div>
-              </div>
-            ) : null}
-
             <div ref={messagesEndRef} />
           </div>
 
+          {/* input */}
           <div className="border-t border-gray-200 bg-white p-4">
             <textarea
-              className="w-full resize-none rounded-lg border border-gray-300 bg-[#f9fafb] p-3 text-sm outline-none focus:border-blue-500"
+              className="w-full resize-none rounded-lg border border-gray-300 px-3 py-2 text-[14px] leading-6 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              rows={3}
               style={{ minHeight: 44, maxHeight: 120 }}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="Type your message..."
             />
-
             <div className="mt-2 flex items-center justify-between">
+              {/* Left: Lovable-style controls */}
               <div className="flex items-center gap-2">
+                {/* hidden file input */}
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -225,155 +231,132 @@ export function ChatWorkspace({ showEnterVibeButton = false }: Props) {
                   }}
                 />
 
+                {/* Paperclip / Attach */}
                 <button
                   type="button"
                   title="Attach files"
                   onClick={() => fileInputRef.current?.click()}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-white"
                 >
                   <Paperclip size={18} />
                 </button>
 
-                <button
-                  type="button"
-                  title="Chat mode: describe what you want to build"
-                  onClick={() => setChatMode("chat")}
-                  className={
-                    chatMode === "chat"
-                      ? "inline-flex h-9 items-center gap-2 rounded-md bg-gray-100 px-3 text-sm font-medium text-gray-900"
-                      : "inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm font-medium text-gray-600 hover:bg-gray-100"
-                  }
-                >
-                  <MessageCircle size={18} />
-                  <span className="text-sm">Chat</span>
-                </button>
-
-                <button
-                  type="button"
-                  title="Voice input (speech-to-text)"
-                  onClick={() => {
-                    const w = window as any;
-                    const SpeechRecognition = w.SpeechRecognition || w.webkitSpeechRecognition;
-                    if (!SpeechRecognition) {
-                      addLog("error", "Speech-to-text not supported in this browser.");
-                      return;
-                    }
-                    if (isListening) return;
-
-                    try {
-                      const recognition = new SpeechRecognition();
-                      recognition.continuous = false;
-                      recognition.interimResults = true;
-                      recognition.lang = "en-US";
-                      setIsListening(true);
-                      addLog("running", "Listening…");
-
-                      recognition.onresult = (event: any) => {
-                        let transcript = "";
-                        for (let i = event.resultIndex; i < event.results.length; i++) {
-                          transcript += event.results[i][0].transcript;
-                        }
-                        setInput(transcript.trim());
-                      };
-
-                      recognition.onerror = (event: any) => {
-                        addLog("error", "Speech-to-text error", event?.error ?? "unknown");
-                        setIsListening(false);
-                      };
-
-                      recognition.onend = () => {
-                        setIsListening(false);
-                        addLog("success", "Voice captured");
-                      };
-
-                      recognition.start();
-                    } catch (e: any) {
-                      addLog("error", "Failed to start speech-to-text", e?.message ?? "unknown");
+                {/* Voice / Mic button */}
+                {chatMode === "chat" ? (
+                  <button
+                    type="button"
+                    title="Voice chat"
+                    onClick={() => {
+                      setChatMode("voice");
+                      addLog("info", "Voice mode activated (wiring next).");
+                    }}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-white"
+                  >
+                    <Mic size={18} />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    title="Stop voice / Switch to text"
+                    onClick={() => {
+                      setChatMode("chat");
                       setIsListening(false);
-                    }
-                  }}
-                  className={
-                    isListening
-                      ? "inline-flex h-9 w-9 items-center justify-center rounded-md bg-red-50 text-red-600"
-                      : chatMode === "voice"
-                      ? "inline-flex h-9 w-9 items-center justify-center rounded-md bg-gray-100 text-gray-900"
-                      : "inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100"
-                  }
-                >
-                  <Mic size={18} />
-                </button>
+                      addLog("info", "Switched back to text mode.");
+                    }}
+                    className={`inline-flex h-9 w-9 items-center justify-center rounded-md ${
+                      isListening ? "bg-red-500 text-white" : "text-gray-600"
+                    }`}
+                  >
+                    {isListening ? <MessageCircle size={18} /> : <Mic size={18} />}
+                  </button>
+                )}
               </div>
 
+              {/* Right: Send button */}
               <button
                 type="button"
                 onClick={send}
-                disabled={isLoading}
-                className="inline-flex items-center gap-2 rounded-md bg-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-gray-300"
+                disabled={isLoading || !input.trim()}
+                className="inline-flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                <Send size={16} />
-                Send
+                {isLoading ? (
+                  <>
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <Send size={16} />
+                    Send
+                  </>
+                )}
               </button>
             </div>
           </div>
         </div>
 
-        {/* RIGHT: dynamic */}
-        <div className="flex w-[60%] flex-col">
-          {/* Right header: title + mode buttons */}
+        {/* RIGHT: split view */}
+        <div className="flex flex-1 flex-col">
           <div className="flex items-center justify-between border-b border-gray-200 bg-white px-4 py-2">
-            <div className="text-sm font-semibold text-gray-900">
-              {view === "terminal" ? "Current Changes" : view === "preview" ? "Dashboard Preview" : "Publish"}
-            </div>
-
-            <div className="inline-flex items-center gap-1 rounded-lg bg-gray-100 p-1">
-              <button
-                type="button"
-                title="Terminal"
-                onClick={() => setView("terminal")}
-                className={
-                  view === "terminal"
-                    ? "inline-flex h-9 w-9 items-center justify-center rounded-md bg-blue-500 text-white"
-                    : "inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-white"
-                }
-              >
-                <TerminalIcon size={18} />
-              </button>
-
-              <button
-                type="button"
-                title="Preview"
-                onClick={() => setView("preview")}
-                className={
-                  view === "preview"
-                    ? "inline-flex h-9 w-9 items-center justify-center rounded-md bg-blue-500 text-white"
-                    : "inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-white"
-                }
-              >
-                <Eye size={18} />
-              </button>
-
-              <button
-                type="button"
-                title="Publish"
-                onClick={() => setView("publish")}
-                className={
-                  view === "publish"
-                    ? "inline-flex h-9 w-9 items-center justify-center rounded-md bg-blue-500 text-white"
-                    : "inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-white"
-                }
-              >
-                <Rocket size={18} />
-              </button>
-            </div>
+          <div className="text-sm font-semibold text-gray-900">
+            {view === "terminal" ? "Current Changes" : view === "preview" ? "Dashboard Preview" : "Publish"}
           </div>
 
-          {/* Terminal */}
+          <div className="inline-flex items-center gap-1 rounded-lg bg-gray-100 p-1">
+            <button
+              type="button"
+              title="Terminal"
+              onClick={() => setView("terminal")}
+              className={
+                view === "terminal"
+                  ? "inline-flex h-9 w-9 items-center justify-center rounded-md bg-blue-500 text-white"
+                  : "inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-white"
+              }
+            >
+              <TerminalIcon size={18} />
+            </button>
+
+            <button
+              type="button"
+              title="Preview"
+              onClick={() => setView("preview")}
+              className={
+                view === "preview"
+                  ? "inline-flex h-9 w-9 items-center justify-center rounded-md bg-blue-500 text-white"
+                  : "inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-white"
+              }
+            >
+              <Eye size={18} />
+            </button>
+
+            <button
+              type="button"
+              title="Publish"
+              onClick={() => setView("publish")}
+              className={
+                view === "publish"
+                  ? "inline-flex h-9 w-9 items-center justify-center rounded-md bg-blue-500 text-white"
+                  : "inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-white"
+              }
+            >
+              <Rocket size={18} />
+            </button>
+          </div>
+        </div>
+          {/* Terminal View */}
           {view === "terminal" ? (
             <div className="flex flex-1 flex-col bg-[#1e1e1e]">
               <div className="flex-1 overflow-y-auto px-4 py-4 font-mono text-[13px] leading-6 text-[#d4d4d4]">
                 {logs.map((l) => {
                   const icon =
-                    l.type === "success" ? "✓" : l.type === "error" ? "✗" : l.type === "running" ? "⋯" : "•";
+                    l.type === "success"
+                      ? "✓"
+                      : l.type === "error"
+                      ? "✗"
+                      : l.type === "running"
+                      ? "⋯"
+                      : "•";
+
                   const iconColor =
                     l.type === "success"
                       ? "text-emerald-400"
@@ -389,7 +372,9 @@ export function ChatWorkspace({ showEnterVibeButton = false }: Props) {
                         <span className={iconColor}>{icon}</span>
                         <span>{l.text}</span>
                       </div>
-                      {l.detail ? <pre className="mt-1 whitespace-pre-wrap text-[#9ca3af]">{l.detail}</pre> : null}
+                      {l.detail ? (
+                        <pre className="mt-1 whitespace-pre-wrap text-[#9ca3af]">{l.detail}</pre>
+                      ) : null}
                     </div>
                   );
                 })}
@@ -398,10 +383,10 @@ export function ChatWorkspace({ showEnterVibeButton = false }: Props) {
             </div>
           ) : null}
 
-          {/* Preview */}
+          {/* Preview View */}
           {view === "preview" ? (
             <div className="flex flex-1 flex-col bg-white">
-              <div className="flex items-center justify-between border-b border-gray-200 bg-[#f9fafb] px-4 py-2 text-[13px] text-gray-900">
+              <div className="flex items-center justify-between border-b border-gray-200 bg-[#f9fafb] px-4 py-3 text-[13px] text-gray-900">
                 <div className="inline-flex items-center gap-1 rounded-lg bg-gray-200 p-1">
                   {(["desktop", "tablet", "mobile"] as const).map((d) => (
                     <button
@@ -421,7 +406,11 @@ export function ChatWorkspace({ showEnterVibeButton = false }: Props) {
 
                 <button
                   type="button"
-                  onClick={() => setPreviewRefreshKey((k) => k + 1)}
+                  onClick={() => {
+                    // Force iframe refresh by bumping query param
+                    setPreviewRefreshKey((k) => k + 1);
+                    addLog("info", "Preview refreshed");
+                  }}
                   className="inline-flex items-center justify-center rounded-md p-2 text-gray-600 hover:bg-gray-200"
                   title="Refresh"
                 >
@@ -433,8 +422,18 @@ export function ChatWorkspace({ showEnterVibeButton = false }: Props) {
                 <div
                   className="rounded-xl border border-gray-200 bg-white shadow-sm"
                   style={{
-                    width: previewDevice === "mobile" ? 390 : previewDevice === "tablet" ? 820 : "100%",
-                    height: previewDevice === "mobile" ? 844 : previewDevice === "tablet" ? 1180 : "100%",
+                    width:
+                      previewDevice === "mobile"
+                        ? 390
+                        : previewDevice === "tablet"
+                        ? 820
+                        : "100%",
+                    height:
+                      previewDevice === "mobile"
+                        ? 844
+                        : previewDevice === "tablet"
+                        ? 1180
+                        : "100%",
                     maxWidth: "100%",
                   }}
                 >
@@ -450,7 +449,7 @@ export function ChatWorkspace({ showEnterVibeButton = false }: Props) {
             </div>
           ) : null}
 
-          {/* Publish */}
+          {/* Publish View */}
           {view === "publish" ? (
             <div className="flex flex-1 items-center justify-center bg-white">
               <div className="mx-auto w-full max-w-[480px] px-6 py-12 text-center">
@@ -462,7 +461,8 @@ export function ChatWorkspace({ showEnterVibeButton = false }: Props) {
 
                 <div className="mb-8 rounded-lg border border-gray-200 bg-[#f9fafb] p-4 text-left text-[13px] leading-6">
                   <div>
-                    <span className="text-gray-500">Client:</span> <span className="text-gray-900">ABC Dental</span>
+                    <span className="text-gray-500">Client:</span>{" "}
+                    <span className="text-gray-900">ABC Dental</span>
                   </div>
                   <div>
                     <span className="text-gray-500">Dashboard:</span>{" "}
@@ -479,7 +479,10 @@ export function ChatWorkspace({ showEnterVibeButton = false }: Props) {
                 </div>
 
                 <div className="flex justify-center gap-3">
-                  <button type="button" className="rounded-lg bg-blue-500 px-8 py-3 font-semibold text-white hover:bg-blue-600">
+                  <button
+                    type="button"
+                    className="rounded-lg bg-blue-500 px-8 py-3 font-semibold text-white hover:bg-blue-600"
+                  >
                     Publish Now
                   </button>
                   <button
@@ -495,6 +498,8 @@ export function ChatWorkspace({ showEnterVibeButton = false }: Props) {
           ) : null}
         </div>
       </div>
+
+      {/* Mobile behavior note: MVP keeps desktop layout; responsive refinements later */}
     </div>
   );
 }
