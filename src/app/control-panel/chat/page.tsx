@@ -99,7 +99,7 @@ export default function ChatPage() {
       <PageHeader title="Chat" subtitle="Build and edit dashboards with your AI assistant." />
 
       <div className="grid gap-6 px-8 pb-8 pt-6 lg:grid-cols-2">
-        {/* Left: Chat */}
+        {/* Left: Headless chat */}
         <div className="min-h-[70vh] rounded-xl border border-gray-200 bg-white">
           <div className="border-b border-gray-200 px-4 py-3">
             <div className="text-sm font-semibold text-gray-900">Assistant</div>
