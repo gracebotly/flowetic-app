@@ -439,7 +439,7 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
                 >
                   <iframe
                     key={`${previewVersionId}-${previewRefreshKey}`}
-                    src={`/preview/${previewDashboardId}/${previewVersionId}?r=${previewRefreshKey}`}
+                    src={`/preview/${previewDashboardId}/${previewVersionId}`}
                     className="h-full w-full border-0"
                     sandbox="allow-scripts allow-same-origin"
                     title="Dashboard Preview"
