@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-type ViewMode = "terminal" | "preview" | "deploy";
+type ViewMode = "terminal" | "preview" | "publish";
 
 type Role = "user" | "assistant" | "system";
 type Msg = { id: string; role: Role; content: string };
@@ -30,6 +30,7 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [chatMode, setChatMode] = useState<"chat" | "voice">("chat");
+  const [isListening, setIsListening] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [previewDevice, setPreviewDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
@@ -254,16 +255,61 @@ export default function ChatPage() {
                   <span className="text-sm">Chat</span>
                 </button>
 
-                {/* Mic / speech-to-text (UI only for now) */}
+                {/* Mic / speech-to-text with Web Speech API */}
                 <button
                   type="button"
-                  title="Voice mode: speak instead of typing (speech-to-text wiring next)."
+                  title="Voice input (speech-to-text)"
                   onClick={() => {
-                    setChatMode("voice");
-                    addLog("info", "Voice mode selected (speech-to-text wiring next).");
+                    const w = window as any;
+                    const SpeechRecognition = w.SpeechRecognition || w.webkitSpeechRecognition;
+
+                    if (!SpeechRecognition) {
+                      addLog("error", "Speech-to-text not supported in this browser.");
+                      return;
+                    }
+
+                    if (isListening) {
+                      // If already listening, do nothing (simple MVP)
+                      return;
+                    }
+
+                    try {
+                      const recognition = new SpeechRecognition();
+                      recognition.continuous = false;
+                      recognition.interimResults = true;
+                      recognition.lang = "en-US";
+
+                      setIsListening(true);
+                      addLog("running", "Listening…");
+
+                      recognition.onresult = (event: any) => {
+                        let transcript = "";
+                        for (let i = event.resultIndex; i < event.results.length; i++) {
+                          transcript += event.results[i][0].transcript;
+                        }
+                        setInput(transcript.trim());
+                      };
+
+                      recognition.onerror = (event: any) => {
+                        addLog("error", "Speech-to-text error", event?.error ?? "unknown");
+                        setIsListening(false);
+                      };
+
+                      recognition.onend = () => {
+                        setIsListening(false);
+                        addLog("success", "Voice captured");
+                      };
+
+                      recognition.start();
+                    } catch (e: any) {
+                      addLog("error", "Failed to start speech-to-text", e?.message ?? "unknown");
+                      setIsListening(false);
+                    }
                   }}
                   className={
-                    chatMode === "voice"
+                    isListening
+                      ? "inline-flex h-9 w-9 items-center justify-center rounded-md bg-red-50 text-red-600"
+                      : chatMode === "voice"
                       ? "inline-flex h-9 w-9 items-center justify-center rounded-md bg-gray-100 text-gray-900"
                       : "inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100"
                   }
@@ -291,7 +337,7 @@ export default function ChatPage() {
           {/* Right panel header with mode buttons */}
           <div className="flex items-center justify-between border-b border-gray-200 bg-white px-4 py-2">
             <div className="text-sm font-semibold text-gray-900">
-              {view === "terminal" ? "Current Changes" : view === "preview" ? "Dashboard Preview" : "Deploy"}
+              {view === "terminal" ? "Current Changes" : view === "preview" ? "Dashboard Preview" : "Publish"}
             </div>
 
             <div className="inline-flex items-center gap-1 rounded-lg bg-gray-100 p-1">
@@ -323,10 +369,10 @@ export default function ChatPage() {
 
               <button
                 type="button"
-                title="Deploy"
-                onClick={() => setView("deploy")}
+                title="Publish"
+                onClick={() => setView("publish")}
                 className={
-                  view === "deploy"
+                  view === "publish"
                     ? "inline-flex h-9 w-9 items-center justify-center rounded-md bg-blue-500 text-white"
                     : "inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-white"
                 }
@@ -441,12 +487,12 @@ export default function ChatPage() {
             </div>
           ) : null}
 
-          {/* Deploy View */}
-          {view === "deploy" ? (
+          {/* Publish View */}
+          {view === "publish" ? (
             <div className="flex flex-1 items-center justify-center bg-white">
               <div className="mx-auto w-full max-w-[480px] px-6 py-12 text-center">
                 <CheckCircle size={64} className="mx-auto mb-6 text-emerald-500" />
-                <div className="mb-2 text-2xl font-semibold text-gray-900">Ready to Deploy?</div>
+                <div className="mb-2 text-2xl font-semibold text-gray-900">Ready to Publish?</div>
                 <div className="mb-8 text-sm text-gray-500">
                   This will replace the current dashboard for <span className="font-medium">[Client Name]</span>.
                 </div>
@@ -475,7 +521,7 @@ export default function ChatPage() {
                     type="button"
                     className="rounded-lg bg-blue-500 px-8 py-3 font-semibold text-white hover:bg-blue-600"
                   >
-                    Deploy Now
+                    Publish Now
                   </button>
                   <button
                     type="button"
