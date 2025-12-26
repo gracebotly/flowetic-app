@@ -1,16 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
 import Link from "next/link";
-import {
-  Plus,
-  MessagesSquare,
-  PanelLeft,
-  X,
-} from "lucide-react";
-
-// Reuse your existing chat workspace UI
-import ControlPanelChatPage from "@/app/control-panel/chat/page";
+import { useMemo, useState } from "react";
+import { PanelLeft, Plus, MessagesSquare, X } from "lucide-react";
+import { ChatWorkspace } from "@/components/vibe/chat-workspace";
 
 type Conversation = {
   id: string;
@@ -19,7 +12,6 @@ type Conversation = {
 };
 
 export default function VibeChatPage() {
-  // Minimal mock conversation list (replace with Supabase later)
   const conversations: Conversation[] = useMemo(
     () => [
       { id: "c1", title: "ChatBot Insights dashboard", updatedAt: "Just now" },
@@ -33,9 +25,9 @@ export default function VibeChatPage() {
 
   return (
     <div className="h-screen overflow-hidden bg-[#0b1220]">
-      {/* Minimal left rail */}
-      <div className="absolute left-4 top-4 z-50 flex flex-col gap-2">
-        {/* Logo / Control Panel button */}
+      {/* Left mini-rail */}
+      <div className="absolute left-4 top-4 z-[60] flex flex-col gap-2">
+        {/* Logo button = exit vibe mode */}
         <Link
           href="/control-panel/chat"
           title="Back to Control Panel"
@@ -49,16 +41,15 @@ export default function VibeChatPage() {
           type="button"
           title="New conversation"
           onClick={() => {
-            // MVP: just close drawer and let existing chat remain
+            // MVP placeholder: later this will create a new thread + reset messages/logs
             setDrawerOpen(false);
-            // Later: create thread in Supabase and reset local UI state
           }}
           className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-white/10 text-white hover:bg-white/15"
         >
           <Plus size={18} />
         </button>
 
-        {/* Conversations drawer toggle */}
+        {/* Conversations popup */}
         <button
           type="button"
           title="Conversations"
@@ -69,9 +60,9 @@ export default function VibeChatPage() {
         </button>
       </div>
 
-      {/* Conversations drawer (popup) */}
+      {/* Conversations drawer */}
       {drawerOpen ? (
-        <div className="absolute left-20 top-4 z-50 w-[320px] overflow-hidden rounded-2xl border border-white/10 bg-[#0f172a] text-white shadow-2xl">
+        <div className="absolute left-20 top-4 z-[60] w-[320px] overflow-hidden rounded-2xl border border-white/10 bg-[#0f172a] text-white shadow-2xl">
           <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
             <div className="text-sm font-semibold">Conversations</div>
             <button
@@ -90,28 +81,23 @@ export default function VibeChatPage() {
                 key={c.id}
                 type="button"
                 onClick={() => {
-                  // MVP: just close drawer
+                  // MVP placeholder: later loads that conversation thread
                   setDrawerOpen(false);
-                  // Later: load conversation thread
                 }}
                 className="w-full rounded-xl px-3 py-3 text-left hover:bg-white/10"
               >
                 <div className="text-sm font-medium">{c.title}</div>
                 <div className="mt-1 text-xs text-white/60">{c.updatedAt}</div>
               </button>
-            ))}
+            ))} 
           </div>
         </div>
       ) : null}
 
-      {/* Main workspace fills screen; no extra header; no page scrolling */}
-      <div className="h-screen overflow-hidden">
-        {/* Soft background gradient (optional premium feel) */}
-        <div className="absolute inset-0 bg-gradient-to-br from-[#0b1220] via-[#0b1220] to-[#111b33]" />
-
-        {/* Your existing chat UI on top */}
-        <div className="relative h-screen overflow-hidden">
-          <ControlPanelChatPage />
+      {/* Workspace area: padded so rail never blocks it */}
+      <div className="relative h-screen overflow-hidden px-20 py-6">
+        <div className="h-full overflow-hidden rounded-2xl">
+          <ChatWorkspace showEnterVibeButton={false} />
         </div>
       </div>
     </div>
