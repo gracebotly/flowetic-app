@@ -1,6 +1,6 @@
 "use client";
 
-import { PageHeader } from "@/components/layout/page-header";
+
 import { CopyButton } from "@/components/chat/copy-button";
 import {
   Terminal as TerminalIcon,
@@ -143,56 +143,56 @@ export default function ChatPage() {
 
   return (
     <div className="min-h-screen">
-      <PageHeader title="Chat" subtitle="Build and edit dashboards with your AI assistant." />
+      
 
       {/* Spec header bar (dark) */}
-      <div className="mx-8 mt-6 flex h-[56px] items-center justify-between rounded-xl border border-white/10 bg-[#1f2937] px-6 text-white">
-        <div className="text-[16px] font-semibold">Dashboard Editor</div>
+      <div className="mx-8 mt-3 flex h-[48px] items-center justify-between rounded-xl border border-white/10 bg-[#1f2937] px-4 text-white">
+        
 
         <div className="inline-flex items-center gap-2 rounded-lg bg-white/10 p-1">
           <button
             type="button"
             onClick={() => setView("terminal")}
+            title="Terminal"
             className={
               view === "terminal"
-                ? "inline-flex items-center gap-2 rounded-md bg-blue-500 px-4 py-2 text-sm font-medium text-white"
-                : "inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium text-gray-300 hover:bg-white/5 hover:text-gray-100"
+                ? "inline-flex h-9 w-9 items-center justify-center rounded-md bg-blue-500 text-white"
+                : "inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-300 hover:bg-white/5 hover:text-gray-100"
             }
           >
-            <TerminalIcon size={16} />
-            <span className="hidden sm:inline">Terminal</span>
+            <TerminalIcon size={18} />
           </button>
 
           <button
             type="button"
             onClick={() => setView("preview")}
+            title="Preview"
             className={
               view === "preview"
-                ? "inline-flex items-center gap-2 rounded-md bg-blue-500 px-4 py-2 text-sm font-medium text-white"
-                : "inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium text-gray-300 hover:bg-white/5 hover:text-gray-100"
+                ? "inline-flex h-9 w-9 items-center justify-center rounded-md bg-blue-500 text-white"
+                : "inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-300 hover:bg-white/5 hover:text-gray-100"
             }
           >
-            <Eye size={16} />
-            <span className="hidden sm:inline">Preview</span>
+            <Eye size={18} />
           </button>
 
           <button
             type="button"
             onClick={() => setView("deploy")}
+            title="Deploy"
             className={
               view === "deploy"
-                ? "inline-flex items-center gap-2 rounded-md bg-blue-500 px-4 py-2 text-sm font-medium text-white"
-                : "inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium text-gray-300 hover:bg-white/5 hover:text-gray-100"
+                ? "inline-flex h-9 w-9 items-center justify-center rounded-md bg-blue-500 text-white"
+                : "inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-300 hover:bg-white/5 hover:text-gray-100"
             }
           >
-            <Rocket size={16} />
-            <span className="hidden sm:inline">Deploy</span>
+            <Rocket size={18} />
           </button>
         </div>
       </div>
 
       {/* Split layout 40/60 */}
-      <div className="mx-8 mb-8 mt-4 flex min-h-[calc(100vh-220px)] overflow-hidden rounded-xl border border-gray-200 bg-white">
+      <div className="mx-8 mb-8 mt-3 flex min-h-[calc(100vh-180px)] overflow-hidden rounded-xl border border-gray-200 bg-white">
         {/* LEFT: chat (40%) */}
         <div className="flex w-[40%] min-w-[360px] flex-col border-r border-gray-200 bg-[#f9fafb]">
           {/* messages */}
