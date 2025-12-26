@@ -166,7 +166,7 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
       )}
 
       {/* Split layout 40/60 */}
-      <div className="flex h-[calc(100vh-64px)] w-full overflow-hidden rounded-xl border border-gray-200 bg-white">
+      <div className="flex h-full w-full overflow-hidden rounded-xl border border-gray-200 bg-white">
         {/* LEFT: chat (40%) */}
         <div className="flex w-[40%] min-w-[360px] flex-col border-r border-gray-200 bg-[#f9fafb]">
           {/* messages */}
