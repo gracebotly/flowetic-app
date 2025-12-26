@@ -26,13 +26,12 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  // Preview HTML for iframe srcDoc (MVP placeholder)
-  const [previewHtml, setPreviewHtml] = useState<string>(
-    `<div style="font-family: ui-sans-serif; padding: 24px; color: #111827;">
-      <h2 style="margin:0 0 8px 0;">Dashboard Preview</h2>
-      <p style="margin:0; color:#6b7280;">Preview will render here once generated.</p>
-    </div>`
-  );
+  const [previewDevice, setPreviewDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
+  const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
+
+  // MVP: hardcoded dashboard + version IDs until we have real objects from Supabase
+  const [previewDashboardId] = useState("demo-dashboard");
+  const [previewVersionId] = useState("v1");
 
   // Terminal logs
   const [logs, setLogs] = useState<TerminalLog[]>([
@@ -126,11 +125,7 @@ export default function ChatPage() {
 
       addLog("success", "Response received");
 
-      // MVP: if the agent ever returns something that looks like HTML, place it in preview
-      if (assistantText.includes("<html") || assistantText.includes("<div") || assistantText.includes("<body")) {
-        setPreviewHtml(assistantText);
-        addLog("success", "Preview updated");
-      }
+      
     } catch (e: any) {
       setMessages((prev) => [
         ...prev,
@@ -318,12 +313,33 @@ export default function ChatPage() {
           {view === "preview" ? (
             <div className="flex h-full flex-col bg-white">
               <div className="flex items-center justify-between border-b border-gray-200 bg-[#f9fafb] px-4 py-3 text-[13px] text-gray-900">
-                <div>Dashboard Preview</div>
+                <div className="flex items-center gap-3">
+                  <div>Dashboard Preview</div>
+
+                  {/* Device toggles */}
+                  <div className="inline-flex items-center gap-1 rounded-lg bg-gray-200 p-1">
+                    {(["desktop", "tablet", "mobile"] as const).map((d) => (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => setPreviewDevice(d)}
+                        className={
+                          previewDevice === d
+                            ? "rounded-md bg-blue-500 px-3 py-1 text-xs font-medium text-white"
+                            : "rounded-md px-3 py-1 text-xs font-medium text-gray-700 hover:bg-white/60"
+                        }
+                      >
+                        {d}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <button
                   type="button"
                   onClick={() => {
-                    // MVP: refresh just re-sets the same HTML
-                    setPreviewHtml((v) => v);
+                    // Force iframe refresh by bumping query param
+                    setPreviewRefreshKey((k) => k + 1);
                     addLog("info", "Preview refreshed");
                   }}
                   className="inline-flex items-center justify-center rounded-md p-2 text-gray-600 hover:bg-gray-200"
@@ -333,13 +349,33 @@ export default function ChatPage() {
                 </button>
               </div>
 
-              <div className="flex-1 overflow-hidden">
-                <iframe
-                  srcDoc={previewHtml}
-                  className="h-full w-full border-0"
-                  sandbox="allow-scripts allow-same-origin"
-                  title="Dashboard Preview"
-                />
+              <div className="flex flex-1 items-center justify-center overflow-auto bg-white p-4">
+                <div
+                  className="rounded-xl border border-gray-200 bg-white shadow-sm"
+                  style={{
+                    width:
+                      previewDevice === "mobile"
+                        ? 390
+                        : previewDevice === "tablet"
+                        ? 820
+                        : "100%",
+                    height:
+                      previewDevice === "mobile"
+                        ? 844
+                        : previewDevice === "tablet"
+                        ? 1180
+                        : "100%",
+                    maxWidth: "100%",
+                  }}
+                >
+                  <iframe
+                    key={`${previewVersionId}-${previewRefreshKey}`}
+                    src={`/preview/${previewDashboardId}/${previewVersionId}?r=${previewRefreshKey}`}
+                    className="h-full w-full border-0"
+                    sandbox="allow-scripts allow-same-origin"
+                    title="Dashboard Preview"
+                  />
+                </div>
               </div>
             </div>
           ) : null}
