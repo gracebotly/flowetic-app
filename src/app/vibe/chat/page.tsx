@@ -95,8 +95,8 @@ export default function VibeChatPage() {
       ) : null}
 
       {/* Workspace area: padded so rail never blocks it */}
-      <div className="relative h-screen overflow-hidden px-20 py-6">
-        <div className="h-full overflow-hidden rounded-2xl">
+      <div className="relative h-screen overflow-hidden px-20 py-4">
+        <div className="h-[calc(100vh-32px)] overflow-hidden rounded-2xl">
           <ChatWorkspace showEnterVibeButton={false} />
         </div>
       </div>

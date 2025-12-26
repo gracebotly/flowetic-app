@@ -166,7 +166,7 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
       )}
 
       {/* Split layout 40/60 */}
-      <div className="flex h-[calc(100vh-200px)] overflow-hidden rounded-xl border border-gray-200 bg-white">
+      <div className="flex h-full w-full overflow-hidden rounded-xl border border-gray-200 bg-white">
         {/* LEFT: chat (40%) */}
         <div className="flex w-[40%] min-w-[360px] flex-col border-r border-gray-200 bg-[#f9fafb]">
           {/* messages */}
@@ -297,10 +297,15 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
 
         {/* RIGHT: split view */}
         <div className="flex flex-1 flex-col">
-          {/* Tab bar */}
-          <div className="flex items-center gap-1 border-b border-gray-200 bg-[#f9fafb] px-4 py-3">
+          <div className="flex items-center justify-between border-b border-gray-200 bg-white px-4 py-2">
+          <div className="text-sm font-semibold text-gray-900">
+            {view === "terminal" ? "Current Changes" : view === "preview" ? "Dashboard Preview" : "Publish"}
+          </div>
+
+          <div className="inline-flex items-center gap-1 rounded-lg bg-gray-100 p-1">
             <button
               type="button"
+              title="Terminal"
               onClick={() => setView("terminal")}
               className={
                 view === "terminal"
@@ -337,6 +342,7 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
               <Rocket size={18} />
             </button>
           </div>
+        </div>
           {/* Terminal View */}
           {view === "terminal" ? (
             <div className="flex flex-1 flex-col bg-[#1e1e1e]">
