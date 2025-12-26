@@ -4,9 +4,6 @@ import { PageHeader } from "@/components/layout/page-header";
 import { CopyButton } from "@/components/chat/copy-button";
 import { useMemo, useState } from "react";
 
-// CopilotKit v1.50+ agent-first API (v2)
-import { useAgent } from "@copilotkit/react-core/v2";
-
 type Device = "desktop" | "tablet" | "mobile";
 
 function deviceStyle(device: Device) {
@@ -15,24 +12,86 @@ function deviceStyle(device: Device) {
   return "w-full h-full";
 }
 
+type Role = "user" | "assistant";
+
+type Msg = {
+  id: string;
+  role: Role;
+  content: string;
+};
+
 export default function ChatPage() {
   const [device, setDevice] = useState<Device>("desktop");
   const [input, setInput] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
-  // Connect UI -> your Master Agent endpoint
-  const agent = useAgent({
-    api: "/api/agent/master",
-    // Optional: name/metadata depending on your needs later
-  });
+  // Temporary local state until CopilotKit Agent wiring is completed:
+  const [messages, setMessages] = useState<Msg[]>([
+    {
+      id: "m1",
+      role: "assistant",
+      content:
+        "Hi! Tell me what dashboard you want to build, and which platform (Vapi, Retell, n8n) you're connecting first.",
+    },
+  ]);
 
-  const messages = useMemo(() => agent.messages ?? [], [agent.messages]);
-  const isLoading = agent.isLoading ?? false;
+  const rendered = useMemo(() => messages, [messages]);
 
   async function send() {
     const trimmed = input.trim();
     if (!trimmed || isLoading) return;
+
+    const userMsg: Msg = { id: crypto.randomUUID(), role: "user", content: trimmed };
+    setMessages((prev) => [...prev, userMsg]);
     setInput("");
-    await agent.sendMessage({ role: "user", content: trimmed });
+    setIsLoading(true);
+
+    try {
+      // Call the Master Agent endpoint (OpenAI-backed)
+      const res = await fetch("/api/agent/master", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          messages: [
+            ...rendered.map((m) => ({ role: m.role, content: m.content })),
+            { role: "user", content: trimmed },
+          ],
+        }),
+      });
+
+      if (!res.ok || !res.body) {
+        throw new Error(`Agent error: ${res.status}`);
+      }
+
+      // Read streaming response as text (MVP)
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let assistantText = "";
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        assistantText += decoder.decode(value, { stream: true });
+      }
+
+      const assistantMsg: Msg = {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: assistantText,
+      };
+      setMessages((prev) => [...prev, assistantMsg]);
+    } catch (e: any) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: `Sorry—something went wrong calling the Master Agent. ${e?.message ?? ""}`,
+        },
+      ]);
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   return (
@@ -44,29 +103,20 @@ export default function ChatPage() {
         <div className="min-h-[70vh] rounded-xl border border-gray-200 bg-white">
           <div className="border-b border-gray-200 px-4 py-3">
             <div className="text-sm font-semibold text-gray-900">Assistant</div>
-            <div className="text-xs text-gray-500">Agent-first (useAgent) + custom UI</div>
+            <div className="text-xs text-gray-500">Headless chat UI (custom)</div>
           </div>
 
           <div className="flex h-[calc(70vh-120px)] flex-col gap-3 overflow-auto p-4">
-            {messages.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-gray-200 p-6 text-sm text-gray-600">
-                Ask for a dashboard, a UI spec, or changes to your preview.
-              </div>
-            ) : null}
-
-            {messages.map((m: any) => {
-              const role = m.role ?? "assistant";
-              const content = typeof m.content === "string" ? m.content : JSON.stringify(m.content);
-              const isUser = role === "user";
-
+            {rendered.map((m) => {
+              const isUser = m.role === "user";
               return (
-                <div key={m.id ?? `${role}-${content.slice(0, 20)}`} className="flex gap-3">
+                <div key={m.id} className="flex gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-3">
                       <div className="text-xs font-semibold text-gray-700">
                         {isUser ? "You" : "Flowetic AI"}
                       </div>
-                      <CopyButton text={content} />
+                      <CopyButton text={m.content} />
                     </div>
 
                     <div
@@ -76,7 +126,7 @@ export default function ChatPage() {
                           : "mt-1 whitespace-pre-wrap rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-900"
                       }
                     >
-                      {content}
+                      {m.content}
                     </div>
                   </div>
                 </div>
