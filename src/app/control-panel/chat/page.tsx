@@ -1,6 +1,6 @@
 "use client";
 
-
+import Link from "next/link";
 import { CopyButton } from "@/components/chat/copy-button";
 import {
   Terminal as TerminalIcon,
@@ -10,6 +10,10 @@ import {
   Send,
   RefreshCw,
   CheckCircle,
+  Paperclip,
+  MessageCircle,
+  Mic,
+  ArrowLeft,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -25,6 +29,8 @@ export default function ChatPage() {
   const [view, setView] = useState<ViewMode>("terminal");
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [chatMode, setChatMode] = useState<"chat" | "voice">("chat");
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [previewDevice, setPreviewDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
   const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
@@ -145,7 +151,14 @@ export default function ChatPage() {
     <div className="min-h-screen">
       
 
-      
+      <div className="mx-8 mt-4 flex justify-end">
+        <Link
+          href="/vibe/chat"
+          className="rounded-md border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+        >
+          Enter Vibe Mode
+        </Link>
+      </div>
 
       {/* Split layout 40/60 */}
       <div className="mx-8 mb-8 mt-4 flex h-[calc(100vh-140px)] overflow-hidden rounded-xl border border-gray-200 bg-white">
@@ -199,14 +212,67 @@ export default function ChatPage() {
               placeholder="Type your message..."
             />
             <div className="mt-2 flex items-center justify-between">
-              <button
-                type="button"
-                className="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm text-gray-500 hover:bg-gray-100"
-              >
-                <Wrench size={16} />
-                Tools
-              </button>
+              {/* Left: Lovable-style controls */}
+              <div className="flex items-center gap-2">
+                {/* hidden file input */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  className="hidden"
+                  multiple
+                  onChange={(e) => {
+                    const count = e.target.files?.length ?? 0;
+                    if (count > 0) addLog("info", `Attached ${count} file(s) (upload wiring next).`);
+                  }}
+                />
 
+                {/* Paperclip / Attach */}
+                <button
+                  type="button"
+                  title="Attach files"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100"
+                >
+                  <Paperclip size={18} />
+                </button>
+
+                {/* Chat mode toggle */}
+                <button
+                  type="button"
+                  title="Chat mode: use this to describe what you want to build (requirements, changes, ideas)."
+                  onClick={() => {
+                    setChatMode("chat");
+                    addLog("info", "Chat mode enabled");
+                  }}
+                  className={
+                    chatMode === "chat"
+                      ? "inline-flex h-9 items-center gap-2 rounded-md bg-gray-100 px-3 text-sm font-medium text-gray-900"
+                      : "inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm font-medium text-gray-600 hover:bg-gray-100"
+                  }
+                >
+                  <MessageCircle size={18} />
+                  <span className="text-sm">Chat</span>
+                </button>
+
+                {/* Mic / speech-to-text (UI only for now) */}
+                <button
+                  type="button"
+                  title="Voice mode: speak instead of typing (speech-to-text wiring next)."
+                  onClick={() => {
+                    setChatMode("voice");
+                    addLog("info", "Voice mode selected (speech-to-text wiring next).");
+                  }}
+                  className={
+                    chatMode === "voice"
+                      ? "inline-flex h-9 w-9 items-center justify-center rounded-md bg-gray-100 text-gray-900"
+                      : "inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100"
+                  }
+                >
+                  <Mic size={18} />
+                </button>
+              </div>
+
+              {/* Right: Send */}
               <button
                 type="button"
                 onClick={send}
