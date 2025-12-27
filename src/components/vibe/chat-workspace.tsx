@@ -294,7 +294,6 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
             </div>
           </div>
         </div>
-        </div>
 
         {/* RIGHT: split view */}
         <div className="flex flex-1 flex-col">
@@ -498,6 +497,5 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
           </div>
         </div>
       </div>
-    </div>
   );
 }
