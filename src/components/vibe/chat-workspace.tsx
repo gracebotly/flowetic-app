@@ -495,6 +495,7 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
               </div>
             </div>
           ) : null}
+          </div>
         </div>
       </div>
     </div>
