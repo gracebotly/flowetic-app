@@ -1,5 +1,7 @@
 import { notFound } from "next/navigation";
 
+export const dynamic = "force-dynamic"; // ensure dynamic params work
+
 export default async function PreviewPage({
   params,
 }: {
