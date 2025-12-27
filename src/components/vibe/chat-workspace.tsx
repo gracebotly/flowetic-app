@@ -153,7 +153,7 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
   }
 
   return (
-    <div>
+    <div className="h-full flex flex-col">
       {showEnterVibeButton && (
         <div className="mb-4 flex justify-end">
           <Link
@@ -166,9 +166,9 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
       )}
 
       {/* Split layout 40/60 */}
-      <div className="flex h-full w-full overflow-hidden rounded-xl border border-gray-200 bg-white">
+      <div className="flex h-full w-full overflow-hidden rounded-xl border border-gray-300 bg-white">
         {/* LEFT: chat (40%) */}
-        <div className="flex w-[40%] min-w-[360px] flex-col border-r border-gray-200 bg-[#f9fafb]">
+        <div className="flex w-[40%] min-w-[360px] flex-col border-r border-gray-300 bg-[#f9fafb]">
           {/* messages */}
           <div className="flex-1 overflow-y-auto p-4">
             {renderedMessages.map((m) => {
@@ -193,7 +193,7 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
                     className={`max-w-[80%] rounded-lg px-4 py-3 ${
                       isUser
                         ? "bg-blue-500 text-white"
-                        : "bg-white border border-gray-200 text-gray-900"
+                        : "bg-white border border-gray-300 text-gray-900"
                     }`}
                   >
                     <div className="whitespace-pre-wrap text-[14px] leading-6">
@@ -207,7 +207,7 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
           </div>
 
           {/* input */}
-          <div className="border-t border-gray-200 bg-white p-4">
+          <div className="border-t border-gray-300 bg-white p-4">
             <textarea
               className="w-full resize-none rounded-lg border border-gray-300 px-3 py-2 text-[14px] leading-6 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               rows={3}
@@ -297,52 +297,82 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
 
         {/* RIGHT: split view */}
         <div className="flex flex-1 flex-col">
-          <div className="flex items-center justify-between border-b border-gray-200 bg-white px-4 py-2">
-          <div className="text-sm font-semibold text-gray-900">
-            {view === "terminal" ? "Current Changes" : view === "preview" ? "Dashboard Preview" : "Publish"}
+          <div className="flex items-center justify-between border-b border-gray-300 bg-white px-4 py-2">
+            <div className="flex items-center gap-3">
+              <div className="text-sm font-semibold text-gray-900">
+                {view === "terminal" ? "Current Changes" : view === "preview" ? "Dashboard Preview" : "Publish"}
+              </div>
+              {view === "preview" && (
+                <>
+                  <div className="inline-flex items-center gap-1 rounded-lg bg-gray-100 p-1">
+                    {(["desktop", "tablet", "mobile"] as const).map((d) => (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => setPreviewDevice(d)}
+                        className={
+                          previewDevice === d
+                            ? "rounded-md bg-blue-500 px-3 py-1 text-xs font-medium text-white"
+                            : "rounded-md px-3 py-1 text-xs font-medium text-gray-700 hover:bg-white/60"
+                        }
+                      >
+                        {d}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPreviewRefreshKey((k) => k + 1);
+                      addLog("info", "Preview refreshed");
+                    }}
+                    className="ml-2 inline-flex items-center justify-center rounded-md p-2 text-gray-600 hover:bg-gray-200"
+                    title="Refresh"
+                  >
+                    <RefreshCw size={16} />
+                  </button>
+                </>
+              )}
+            </div>
+            <div className="inline-flex items-center gap-1 rounded-lg bg-gray-100 p-1">
+              <button
+                type="button"
+                title="Terminal"
+                onClick={() => setView("terminal")}
+                className={
+                  view === "terminal"
+                    ? "inline-flex h-9 w-9 items-center justify-center rounded-md bg-blue-500 text-white"
+                    : "inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-white"
+                }
+              >
+                <TerminalIcon size={18} />
+              </button>
+              <button
+                type="button"
+                title="Preview"
+                onClick={() => setView("preview")}
+                className={
+                  view === "preview"
+                    ? "inline-flex h-9 w-9 items-center justify-center rounded-md bg-blue-500 text-white"
+                    : "inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-white"
+                }
+              >
+                <Eye size={18} />
+              </button>
+              <button
+                type="button"
+                title="Publish"
+                onClick={() => setView("publish")}
+                className={
+                  view === "publish"
+                    ? "inline-flex h-9 w-9 items-center justify-center rounded-md bg-blue-500 text-white"
+                    : "inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-white"
+                }
+              >
+                <Rocket size={18} />
+              </button>
+            </div>
           </div>
-
-          <div className="inline-flex items-center gap-1 rounded-lg bg-gray-100 p-1">
-            <button
-              type="button"
-              title="Terminal"
-              onClick={() => setView("terminal")}
-              className={
-                view === "terminal"
-                  ? "inline-flex h-9 w-9 items-center justify-center rounded-md bg-blue-500 text-white"
-                  : "inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-white"
-              }
-            >
-              <TerminalIcon size={18} />
-            </button>
-
-            <button
-              type="button"
-              title="Preview"
-              onClick={() => setView("preview")}
-              className={
-                view === "preview"
-                  ? "inline-flex h-9 w-9 items-center justify-center rounded-md bg-blue-500 text-white"
-                  : "inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-white"
-              }
-            >
-              <Eye size={18} />
-            </button>
-
-            <button
-              type="button"
-              title="Publish"
-              onClick={() => setView("publish")}
-              className={
-                view === "publish"
-                  ? "inline-flex h-9 w-9 items-center justify-center rounded-md bg-blue-500 text-white"
-                  : "inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-white"
-              }
-            >
-              <Rocket size={18} />
-            </button>
-          </div>
-        </div>
           {/* Terminal View */}
           {view === "terminal" ? (
             <div className="flex flex-1 flex-col bg-[#1e1e1e]">
@@ -386,55 +416,22 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
           {/* Preview View */}
           {view === "preview" ? (
             <div className="flex flex-1 flex-col bg-white">
-              <div className="flex items-center justify-between border-b border-gray-200 bg-[#f9fafb] px-4 py-3 text-[13px] text-gray-900">
-                <div className="inline-flex items-center gap-1 rounded-lg bg-gray-200 p-1">
-                  {(["desktop", "tablet", "mobile"] as const).map((d) => (
-                    <button
-                      key={d}
-                      type="button"
-                      onClick={() => setPreviewDevice(d)}
-                      className={
-                        previewDevice === d
-                          ? "rounded-md bg-blue-500 px-3 py-1 text-xs font-medium text-white"
-                          : "rounded-md px-3 py-1 text-xs font-medium text-gray-700 hover:bg-white/60"
-                      }
-                    >
-                      {d}
-                    </button>
-                  ))}
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    // Force iframe refresh by bumping query param
-                    setPreviewRefreshKey((k) => k + 1);
-                    addLog("info", "Preview refreshed");
-                  }}
-                  className="inline-flex items-center justify-center rounded-md p-2 text-gray-600 hover:bg-gray-200"
-                  title="Refresh"
-                >
-                  <RefreshCw size={16} />
-                </button>
-              </div>
-
-              <div className="flex flex-1 items-center justify-center overflow-auto bg-white p-4">
+              <div className="flex flex-1 overflow-auto bg-white p-4">
                 <div
-                  className="rounded-xl border border-gray-200 bg-white shadow-sm"
+                  className="rounded-xl border border-gray-300 bg-white shadow-sm overflow-auto"
                   style={{
                     width:
-                      previewDevice === "mobile"
-                        ? 390
+                      previewDevice === "desktop"
+                        ? "100%"
                         : previewDevice === "tablet"
                         ? 820
-                        : "100%",
+                        : 390,
                     height:
-                      previewDevice === "mobile"
-                        ? 844
-                        : previewDevice === "tablet"
-                        ? 1180
-                        : "100%",
+                      previewDevice === "desktop"
+                        ? "100%"
+                        : "auto",
                     maxWidth: "100%",
+                    maxHeight: "100%",
                   }}
                 >
                   <iframe
@@ -459,7 +456,7 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
                   This will replace the current dashboard for <span className="font-medium">[Client Name]</span>.
                 </div>
 
-                <div className="mb-8 rounded-lg border border-gray-200 bg-[#f9fafb] p-4 text-left text-[13px] leading-6">
+                <div className="mb-8 rounded-lg border border-gray-300 bg-[#f9fafb] p-4 text-left text-[13px] leading-6">
                   <div>
                     <span className="text-gray-500">Client:</span>{" "}
                     <span className="text-gray-900">ABC Dental</span>
@@ -496,10 +493,8 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
               </div>
             </div>
           ) : null}
+          </div>
         </div>
       </div>
-
-      {/* Mobile behavior note: MVP keeps desktop layout; responsive refinements later */}
-    </div>
   );
 }

@@ -24,7 +24,7 @@ export default function VibeChatPage() {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   return (
-    <div className="h-screen overflow-hidden bg-[#0b1220]">
+    <div className="relative flex flex-col h-screen overflow-hidden bg-[#0b1220]">
       {/* Left mini-rail */}
       <div className="absolute left-4 top-4 z-[60] flex flex-col gap-2">
         {/* Logo button = exit vibe mode */}
@@ -95,8 +95,8 @@ export default function VibeChatPage() {
       ) : null}
 
       {/* Workspace area: padded so rail never blocks it */}
-      <div className="relative h-screen overflow-hidden pl-20 pr-6 py-2">
-        <div className="h-[calc(100vh-16px)] overflow-hidden">
+      <div className="relative flex-1 overflow-hidden px-20 py-4">
+        <div className="h-full overflow-hidden">
           <ChatWorkspace showEnterVibeButton={false} />
         </div>
       </div>
