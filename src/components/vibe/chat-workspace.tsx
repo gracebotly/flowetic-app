@@ -497,8 +497,6 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
           ) : null}
         </div>
       </div>
-
-      {/* Mobile behavior note: MVP keeps desktop layout; responsive refinements later */}
     </div>
   );
 }
