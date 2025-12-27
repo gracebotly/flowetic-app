@@ -374,7 +374,6 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
               </button>
             </div>
           </div>
-        </div>
           {/* Terminal View */}
           {view === "terminal" ? (
             <div className="flex flex-1 flex-col bg-[#1e1e1e]">
