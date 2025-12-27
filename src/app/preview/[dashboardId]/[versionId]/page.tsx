@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
 
-export const dynamic = "force-dynamic"; // ensure dynamic params work
+export const dynamic = "force-dynamic";
 
 export default async function PreviewPage({
   params,
@@ -8,14 +9,19 @@ export default async function PreviewPage({
   params: { dashboardId: string; versionId: string };
 }) {
   const { dashboardId, versionId } = params;
-
-  // MVP: if params missing
   if (!dashboardId || !versionId) return notFound();
 
-  // TODO (next): load real spec/version from Supabase:
-  // - interfaces/interface_versions tables
-  // - render via your renderer later
-  // For now: a clean placeholder preview page.
+  const supabase = await createClient();
+
+  const { data: version, error } = await supabase
+    .from("interface_versions")
+    .select("id, interface_id, spec_json, design_tokens, created_at")
+    .eq("id", versionId)
+    .eq("interface_id", dashboardId)
+    .single();
+
+  if (error || !version) return notFound();
+
   return (
     <div style={{ fontFamily: "ui-sans-serif", padding: 24 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
@@ -34,10 +40,10 @@ export default async function PreviewPage({
           background: "#ffffff",
         }}
       >
-        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Dashboard content goes here</h2>
-        <p style={{ margin: 0, color: "#6b7280" }}>
-          Next step: load the saved dashboard spec/version from Supabase and render it.
-        </p>
+        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Spec JSON (MVP)</h2>
+        <pre style={{ margin: 0, whiteSpace: "pre-wrap", fontSize: 12, color: "#111827" }}>
+          {JSON.stringify(version.spec_json, null, 2)}
+        </pre>
       </div>
     </div>
   );
