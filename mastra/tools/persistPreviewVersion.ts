@@ -16,8 +16,8 @@ export const persistPreviewVersion = createTool({
     versionId: z.string().uuid(),
     previewUrl: z.string(),
   }),
-  execute: async ({ inputData }) => {
-    const { tenantId, userId, interfaceId, spec } = inputData;
+  execute: async ({ context }) => {
+    const { tenantId, userId, interfaceId, spec } = context;
     
     const supabase = createClient();
     
