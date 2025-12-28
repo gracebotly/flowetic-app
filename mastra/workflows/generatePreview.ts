@@ -27,8 +27,8 @@ export type GeneratePreviewOutput = z.infer<typeof GeneratePreviewOutput>;
 // ============================================================================
 
 export const generatePreviewWorkflow = new Workflow({
-  name: 'generatePreview',
-  triggerSchema: GeneratePreviewInput,
+  id: 'generatePreview',
+  inputSchema: GeneratePreviewInput,
 })
   // Step 1: Analyze Schema
   .step('analyzeSchema', {
