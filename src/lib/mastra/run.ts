@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { z } from "zod";
-import { GeneratePreviewInput, GeneratePreviewOutput } from "./workflows/generate-preview";
+import { GeneratePreviewInput, GeneratePreviewOutput } from "../../../mastra/workflows/generatePreview";
 import { PublishInput, PublishOutput } from "./workflows/publish-dashboard";
 
 function nowIso() {
