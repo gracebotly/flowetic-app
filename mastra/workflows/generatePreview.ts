@@ -159,14 +159,14 @@ const generateUISpecStep = createStep({
     spec_json: z.record(z.any()),
     design_tokens: z.record(z.any()),
   }),
-  async execute({ mastra, runtimeContext, getStepResult }) {
+  async execute({ mastra, runtimeContext, getStepResult, getInitData }) {
     const templateResult = getStepResult(selectTemplateStep);
     const mappingResult = getStepResult(generateMappingStep);
-    const initData = getStepResult(analyzeSchemaStep) as any; // Get original workflow input
+    const initData = getInitData() as GeneratePreviewInput;
     
     const templateId = templateResult?.templateId || 'default';
     const mapping = mappingResult?.mappings || {};
-    const instructions = initData?.instructions;
+    const instructions = initData.instructions;
     const platformType = runtimeContext?.get('platformType') || 'unknown';
     
     const result = await mastra.tools.generateUISpec.execute({
@@ -216,6 +216,7 @@ const persistPreviewVersionStep = createStep({
   async execute({ mastra, runtimeContext, getStepResult, getInitData }) {
     const specResult = getStepResult(generateUISpecStep);
     const initData = getInitData() as GeneratePreviewInput;
+    
     const spec_json = specResult?.spec_json || {};
     const design_tokens = specResult?.design_tokens || {};
     
