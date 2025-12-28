@@ -61,6 +61,11 @@ export const persistPreviewVersion = createTool({
       throw new Error(`Failed to create version: ${versionError.message}`);
     }
     
+    // Ensure we have a valid interfaceId (TypeScript type narrowing)
+    if (!finalInterfaceId) {
+      throw new Error('Failed to create or retrieve interface ID');
+    }
+    
     const previewUrl = `/preview/${finalInterfaceId}/${version.id}`;
     
     return {
