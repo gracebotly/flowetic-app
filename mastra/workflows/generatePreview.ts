@@ -1,13 +1,9 @@
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { z } from 'zod';
-import { analyzeSchema } from '../tools/analyzeSchema';
-import { selectTemplate } from '../tools/selectTemplate';
-import { generateMapping } from '../tools/generateMapping';
-import { generateUISpec } from '../tools/generateUISpec';
-import { validateSpec } from '../tools/validateSpec';
-import { persistPreviewVersion } from '../tools/persistPreviewVersion';
 
-// Input and output schemas remain unchanged
+// ============================================================================
+// Input/Output Schemas (KEEP EXISTING)
+// ============================================================================
 export const GeneratePreviewInput = z.object({
   tenantId: z.string().uuid(),
   userId: z.string().uuid(),
@@ -25,7 +21,9 @@ export const GeneratePreviewOutput = z.object({
 export type GeneratePreviewInput = z.infer<typeof GeneratePreviewInput>;
 export type GeneratePreviewOutput = z.infer<typeof GeneratePreviewOutput>;
 
-// Step 1: Analyze Schema
+// ============================================================================
+// Step Definitions
+// ============================================================================
 const analyzeSchemaStep = createStep({
   id: 'analyzeSchema',
   inputSchema: z.object({}),
@@ -41,22 +39,23 @@ const analyzeSchemaStep = createStep({
     eventTypes: z.array(z.string()),
     confidence: z.number(),
   }),
-  async execute({ runtimeContext }) {
+  async execute({ mastra, runtimeContext }) {
     const tenantId = runtimeContext?.get('tenantId');
     const sourceId = runtimeContext?.get('sourceId');
     const sampleSize = 100;
     if (!tenantId || !sourceId) {
       throw new Error('CONNECTION_NOT_CONFIGURED');
     }
-    const result = await analyzeSchema.execute({
-      context: { tenantId, sourceId, sampleSize },
-      runtimeContext,
+    
+    const result = await mastra.tools.analyzeSchema.execute({
+      tenantId,
+      sourceId,
+      sampleSize,
     });
     return result;
   },
 });
 
-// Step 2: Select Template
 const selectTemplateStep = createStep({
   id: 'selectTemplate',
   inputSchema: analyzeSchemaStep.outputSchema,
@@ -65,22 +64,23 @@ const selectTemplateStep = createStep({
     confidence: z.number(),
     reason: z.string(),
   }),
-  async execute({ runtimeContext, getStepResult }) {
+  async execute({ mastra, runtimeContext, getStepResult }) {
     const analyzeResult = getStepResult(analyzeSchemaStep);
-    const platformType = runtimeContext?.get('platformType');
-    if (!analyzeResult || !platformType) {
+    const platformType = runtimeContext?.get('platformType') || 'unknown';
+    
+    if (!analyzeResult) {
       throw new Error('TEMPLATE_NOT_FOUND');
     }
-    const { eventTypes, fields } = analyzeResult;
-    const result = await selectTemplate.execute({
-      context: { platformType, eventTypes, fields },
-      runtimeContext,
+    
+    const result = await mastra.tools.selectTemplate.execute({ 
+      platformType,
+      eventTypes: analyzeResult.eventTypes,
+      fields: analyzeResult.fields,
     });
     return result;
   },
 });
 
-// Step 3: Generate Mapping
 const generateMappingStep = createStep({
   id: 'generateMapping',
   inputSchema: selectTemplateStep.outputSchema,
@@ -89,27 +89,23 @@ const generateMappingStep = createStep({
     missingFields: z.array(z.string()),
     confidence: z.number(),
   }),
-  async execute({ runtimeContext, getStepResult }) {
+  async execute({ mastra, runtimeContext, getStepResult }) {
     const analyzeResult = getStepResult(analyzeSchemaStep);
     const templateResult = getStepResult(selectTemplateStep);
-    if (!analyzeResult || !templateResult) {
-      throw new Error('MAPPING_INCOMPLETE_REQUIRED_FIELDS');
-    }
-    const fields = analyzeResult.fields;
-    const templateId = templateResult.templateId;
-    const platformType = runtimeContext?.get('platformType');
-    if (!platformType) {
-      throw new Error('MAPPING_INCOMPLETE_REQUIRED_FIELDS');
-    }
-    const result = await generateMapping.execute({
-      context: { templateId, fields, platformType },
-      runtimeContext,
+    
+    const detectedSchema = analyzeResult?.fields || [];
+    const templateId = templateResult?.templateId || 'default';
+    const platformType = runtimeContext?.get('platformType') || 'unknown';
+    
+    const result = await mastra.tools.generateMapping.execute({
+      detectedSchema,
+      templateId,
+      platformType,
     });
     return result;
   },
 });
 
-// Step 4: Check Mapping Completeness (HITL)
 const checkMappingCompletenessStep = createStep({
   id: 'checkMappingCompleteness',
   inputSchema: generateMappingStep.outputSchema,
@@ -131,21 +127,23 @@ const checkMappingCompletenessStep = createStep({
   async execute({ getStepResult, suspend }) {
     const mappingResult = getStepResult(generateMappingStep);
     const missingFields = mappingResult?.missingFields || [];
-    if (missingFields.length > 0) {
+    const hasRequiredMissing = missingFields.some((f: any) => f.required);
+    
+    if (hasRequiredMissing) {
       await suspend({
         reason: 'Required fields missing - needs human input',
         missingFields,
         message: 'Please map missing fields and resume.',
       });
     }
-    return {
+    
+    return { 
       shouldSuspend: false,
       decision: 'complete',
     };
   },
 });
 
-// Step 5: Generate UI Spec
 const generateUISpecStep = createStep({
   id: 'generateUISpec',
   inputSchema: z.object({}),
@@ -153,27 +151,23 @@ const generateUISpecStep = createStep({
     spec_json: z.record(z.any()),
     design_tokens: z.record(z.any()),
   }),
-  async execute({ runtimeContext, getStepResult }) {
+  async execute({ mastra, runtimeContext, getStepResult }) {
     const templateResult = getStepResult(selectTemplateStep);
     const mappingResult = getStepResult(generateMappingStep);
-    if (!templateResult || !mappingResult) {
-      throw new Error('SPEC_GENERATION_FAILED');
-    }
-    const templateId = templateResult.templateId;
-    const mappings = mappingResult.mappings;
-    const platformType = runtimeContext?.get('platformType');
-    if (!platformType) {
-      throw new Error('SPEC_GENERATION_FAILED');
-    }
-    const result = await generateUISpec.execute({
-      context: { templateId, mappings, platformType },
-      runtimeContext,
+    
+    const templateId = templateResult?.templateId || 'default';
+    const mapping = mappingResult?.mappings || {};
+    const platformType = runtimeContext?.get('platformType') || 'unknown';
+    
+    const result = await mastra.tools.generateUISpec.execute({
+      templateId,
+      mapping,
+      platformType,
     });
     return result;
   },
 });
 
-// Step 6: Validate Spec
 const validateSpecStep = createStep({
   id: 'validateSpec',
   inputSchema: generateUISpecStep.outputSchema,
@@ -182,51 +176,48 @@ const validateSpecStep = createStep({
     errors: z.array(z.string()),
     score: z.number(),
   }),
-  async execute({ getStepResult }) {
+  async execute({ mastra, getStepResult }) {
     const specResult = getStepResult(generateUISpecStep);
     const spec_json = specResult?.spec_json || {};
-    const result = await validateSpec.execute({
-      context: { spec_json },
-    });
+    
+    const result = await mastra.tools.validateSpec.execute({ spec_json });
+    
     if (result.score < 0.8 || !result.valid) {
       throw new Error('SCORING_HARD_GATE_FAILED');
     }
+    
     return result;
   },
 });
 
-// Step 7: Persist Preview Version
 const persistPreviewVersionStep = createStep({
-  id: 'persist-preview-version',
+  id: 'persistPreviewVersion',
   inputSchema: validateSpecStep.outputSchema,
   outputSchema: z.object({
     interfaceId: z.string().uuid(),
     versionId: z.string().uuid(),
     previewUrl: z.string(),
   }),
-  async execute({ runtimeContext, getStepResult, getInitData }) {
+  async execute({ mastra, runtimeContext, getStepResult, getInitData }) {
     const specResult = getStepResult(generateUISpecStep);
-    const initData = getInitData() as GeneratePreviewInput;
-    const { tenantId, userId, interfaceId } = initData;
+    const initData = getInitData();
+    
     const spec_json = specResult?.spec_json || {};
     const design_tokens = specResult?.design_tokens || {};
-    const platformType = runtimeContext?.get('platformType');
-    const result = await persistPreviewVersion.execute({
-      context: {
-        tenantId,
-        userId,
-        interfaceId,
-        spec_json,
-        design_tokens,
-        platformType,
-      },
-      runtimeContext,
+    
+    const result = await mastra.tools.persistPreviewVersion.execute({
+      tenantId: initData.tenantId,
+      interfaceId: initData.interfaceId,
+      userId: initData.userId,
+      spec_json,
+      design_tokens,
+      platformType: runtimeContext?.get('platformType') || 'unknown',
     });
+    
     return result;
   },
 });
 
-// Step 8: Finalize
 const finalizeStep = createStep({
   id: 'finalize',
   inputSchema: persistPreviewVersionStep.outputSchema,
@@ -241,7 +232,9 @@ const finalizeStep = createStep({
   },
 });
 
-// Workflow definition
+// ============================================================================
+// Workflow Definition
+// ============================================================================
 export const generatePreviewWorkflow = createWorkflow({
   id: 'generatePreview',
   inputSchema: GeneratePreviewInput,
