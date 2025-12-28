@@ -46,8 +46,7 @@ const analyzeSchemaStep = createStep({
     const initData = getInitData() as GeneratePreviewInput;
     const { tenantId, interfaceId } = initData;
     
-    const analyzeSchemaTool = mastra.getTool('analyzeSchema');
-    const result = await analyzeSchemaTool.execute({
+    const result = await mastra.tools.analyzeSchema.execute({
       tenantId,
       interfaceId,
     });
@@ -68,8 +67,7 @@ const selectTemplateStep = createStep({
     const analyzeResult = getStepResult(analyzeSchemaStep);
     const platformType = runtimeContext?.get('platformType') || 'unknown';
     
-    const selectTemplateTool = mastra.getTool('selectTemplate');
-    const result = await selectTemplateTool.execute({ 
+    const result = await mastra.tools.selectTemplate.execute({ 
       platformType,
       eventTypes: analyzeResult.eventTypes,
       fields: analyzeResult.fields,
@@ -95,8 +93,7 @@ const generateMappingStep = createStep({
     const templateId = templateResult?.templateId || 'default';
     const platformType = runtimeContext?.get('platformType') || 'unknown';
     
-    const generateMappingTool = mastra.getTool('generateMapping');
-    const result = await generateMappingTool.execute({
+    const result = await mastra.tools.generateMapping.execute({
       detectedSchema,
       templateId,
       platformType,
@@ -162,8 +159,7 @@ const generateUISpecStep = createStep({
     const instructions = initData.instructions;
     const platformType = runtimeContext?.get('platformType') || 'unknown';
     
-    const generateUISpecTool = mastra.getTool('generateUISpec');
-    const result = await generateUISpecTool.execute({
+    const result = await mastra.tools.generateUISpec.execute({
       templateId,
       mapping,
       instructions,
@@ -186,8 +182,7 @@ const validateSpecStep = createStep({
     const specResult = getStepResult(generateUISpecStep);
     const spec_json = specResult?.spec_json || {};
     
-    const validateSpecTool = mastra.getTool('validateSpec');
-    const result = await validateSpecTool.execute({ spec_json });
+    const result = await mastra.tools.validateSpec.execute({ spec_json });
     
     // Hard gate: score >= 0.8 required
     if (result.score < 0.8 || !result.valid) {
@@ -215,8 +210,7 @@ const persistPreviewVersionStep = createStep({
     const spec_json = specResult?.spec_json || {};
     const design_tokens = specResult?.design_tokens || {};
     
-    const persistPreviewVersionTool = mastra.getTool('persistPreviewVersion');
-    const result = await persistPreviewVersionTool.execute({
+    const result = await mastra.tools.persistPreviewVersion.execute({
       tenantId: initData.tenantId,
       interfaceId: initData.interfaceId,
       userId: initData.userId,
