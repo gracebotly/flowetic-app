@@ -1,4 +1,4 @@
-import { createTool } from '@mastra/core';
+import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 export const generateUISpec = createTool({
@@ -13,8 +13,8 @@ export const generateUISpec = createTool({
     spec_json: z.record(z.any()),
     design_tokens: z.record(z.any()),
   }),
-  execute: async ({ context, inputData }) => {
-    const { templateId, mappings, platformType } = inputData;
+  execute: async ({ context }) => {
+    const { templateId, mappings, platformType } = context;
     
     // Generate spec based on template (simplified for MVP)
     const spec_json = {
@@ -26,7 +26,7 @@ export const generateUISpec = createTool({
         columns: 12,
         gap: 4,
       },
-      components: [],
+      components: [] as any[],
     };
     
     // Add components based on template

@@ -59,6 +59,7 @@ export async function POST(req: NextRequest) {
     runtimeContext.set('clientId', clientId);
     runtimeContext.set('dashboardId', dashboardId);
     runtimeContext.set('platformType', platformType);
+    runtimeContext.set('sourceId', sourceId);
     runtimeContext.set('planTier', planTier);
     runtimeContext.set('mode', state.mode);
     runtimeContext.set('phase', state.phase);

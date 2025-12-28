@@ -18,10 +18,10 @@ export const persistPreviewVersion = createTool({
     versionId: z.string().uuid(),
     previewUrl: z.string(),
   }),
-  execute: async ({ context, inputData }) => {
-    const { tenantId, userId, interfaceId, spec_json, design_tokens, platformType } = inputData;
+  execute: async ({ context }) => {
+    const { tenantId, userId, interfaceId, spec_json, design_tokens, platformType } = context;
     
-    const supabase = createClient();
+    const supabase = await createClient();
     
     // Create or get interface
     let finalInterfaceId = interfaceId;
@@ -59,6 +59,11 @@ export const persistPreviewVersion = createTool({
     
     if (versionError) {
       throw new Error(`Failed to create version: ${versionError.message}`);
+    }
+    
+    // Ensure we have a valid interfaceId (TypeScript type narrowing)
+    if (!finalInterfaceId) {
+      throw new Error('Failed to create or retrieve interface ID');
     }
     
     const previewUrl = `/preview/${finalInterfaceId}/${version.id}`;

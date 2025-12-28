@@ -1,4 +1,4 @@
-import { createTool } from '@mastra/core';
+import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 const UISpecSchema = z.object({
@@ -34,8 +34,8 @@ export const validateSpec = createTool({
     errors: z.array(z.string()),
     score: z.number().min(0).max(1),
   }),
-  execute: async ({ context, inputData }) => {
-    const { spec_json } = inputData;
+  execute: async ({ context }) => {
+    const { spec_json } = context;
     
     try {
       // Validate against schema

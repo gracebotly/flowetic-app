@@ -1,4 +1,4 @@
-import { createTool } from '@mastra/core';
+import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 export const generateMapping = createTool({
@@ -17,8 +17,8 @@ export const generateMapping = createTool({
     missingFields: z.array(z.string()),
     confidence: z.number().min(0).max(1),
   }),
-  execute: async ({ context, inputData }) => {
-    const { templateId, fields, platformType } = inputData;
+  execute: async ({ context }) => {
+    const { templateId, fields, platformType } = context;
     
     // Template requirements (simplified for MVP)
     const templateRequirements: Record<string, string[]> = {

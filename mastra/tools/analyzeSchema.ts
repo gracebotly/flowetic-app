@@ -1,4 +1,4 @@
-import { createTool } from '@mastra/core';
+import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
 
@@ -20,10 +20,10 @@ export const analyzeSchema = createTool({
     eventTypes: z.array(z.string()),
     confidence: z.number().min(0).max(1),
   }),
-  execute: async ({ context, inputData }) => {
-    const { tenantId, sourceId, sampleSize } = inputData;
+  execute: async ({ context }) => {
+    const { tenantId, sourceId, sampleSize } = context;
     
-    const supabase = createClient();
+    const supabase = await createClient();
     
     // Fetch sample events
     const { data: events, error } = await supabase
