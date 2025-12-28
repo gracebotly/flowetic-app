@@ -1,5 +1,11 @@
 import { Agent } from '@mastra/core';
 import { openai } from '@ai-sdk/openai';
+import { analyzeSchema } from '../tools/analyzeSchema';
+import { selectTemplate } from '../tools/selectTemplate';
+import { generateMapping } from '../tools/generateMapping';
+import { generateUISpec } from '../tools/generateUISpec';
+import { validateSpec } from '../tools/validateSpec';
+import { persistPreviewVersion } from '../tools/persistPreviewVersion';
 
 /**
  * Master Router Agent
@@ -25,6 +31,13 @@ Modes:
 plan | edit
 `,
   model: openai('gpt-4o-mini'),
-  // No tools attached here; workflows are invoked explicitly in the API.
-  tools: {},
+  // Tools available for the agent to use when needed.
+  tools: {
+    analyzeSchema,
+    selectTemplate,
+    generateMapping,
+    generateUISpec,
+    validateSpec,
+    persistPreviewVersion,
+  },
 });
