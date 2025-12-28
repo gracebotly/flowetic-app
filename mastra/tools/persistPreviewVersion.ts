@@ -21,7 +21,7 @@ export const persistPreviewVersion = createTool({
   execute: async ({ context }) => {
     const { tenantId, userId, interfaceId, spec_json, design_tokens, platformType } = context;
     
-    const supabase = createClient();
+    const supabase = await createClient();
     
     // Create or get interface
     let finalInterfaceId = interfaceId;
