@@ -46,7 +46,8 @@ const analyzeSchemaStep = createStep({
     const initData = getInitData() as GeneratePreviewInput;
     const { tenantId, interfaceId } = initData;
     
-    const result = await mastra.tools.analyzeSchema.execute({
+    const analyzeSchemaTool = mastra.getTool('analyzeSchema');
+    const result = await analyzeSchemaTool.execute({
       tenantId,
       interfaceId,
     });
@@ -67,7 +68,8 @@ const selectTemplateStep = createStep({
     const analyzeResult = getStepResult(analyzeSchemaStep);
     const platformType = runtimeContext?.get('platformType') || 'unknown';
     
-    const result = await mastra.tools.selectTemplate.execute({ 
+    const selectTemplateTool = mastra.getTool('selectTemplate');
+    const result = await selectTemplateTool.execute({ 
       platformType,
       eventTypes: analyzeResult.eventTypes,
       fields: analyzeResult.fields,
@@ -93,7 +95,8 @@ const generateMappingStep = createStep({
     const templateId = templateResult?.templateId || 'default';
     const platformType = runtimeContext?.get('platformType') || 'unknown';
     
-    const result = await mastra.tools.generateMapping.execute({
+    const generateMappingTool = mastra.getTool('generateMapping');
+    const result = await generateMappingTool.execute({
       detectedSchema,
       templateId,
       platformType,
@@ -130,7 +133,7 @@ const checkMappingCompletenessStep = createStep({
       await suspend({
         reason: 'Required fields missing - needs human input',
         missingFields,
-        message: 'Please map the missing fields and resume.',
+        message: 'Please map missing fields and resume.',
       });
     }
     
@@ -159,7 +162,8 @@ const generateUISpecStep = createStep({
     const instructions = initData.instructions;
     const platformType = runtimeContext?.get('platformType') || 'unknown';
     
-    const result = await mastra.tools.generateUISpec.execute({
+    const generateUISpecTool = mastra.getTool('generateUISpec');
+    const result = await generateUISpecTool.execute({
       templateId,
       mapping,
       instructions,
@@ -182,7 +186,8 @@ const validateSpecStep = createStep({
     const specResult = getStepResult(generateUISpecStep);
     const spec_json = specResult?.spec_json || {};
     
-    const result = await mastra.tools.validateSpec.execute({ spec_json });
+    const validateSpecTool = mastra.getTool('validateSpec');
+    const result = await validateSpecTool.execute({ spec_json });
     
     // Hard gate: score >= 0.8 required
     if (result.score < 0.8 || !result.valid) {
@@ -210,7 +215,8 @@ const persistPreviewVersionStep = createStep({
     const spec_json = specResult?.spec_json || {};
     const design_tokens = specResult?.design_tokens || {};
     
-    const result = await mastra.tools.persistPreviewVersion.execute({
+    const persistPreviewVersionTool = mastra.getTool('persistPreviewVersion');
+    const result = await persistPreviewVersionTool.execute({
       tenantId: initData.tenantId,
       interfaceId: initData.interfaceId,
       userId: initData.userId,
