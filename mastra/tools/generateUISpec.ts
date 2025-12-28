@@ -26,7 +26,7 @@ export const generateUISpec = createTool({
         columns: 12,
         gap: 4,
       },
-      components: [],
+      components: [] as any[],
     };
     
     // Add components based on template
