@@ -23,7 +23,7 @@ export const analyzeSchema = createTool({
   execute: async ({ context }) => {
     const { tenantId, sourceId, sampleSize } = context;
     
-    const supabase = createClient();
+    const supabase = await createClient();
     
     // Fetch sample events
     const { data: events, error } = await supabase
