@@ -9,7 +9,9 @@ export const persistPreviewVersion = createTool({
     tenantId: z.string().uuid(),
     userId: z.string().uuid(),
     interfaceId: z.string().uuid().optional(),
-    spec: z.record(z.any()),
+    spec_json: z.record(z.any()),
+    design_tokens: z.record(z.any()),
+    platformType: z.string(),
   }),
   outputSchema: z.object({
     interfaceId: z.string().uuid(),
@@ -17,7 +19,7 @@ export const persistPreviewVersion = createTool({
     previewUrl: z.string(),
   }),
   execute: async ({ context }) => {
-    const { tenantId, userId, interfaceId, spec } = context;
+    const { tenantId, userId, interfaceId, spec_json, design_tokens, platformType } = context;
     
     const supabase = createClient();
     
@@ -29,7 +31,7 @@ export const persistPreviewVersion = createTool({
         .from('interfaces')
         .insert({
           tenant_id: tenantId,
-          name: 'Dashboard',
+          name: `${platformType} Dashboard`,
           status: 'draft',
           component_pack: 'default',
         })
@@ -48,7 +50,8 @@ export const persistPreviewVersion = createTool({
       .from('interface_versions')
       .insert({
         interface_id: finalInterfaceId,
-        spec_json: spec,
+        spec_json,
+        design_tokens,
         created_by: userId,
       })
       .select('id')
