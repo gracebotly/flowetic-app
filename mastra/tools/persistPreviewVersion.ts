@@ -1,4 +1,4 @@
-import { createTool } from '@mastra/core/tools';
+import { createTool } from '@mastra/core';
 import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
 
@@ -9,17 +9,15 @@ export const persistPreviewVersion = createTool({
     tenantId: z.string().uuid(),
     userId: z.string().uuid(),
     interfaceId: z.string().uuid().optional(),
-    spec_json: z.record(z.any()),
-    design_tokens: z.record(z.any()),
-    platformType: z.string(),
+    spec: z.record(z.any()),
   }),
   outputSchema: z.object({
     interfaceId: z.string().uuid(),
     versionId: z.string().uuid(),
     previewUrl: z.string(),
   }),
-  execute: async ({ context, inputData }) => {
-    const { tenantId, userId, interfaceId, spec_json, design_tokens, platformType } = inputData;
+  execute: async ({ inputData }) => {
+    const { tenantId, userId, interfaceId, spec } = inputData;
     
     const supabase = createClient();
     
@@ -31,7 +29,7 @@ export const persistPreviewVersion = createTool({
         .from('interfaces')
         .insert({
           tenant_id: tenantId,
-          name: `${platformType} Dashboard`,
+          name: 'Dashboard',
           status: 'draft',
           component_pack: 'default',
         })
@@ -50,8 +48,7 @@ export const persistPreviewVersion = createTool({
       .from('interface_versions')
       .insert({
         interface_id: finalInterfaceId,
-        spec_json,
-        design_tokens,
+        spec_json: spec,
         created_by: userId,
       })
       .select('id')

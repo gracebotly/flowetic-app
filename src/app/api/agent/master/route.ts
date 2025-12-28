@@ -1,5 +1,5 @@
 import { mastra } from '@/mastra';
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { RuntimeContext } from '@mastra/core';
 import { NextRequest } from 'next/server';
 import { getThreadState, updateThreadState } from '@/lib/sharedState';
 import { logThreadEvent } from '@/lib/threadEvents';
