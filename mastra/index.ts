@@ -1,4 +1,4 @@
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 import { masterRouterAgent } from './agents/masterRouter';
 import { generatePreviewWorkflow } from './workflows/generatePreview';
 import { analyzeSchema } from './tools/analyzeSchema';

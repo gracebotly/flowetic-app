@@ -19,6 +19,8 @@
     "incremental": true,
     "baseUrl": ".",
     "paths": {
+      "@/mastra": ["./mastra"],
+      "@/mastra/*": ["./mastra/*"],
       "@/*": [
         "src/*"
       ]
@@ -31,6 +33,7 @@
   },
   "include": [
     "next-env.d.ts",
+    "mastra",
     "**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts",
