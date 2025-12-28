@@ -1,5 +1,11 @@
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { z } from 'zod';
+import { analyzeSchema } from '../tools/analyzeSchema';
+import { selectTemplate } from '../tools/selectTemplate';
+import { generateMapping } from '../tools/generateMapping';
+import { generateUISpec } from '../tools/generateUISpec';
+import { validateSpec } from '../tools/validateSpec';
+import { persistPreviewVersion } from '../tools/persistPreviewVersion';
 
 // ============================================================================
 // Input/Output Schemas (KEEP EXISTING)
@@ -42,13 +48,16 @@ const analyzeSchemaStep = createStep({
     eventTypes: z.array(z.string()),
     confidence: z.number(),
   }),
-  async execute({ mastra, runtimeContext, getInitData }) {
+  async execute({ runtimeContext, getInitData }) {
     const initData = getInitData() as GeneratePreviewInput;
     const { tenantId, interfaceId } = initData;
     
-    const result = await mastra.tools.analyzeSchema.execute({
-      tenantId,
-      interfaceId,
+    const result = await analyzeSchema.execute({
+      context: {
+        tenantId,
+        interfaceId,
+      },
+      runtimeContext,
     });
     return result;
   },
@@ -63,14 +72,17 @@ const selectTemplateStep = createStep({
     confidence: z.number(),
     reason: z.string(),
   }),
-  async execute({ mastra, runtimeContext, getStepResult }) {
+  async execute({ runtimeContext, getStepResult }) {
     const analyzeResult = getStepResult(analyzeSchemaStep);
     const platformType = runtimeContext?.get('platformType') || 'unknown';
     
-    const result = await mastra.tools.selectTemplate.execute({ 
-      platformType,
-      eventTypes: analyzeResult.eventTypes,
-      fields: analyzeResult.fields,
+    const result = await selectTemplate.execute({
+      context: { 
+        platformType,
+        eventTypes: analyzeResult.eventTypes,
+        fields: analyzeResult.fields,
+      },
+      runtimeContext,
     });
     return result;
   },
@@ -85,7 +97,7 @@ const generateMappingStep = createStep({
     missingFields: z.array(z.string()),
     confidence: z.number(),
   }),
-  async execute({ mastra, runtimeContext, getStepResult }) {
+  async execute({ runtimeContext, getStepResult }) {
     const analyzeResult = getStepResult(analyzeSchemaStep);
     const templateResult = getStepResult(selectTemplateStep);
     
@@ -93,10 +105,13 @@ const generateMappingStep = createStep({
     const templateId = templateResult?.templateId || 'default';
     const platformType = runtimeContext?.get('platformType') || 'unknown';
     
-    const result = await mastra.tools.generateMapping.execute({
-      detectedSchema,
-      templateId,
-      platformType,
+    const result = await generateMapping.execute({
+      context: {
+        detectedSchema,
+        templateId,
+        platformType,
+      },
+      runtimeContext,
     });
     return result;
   },
@@ -149,7 +164,7 @@ const generateUISpecStep = createStep({
     spec_json: z.record(z.any()),
     design_tokens: z.record(z.any()),
   }),
-  async execute({ mastra, runtimeContext, getStepResult, getInitData }) {
+  async execute({ runtimeContext, getStepResult, getInitData }) {
     const templateResult = getStepResult(selectTemplateStep);
     const mappingResult = getStepResult(generateMappingStep);
     const initData = getInitData() as GeneratePreviewInput;
@@ -159,11 +174,14 @@ const generateUISpecStep = createStep({
     const instructions = initData.instructions;
     const platformType = runtimeContext?.get('platformType') || 'unknown';
     
-    const result = await mastra.tools.generateUISpec.execute({
-      templateId,
-      mapping,
-      instructions,
-      platformType,
+    const result = await generateUISpec.execute({
+      context: {
+        templateId,
+        mapping,
+        instructions,
+        platformType,
+      },
+      runtimeContext,
     });
     return result;
   },
@@ -178,11 +196,14 @@ const validateSpecStep = createStep({
     errors: z.array(z.string()),
     score: z.number(),
   }),
-  async execute({ mastra, getStepResult }) {
+  async execute({ getStepResult }) {
     const specResult = getStepResult(generateUISpecStep);
     const spec_json = specResult?.spec_json || {};
     
-    const result = await mastra.tools.validateSpec.execute({ spec_json });
+    const result = await validateSpec.execute({
+      context: { spec_json },
+      runtimeContext,
+    });
     
     // Hard gate: score >= 0.8 required
     if (result.score < 0.8 || !result.valid) {
@@ -203,20 +224,23 @@ const persistPreviewVersionStep = createStep({
     versionId: z.string().uuid(),
     previewUrl: z.string(),
   }),
-  async execute({ mastra, runtimeContext, getStepResult, getInitData }) {
+  async execute({ runtimeContext, getStepResult, getInitData }) {
     const specResult = getStepResult(generateUISpecStep);
     const initData = getInitData() as GeneratePreviewInput;
     
     const spec_json = specResult?.spec_json || {};
     const design_tokens = specResult?.design_tokens || {};
     
-    const result = await mastra.tools.persistPreviewVersion.execute({
-      tenantId: initData.tenantId,
-      interfaceId: initData.interfaceId,
-      userId: initData.userId,
-      spec_json,
-      design_tokens,
-      platformType: runtimeContext?.get('platformType') || 'unknown',
+    const result = await persistPreviewVersion.execute({
+      context: {
+        tenantId: initData.tenantId,
+        interfaceId: initData.interfaceId,
+        userId: initData.userId,
+        spec_json,
+        design_tokens,
+        platformType: runtimeContext?.get('platformType') || 'unknown',
+      },
+      runtimeContext,
     });
     
     return result;
