@@ -40,8 +40,8 @@ const analyzeSchemaStep = createStep({
     confidence: z.number(),
   }),
   async execute({ mastra, runtimeContext }) {
-    const tenantId = runtimeContext?.get('tenantId');
-    const sourceId = runtimeContext?.get('sourceId');
+    const tenantId = runtimeContext?.get('tenantId') as string | undefined;
+    const sourceId = runtimeContext?.get('sourceId') as string | undefined;
     const sampleSize = 100;
     if (!tenantId || !sourceId) {
       throw new Error('CONNECTION_NOT_CONFIGURED');
@@ -66,7 +66,7 @@ const selectTemplateStep = createStep({
   }),
   async execute({ mastra, runtimeContext, getStepResult }) {
     const analyzeResult = getStepResult(analyzeSchemaStep);
-    const platformType = runtimeContext?.get('platformType') || 'unknown';
+    const platformType = runtimeContext?.get('platformType') as string || 'unknown';
     
     if (!analyzeResult) {
       throw new Error('TEMPLATE_NOT_FOUND');
@@ -95,7 +95,7 @@ const generateMappingStep = createStep({
     
     const detectedSchema = analyzeResult?.fields || [];
     const templateId = templateResult?.templateId || 'default';
-    const platformType = runtimeContext?.get('platformType') || 'unknown';
+    const platformType = runtimeContext?.get('platformType') as string || 'unknown';
     
     const result = await mastra.tools.generateMapping.execute({
       detectedSchema,
@@ -157,7 +157,7 @@ const generateUISpecStep = createStep({
     
     const templateId = templateResult?.templateId || 'default';
     const mapping = mappingResult?.mappings || {};
-    const platformType = runtimeContext?.get('platformType') || 'unknown';
+    const platformType = runtimeContext?.get('platformType') as string || 'unknown';
     
     const result = await mastra.tools.generateUISpec.execute({
       templateId,
@@ -211,7 +211,7 @@ const persistPreviewVersionStep = createStep({
       userId: initData.userId,
       spec_json,
       design_tokens,
-      platformType: runtimeContext?.get('platformType') || 'unknown',
+      platformType: runtimeContext?.get('platformType') as string || 'unknown',
     });
     
     return result;
