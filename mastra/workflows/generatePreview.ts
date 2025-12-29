@@ -267,7 +267,6 @@ export const generatePreviewWorkflow = createWorkflow({
   id: 'generatePreview',
   inputSchema: GeneratePreviewInput,
   outputSchema: GeneratePreviewOutput,
-  validateInputs: true,
 })
   .then(analyzeSchemaStep)
   .then(selectTemplateStep)
