@@ -35,14 +35,12 @@ const analyzeSchemaStep = createStep({
   id: 'analyzeSchema',
   inputSchema: z.object({}),
   outputSchema: z.object({
-    fields: z.array(
-      z.object({
-        name: z.string(),
-        type: z.string(),
-        sample: z.any(),
-        nullable: z.boolean(),
-      }),
-    ),
+    fields: z.array(z.object({
+      name: z.string(),
+      type: z.string(),
+      sample: z.any(),
+      nullable: z.boolean(),
+    })),
     eventTypes: z.array(z.string()),
     confidence: z.number(),
   }),
@@ -65,7 +63,7 @@ const analyzeSchemaStep = createStep({
   },
 });
 
-// Step 2: Select Template
+// Step 2: selectTemplate
 const selectTemplateStep = createStep({
   id: 'selectTemplate',
   inputSchema: analyzeSchemaStep.outputSchema,
@@ -93,7 +91,7 @@ const selectTemplateStep = createStep({
   },
 });
 
-// Step 3: Generate Mapping
+// Step 3: generateMapping
 const generateMappingStep = createStep({
   id: 'generateMapping',
   inputSchema: selectTemplateStep.outputSchema,
@@ -160,7 +158,7 @@ const checkMappingCompletenessStep = createStep({
   },
 });
 
-// Step 5: Generate UI Spec
+// Step 5: generateUISpec
 const generateUISpecStep = createStep({
   id: 'generateUISpec',
   inputSchema: z.object({}),
@@ -214,7 +212,7 @@ const validateSpecStep = createStep({
   },
 });
 
-// Step 7: Persist Preview Version
+// Step 7: persistPreviewVersion
 const persistPreviewVersionStep = createStep({
   id: 'persistPreviewVersion',
   inputSchema: validateSpecStep.outputSchema,
@@ -248,7 +246,7 @@ const persistPreviewVersionStep = createStep({
   },
 });
 
-// Step 8: Finalize
+// Step 8: finalize
 const finalizeStep = createStep({
   id: 'finalize',
   inputSchema: persistPreviewVersionStep.outputSchema,
@@ -263,9 +261,7 @@ const finalizeStep = createStep({
   },
 });
 
-// ============================================================================
-// Workflow Definition
-// ============================================================================
+// Workflow definition
 export const generatePreviewWorkflow = createWorkflow({
   id: 'generatePreview',
   inputSchema: GeneratePreviewInput,
