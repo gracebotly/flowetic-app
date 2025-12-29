@@ -7,7 +7,6 @@ import {
      persistPreviewVersion,
    } from '@/mastra/tools';
    import { NextRequest } from 'next/server';
-   import { RuntimeContext } from '@mastra/core';
 
    export const runtime = 'nodejs';
    export const dynamic = 'force-dynamic';
@@ -16,7 +15,7 @@ import {
     * POST /api/agent/platform
     *
     * This API endpoint orchestrates the platform mapping process using Mastra tools.
-    * It runs server‑side (no UI components) and returns a JSON response with the preview URL.
+    * It runs server-side (no UI components) and returns a JSON response with the preview URL.
     */
    export async function POST(req: NextRequest) {
      try {
@@ -43,16 +42,9 @@ import {
          );
        }
 
-       // Create runtime context for tool executions
-       const runtimeContext = new RuntimeContext();
-       runtimeContext.set('tenantId', tenantId);
-       runtimeContext.set('sourceId', sourceId);
-       runtimeContext.set('platformType', platformType);
-
        // Step 1: analyze schema
        const analyzeResult = await analyzeSchema.execute({
          context: { tenantId, sourceId, sampleSize: 100 },
-         runtimeContext,
        });
 
        // Step 2: select template
@@ -62,7 +54,6 @@ import {
            eventTypes: analyzeResult.eventTypes,
            fields: analyzeResult.fields,
          },
-         runtimeContext,
        });
 
        // Step 3: generate mapping
@@ -72,7 +63,6 @@ import {
            fields: analyzeResult.fields,
            platformType,
          },
-         runtimeContext,
        });
 
        // Step 4: generate UI spec
@@ -82,14 +72,13 @@ import {
            mappings: mappingResult.mappings,
            platformType,
          },
-         runtimeContext,
        });
 
        // Step 5: validate spec
        const validationResult = await validateSpec.execute({
          context: { spec_json: uiSpecResult.spec_json },
-         runtimeContext,
        });
+       
        if (!validationResult.valid || validationResult.score < 0.8) {
          return new Response(
            JSON.stringify({
@@ -113,7 +102,6 @@ import {
            design_tokens: uiSpecResult.design_tokens,
            platformType,
          },
-         runtimeContext,
        });
 
        return new Response(
