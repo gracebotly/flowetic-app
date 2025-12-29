@@ -16,6 +16,7 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createClient } from '@/lib/supabase/client';
 
 type ViewMode = "terminal" | "preview" | "publish";
 
@@ -44,6 +45,40 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
   const [previewDashboardId] = useState("demo-dashboard");
   const [previewVersionId] = useState("v1");
 
+  const [authContext, setAuthContext] = useState<{
+    userId: string | null;
+    tenantId: string | null;
+  }>({ userId: null, tenantId: null });
+
+  useEffect(() => {
+    async function loadAuthContext() {
+      const supabase = createClient();
+      
+      // Get current user
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id;
+      
+      if (!userId) {
+        console.error('No authenticated user found');
+        return;
+      }
+      
+      // Get user's tenant from memberships
+      const { data: membership } = await supabase
+        .from('memberships')
+        .select('tenant_id')
+        .eq('user_id', userId)
+        .single();
+      
+      setAuthContext({
+        userId,
+        tenantId: membership?.tenant_id || null
+      });
+    }
+    
+    loadAuthContext();
+  }, []);
+
   // Terminal logs
   const [logs, setLogs] = useState<TerminalLog[]>([
     {
@@ -60,8 +95,7 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
     {
       id: "m1",
       role: "assistant",
-      content:
-        "Hi! Tell me what dashboard you want to build, and which platform (Vapi, Retell, n8n) you're connecting first.",
+      content: "Hello! Welcome to GetFlowetic. How can I help you?",
     },
   ]);
 
@@ -104,6 +138,10 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
             ...renderedMessages.map((m) => ({ role: m.role === "assistant" ? "assistant" : m.role, content: m.content })),
             { role: "user", content: trimmed },
           ],
+          threadId: `thread-${Date.now()}`, // Generate if missing
+          tenantId: authContext.tenantId,
+          userId: authContext.userId,
+          // sourceId and platformType can be added later when user connects a platform
         }),
       });
 
@@ -150,6 +188,17 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
     } finally {
       setIsLoading(false);
     }
+  }
+
+  // Show loading state while auth is loading
+  if (!authContext.userId || !authContext.tenantId) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center">
+          <p className="text-gray-500">Loading...</p>
+        </div>
+      </div>
+    );
   }
 
   return (
