@@ -8,7 +8,7 @@ import { validateSpec } from '../tools/validateSpec';
 import { persistPreviewVersion } from '../tools/persistPreviewVersion';
 
 // Platform type derived from selectTemplate tool schema
-type PlatformType = z.infer<typeof selectTemplate.inputSchema>['platformType'];
+type SelectTemplatePlatformType = z.infer<typeof selectTemplate.inputSchema>['platformType'];
 
 // Input/Output schemas
 export const GeneratePreviewInput = z.object({
@@ -75,12 +75,11 @@ const selectTemplateStep = createStep({
   }),
   async execute({ runtimeContext, getStepResult }) {
     const analyzeResult = getStepResult(analyzeSchemaStep);
-    const platformType = runtimeContext?.get('platformType') as string || 'unknown';
     
     if (!analyzeResult) {
       throw new Error('TEMPLATE_NOT_FOUND');
     }
-    const platformType = (runtimeContext?.get('platformType') || 'other') as PlatformType;
+    const platformType = (runtimeContext?.get('platformType') || 'other') as SelectTemplatePlatformType;
     const result = await selectTemplate.execute({
       context: {
         platformType,
@@ -110,7 +109,7 @@ const generateMappingStep = createStep({
     }
     const fields = analyzeResult.fields;
     const templateId = templateResult.templateId;
-    const platformType = (runtimeContext?.get('platformType') || 'other') as PlatformType;
+    const platformType = (runtimeContext?.get('platformType') || 'other') as SelectTemplatePlatformType;
     const result = await generateMapping.execute({
       context: {
         templateId,
@@ -176,7 +175,7 @@ const generateUISpecStep = createStep({
     }
     const templateId = templateResult.templateId;
     const mappings = mappingResult.mappings;
-    const platformType = (runtimeContext?.get('platformType') || 'other') as PlatformType;
+    const platformType = (runtimeContext?.get('platformType') || 'other') as SelectTemplatePlatformType;
     const result = await generateUISpec.execute({
       context: {
         templateId,
@@ -232,7 +231,7 @@ const persistPreviewVersionStep = createStep({
     const tenantId = initData.tenantId;
     const userId = initData.userId;
     const interfaceId = initData.interfaceId;
-    const platformType = (runtimeContext?.get('platformType') || 'other') as PlatformType;
+    const platformType = (runtimeContext?.get('platformType') || 'other') as SelectTemplatePlatformType;
     const result = await persistPreviewVersion.execute({
       context: {
         tenantId,
