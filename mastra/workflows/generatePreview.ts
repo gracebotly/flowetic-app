@@ -113,7 +113,7 @@ const generateMappingStep = createStep({
     const result = await generateMapping.execute({
       context: {
         templateId,
-        fields: detectedSchema,
+        fields: analyzeResult.fields,
         platformType,
       },
       runtimeContext,
@@ -179,7 +179,7 @@ const generateUISpecStep = createStep({
     const result = await generateUISpec.execute({
       context: {
         templateId,
-        mappings: mapping,
+        mappings: mappingResult.mappings,
         platformType,
       },
       runtimeContext,
