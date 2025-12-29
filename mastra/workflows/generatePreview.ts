@@ -7,7 +7,9 @@ import { generateUISpec } from '../tools/generateUISpec';
 import { validateSpec } from '../tools/validateSpec';
 import { persistPreviewVersion } from '../tools/persistPreviewVersion';
 
-// Input/Output schemas
+// ============================================================================
+// Input/Output Schemas
+// ============================================================================
 export const GeneratePreviewInput = z.object({
   tenantId: z.string().uuid(),
   userId: z.string().uuid(),
@@ -25,7 +27,10 @@ export const GeneratePreviewOutput = z.object({
 export type GeneratePreviewInput = z.infer<typeof GeneratePreviewInput>;
 export type GeneratePreviewOutput = z.infer<typeof GeneratePreviewOutput>;
 
-// Step 1: analyzeSchema
+// ============================================================================
+// Step Definitions
+// ============================================================================
+// Step 1: Analyze Schema
 const analyzeSchemaStep = createStep({
   id: 'analyzeSchema',
   inputSchema: z.object({}),
@@ -47,7 +52,11 @@ const analyzeSchemaStep = createStep({
       throw new Error('CONNECTION_NOT_CONFIGURED');
     }
     const result = await analyzeSchema.execute({
-      context: { tenantId, sourceId, sampleSize },
+      context: {
+        tenantId,
+        sourceId,
+        sampleSize,
+      },
       runtimeContext,
     });
     return result;
@@ -65,10 +74,11 @@ const selectTemplateStep = createStep({
   }),
   async execute({ runtimeContext, getStepResult }) {
     const analyzeResult = getStepResult(analyzeSchemaStep);
+    const platformType = runtimeContext?.get('platformType') as string || 'unknown';
+    
     if (!analyzeResult) {
       throw new Error('TEMPLATE_NOT_FOUND');
     }
-    const platformType = runtimeContext?.get('platformType') as string || 'unknown';
     const result = await selectTemplate.execute({
       context: {
         platformType,
@@ -96,18 +106,22 @@ const generateMappingStep = createStep({
     if (!analyzeResult || !templateResult) {
       throw new Error('MAPPING_INCOMPLETE_REQUIRED_FIELDS');
     }
-    const fields = analyzeResult.fields;
-    const templateId = templateResult.templateId;
+    const detectedSchema = analyzeResult?.fields || [];
+    const templateId = templateResult?.templateId || 'default';
     const platformType = runtimeContext?.get('platformType') as string || 'unknown';
     const result = await generateMapping.execute({
-      context: { templateId, fields, platformType },
+      context: {
+        templateId,
+        fields: detectedSchema,
+        platformType,
+      },
       runtimeContext,
     });
     return result;
   },
 });
 
-// Step 4: checkMappingCompleteness
+// Step 4: Check Mapping Completeness (HITL)
 const checkMappingCompletenessStep = createStep({
   id: 'checkMappingCompleteness',
   inputSchema: generateMappingStep.outputSchema,
@@ -129,6 +143,7 @@ const checkMappingCompletenessStep = createStep({
   async execute({ getStepResult, suspend }) {
     const mappingResult = getStepResult(generateMappingStep);
     const missingFields = mappingResult?.missingFields || [];
+    // If any required fields are missing, pause for human input
     if (missingFields.length > 0) {
       await suspend({
         reason: 'Required fields missing - needs human input',
@@ -157,18 +172,22 @@ const generateUISpecStep = createStep({
     if (!templateResult || !mappingResult) {
       throw new Error('SPEC_GENERATION_FAILED');
     }
-    const templateId = templateResult.templateId;
-    const mappings = mappingResult.mappings;
+    const templateId = templateResult?.templateId || 'default';
+    const mapping = mappingResult?.mappings || {};
     const platformType = runtimeContext?.get('platformType') as string || 'unknown';
     const result = await generateUISpec.execute({
-      context: { templateId, mappings, platformType },
+      context: {
+        templateId,
+        mappings: mapping,
+        platformType,
+      },
       runtimeContext,
     });
     return result;
   },
 });
 
-// Step 6: validateSpec
+// Step 6: Validate Spec
 const validateSpecStep = createStep({
   id: 'validateSpec',
   inputSchema: generateUISpecStep.outputSchema,
@@ -181,7 +200,9 @@ const validateSpecStep = createStep({
     const specResult = getStepResult(generateUISpecStep);
     const spec_json = specResult?.spec_json || {};
     const result = await validateSpec.execute({
-      context: { spec_json },
+      context: {
+        spec_json,
+      },
       runtimeContext,
     });
     if (!result.valid || result.score < 0.8) {
@@ -205,6 +226,7 @@ const persistPreviewVersionStep = createStep({
     const specResult = getStepResult(generateUISpecStep);
     const spec_json = specResult?.spec_json || {};
     const design_tokens = specResult?.design_tokens || {};
+    
     const tenantId = initData.tenantId;
     const userId = initData.userId;
     const interfaceId = initData.interfaceId;
