@@ -1,4 +1,4 @@
-import { Agent } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
 import { openai } from '@ai-sdk/openai';
 import { analyzeSchema } from '../tools/analyzeSchema';
 import { selectTemplate } from '../tools/selectTemplate';
