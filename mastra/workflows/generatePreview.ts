@@ -7,6 +7,9 @@ import { generateUISpec } from '../tools/generateUISpec';
 import { validateSpec } from '../tools/validateSpec';
 import { persistPreviewVersion } from '../tools/persistPreviewVersion';
 
+// Platform type definition
+type PlatformType = 'vapi' | 'retell' | 'n8n' | 'mastra' | 'crewai' | 'pydantic_ai' | 'other';
+
 // Input/Output schemas
 export const GeneratePreviewInput = z.object({
   tenantId: z.string().uuid(),
@@ -68,7 +71,7 @@ const selectTemplateStep = createStep({
     if (!analyzeResult) {
       throw new Error('TEMPLATE_NOT_FOUND');
     }
-    const platformType = runtimeContext?.get('platformType') as string || 'unknown';
+    const platformType = (runtimeContext?.get('platformType') as PlatformType) || 'other';
     const result = await selectTemplate.execute({
       context: {
         platformType,
@@ -98,7 +101,7 @@ const generateMappingStep = createStep({
     }
     const fields = analyzeResult.fields;
     const templateId = templateResult.templateId;
-    const platformType = runtimeContext?.get('platformType') as string || 'unknown';
+    const platformType = (runtimeContext?.get('platformType') as PlatformType) || 'other';
     const result = await generateMapping.execute({
       context: { templateId, fields, platformType },
       runtimeContext,
@@ -159,7 +162,7 @@ const generateUISpecStep = createStep({
     }
     const templateId = templateResult.templateId;
     const mappings = mappingResult.mappings;
-    const platformType = runtimeContext?.get('platformType') as string || 'unknown';
+    const platformType = (runtimeContext?.get('platformType') as PlatformType) || 'other';
     const result = await generateUISpec.execute({
       context: { templateId, mappings, platformType },
       runtimeContext,
@@ -208,7 +211,7 @@ const persistPreviewVersionStep = createStep({
     const tenantId = initData.tenantId;
     const userId = initData.userId;
     const interfaceId = initData.interfaceId;
-    const platformType = runtimeContext?.get('platformType') as string || 'unknown';
+    const platformType = (runtimeContext?.get('platformType') as PlatformType) || 'other';
     const result = await persistPreviewVersion.execute({
       context: {
         tenantId,
