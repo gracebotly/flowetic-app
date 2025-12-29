@@ -7,9 +7,10 @@ import { generateUISpec } from '../tools/generateUISpec';
 import { validateSpec } from '../tools/validateSpec';
 import { persistPreviewVersion } from '../tools/persistPreviewVersion';
 
-// ============================================================================
-// Input/Output Schemas
-// ============================================================================
+// Platform type derived from selectTemplate tool schema
+type SelectTemplatePlatformType = z.infer<typeof selectTemplate.inputSchema>['platformType'];
+
+// Input/Output schemas
 export const GeneratePreviewInput = z.object({
   tenantId: z.string().uuid(),
   userId: z.string().uuid(),
@@ -33,7 +34,13 @@ export type GeneratePreviewOutput = z.infer<typeof GeneratePreviewOutput>;
 // Step 1: Analyze Schema
 const analyzeSchemaStep = createStep({
   id: 'analyzeSchema',
-  inputSchema: z.object({}),
+  inputSchema: z.object({
+    tenantId: z.string(),
+    userId: z.string(),
+    userRole: z.enum(['admin', 'client', 'viewer']),
+    interfaceId: z.string(),
+    instructions: z.string().optional(),
+  }),
   outputSchema: z.object({
     fields: z.array(z.object({
       name: z.string(),
@@ -44,13 +51,19 @@ const analyzeSchemaStep = createStep({
     eventTypes: z.array(z.string()),
     confidence: z.number(),
   }),
-  async execute({ runtimeContext }) {
-    const tenantId = runtimeContext?.get('tenantId') as string | undefined;
+  async execute({ inputData, runtimeContext }) {
+    // Get sourceId from runtimeContext (set when connection was established)
     const sourceId = runtimeContext?.get('sourceId') as string | undefined;
+    
+    // Get tenantId from workflow input
+    const { tenantId } = inputData;
+    
     const sampleSize = 100;
+    
     if (!tenantId || !sourceId) {
       throw new Error('CONNECTION_NOT_CONFIGURED');
     }
+    
     const result = await analyzeSchema.execute({
       context: {
         tenantId,
@@ -59,6 +72,7 @@ const analyzeSchemaStep = createStep({
       },
       runtimeContext,
     });
+    
     return result;
   },
 });
@@ -74,11 +88,11 @@ const selectTemplateStep = createStep({
   }),
   async execute({ runtimeContext, getStepResult }) {
     const analyzeResult = getStepResult(analyzeSchemaStep);
-    const platformType = runtimeContext?.get('platformType') as string || 'unknown';
     
     if (!analyzeResult) {
       throw new Error('TEMPLATE_NOT_FOUND');
     }
+    const platformType = (runtimeContext?.get('platformType') || 'other') as SelectTemplatePlatformType;
     const result = await selectTemplate.execute({
       context: {
         platformType,
@@ -106,13 +120,13 @@ const generateMappingStep = createStep({
     if (!analyzeResult || !templateResult) {
       throw new Error('MAPPING_INCOMPLETE_REQUIRED_FIELDS');
     }
-    const detectedSchema = analyzeResult?.fields || [];
-    const templateId = templateResult?.templateId || 'default';
-    const platformType = runtimeContext?.get('platformType') as string || 'unknown';
+    const fields = analyzeResult.fields;
+    const templateId = templateResult.templateId;
+    const platformType = (runtimeContext?.get('platformType') || 'other') as SelectTemplatePlatformType;
     const result = await generateMapping.execute({
       context: {
         templateId,
-        fields: detectedSchema,
+        fields: analyzeResult.fields,
         platformType,
       },
       runtimeContext,
@@ -161,28 +175,45 @@ const checkMappingCompletenessStep = createStep({
 // Step 5: generateUISpec
 const generateUISpecStep = createStep({
   id: 'generateUISpec',
-  inputSchema: z.object({}),
+  inputSchema: z.object({
+    shouldSuspend: z.boolean(),
+    missingFields: z.array(z.string()).optional(),
+    message: z.string().optional(),
+    decision: z.string(),
+  }),
   outputSchema: z.object({
     spec_json: z.record(z.any()),
     design_tokens: z.record(z.any()),
   }),
-  async execute({ runtimeContext, getStepResult }) {
+  async execute({ inputData, runtimeContext, getStepResult }) {
+    // inputData contains output from checkMappingCompletenessStep
+    const { shouldSuspend, missingFields, message, decision } = inputData;
+    
+    // If the previous step decided we should suspend, handle it
+    if (shouldSuspend && missingFields && missingFields.length > 0) {
+      throw new Error(`INCOMPLETE_MAPPING: ${message || 'Missing required fields'}`);
+    }
+    
     const templateResult = getStepResult(selectTemplateStep);
     const mappingResult = getStepResult(generateMappingStep);
+    
     if (!templateResult || !mappingResult) {
       throw new Error('SPEC_GENERATION_FAILED');
     }
-    const templateId = templateResult?.templateId || 'default';
-    const mapping = mappingResult?.mappings || {};
-    const platformType = runtimeContext?.get('platformType') as string || 'unknown';
+    
+    const templateId = templateResult.templateId;
+    const mappings = mappingResult.mappings;
+    const platformType = (runtimeContext?.get('platformType') || 'other') as SelectTemplatePlatformType;
+    
     const result = await generateUISpec.execute({
       context: {
         templateId,
-        mappings: mapping,
+        mappings: mappingResult.mappings,
         platformType,
       },
       runtimeContext,
     });
+    
     return result;
   },
 });
@@ -230,7 +261,7 @@ const persistPreviewVersionStep = createStep({
     const tenantId = initData.tenantId;
     const userId = initData.userId;
     const interfaceId = initData.interfaceId;
-    const platformType = runtimeContext?.get('platformType') as string || 'unknown';
+    const platformType = (runtimeContext?.get('platformType') || 'other') as SelectTemplatePlatformType;
     const result = await persistPreviewVersion.execute({
       context: {
         tenantId,
@@ -266,7 +297,6 @@ export const generatePreviewWorkflow = createWorkflow({
   id: 'generatePreview',
   inputSchema: GeneratePreviewInput,
   outputSchema: GeneratePreviewOutput,
-  validateInputs: true,
 })
   .then(analyzeSchemaStep)
   .then(selectTemplateStep)

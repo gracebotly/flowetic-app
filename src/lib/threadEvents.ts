@@ -11,12 +11,18 @@ export async function logThreadEvent(
   payload: Record<string, unknown>,
 ) {
   try {
-    const supabase = createClient();
-    await supabase.from('events').insert({
-      thread_id: threadId,
-      type,
-      payload,
-    });
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from('thread_events')
+      .insert({
+        thread_id: threadId,
+        type,
+        payload,
+      });
+      
+    if (error) {
+      console.error('Supabase error inserting thread event:', error);
+    }
   } catch (err) {
     // In case of logging failure, just print to console.  Do not interrupt the request.
     console.error('Error logging thread event', err);
