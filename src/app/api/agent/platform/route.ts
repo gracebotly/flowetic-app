@@ -42,9 +42,13 @@ import {
          );
        }
 
+       // Runtime context required by Mastra tools (empty object satisfies type requirements)
+       const runtimeContext = {};
+
        // Step 1: analyze schema
        const analyzeResult = await analyzeSchema.execute({
          context: { tenantId, sourceId, sampleSize: 100 },
+         runtimeContext,
        });
 
        // Step 2: select template
@@ -54,6 +58,7 @@ import {
            eventTypes: analyzeResult.eventTypes,
            fields: analyzeResult.fields,
          },
+         runtimeContext,
        });
 
        // Step 3: generate mapping
@@ -63,6 +68,7 @@ import {
            fields: analyzeResult.fields,
            platformType,
          },
+         runtimeContext,
        });
 
        // Step 4: generate UI spec
@@ -72,11 +78,13 @@ import {
            mappings: mappingResult.mappings,
            platformType,
          },
+         runtimeContext,
        });
 
        // Step 5: validate spec
        const validationResult = await validateSpec.execute({
          context: { spec_json: uiSpecResult.spec_json },
+         runtimeContext,
        });
        
        if (!validationResult.valid || validationResult.score < 0.8) {
@@ -102,6 +110,7 @@ import {
            design_tokens: uiSpecResult.design_tokens,
            platformType,
          },
+         runtimeContext,
        });
 
        return new Response(
