@@ -175,20 +175,36 @@ const checkMappingCompletenessStep = createStep({
 // Step 5: generateUISpec
 const generateUISpecStep = createStep({
   id: 'generateUISpec',
-  inputSchema: z.object({}),
+  inputSchema: z.object({
+    shouldSuspend: z.boolean(),
+    missingFields: z.array(z.string()).optional(),
+    message: z.string().optional(),
+    decision: z.string(),
+  }),
   outputSchema: z.object({
     spec_json: z.record(z.any()),
     design_tokens: z.record(z.any()),
   }),
-  async execute({ runtimeContext, getStepResult }) {
+  async execute({ inputData, runtimeContext, getStepResult }) {
+    // inputData contains output from checkMappingCompletenessStep
+    const { shouldSuspend, missingFields, message, decision } = inputData;
+    
+    // If the previous step decided we should suspend, handle it
+    if (shouldSuspend && missingFields && missingFields.length > 0) {
+      throw new Error(`INCOMPLETE_MAPPING: ${message || 'Missing required fields'}`);
+    }
+    
     const templateResult = getStepResult(selectTemplateStep);
     const mappingResult = getStepResult(generateMappingStep);
+    
     if (!templateResult || !mappingResult) {
       throw new Error('SPEC_GENERATION_FAILED');
     }
+    
     const templateId = templateResult.templateId;
     const mappings = mappingResult.mappings;
     const platformType = (runtimeContext?.get('platformType') || 'other') as SelectTemplatePlatformType;
+    
     const result = await generateUISpec.execute({
       context: {
         templateId,
@@ -197,6 +213,7 @@ const generateUISpecStep = createStep({
       },
       runtimeContext,
     });
+    
     return result;
   },
 });
