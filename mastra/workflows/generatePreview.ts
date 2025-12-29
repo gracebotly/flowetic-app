@@ -34,7 +34,13 @@ export type GeneratePreviewOutput = z.infer<typeof GeneratePreviewOutput>;
 // Step 1: Analyze Schema
 const analyzeSchemaStep = createStep({
   id: 'analyzeSchema',
-  inputSchema: z.object({}),
+  inputSchema: z.object({
+    tenantId: z.string(),
+    userId: z.string(),
+    userRole: z.enum(['admin', 'client', 'viewer']),
+    interfaceId: z.string(),
+    instructions: z.string().optional(),
+  }),
   outputSchema: z.object({
     fields: z.array(z.object({
       name: z.string(),
@@ -45,13 +51,19 @@ const analyzeSchemaStep = createStep({
     eventTypes: z.array(z.string()),
     confidence: z.number(),
   }),
-  async execute({ runtimeContext }) {
-    const tenantId = runtimeContext?.get('tenantId') as string | undefined;
+  async execute({ inputData, runtimeContext }) {
+    // Get sourceId from runtimeContext (set when connection was established)
     const sourceId = runtimeContext?.get('sourceId') as string | undefined;
+    
+    // Get tenantId from workflow input
+    const { tenantId } = inputData;
+    
     const sampleSize = 100;
+    
     if (!tenantId || !sourceId) {
       throw new Error('CONNECTION_NOT_CONFIGURED');
     }
+    
     const result = await analyzeSchema.execute({
       context: {
         tenantId,
@@ -60,6 +72,7 @@ const analyzeSchemaStep = createStep({
       },
       runtimeContext,
     });
+    
     return result;
   },
 });
