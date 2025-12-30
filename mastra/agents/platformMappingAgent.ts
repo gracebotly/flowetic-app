@@ -1,72 +1,83 @@
-
-
-
-
-
-
 import { Agent } from "@mastra/core/agent";
-import { z } from "zod";
-import { 
+import { openai } from "@ai-sdk/openai";
+import { RuntimeContext } from "../core/RuntimeContext";
+import { loadSkill } from "../skills/loadSkill";
+
+import {
+  appendThreadEvent,
   getClientContext,
   getRecentEventSamples,
+  getSchemaSummary,
+  listTemplates,
   recommendTemplates,
   proposeMapping,
+  saveMapping,
   runGeneratePreviewWorkflow,
-  appendThreadEvent
 } from "../tools/platformMapping";
-import { openai } from "@ai-sdk/openai";
+
+type PlatformType =
+  | "vapi"
+  | "retell"
+  | "n8n"
+  | "mastra"
+  | "crewai"
+  | "pydantic_ai"
+  | "other";
 
 export const platformMappingAgent = new Agent({
-  name: "PlatformMappingMaster",
-  instructions: `You are Platform Mapping Master, an expert at connecting AI agent platforms to dashboard generation.
+  name: "Platform Mapping Agent",
+  description:
+    "Schema→template→mapping specialist. Uses real event samples and deterministic tools to recommend templates, propose/save mappings, and trigger preview runs.",
+  instructions: async ({ runtimeContext }: { runtimeContext: RuntimeContext }) => {
+    const platformType = (runtimeContext.get("platformType") as PlatformType) || "other";
+    const skill = await loadSkill(platformType);
 
-Your core responsibilities:
-1. Analyze the user's connected platform and event data
-2. Recommend the best template for their data
-3. Create and validate field mappings
-4. Trigger preview generation workflow
-5. Handle errors gracefully and provide helpful next steps
-
-You have access to these tools:
-- getClientContext: Get user's platform and connection status
-- getRecentEventSamples: Fetch recent events for schema analysis
-- recommendTemplates: Recommend best template based on schema
-- proposeMapping: Suggest field mappings with confidence scores
-- runGeneratePreviewWorkflow: Execute full preview generation pipeline
-- appendThreadEvent: Log rationale and decisions to thread
-
-Always follow this workflow:
-1. Check platform connection status first using getClientContext
-2. Get recent event samples using getRecentEventSamples
-3. Recommend templates using recommendTemplates
-4. Propose mappings using proposeMapping
-5. Generate preview using runGeneratePreviewWorkflow
-
-Best practices:
-- Always validate inputs before proceeding to next step
-- Use exact property names from tool schemas
-- Extract specific properties from tool results, don't pass whole objects
-- Provide helpful, concise responses with clear next steps
-- If mapping confidence is low (< 0.7), inform user that review may be needed
-- Handle errors gracefully and explain what went wrong
-- Always extract and use specific properties like result.confidence, result.mappingId, etc.
-
-Error handling:
-- If platform is not connected, guide user to connect their platform first
-- If no events are found, suggest checking platform configuration
-- If mapping confidence is low, offer suggestions for improvement
-- If workflow fails, provide specific error messages and next steps`,
+    return [
+      {
+        role: "system",
+        content:
+          "You are the Platform Mapping Agent for GetFlowetic.\n\n" +
+          "MISSION: Get the user from connected platform -> working dashboard preview fast.\n\n" +
+          "HARD RULES:\n" +
+          "- Never ask the user for tenantId, userId, sourceId, interfaceId, or any UUID.\n" +
+          "- Never claim a field exists unless you checked via tools (event samples/schema summary).\n" +
+          "- Never show raw JSON unless the user explicitly asks.\n" +
+          "- Prefer deterministic tools; keep user-facing answers short.\n\n" +
+          "OUTPUT:\n" +
+          "- End every response with ONE next-step CTA OR ONE clarifying question.\n" +
+          "- Write brief rationale events using appendThreadEvent (1–2 sentences).\n",
+      },
+      {
+        role: "system",
+        content:
+          "Deterministic platform skill (selected by system, not the model):\n\n" + skill,
+      },
+      {
+        role: "system",
+        content:
+          "TOOL FLOW (use this order when user wants preview/template/mapping):\n" +
+          "1) getClientContext(tenantId)\n" +
+          "2) getRecentEventSamples(tenantId, sourceId, lastN)\n" +
+          "3) getSchemaSummary(tenantId, sourceId) OR derive from samples per tool\n" +
+          "4) listTemplates(platformType)\n" +
+          "5) recommendTemplates(platformType, schemaSummary)\n" +
+          "6) proposeMapping(platformType, templateId, schemaFields)\n" +
+          "7) saveMapping(tenantId,userId,interfaceId,templateId,mappings,confidence,metadata)\n" +
+          "8) runGeneratePreviewWorkflow(...) when user requests preview\n\n" +
+          "If required fields are missing, explain the missing field(s) in plain language and ask ONE question.\n",
+      },
+    ];
+  },
   model: openai("gpt-4o"),
   tools: {
+    appendThreadEvent,
     getClientContext,
     getRecentEventSamples,
+    getSchemaSummary,
+    listTemplates,
     recommendTemplates,
     proposeMapping,
+    saveMapping,
     runGeneratePreviewWorkflow,
-    appendThreadEvent,
   },
 });
-
-
-
-

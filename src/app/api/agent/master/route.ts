@@ -8,18 +8,23 @@ export const dynamic = "force-dynamic";
 
 function detectIntent(message: string) {
   const m = message.toLowerCase();
+
   const wantsPreview =
     m.includes("preview") ||
-    m.includes("generate") ||
+    m.includes("generate preview") ||
+    m.includes("generate a preview") ||
+    m.includes("create a preview") ||
+    m.includes("build a preview") ||
+    m.includes("generate dashboard") ||
     m.includes("create dashboard") ||
-    m.includes("build dashboard") ||
-    m.includes("generate dashboard");
+    m.includes("build dashboard");
 
   const wantsMapping =
     m.includes("mapping") ||
     m.includes("map ") ||
     m.includes("template") ||
-    m.includes("recommend template");
+    m.includes("recommend template") ||
+    m.includes("best template");
 
   return { wantsPreview, wantsMapping };
 }
@@ -33,6 +38,7 @@ export async function POST(req: NextRequest) {
     // Message can come from either shape
     const message =
       (body.message as string | undefined) ??
+      (body.lastMessage as string | undefined) ??
       (body.messages?.[body.messages.length - 1]?.content as string | undefined) ??
       "";
 
@@ -140,8 +146,8 @@ export async function POST(req: NextRequest) {
     const { wantsPreview, wantsMapping } = detectIntent(message);
 
     if (wantsPreview || wantsMapping) {
-      const mappingAgent = mastra.getAgent("platformMapping");
-      if (!mappingAgent) {
+      const platformMapping = mastra.getAgent("platformMapping");
+      if (!platformMapping) {
         return new Response(
           JSON.stringify({
             type: "error",
@@ -166,7 +172,7 @@ export async function POST(req: NextRequest) {
         JSON.stringify({
           type: "success",
           agentKey: "masterRouter->platformMapping",
-          text: `${routerResponse.text}\n\n${mappingResponse.text}`,
+          text: `${routerResponse.text ?? ""}\n\n${mappingResponse.text ?? ""}`.trim(),
         }),
         { headers: { "Content-Type": "application/json" } },
       );
@@ -181,7 +187,7 @@ export async function POST(req: NextRequest) {
       JSON.stringify({
         type: "success",
         agentKey: "masterRouter",
-        text: routerOnly.text ?? "",
+        text: routerResponse.text ?? "",
       }),
       { headers: { "Content-Type": "application/json" } },
     );
