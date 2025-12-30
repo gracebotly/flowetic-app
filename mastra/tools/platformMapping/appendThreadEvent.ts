@@ -22,7 +22,7 @@ export const appendThreadEvent = createTool({
     eventId: z.string().uuid(),
   }),
   execute: async ({ context }) => {
-    const supabase = createClient();
+    const supabase = await createClient();
 
     const { tenantId, threadId, interfaceId, runId, type, message, metadata } = context;
 
