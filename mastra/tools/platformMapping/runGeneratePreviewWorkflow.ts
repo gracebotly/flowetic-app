@@ -51,7 +51,7 @@ export const runGeneratePreviewWorkflow = createTool({
 
 
     return {
-      runId: result.runId,
+      runId: result.result.runId,
       previewVersionId: result.result.previewVersionId,
       previewUrl: result.result.previewUrl,
     };
