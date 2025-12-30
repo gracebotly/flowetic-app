@@ -1,10 +1,7 @@
 
 
----------
-
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-
 export const getSchemaSummary = createTool({
   id: 'getSchemaSummary',
   description: 'Summarize event schema and field types from samples',
