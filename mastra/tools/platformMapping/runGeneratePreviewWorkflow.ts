@@ -1,12 +1,12 @@
 import { createTool } from "@mastra/core/tools";
 import { RuntimeContext } from "@mastra/core/runtime-context";
 import { z } from "zod";
-import { generatePreviewWorkflow } from "../../workflows/generatePreview";
+import { mastra } from "../../index";
 
 export const runGeneratePreviewWorkflow = createTool({
   id: "runGeneratePreviewWorkflow",
   description:
-    "Run the Generate Preview workflow end-to-end using the existing runtimeContext.",
+    "Run the Generate Preview workflow end-to-end using Mastra workflow runs.",
   inputSchema: z.object({
     tenantId: z.string().uuid(),
     userId: z.string().uuid(),
@@ -21,11 +21,17 @@ export const runGeneratePreviewWorkflow = createTool({
   }),
   execute: async ({ context, runtimeContext }) => {
     if (!runtimeContext) {
-      // Hard fail: per architecture, runtimeContext is required on every call
       throw new Error("RUNTIME_CONTEXT_REQUIRED");
     }
 
-    const result = await generatePreviewWorkflow.execute({
+    const workflow = mastra.getWorkflow("generatePreview");
+    if (!workflow) {
+      throw new Error("WORKFLOW_NOT_FOUND");
+    }
+
+    const run = await workflow.createRunAsync();
+
+    const result = await run.start({
       inputData: {
         tenantId: context.tenantId,
         userId: context.userId,
@@ -36,10 +42,16 @@ export const runGeneratePreviewWorkflow = createTool({
       runtimeContext: runtimeContext as RuntimeContext,
     });
 
+    // In Mastra, run.start returns a result envelope; your workflow's output schema
+    // is the final output, available on result.result when status === 'success'.
+    if (result.status !== "success") {
+      throw new Error("WORKFLOW_FAILED");
+    }
+
     return {
       runId: result.runId,
-      previewVersionId: result.previewVersionId,
-      previewUrl: result.previewUrl,
+      previewVersionId: result.result.previewVersionId,
+      previewUrl: result.result.previewUrl,
     };
   },
 });
