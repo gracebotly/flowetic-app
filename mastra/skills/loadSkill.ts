@@ -27,6 +27,9 @@ export async function loadSkill(platformType: PlatformType): Promise<string> {
   }
 }
 
+// Backwards-compatible alias (older agents/tools may still import this name)
+export const loadSkillMarkdown = loadSkill;
+
 
 
 
