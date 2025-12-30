@@ -44,7 +44,7 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
 
   // MVP: hardcoded dashboard + version IDs until we have real objects from Supabase
   const [previewDashboardId] = useState("demo-dashboard");
-  const [previewVersionId] = useState("v1");
+  const [previewVersionId, setPreviewVersionId] = useState("v1");
 
   const [authContext, setAuthContext] = useState<{
     userId: string | null;
