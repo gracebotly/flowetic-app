@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from '@/lib/supabase/client';
+import { useCopilotAction } from "@copilotkit/react-core";
 
 type ViewMode = "terminal" | "preview" | "publish";
 
@@ -116,78 +117,138 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
     setLogs((prev) => [...prev, { id: crypto.randomUUID(), type, text, detail }]);
   }
 
-  async function send() {
-    const trimmed = input.trim();
-    if (!trimmed || isLoading) return;
-
-    const userMsg: Msg = { id: crypto.randomUUID(), role: "user", content: trimmed };
-    setMessages((prev) => [...prev, userMsg]);
-    setInput("");
-    setIsLoading(true);
-
-    // Default right panel to terminal so users see "what's happening"
-    setView("terminal");
-    addLog("running", "Analyzing request...");
-
-    try {
-      const res = await fetch("/api/agent/master", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          messages: [
-            ...renderedMessages.map((m) => ({ role: m.role === "assistant" ? "assistant" : m.role, content: m.content })),
-            { role: "user", content: trimmed },
-          ],
-          threadId: `thread-${Date.now()}`, // Generate if missing
-          tenantId: authContext.tenantId,
-          userId: authContext.userId,
-          // sourceId and platformType can be added later when user connects a platform
-        }),
-      });
-
-      if (!res.ok || !res.body) {
-        addLog("error", "Agent request failed", `HTTP ${res.status}`);
-        throw new Error(`Agent error: ${res.status}`);
+  // CopilotKit Action for Generate Preview
+  useCopilotAction({
+    name: "generatePreview",
+    description: "Generate a dashboard preview based on current context",
+    parameters: [
+      {
+        name: "instructions",
+        type: "string",
+        description: "Optional instructions for the preview generation",
+        required: false,
+      },
+    ],
+    handler: async (args) => {
+      if (!authContext.tenantId || !authContext.userId) {
+        addLog("error", "Authentication required", "Please log in to generate previews");
+        return;
       }
 
-      addLog("success", "Connected to Master Agent");
-      addLog("running", "Streaming response...");
+      // Hardcoded interfaceId for MVP
+      const interfaceId = "demo-interface";
 
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let assistantText = "";
+      addLog("running", "Generating dashboard preview...", "Starting workflow execution");
 
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        assistantText += decoder.decode(value, { stream: true });
-        // Optional: could show partial streaming in UI later
+      try {
+        const response = await fetch('/api/agent/master', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            tenantId: authContext.tenantId,
+            userId: authContext.userId,
+            userRole: 'admin', // MVP: hardcoded
+            interfaceId,
+            instructions: args.instructions,
+            sourceId: 'demo-source', // MVP: hardcoded
+            platformType: 'vapi', // MVP: hardcoded
+          }),
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result.message || 'Failed to generate preview');
+        }
+
+        if (result.type === 'success') {
+          setPreviewVersionId(result.versionId);
+          addLog("success", "Preview generated successfully!", `View at: ${result.previewUrl}`);
+          setView("preview");
+        } else {
+          addLog("error", "Preview generation failed", result.message);
+        }
+      } catch (error: any) {
+        addLog("error", "Preview generation failed", error.message);
       }
+    },
+  });
 
-      assistantText = assistantText.trim();
+  const send = async () => {
+  const text = input.trim();
+  if (!text || isLoading) return;
 
-      // Add assistant response
-      setMessages((prev) => [
-        ...prev,
-        { id: crypto.randomUUID(), role: "assistant", content: assistantText || "(empty response)" },
-      ]);
+  setIsLoading(true);
+  setInput("");
 
-      addLog("success", "Response received");
+  const userMsg: Msg = { id: `u-${Date.now()}`, role: "user", content: text };
+  setMessages((prev) => [...prev, userMsg]);
 
-      
-    } catch (e: any) {
+  try {
+    const tenantId = authContext.tenantId;
+    const userId = authContext.userId;
+
+    if (!tenantId || !userId) {
+      addLog("error", "Not authenticated", "Please log in and try again.");
+      setIsLoading(false);
+      return;
+    }
+
+    // MVP placeholders (replace with real IDs once your interfaces/sources exist in Supabase)
+    const interfaceId = "00000000-0000-0000-0000-000000000001";
+    const sourceId = "00000000-0000-0000-0000-000000000002";
+    const threadId = `demo-thread-${userId}`;
+    const platformType = "vapi" as const;
+
+    addLog("running", "Sending message to agent...", text);
+
+    const resp = await fetch("/api/agent/master", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        tenantId,
+        userId,
+        userRole: "admin",
+        interfaceId,
+        sourceId,
+        threadId,
+        platformType,
+        lastMessage: text,
+      }),
+    });
+
+    const data = await resp.json();
+
+    if (!resp.ok || data.type === "error") {
+      addLog("error", "Agent error", data.message || "Unknown agent error");
       setMessages((prev) => [
         ...prev,
         {
-          id: crypto.randomUUID(),
+          id: `a-${Date.now()}`,
           role: "assistant",
-          content: `Sorry—something went wrong. ${e?.message ?? ""}`,
+          content: data.message || "Something went wrong.",
         },
       ]);
-      addLog("error", "Error", e?.message ?? "Unknown error");
-    } finally {
-      setIsLoading(false);
+      return;
     }
+
+    setMessages((prev) => [
+      ...prev,
+      { id: `a-${Date.now()}`, role: "assistant", content: data.text || "" },
+    ]);
+
+    addLog("success", "Agent responded");
+  } catch (e: any) {
+    addLog("error", "Request failed", e?.message ?? "Unknown error");
+    setMessages((prev) => [
+      ...prev,
+      { id: `a-${Date.now()}`, role: "assistant", content: "Request failed." },
+    ]);
+  } finally {
+    setIsLoading(false);
+  }
   }
 
   // Show loading state while auth is loading

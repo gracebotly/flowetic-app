@@ -1,144 +1,79 @@
-import { mastra } from '@/mastra';
-import { NextRequest } from 'next/server';
-
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+import { NextRequest } from "next/server";
+import { RuntimeContext } from "@mastra/core/runtime-context";
+import { mastra } from "@/mastra";
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { messages, threadId, tenantId, userId, sourceId, platformType } = body;
-    
-    // Validate required fields
-    if (!tenantId || !userId) {
+
+    const tenantId = body.tenantId as string | undefined;
+    const userId = body.userId as string | undefined;
+    const userRole = body.userRole as "admin" | "client" | "viewer" | undefined;
+    const interfaceId = body.interfaceId as string | undefined;
+    const threadId = body.threadId as string | undefined;
+    const platformType = body.platformType as
+      | "vapi"
+      | "retell"
+      | "n8n"
+      | "mastra"
+      | "crewai"
+      | "pydantic_ai"
+      | "other"
+      | undefined;
+    const sourceId = body.sourceId as string | undefined;
+    const lastMessage = (body.lastMessage as string | undefined) ?? "";
+
+    if (!tenantId || !userId || !userRole || !interfaceId || !threadId || !platformType || !sourceId) {
       return new Response(
         JSON.stringify({
-          type: 'error',
-          code: 'MISSING_REQUIRED_FIELDS',
-          message: 'tenantId and userId are required',
+          type: "error",
+          code: "MISSING_REQUIRED_FIELDS",
+          message:
+            "Missing required fields: tenantId, userId, userRole, interfaceId, threadId, platformType, sourceId",
         }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
+        { status: 400, headers: { "Content-Type": "application/json" } },
       );
     }
-    
-    // Get last user message
-    const lastMessage = messages[messages.length - 1]?.content || '';
-    
-    // Simple intent detection
-    const shouldGeneratePreview =
-      lastMessage.toLowerCase().includes('generate') ||
-      lastMessage.toLowerCase().includes('create') ||
-      lastMessage.toLowerCase().includes('build');
-    
-    if (shouldGeneratePreview && sourceId && platformType) {
-      // Get workflow
-      const workflow = mastra.getWorkflow('generatePreview');
-      
-      if (!workflow) {
-        return new Response(
-          JSON.stringify({
-            type: 'error',
-            code: 'WORKFLOW_NOT_FOUND',
-            message: 'generatePreview workflow not found',
-          }),
-          { status: 500, headers: { 'Content-Type': 'application/json' } }
-        );
-      }
-      
-      // Generate a unique interfaceId for this preview
-      const interfaceId = `preview-${Date.now()}`;
-      
-      // Execute workflow with input data (runtime context will be set by the workflow steps)
-      // TODO: Fix workflow execution with proper Mastra v0.19 API
-      // For now, return a simulated response to avoid TypeScript errors
-      const result = {
-        previewUrl: `/preview/${interfaceId}`,
-        previewVersionId: `v1-${Date.now()}`,
-      };
-      
-      // Return workflow result (workflow.execute() returns the expected output structure)
-      return new Response(
-        JSON.stringify({
-          type: 'workflow_complete',
-          workflow: 'generate-preview',
-          result: {
-            previewUrl: result.previewUrl,
-            interfaceId: interfaceId, // Use our generated interfaceId
-            versionId: result.previewVersionId,
-          },
-          message: `✅ Dashboard preview generated! You can view it at ${result.previewUrl || '/preview/' + interfaceId}`,
-        }),
-        {
-          headers: { 'Content-Type': 'application/json' },
-        }
-      );
-    }
-    
-    // Fall back to conversational agent
-    const agent = mastra.getAgent('masterRouter');
-    
+
+    const runtimeContext = new RuntimeContext();
+    runtimeContext.set("tenantId", tenantId);
+    runtimeContext.set("userId", userId);
+    runtimeContext.set("userRole", userRole);
+    runtimeContext.set("interfaceId", interfaceId);
+    runtimeContext.set("threadId", threadId);
+    runtimeContext.set("platformType", platformType);
+    runtimeContext.set("sourceId", sourceId);
+
+    const agent = mastra.getAgent("platformMappingMaster");
     if (!agent) {
       return new Response(
         JSON.stringify({
-          type: 'error',
-          code: 'AGENT_NOT_FOUND',
-          message: 'Master router agent not configured',
+          type: "error",
+          code: "AGENT_NOT_FOUND",
+          message: "platformMappingMaster agent not registered",
         }),
-        { status: 500, headers: { 'Content-Type': 'application/json' } }
+        { status: 500, headers: { "Content-Type": "application/json" } },
       );
     }
-    
-    const response = await agent.generate(lastMessage, {
-      maxSteps: 3,
-    });
-    
-    return new Response(
-      response.text,
-      {
-        headers: { 'Content-Type': 'text/plain; charset=utf-8' },
-      }
-    );
-  } catch (error: any) {
-    console.error('Master Agent Error:', error);
-    
-    const { tenantId, userId, sourceId, platformType } = await req.json();
-    
-    // Handle known errors
-    if (error.message === 'NO_EVENTS_AVAILABLE') {
-      return new Response(
-        JSON.stringify({
-          type: 'error',
-          code: 'NO_EVENTS_AVAILABLE',
-          message: 'No events found. Please connect your platform and ensure data is flowing.',
-        }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
-      );
-    }
-    
-    if (error.message === 'MAPPING_INCOMPLETE_REQUIRED_FIELDS') {
-      return new Response(
-        JSON.stringify({
-          executionContext: {
-            tenantId,
-            userId,
-            sourceId,
-            platformType,
-          },
-          type: 'error',
-          code: 'MAPPING_INCOMPLETE',
-          message: 'Cannot generate preview without all required fields.',
-        }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
-      );
-    }
-    
+
+    const result = await agent.generate(lastMessage, { runtimeContext, maxSteps: 8 });
+
     return new Response(
       JSON.stringify({
-        type: 'error',
-        code: 'UNKNOWN_ERROR',
-        message: error.message || 'An unexpected error occurred.',
+        type: "success",
+        text: result.text ?? "",
       }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
+      { headers: { "Content-Type": "application/json" } },
+    );
+  } catch (err: any) {
+    console.error("Agent master route error:", err);
+    return new Response(
+      JSON.stringify({
+        type: "error",
+        code: "UNKNOWN_ERROR",
+        message: err?.message ?? "Unknown error",
+      }),
+      { status: 500, headers: { "Content-Type": "application/json" } },
     );
   }
 }
