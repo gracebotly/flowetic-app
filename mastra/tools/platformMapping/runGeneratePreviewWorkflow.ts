@@ -1,21 +1,12 @@
-
-
-
-
-
-
-
-
-
-
 import { createTool } from "@mastra/core/tools";
+import { RuntimeContext } from "@mastra/core/runtime-context";
 import { z } from "zod";
-import { generatePreviewWorkflow } from "../../workflows/generatePreview";
-import { RuntimeContext } from "../../core/RuntimeContext";
+import { mastra } from "../../index";
 
 export const runGeneratePreviewWorkflow = createTool({
   id: "runGeneratePreviewWorkflow",
-  description: "Run the Generate Preview workflow end-to-end using the existing runtimeContext.",
+  description:
+    "Run the Generate Preview workflow end-to-end using Mastra workflow runs.",
   inputSchema: z.object({
     tenantId: z.string().uuid(),
     userId: z.string().uuid(),
@@ -30,12 +21,15 @@ export const runGeneratePreviewWorkflow = createTool({
   }),
   execute: async ({ context, runtimeContext }) => {
     if (!runtimeContext) {
-      // Hard fail: per architecture, runtimeContext is required on every call
       throw new Error("RUNTIME_CONTEXT_REQUIRED");
     }
 
-    // Ensure runtimeContext is the correct class (defensive, but no guessing)
-    const rc = runtimeContext as RuntimeContext;
+    const workflow = mastra.getWorkflow("generatePreview");
+    if (!workflow) {
+      throw new Error("WORKFLOW_NOT_FOUND");
+    }
+
+    const run = await workflow.createRunAsync();
 
     const result = await generatePreviewWorkflow.start({
       inputData: {
@@ -63,11 +57,3 @@ export const runGeneratePreviewWorkflow = createTool({
     };
   },
 });
-
-
-
-
-
-
-
-
