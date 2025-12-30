@@ -149,11 +149,10 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
           body: JSON.stringify({
             tenantId: authContext.tenantId,
             userId: authContext.userId,
-            userRole: 'admin', // MVP: hardcoded
-            interfaceId,
             instructions: args.instructions,
             sourceId: 'demo-source', // MVP: hardcoded
             platformType: 'vapi', // MVP: hardcoded
+            message: args.instructions || 'Generate dashboard preview',
           }),
         });
 
@@ -210,12 +209,9 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
       body: JSON.stringify({
         tenantId,
         userId,
-        userRole: "admin",
-        interfaceId,
         sourceId,
-        threadId,
         platformType,
-        lastMessage: text,
+        message: text,
       }),
     });
 
