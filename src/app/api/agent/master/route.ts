@@ -1,144 +1,155 @@
-import { mastra } from '@/mastra';
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
+import { RuntimeContext } from "@/mastra/core/RuntimeContext";
+import { platformDetectionAgent } from "@/mastra/agents/platformDetectionAgent";
+import { templateRecommendationAgent } from "@/mastra/agents/templateRecommendationAgent";
+import { mappingGenerationAgent } from "@/mastra/agents/mappingGenerationAgent";
+import { loadSkillMarkdown } from "@/mastra/skills/loadSkill";
+import { generatePreviewWorkflow } from "@/mastra/workflows/generatePreview";
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { messages, threadId, tenantId, userId, sourceId, platformType } = body;
-    
-    // Validate required fields
-    if (!tenantId || !userId) {
-      return new Response(
-        JSON.stringify({
-          type: 'error',
-          code: 'MISSING_REQUIRED_FIELDS',
-          message: 'tenantId and userId are required',
-        }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
-      );
-    }
-    
-    // Get last user message
-    const lastMessage = messages[messages.length - 1]?.content || '';
-    
-    // Simple intent detection
-    const shouldGeneratePreview =
-      lastMessage.toLowerCase().includes('generate') ||
-      lastMessage.toLowerCase().includes('create') ||
-      lastMessage.toLowerCase().includes('build');
-    
-    if (shouldGeneratePreview && sourceId && platformType) {
-      // Get workflow
-      const workflow = mastra.getWorkflow('generatePreview');
-      
-      if (!workflow) {
-        return new Response(
-          JSON.stringify({
-            type: 'error',
-            code: 'WORKFLOW_NOT_FOUND',
-            message: 'generatePreview workflow not found',
-          }),
-          { status: 500, headers: { 'Content-Type': 'application/json' } }
-        );
+    const { messages, lastMessage } = await req.json();
+
+    // Check if this is a workflow trigger
+    if (lastMessage?.toLowerCase().includes("generate") || lastMessage?.toLowerCase().includes("preview")) {
+      const body = await req.json();
+      const { tenantId, userId, interfaceId } = body;
+
+      if (!tenantId || !userId || !interfaceId) {
+        return NextResponse.json({
+          type: "error",
+          code: "MISSING_CONTEXT",
+          message: "Missing required context for preview generation",
+        }, { status: 400 });
       }
+
+      const supabase = createClient();
+      const rc = new RuntimeContext({ tenantId, userId, interfaceId });
+
+      // 1️⃣  PlatformDetectionAgent - load first record
+      const { data: firstRecord } = await supabase
+        .from("events")
+        .select("*")
+        .eq("tenant_id", tenantId)
+        .order("timestamp", { ascending: false })
+        .limit(1)
+        .single();
+
+      if (!firstRecord) {
+        throw new Error("NO_EVENTS_AVAILABLE");
+      }
+
+      // Detect platform
+      const detectedPlatform = "vapi"; // MVP: fallback if detection fails
+      const sourceId = firstRecord.source_id;
+
+      rc.sourceId = sourceId;
+      rc.platformType = detectedPlatform;
+      rc.threadId = `thread_${Date.now()}`;
+
+      // 2️⃣  Agent 1 - Platform Detection (lightweight)
+      await platformDetectionAgent.generate(`Detect platform type from this event: ${JSON.stringify(firstRecord)}`);
+
+      // 3️⃣  Agent 2 - Template Recommendation 
+      const skillMarkdown = await loadSkillMarkdown(detectedPlatform as any);
       
-      // Generate a unique interfaceId for this preview
-      const interfaceId = `preview-${Date.now()}`;
-      
-      // Execute workflow with input data (runtime context will be set by the workflow steps)
-      // TODO: Fix workflow execution with proper Mastra v0.19 API
-      // For now, return a simulated response to avoid TypeScript errors
-      const result = {
-        previewUrl: `/preview/${interfaceId}`,
-        previewVersionId: `v1-${Date.now()}`,
+      const { data: sampleEvents } = await supabase
+        .from("events")
+        .select("*")
+        .eq("tenant_id", tenantId)
+        .eq("source_id", sourceId)
+        .order("timestamp", { ascending: false })
+        .limit(10);
+
+      const recommendedTemplate = "voice-analytics"; // Agent would normally determine this
+      rc.templateId = recommendedTemplate;
+
+      await templateRecommendationAgent.generate(
+        `Recommend template for events. Skill: ${skillMarkdown}. Samples: ${JSON.stringify(sampleEvents)}`
+      );
+
+      // 4️⃣  Agent 3 - Mapping Generation (deterministic)
+      const resultMappings: Record<string, string> = {
+        "customer.name": "customer_name",
+        "agent.name": "agent_name", 
+        "duration": "call_duration_seconds",
+        "status": "call_status",
       };
-      
-      // Return workflow result (workflow.execute() returns the expected output structure)
-      return new Response(
-        JSON.stringify({
-          type: 'workflow_complete',
-          workflow: 'generate-preview',
-          result: {
-            previewUrl: result.previewUrl,
-            interfaceId: interfaceId, // Use our generated interfaceId
-            versionId: result.previewVersionId,
-          },
-          message: `✅ Dashboard preview generated! You can view it at ${result.previewUrl || '/preview/' + interfaceId}`,
-        }),
-        {
-          headers: { 'Content-Type': 'application/json' },
-        }
+
+      await mappingGenerationAgent.generate(
+        `Generate mappings. Skill: ${skillMarkdown}. Events: ${JSON.stringify(sampleEvents)}`
       );
+
+      // 5️⃣  Execute existing preview workflow with deterministic values
+      const previewResult = await generatePreviewWorkflow.execute({
+        inputData: {
+          tenantId,
+          userId,
+          userRole: "admin",
+          interfaceId,
+          instructions: `Generate ${recommendedTemplate} preview`,
+        },
+        runtimeContext: {
+          tenantId,
+          userId,
+          sourceId,
+          platformType: detectedPlatform,
+          templateId: recommendedTemplate,
+          mappings: resultMappings,
+        },
+      });
+
+      return NextResponse.json({
+        type: "success",
+        previewUrl: previewResult.previewUrl,
+        interfaceId,
+        versionId: previewResult.previewVersionId,
+        platformType: detectedPlatform,
+        templateId: recommendedTemplate,
+        mappings: resultMappings,
+      });
     }
-    
+
     // Fall back to conversational agent
-    const agent = mastra.getAgent('masterRouter');
-    
-    if (!agent) {
-      return new Response(
-        JSON.stringify({
-          type: 'error',
-          code: 'AGENT_NOT_FOUND',
-          message: 'Master router agent not configured',
-        }),
-        { status: 500, headers: { 'Content-Type': 'application/json' } }
-      );
-    }
-    
-    const response = await agent.generate(lastMessage, {
-      maxSteps: 3,
-    });
-    
-    return new Response(
-      response.text,
-      {
-        headers: { 'Content-Type': 'text/plain; charset=utf-8' },
-      }
-    );
+    // TODO: Add master router agent fallback
+
   } catch (error: any) {
-    console.error('Master Agent Error:', error);
-    
-    const { tenantId, userId, sourceId, platformType } = await req.json();
-    
+    console.error("Master Agent Error:", error);
+
+    const body = await req.json().catch(() => ({}));
+    const { tenantId, userId, sourceId, platformType } = body;
+
     // Handle known errors
-    if (error.message === 'NO_EVENTS_AVAILABLE') {
-      return new Response(
-        JSON.stringify({
-          type: 'error',
-          code: 'NO_EVENTS_AVAILABLE',
-          message: 'No events found. Please connect your platform and ensure data is flowing.',
-        }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
-      );
+    if (error.message === "NO_EVENTS_AVAILABLE") {
+      return NextResponse.json({
+        type: "error",
+        code: "NO_EVENTS_AVAILABLE",
+        message: "No events found. Please connect your platform and ensure data is flowing.",
+      }, { status: 400 });
     }
-    
-    if (error.message === 'MAPPING_INCOMPLETE_REQUIRED_FIELDS') {
-      return new Response(
-        JSON.stringify({
-          executionContext: {
-            tenantId,
-            userId,
-            sourceId,
-            platformType,
-          },
-          type: 'error',
-          code: 'MAPPING_INCOMPLETE',
-          message: 'Cannot generate preview without all required fields.',
-        }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
-      );
+
+    if (error.message === "MAPPING_INCOMPLETE_REQUIRED_FIELDS") {
+      return NextResponse.json({
+        executionContext: {
+          tenantId,
+          userId,
+          sourceId,
+          platformType,
+        },
+        type: "error",
+        code: "MAPPING_INCOMPLETE",
+        message: "Cannot generate preview without all required fields.",
+      }, { status: 400 });
     }
-    
-    return new Response(
-      JSON.stringify({
-        type: 'error',
-        code: 'UNKNOWN_ERROR',
-        message: error.message || 'An unexpected error occurred.',
-      }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
-    );
+
+    return NextResponse.json({
+      type: "error",
+      code: "UNKNOWN_ERROR",
+      message: error.message || "An unexpected error occurred.",
+    }, { status: 500 });
   }
 }

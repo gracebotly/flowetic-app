@@ -2,12 +2,18 @@
 import { Mastra } from '@mastra/core/mastra';
 import { masterRouterAgent } from './agents/masterRouter';
 import { platformMappingAgent } from './agents/platformMapping';
+import { platformDetectionAgent } from './agents/platformDetectionAgent';
+import { templateRecommendationAgent } from './agents/templateRecommendationAgent';
+import { mappingGenerationAgent } from './agents/mappingGenerationAgent';
 import { generatePreviewWorkflow } from './workflows/generatePreview';
 
 export const mastra = new Mastra({
   agents: {
     masterRouter: masterRouterAgent,
-    platformMapping: platformMappingAgent, // new agent registration
+    platformMapping: platformMappingAgent, // Agent 2
+    platformDetection: platformDetectionAgent, // Agent 1
+    templateRecommendation: templateRecommendationAgent, // Agent 3
+    mappingGeneration: mappingGenerationAgent, // Agent 4
   },
   workflows: {
     generatePreview: generatePreviewWorkflow,

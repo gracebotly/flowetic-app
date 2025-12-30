@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from '@/lib/supabase/client';
+import { useCopilotAction } from "@copilotkit/react-core";
 
 type ViewMode = "terminal" | "preview" | "publish";
 
@@ -115,6 +116,65 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
   function addLog(type: LogType, text: string, detail?: string) {
     setLogs((prev) => [...prev, { id: crypto.randomUUID(), type, text, detail }]);
   }
+
+  // CopilotKit Action for Generate Preview
+  useCopilotAction({
+    name: "generatePreview",
+    description: "Generate a dashboard preview based on current context",
+    parameters: [
+      {
+        name: "instructions",
+        type: "string",
+        description: "Optional instructions for the preview generation",
+        required: false,
+      },
+    ],
+    handler: async (args) => {
+      if (!authContext.tenantId || !authContext.userId) {
+        addLog("error", "Authentication required", "Please log in to generate previews");
+        return;
+      }
+
+      // Hardcoded interfaceId for MVP
+      const interfaceId = "demo-interface";
+
+      addLog("running", "Generating dashboard preview...", "Starting workflow execution");
+
+      try {
+        const response = await fetch('/api/agent/master', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            tenantId: authContext.tenantId,
+            userId: authContext.userId,
+            userRole: 'admin', // MVP: hardcoded
+            interfaceId,
+            instructions: args.instructions,
+            sourceId: 'demo-source', // MVP: hardcoded
+            platformType: 'vapi', // MVP: hardcoded
+          }),
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result.message || 'Failed to generate preview');
+        }
+
+        if (result.type === 'success') {
+          setPreviewVersionId(result.versionId);
+          addLog("success", "Preview generated successfully!", `View at: ${result.previewUrl}`);
+          setView("preview");
+        } else {
+          addLog("error", "Preview generation failed", result.message);
+        }
+      } catch (error: any) {
+        addLog("error", "Preview generation failed", error.message);
+      }
+    },
+  });
 
   async function send() {
     const trimmed = input.trim();
