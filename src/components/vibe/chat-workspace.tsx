@@ -259,7 +259,7 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
   }
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full min-h-0 flex flex-col">
       {showEnterVibeButton && (
         <div className="mb-4 flex justify-end">
           <Link
@@ -272,11 +272,11 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
       )}
 
       {/* Split layout 40/60 */}
-      <div className="flex h-full w-full overflow-hidden rounded-xl border border-gray-300 bg-white">
+      <div className="flex h-full min-h-0 w-full overflow-hidden rounded-xl border border-gray-300 bg-white">
         {/* LEFT: chat (40%) */}
-        <div className="flex w-[40%] min-w-[360px] flex-col border-r border-gray-300 bg-[#f9fafb]">
+        <div className="flex w-[40%] min-w-[360px] min-h-0 flex-col border-r border-gray-300 bg-[#f9fafb]">
           {/* messages */}
-          <div className="flex-1 overflow-y-auto p-4">
+          <div className="flex-1 min-h-0 overflow-y-auto p-4">
             {renderedMessages.map((m) => {
               if (m.role === "system") {
                 return (
