@@ -51,7 +51,7 @@ export const runGeneratePreviewWorkflow = createTool({
 
 
     return {
-      runId: run.id, // runId is stored on the run object itself, not in result
+      runId: result.runId,
       previewVersionId: result.result.previewVersionId,
       previewUrl: result.result.previewUrl,
     };
