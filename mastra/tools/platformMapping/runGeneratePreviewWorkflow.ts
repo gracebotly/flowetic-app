@@ -37,7 +37,7 @@ export const runGeneratePreviewWorkflow = createTool({
     // Ensure runtimeContext is the correct class (defensive, but no guessing)
     const rc = runtimeContext as RuntimeContext;
 
-    const result = await generatePreviewWorkflow.execute({
+    const result = await generatePreviewWorkflow.start({
       inputData: {
         tenantId: context.tenantId,
         userId: context.userId,
@@ -45,13 +45,21 @@ export const runGeneratePreviewWorkflow = createTool({
         interfaceId: context.interfaceId,
         instructions: context.instructions,
       },
-      runtimeContext: rc,
+      runtimeContext: runtimeContext as RuntimeContext,
     });
 
+
+    // In Mastra, generatePreviewWorkflow.start returns a result envelope; your workflow's output schema
+    // is the final output, available on result.result when status === 'success'.
+    if (result.status !== "success") {
+      throw new Error("WORKFLOW_FAILED");
+    }
+
+
     return {
-      runId: result.runId,
-      previewVersionId: result.previewVersionId,
-      previewUrl: result.previewUrl,
+      runId: result.runId, // runId is stored in the result
+      previewVersionId: result.result.previewVersionId,
+      previewUrl: result.result.previewUrl,
     };
   },
 });
