@@ -29,7 +29,7 @@ export const getRecentEventSamples = createTool({
     ),
   }),
   execute: async ({ context }) => {
-    const supabase = createClient();
+    const supabase = await createClient();
     const { tenantId, sourceId, lastN } = context;
 
     const { data, error } = await supabase

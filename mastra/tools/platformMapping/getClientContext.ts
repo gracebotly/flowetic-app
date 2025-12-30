@@ -22,7 +22,7 @@ export const getClientContext = createTool({
     ),
   }),
   execute: async ({ context }) => {
-    const supabase = createClient();
+    const supabase = await createClient();
     const { tenantId } = context;
 
     const { data: sources, error: sourcesError } = await supabase
