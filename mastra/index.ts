@@ -11,6 +11,7 @@ import { generatePreviewWorkflow } from './workflows/generatePreview';
 export const mastra = new Mastra({
   agents: {
     masterRouter: masterRouterAgent,
+    default: masterRouterAgent,
     platformMapping: platformMappingAgent, // Agent 2
     platformDetection: platformDetectionAgent, // Agent 1
     templateRecommendation: templateRecommendationAgent, // Agent 3
