@@ -31,7 +31,7 @@ export const runGeneratePreviewWorkflow = createTool({
 
     const run = await workflow.createRunAsync();
 
-    const result = await generatePreviewWorkflow.start({
+    const result = await run.start({
       inputData: {
         tenantId: context.tenantId,
         userId: context.userId,
@@ -43,7 +43,7 @@ export const runGeneratePreviewWorkflow = createTool({
     });
 
 
-    // In Mastra, generatePreviewWorkflow.start returns a result envelope; your workflow's output schema
+    // In Mastra, run.start returns a result envelope; your workflow's output schema
     // is the final output, available on result.result when status === 'success'.
     if (result.status !== "success") {
       throw new Error("WORKFLOW_FAILED");
@@ -51,7 +51,7 @@ export const runGeneratePreviewWorkflow = createTool({
 
 
     return {
-      runId: result.runId, // runId is stored in the result
+      runId: run.id, // runId is stored on the run object itself, not in result
       previewVersionId: result.result.previewVersionId,
       previewUrl: result.result.previewUrl,
     };
