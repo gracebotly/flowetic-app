@@ -1,71 +1,74 @@
+/**
+ * CopilotKit API Route - Correct Implementation
+ * Based on official CopilotKit integration pattern for custom agents
+ */
+
 import { CopilotRuntime } from "@copilotkit/runtime";
-import { NextRequest, NextResponse } from "next/server";
+import { copilotRuntimeHandler } from "@copilotkit/runtime/nextjs";
+import { AbstractAgent } from "@ag-ui/client";
 import { platformMappingAgent } from "@/mastra/agents/platformMappingAgent";
 
-const copilotKit = new CopilotRuntime({
-  actions: [
-    // Platform mapping actions will be automatically registered from ChatWorkspace component
-  ],
-});
+/**
+ * Mastra Agent Adapter
+ * Wraps the Mastra platformMappingAgent in AbstractAgent interface
+ */
+class MastraAgentAdapter extends AbstractAgent {
+  private mastraAgent: typeof platformMappingAgent;
 
-export async function POST(request: NextRequest) {
-  try {
-    const { messages } = await request.json();
-    const lastMessage = messages[messages.length - 1]?.content || "";
+  constructor(mastraAgent: typeof platformMappingAgent) {
+    super({
+      agentId: "default",
+      description: "Platform mapping agent for dashboard generation with Mastra workflows and tools",
+    });
+    this.mastraAgent = mastraAgent;
+  }
 
-    // Check if this is a workflow trigger request
-    if (lastMessage.toLowerCase().includes("generate preview") || 
-        lastMessage.toLowerCase().includes("preview") ||
-        lastMessage.toLowerCase().includes("create dashboard")) {
-      
-      // Extract request context from previous messages or metadata
-      const contextMessage = messages.find((msg: any) => msg.content.includes('{') && msg.content.includes('tenantId'));
-      let body: any = {};
-      
-      if (contextMessage) {
-        try {
-          body = JSON.parse(contextMessage.content);
-        } catch (e) {
-          // If parsing fails, try to extract from user message
-          console.log('Could not parse context message, using defaults');
-        }
-      }
+  protected async run(input: any): Promise<any> {
+    try {
+      const messages = input.messages ?? [];
+      const userMessages = messages.filter((m: any) => m.role === "user");
+      const lastMessage = userMessages[userMessages.length - 1]?.content || "";
 
-      // Use default context for MVP if not provided
-      const tenantId = body.tenantId || 'demo-tenant';
-      const userId = body.userId || 'demo-user';
-      const interfaceId = body.interfaceId || `demo-interface-${Date.now()}`;
+      // Emit RUN_STARTED event
+      this.events$.next({ type: "RUN_STARTED" });
 
-      // Validate required fields
-      if (!tenantId || !userId || !interfaceId) {
-        return NextResponse.json({
-          error: "MISSING_CONTEXT",
-          message: "Missing required context: tenantId, userId, and interfaceId",
-        }, { status: 400 });
-      }
-
-      // Use the platform mapping agent to handle the request
-      const response = await platformMappingAgent.generate(lastMessage);
-
-      return NextResponse.json({
-        type: 'agent_response',
-        content: response.text,
-        context: {
-          tenantId,
-          userId,
-          interfaceId,
-        },
+      // Call Mastra agent
+      const result = await this.mastraAgent.generate(lastMessage, {
+        messages: messages.map((m: any) => ({
+          role: m.role,
+          content: m.content,
+        })),
       });
-    }
 
-    // Default CopilotKit behavior for regular chat - simplified for now
-    return NextResponse.json({ message: "Chat functionality temporarily disabled" });
-  } catch (error: any) {
-    console.error('CopilotKit route error:', error);
-    return NextResponse.json({
-      error: "AGENT_ERROR",
-      message: "Failed to process request",
-      details: error.message,
-    }, { status: 500 });
+      const answerText = result.text || String(result);
+
+      // Emit message events
+      this.events$.next({ type: "TEXT_MESSAGE_START", payload: {} });
+      this.events$.next({ type: "TEXT_MESSAGE_CONTENT", delta: answerText });
+      this.events$.next({ type: "TEXT_MESSAGE_END" });
+      this.events$.next({ type: "RUN_FINISHED" });
+
+      return { result: answerText, newMessages: [] };
+    } catch (error) {
+      console.error("MastraAgentAdapter error:", error);
+      this.events$.next({
+        type: "TEXT_MESSAGE_CONTENT",
+        delta: "Sorry, I encountered an error. Please try again.",
+      });
+      this.events$.next({ type: "RUN_FINISHED" });
+      return { result: "Error occurred", newMessages: [] };
+    }
+  }
+
+  protected detachActiveRun(): void {
+    // Cleanup if needed
   }
 }
+
+const defaultAgent = new MastraAgentAdapter(platformMappingAgent);
+
+const runtime = new CopilotRuntime({
+  agents: { default: defaultAgent },
+});
+
+export const { GET, POST } = copilotRuntimeHandler(runtime);
