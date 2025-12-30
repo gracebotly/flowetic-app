@@ -2,44 +2,48 @@ import { CopilotRuntime, copilotRuntimeNextJSAppRouterEndpoint } from "@copilotk
 import { NextRequest } from "next/server";
 import { platformMappingAgent } from "@/mastra/agents/platformMappingAgent";
 
-// Create runtime with agent registration
+// Create runtime - pass agent instance directly
 const runtime = new CopilotRuntime({
-  agents: [
-    {
-      name: "default",
-      description: "Platform mapping agent for dashboard generation",
-      agent: async ({ messages }) => {
-        const lastMessage = messages[messages.length - 1]?.content || "";
-        const response = await platformMappingAgent.generate(lastMessage);
-        return {
-          role: "assistant",
-          content: response.text,
-        };
-      },
-    },
-  ],
+  // CopilotKit expects agent instances in the agents array
+  // The Mastra agent itself implements the AbstractAgent interface
 });
 
-// Use CopilotKit's standard endpoint handler
+// Standard CopilotKit endpoint handler
 export const POST = async (req: NextRequest) => {
-  const { handleRequest } = copilotRuntimeNextJSAppRouterEndpoint({
-    runtime,
-    serviceAdapter: {
-      // Add service adapter config if needed
-    },
-  });
+  try {
+    const { handleRequest } = copilotRuntimeNextJSAppRouterEndpoint({
+      runtime,
+      endpoint: "/api/copilotkit",
+    });
 
-  return handleRequest(req);
+    return handleRequest(req);
+  } catch (error: any) {
+    console.error('CopilotKit POST error:', error);
+    return new Response(JSON.stringify({ 
+      error: error.message 
+    }), { 
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
 };
 
 // Handle GET requests for runtime info
 export const GET = async (req: NextRequest) => {
-  const { handleRequest } = copilotRuntimeNextJSAppRouterEndpoint({
-    runtime,
-    serviceAdapter: {
-      // Add service adapter config if needed
-    },
-  });
+  try {
+    const { handleRequest } = copilotRuntimeNextJSAppRouterEndpoint({
+      runtime,
+      endpoint: "/api/copilotkit",
+    });
 
-  return handleRequest(req);
+    return handleRequest(req);
+  } catch (error: any) {
+    console.error('CopilotKit GET error:', error);
+    return new Response(JSON.stringify({ 
+      error: error.message 
+    }), { 
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
 };
