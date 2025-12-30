@@ -79,7 +79,7 @@ export const listTemplates = createTool({
       return {
         templates: filteredTemplates,
       };
-    } catch (error) {
+    } catch (error: any) {
       throw new Error(`Failed to list templates: ${error.message}`);
     }
   },
