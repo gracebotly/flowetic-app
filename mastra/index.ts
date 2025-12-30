@@ -5,6 +5,7 @@ import { platformMappingAgent } from './agents/platformMapping';
 import { platformDetectionAgent } from './agents/platformDetectionAgent';
 import { templateRecommendationAgent } from './agents/templateRecommendationAgent';
 import { mappingGenerationAgent } from './agents/mappingGenerationAgent';
+import { platformMappingMaster } from './agents/platformMappingMaster';
 import { generatePreviewWorkflow } from './workflows/generatePreview';
 
 export const mastra = new Mastra({
@@ -14,6 +15,7 @@ export const mastra = new Mastra({
     platformDetection: platformDetectionAgent, // Agent 1
     templateRecommendation: templateRecommendationAgent, // Agent 3
     mappingGeneration: mappingGenerationAgent, // Agent 4
+    platformMappingMaster,
   },
   workflows: {
     generatePreview: generatePreviewWorkflow,

@@ -176,78 +176,79 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
     },
   });
 
-  async function send() {
-    const trimmed = input.trim();
-    if (!trimmed || isLoading) return;
+  const send = async () => {
+  const text = input.trim();
+  if (!text || isLoading) return;
 
-    const userMsg: Msg = { id: crypto.randomUUID(), role: "user", content: trimmed };
-    setMessages((prev) => [...prev, userMsg]);
-    setInput("");
-    setIsLoading(true);
+  setIsLoading(true);
+  setInput("");
 
-    // Default right panel to terminal so users see "what's happening"
-    setView("terminal");
-    addLog("running", "Analyzing request...");
+  const userMsg: Msg = { id: `u-${Date.now()}`, role: "user", content: text };
+  setMessages((prev) => [...prev, userMsg]);
 
-    try {
-      const res = await fetch("/api/agent/master", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          messages: [
-            ...renderedMessages.map((m) => ({ role: m.role === "assistant" ? "assistant" : m.role, content: m.content })),
-            { role: "user", content: trimmed },
-          ],
-          threadId: `thread-${Date.now()}`, // Generate if missing
-          tenantId: authContext.tenantId,
-          userId: authContext.userId,
-          // sourceId and platformType can be added later when user connects a platform
-        }),
-      });
+  try {
+    const tenantId = authContext.tenantId;
+    const userId = authContext.userId;
 
-      if (!res.ok || !res.body) {
-        addLog("error", "Agent request failed", `HTTP ${res.status}`);
-        throw new Error(`Agent error: ${res.status}`);
-      }
+    if (!tenantId || !userId) {
+      addLog("error", "Not authenticated", "Please log in and try again.");
+      setIsLoading(false);
+      return;
+    }
 
-      addLog("success", "Connected to Master Agent");
-      addLog("running", "Streaming response...");
+    // MVP placeholders (replace with real IDs once your interfaces/sources exist in Supabase)
+    const interfaceId = "00000000-0000-0000-0000-000000000001";
+    const sourceId = "00000000-0000-0000-0000-000000000002";
+    const threadId = `demo-thread-${userId}`;
+    const platformType = "vapi" as const;
 
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let assistantText = "";
+    addLog("running", "Sending message to agent...", text);
 
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        assistantText += decoder.decode(value, { stream: true });
-        // Optional: could show partial streaming in UI later
-      }
+    const resp = await fetch("/api/agent/master", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        tenantId,
+        userId,
+        userRole: "admin",
+        interfaceId,
+        sourceId,
+        threadId,
+        platformType,
+        lastMessage: text,
+      }),
+    });
 
-      assistantText = assistantText.trim();
+    const data = await resp.json();
 
-      // Add assistant response
-      setMessages((prev) => [
-        ...prev,
-        { id: crypto.randomUUID(), role: "assistant", content: assistantText || "(empty response)" },
-      ]);
-
-      addLog("success", "Response received");
-
-      
-    } catch (e: any) {
+    if (!resp.ok || data.type === "error") {
+      addLog("error", "Agent error", data.message || "Unknown agent error");
       setMessages((prev) => [
         ...prev,
         {
-          id: crypto.randomUUID(),
+          id: `a-${Date.now()}`,
           role: "assistant",
-          content: `Sorry—something went wrong. ${e?.message ?? ""}`,
+          content: data.message || "Something went wrong.",
         },
       ]);
-      addLog("error", "Error", e?.message ?? "Unknown error");
-    } finally {
-      setIsLoading(false);
+      return;
     }
+
+    setMessages((prev) => [
+      ...prev,
+      { id: `a-${Date.now()}`, role: "assistant", content: data.text || "" },
+    ]);
+
+    addLog("success", "Agent responded");
+  } catch (e: any) {
+    addLog("error", "Request failed", e?.message ?? "Unknown error");
+    setMessages((prev) => [
+      ...prev,
+      { id: `a-${Date.now()}`, role: "assistant", content: "Request failed." },
+    ]);
+  } finally {
+    setIsLoading(false);
+  }
   }
 
   // Show loading state while auth is loading

@@ -1,155 +1,79 @@
-import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { RuntimeContext } from "@/mastra/core/RuntimeContext";
-import { platformDetectionAgent } from "@/mastra/agents/platformDetectionAgent";
-import { templateRecommendationAgent } from "@/mastra/agents/templateRecommendationAgent";
-import { mappingGenerationAgent } from "@/mastra/agents/mappingGenerationAgent";
-import { loadSkillMarkdown } from "@/mastra/skills/loadSkill";
-import { generatePreviewWorkflow } from "@/mastra/workflows/generatePreview";
-
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
+import { NextRequest } from "next/server";
+import { RuntimeContext } from "@mastra/core/runtime-context";
+import { mastra } from "@/mastra";
 
 export async function POST(req: NextRequest) {
   try {
-    const { messages, lastMessage } = await req.json();
+    const body = await req.json();
 
-    // Check if this is a workflow trigger
-    if (lastMessage?.toLowerCase().includes("generate") || lastMessage?.toLowerCase().includes("preview")) {
-      const body = await req.json();
-      const { tenantId, userId, interfaceId } = body;
+    const tenantId = body.tenantId as string | undefined;
+    const userId = body.userId as string | undefined;
+    const userRole = body.userRole as "admin" | "client" | "viewer" | undefined;
+    const interfaceId = body.interfaceId as string | undefined;
+    const threadId = body.threadId as string | undefined;
+    const platformType = body.platformType as
+      | "vapi"
+      | "retell"
+      | "n8n"
+      | "mastra"
+      | "crewai"
+      | "pydantic_ai"
+      | "other"
+      | undefined;
+    const sourceId = body.sourceId as string | undefined;
+    const lastMessage = (body.lastMessage as string | undefined) ?? "";
 
-      if (!tenantId || !userId || !interfaceId) {
-        return NextResponse.json({
+    if (!tenantId || !userId || !userRole || !interfaceId || !threadId || !platformType || !sourceId) {
+      return new Response(
+        JSON.stringify({
           type: "error",
-          code: "MISSING_CONTEXT",
-          message: "Missing required context for preview generation",
-        }, { status: 400 });
-      }
-
-      const supabase = createClient();
-      const rc = new RuntimeContext({ tenantId, userId, interfaceId });
-
-      // 1️⃣  PlatformDetectionAgent - load first record
-      const { data: firstRecord } = await supabase
-        .from("events")
-        .select("*")
-        .eq("tenant_id", tenantId)
-        .order("timestamp", { ascending: false })
-        .limit(1)
-        .single();
-
-      if (!firstRecord) {
-        throw new Error("NO_EVENTS_AVAILABLE");
-      }
-
-      // Detect platform
-      const detectedPlatform = "vapi"; // MVP: fallback if detection fails
-      const sourceId = firstRecord.source_id;
-
-      rc.sourceId = sourceId;
-      rc.platformType = detectedPlatform;
-      rc.threadId = `thread_${Date.now()}`;
-
-      // 2️⃣  Agent 1 - Platform Detection (lightweight)
-      await platformDetectionAgent.generate(`Detect platform type from this event: ${JSON.stringify(firstRecord)}`);
-
-      // 3️⃣  Agent 2 - Template Recommendation 
-      const skillMarkdown = await loadSkillMarkdown(detectedPlatform as any);
-      
-      const { data: sampleEvents } = await supabase
-        .from("events")
-        .select("*")
-        .eq("tenant_id", tenantId)
-        .eq("source_id", sourceId)
-        .order("timestamp", { ascending: false })
-        .limit(10);
-
-      const recommendedTemplate = "voice-analytics"; // Agent would normally determine this
-      rc.templateId = recommendedTemplate;
-
-      await templateRecommendationAgent.generate(
-        `Recommend template for events. Skill: ${skillMarkdown}. Samples: ${JSON.stringify(sampleEvents)}`
+          code: "MISSING_REQUIRED_FIELDS",
+          message:
+            "Missing required fields: tenantId, userId, userRole, interfaceId, threadId, platformType, sourceId",
+        }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
       );
+    }
 
-      // 4️⃣  Agent 3 - Mapping Generation (deterministic)
-      const resultMappings: Record<string, string> = {
-        "customer.name": "customer_name",
-        "agent.name": "agent_name", 
-        "duration": "call_duration_seconds",
-        "status": "call_status",
-      };
+    const runtimeContext = new RuntimeContext();
+    runtimeContext.set("tenantId", tenantId);
+    runtimeContext.set("userId", userId);
+    runtimeContext.set("userRole", userRole);
+    runtimeContext.set("interfaceId", interfaceId);
+    runtimeContext.set("threadId", threadId);
+    runtimeContext.set("platformType", platformType);
+    runtimeContext.set("sourceId", sourceId);
 
-      await mappingGenerationAgent.generate(
-        `Generate mappings. Skill: ${skillMarkdown}. Events: ${JSON.stringify(sampleEvents)}`
+    const agent = mastra.getAgent("platformMappingMaster");
+    if (!agent) {
+      return new Response(
+        JSON.stringify({
+          type: "error",
+          code: "AGENT_NOT_FOUND",
+          message: "platformMappingMaster agent not registered",
+        }),
+        { status: 500, headers: { "Content-Type": "application/json" } },
       );
+    }
 
-      // 5️⃣  Execute existing preview workflow with deterministic values
-      const previewResult = await generatePreviewWorkflow.execute({
-        inputData: {
-          tenantId,
-          userId,
-          userRole: "admin",
-          interfaceId,
-          instructions: `Generate ${recommendedTemplate} preview`,
-        },
-        runtimeContext: {
-          tenantId,
-          userId,
-          sourceId,
-          platformType: detectedPlatform,
-          templateId: recommendedTemplate,
-          mappings: resultMappings,
-        },
-      });
+    const result = await agent.generate(lastMessage, { runtimeContext, maxSteps: 8 });
 
-      return NextResponse.json({
+    return new Response(
+      JSON.stringify({
         type: "success",
-        previewUrl: previewResult.previewUrl,
-        interfaceId,
-        versionId: previewResult.previewVersionId,
-        platformType: detectedPlatform,
-        templateId: recommendedTemplate,
-        mappings: resultMappings,
-      });
-    }
-
-    // Fall back to conversational agent
-    // TODO: Add master router agent fallback
-
-  } catch (error: any) {
-    console.error("Master Agent Error:", error);
-
-    const body = await req.json().catch(() => ({}));
-    const { tenantId, userId, sourceId, platformType } = body;
-
-    // Handle known errors
-    if (error.message === "NO_EVENTS_AVAILABLE") {
-      return NextResponse.json({
+        text: result.text ?? "",
+      }),
+      { headers: { "Content-Type": "application/json" } },
+    );
+  } catch (err: any) {
+    console.error("Agent master route error:", err);
+    return new Response(
+      JSON.stringify({
         type: "error",
-        code: "NO_EVENTS_AVAILABLE",
-        message: "No events found. Please connect your platform and ensure data is flowing.",
-      }, { status: 400 });
-    }
-
-    if (error.message === "MAPPING_INCOMPLETE_REQUIRED_FIELDS") {
-      return NextResponse.json({
-        executionContext: {
-          tenantId,
-          userId,
-          sourceId,
-          platformType,
-        },
-        type: "error",
-        code: "MAPPING_INCOMPLETE",
-        message: "Cannot generate preview without all required fields.",
-      }, { status: 400 });
-    }
-
-    return NextResponse.json({
-      type: "error",
-      code: "UNKNOWN_ERROR",
-      message: error.message || "An unexpected error occurred.",
-    }, { status: 500 });
+        code: "UNKNOWN_ERROR",
+        message: err?.message ?? "Unknown error",
+      }),
+      { status: 500, headers: { "Content-Type": "application/json" } },
+    );
   }
 }
