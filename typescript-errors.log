@@ -1,0 +1,136 @@
+[96mmastra/tools/platformMapping/listTemplates.ts[0m:[93m83[0m:[93m52[0m - [91merror[0m[90m TS18046: [0m'error' is of type 'unknown'.
+
+[7m83[0m       throw new Error(`Failed to list templates: ${error.message}`);
+[7m  [0m [91m                                                   ~~~~~[0m
+
+[96mmastra/tools/platformMapping/runGeneratePreviewWorkflow.ts[0m:[93m35[0m:[93m28[0m - [91merror[0m[90m TS2554: [0mExpected 1 arguments, but got 0.
+
+[7m35[0m     const runtimeContext = new RuntimeContext();
+[7m  [0m [91m                           ~~~~~~~~~~~~~~~~~~~~[0m
+
+  [96mmastra/core/RuntimeContext.ts[0m:[93m45[0m:[93m15[0m
+    [7m45[0m   constructor(params: Partial<RuntimeContext>) {
+    [7m  [0m [96m              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    An argument for 'params' was not provided.
+
+[96mmastra/tools/platformMapping/runGeneratePreviewWorkflow.ts[0m:[93m36[0m:[93m20[0m - [91merror[0m[90m TS2339: [0mProperty 'set' does not exist on type 'RuntimeContext'.
+
+[7m36[0m     runtimeContext.set("tenantId", context.tenantId);
+[7m  [0m [91m                   ~~~[0m
+
+[96mmastra/tools/platformMapping/runGeneratePreviewWorkflow.ts[0m:[93m37[0m:[93m20[0m - [91merror[0m[90m TS2339: [0mProperty 'set' does not exist on type 'RuntimeContext'.
+
+[7m37[0m     runtimeContext.set("userId", context.userId);
+[7m  [0m [91m                   ~~~[0m
+
+[96mmastra/tools/platformMapping/runGeneratePreviewWorkflow.ts[0m:[93m38[0m:[93m20[0m - [91merror[0m[90m TS2339: [0mProperty 'set' does not exist on type 'RuntimeContext'.
+
+[7m38[0m     runtimeContext.set("userRole", context.userRole);
+[7m  [0m [91m                   ~~~[0m
+
+[96mmastra/tools/platformMapping/runGeneratePreviewWorkflow.ts[0m:[93m39[0m:[93m20[0m - [91merror[0m[90m TS2339: [0mProperty 'set' does not exist on type 'RuntimeContext'.
+
+[7m39[0m     runtimeContext.set("interfaceId", context.interfaceId);
+[7m  [0m [91m                   ~~~[0m
+
+[96mmastra/tools/platformMapping/runGeneratePreviewWorkflow.ts[0m:[93m40[0m:[93m20[0m - [91merror[0m[90m TS2339: [0mProperty 'set' does not exist on type 'RuntimeContext'.
+
+[7m40[0m     runtimeContext.set("threadId", context.threadId);
+[7m  [0m [91m                   ~~~[0m
+
+[96mmastra/tools/platformMapping/runGeneratePreviewWorkflow.ts[0m:[93m41[0m:[93m20[0m - [91merror[0m[90m TS2339: [0mProperty 'set' does not exist on type 'RuntimeContext'.
+
+[7m41[0m     runtimeContext.set("platformType", context.platformType);
+[7m  [0m [91m                   ~~~[0m
+
+[96mmastra/tools/platformMapping/runGeneratePreviewWorkflow.ts[0m:[93m42[0m:[93m20[0m - [91merror[0m[90m TS2339: [0mProperty 'set' does not exist on type 'RuntimeContext'.
+
+[7m42[0m     runtimeContext.set("sourceId", context.sourceId);
+[7m  [0m [91m                   ~~~[0m
+
+[96mmastra/tools/platformMapping/runGeneratePreviewWorkflow.ts[0m:[93m52[0m:[93m7[0m - [91merror[0m[90m TS2740: [0mType 'RuntimeContext' is missing the following properties from type 'RuntimeContext<unknown>': registry, set, get, has, and 8 more.
+
+[7m52[0m       runtimeContext,
+[7m  [0m [91m      ~~~~~~~~~~~~~~[0m
+
+  [96mnode_modules/@mastra/core/dist/workflows/workflow.d.ts[0m:[93m198[0m:[93m9[0m
+    [7m198[0m         runtimeContext?: RuntimeContext;
+    [7m   [0m [96m        ~~~~~~~~~~~~~~[0m
+    The expected type comes from property 'runtimeContext' which is declared here on type '{ runId?: string | undefined; inputData: { tenantId: string; userId: string; interfaceId: string; userRole: "admin" | "client" | "viewer"; instructions?: string | undefined; }; resumeData?: any; ... 13 more ...; [EMITTER_SYMBOL]: { ...; }; }'
+
+[96mmastra/tools/platformMapping/saveMapping.ts[0m:[93m35[0m:[93m3[0m - [91merror[0m[90m TS2322: [0mType '({ context }: ToolExecutionContext<ZodObject<{ tenantId: ZodString; userId: ZodString; interfaceId: ZodString; templateId: ZodString; mappings: ZodRecord<ZodString, ZodString>; confidence: ZodNumber; metadata: ZodObject<...>; }, "strip", ZodTypeAny, { ...; }, { ...; }>, any, any>) => Promise<...>' is not assignable to type '(context: ToolExecutionContext<ZodObject<{ tenantId: ZodString; userId: ZodString; interfaceId: ZodString; templateId: ZodString; mappings: ZodRecord<ZodString, ZodString>; confidence: ZodNumber; metadata: ZodObject<...>; }, "strip", ZodTypeAny, { ...; }, { ...; }>, any, any>, options?: ToolInvocationOptions | undef...'.
+  Type 'Promise<{ success: boolean; mappingId: string; savedAt: string; confidence: number; fieldCount: number; requiresReview: boolean | undefined; }>' is not assignable to type 'Promise<{ confidence: number; success: boolean; mappingId: string; savedAt: string; fieldCount: number; requiresReview: boolean; }>'.
+    Type '{ success: boolean; mappingId: string; savedAt: string; confidence: number; fieldCount: number; requiresReview: boolean | undefined; }' is not assignable to type '{ confidence: number; success: boolean; mappingId: string; savedAt: string; fieldCount: number; requiresReview: boolean; }'.
+      Types of property 'requiresReview' are incompatible.
+        Type 'boolean | undefined' is not assignable to type 'boolean'.
+          Type 'undefined' is not assignable to type 'boolean'.
+
+[7m35[0m   execute: async ({ context }) => {
+[7m  [0m [91m  ~~~~~~~[0m
+
+  [96mnode_modules/@mastra/core/dist/tools/types.d.ts[0m:[93m54[0m:[93m5[0m
+    [7m54[0m     execute?: (context: TContext, options?: ToolInvocationOptions) => Promise<TSchemaOut extends ZodLikeSchema ? InferZodLikeSchema<TSchemaOut> : unknown>;
+    [7m  [0m [96m    ~~~~~~~[0m
+    The expected type comes from property 'execute' which is declared here on type 'ToolAction<ZodObject<{ tenantId: ZodString; userId: ZodString; interfaceId: ZodString; templateId: ZodString; mappings: ZodRecord<ZodString, ZodString>; confidence: ZodNumber; metadata: ZodObject<...>; }, "strip", ZodTypeAny, { ...; }, { ...; }>, ZodObject<...>, any, any, ToolExecutionContext<...>> & { ...; }'
+
+[96mmastra/tools/platformMapping/saveMapping.ts[0m:[93m81[0m:[93m50[0m - [91merror[0m[90m TS18046: [0m'error' is of type 'unknown'.
+
+[7m81[0m       throw new Error(`Failed to save mapping: ${error.message}`);
+[7m  [0m [91m                                                 ~~~~~[0m
+
+[96msrc/app/api/copilotkit/route.ts[0m:[93m22[0m:[93m44[0m - [91merror[0m[90m TS7006: [0mParameter 'msg' implicitly has an 'any' type.
+
+[7m22[0m       const contextMessage = messages.find(msg => msg.content.includes('{') && msg.content.includes('tenantId'));
+[7m  [0m [91m                                           ~~~[0m
+
+[96msrc/app/api/copilotkit/route.ts[0m:[93m35[0m:[93m29[0m - [91merror[0m[90m TS2339: [0mProperty 'tenantId' does not exist on type '{}'.
+
+[7m35[0m       const tenantId = body.tenantId || 'demo-tenant';
+[7m  [0m [91m                            ~~~~~~~~[0m
+
+[96msrc/app/api/copilotkit/route.ts[0m:[93m36[0m:[93m27[0m - [91merror[0m[90m TS2339: [0mProperty 'userId' does not exist on type '{}'.
+
+[7m36[0m       const userId = body.userId || 'demo-user';
+[7m  [0m [91m                          ~~~~~~[0m
+
+[96msrc/app/api/copilotkit/route.ts[0m:[93m37[0m:[93m32[0m - [91merror[0m[90m TS2339: [0mProperty 'interfaceId' does not exist on type '{}'.
+
+[7m37[0m       const interfaceId = body.interfaceId || `demo-interface-${Date.now()}`;
+[7m  [0m [91m                               ~~~~~~~~~~~[0m
+
+[96msrc/app/api/copilotkit/route.ts[0m:[93m50[0m:[93m11[0m - [91merror[0m[90m TS2769: [0mNo overload matches this call.
+  Overload 1 of 3, '(messages: MessageListInput, args?: (AgentGenerateOptions<undefined, undefined> & { output?: undefined; experimental_output?: undefined; }) | undefined): Promise<...>', gave the following error.
+    Object literal may only specify known properties, and 'tenantId' does not exist in type 'RuntimeContext<unknown>'.
+  Overload 2 of 3, '(messages: MessageListInput, args?: (AgentGenerateOptions<ZodType<any, ZodTypeDef, any> | JSONSchema7, undefined> & { ...; }) | undefined): Promise<...>', gave the following error.
+    Object literal may only specify known properties, and 'tenantId' does not exist in type 'RuntimeContext<unknown>'.
+  Overload 3 of 3, '(messages: MessageListInput, args?: (AgentGenerateOptions<undefined, ZodType<any, ZodTypeDef, any> | JSONSchema7> & { ...; }) | undefined): Promise<...>', gave the following error.
+    Object literal may only specify known properties, and 'tenantId' does not exist in type 'RuntimeContext<unknown>'.
+
+[7m50[0m           tenantId,
+[7m  [0m [91m          ~~~~~~~~[0m
+
+
+[96msrc/app/api/copilotkit/route.ts[0m:[93m68[0m:[93m42[0m - [91merror[0m[90m TS2339: [0mProperty 'streamHttpServerResponse' does not exist on type 'CopilotRuntime<[]>'.
+
+[7m68[0m     const { handleRequest } = copilotKit.streamHttpServerResponse({
+[7m  [0m [91m                                         ~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+[96msrc/components/vibe/chat-workspace.tsx[0m:[93m167[0m:[93m11[0m - [91merror[0m[90m TS2552: [0mCannot find name 'setPreviewVersionId'. Did you mean 'previewVersionId'?
+
+[7m167[0m           setPreviewVersionId(result.versionId);
+[7m   [0m [91m          ~~~~~~~~~~~~~~~~~~~[0m
+
+  [96msrc/components/vibe/chat-workspace.tsx[0m:[93m47[0m:[93m10[0m
+    [7m47[0m   const [previewVersionId] = useState("v1");
+    [7m  [0m [96m         ~~~~~~~~~~~~~~~~[0m
+    'previewVersionId' is declared here.
+
+
+Found 19 errors in 5 files.
+
+Errors  Files
+     1  mastra/tools/platformMapping/listTemplates.ts[90m:83[0m
+     9  mastra/tools/platformMapping/runGeneratePreviewWorkflow.ts[90m:35[0m
+     2  mastra/tools/platformMapping/saveMapping.ts[90m:35[0m
+     6  src/app/api/copilotkit/route.ts[90m:22[0m
+     1  src/components/vibe/chat-workspace.tsx[90m:167[0m

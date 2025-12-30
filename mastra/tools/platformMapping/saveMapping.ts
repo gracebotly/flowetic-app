@@ -67,7 +67,7 @@ export const saveMapping = createTool({
 
       // Determine if review is needed
       const requiresReview = confidence < 0.7 || 
-                           (metadata.unmappedFields && metadata.unmappedFields.length > 0);
+                           Boolean(metadata.unmappedFields && metadata.unmappedFields.length > 0);
 
       return {
         success: true,
@@ -77,7 +77,7 @@ export const saveMapping = createTool({
         fieldCount: Object.keys(mappings).length,
         requiresReview,
       };
-    } catch (error) {
+    } catch (error: any) {
       throw new Error(`Failed to save mapping: ${error.message}`);
     }
   },
