@@ -187,7 +187,7 @@ export async function POST(req: NextRequest) {
       JSON.stringify({
         type: "success",
         agentKey: "masterRouter",
-        text: routerResponse.text ?? "",
+        text: routerOnly.text ?? "",
       }),
       { headers: { "Content-Type": "application/json" } },
     );
