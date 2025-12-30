@@ -1,7 +1,7 @@
 
-
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
+
 export const getSchemaSummary = createTool({
   id: 'getSchemaSummary',
   description: 'Summarize event schema and field types from samples',
@@ -32,20 +32,22 @@ export const getSchemaSummary = createTool({
       }
 
       // Extract all unique field paths and types
-      const fieldMap = new Map();
-      const eventTypes = new Set();
+      const fieldMap = new Map<string, any>();
+      const eventTypes = new Set<string>();
 
-      samples.forEach(sample => {
-        eventTypes.add(sample.type);
+      samples.forEach((sample: any) => {
+        if (sample.type) {
+          eventTypes.add(String(sample.type));
+        }
         extractFieldsFromObject(sample.data || sample, '', fieldMap);
       });
 
       // Convert map to array and calculate statistics
-      const fields = Array.from(fieldMap.entries()).map(([path, info]: [string, any]) => ({
+      const fields = Array.from(fieldMap.entries()).map(([path, info]) => ({
         name: path.split('.').pop() || path,
-        type: info.type,
+        type: String(info.type),
         path,
-        nullable: info.nullable || false,
+        nullable: Boolean(info.nullable),
         sampleValue: info.sampleValue,
         frequency: (info.count / samples.length) * 100,
       }));
@@ -66,9 +68,9 @@ export const getSchemaSummary = createTool({
         eventTypes: Array.from(eventTypes),
         totalEvents: samples.length,
         schemaComplexity: complexity,
-        confidence: Math.min(0.95, samples.length / 100), // Higher confidence with more samples
+        confidence: Math.min(0.95, samples.length / 100),
       };
-    } catch (error) {
+    } catch (error: any) {
       throw new Error(`Failed to summarize schema: ${error.message}`);
     }
   },
