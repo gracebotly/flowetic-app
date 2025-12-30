@@ -7,29 +7,37 @@ import {
 } from "@copilotkit/runtime";
 import { MastraAgent } from "@ag-ui/mastra";
 
-
 export const POST = async (req: NextRequest) => {
-  // Get local Mastra agents - using "platformMappingAgent" as the primary agent
-  // This agent handles platform detection and dashboard template selection
-  const mastraAgents = MastraAgent.getLocalAgents({
-    mastra,
-    agentId: "platformMappingAgent",
-  });
+  // Get local Mastra agents (API does NOT support agentId option in this version)
+  const mastraAgents = MastraAgent.getLocalAgents({ mastra });
 
+  // Optional: fail fast if the expected primary agent is not registered
+  const hasPlatformMappingAgent =
+    typeof mastraAgents === "object" &&
+    mastraAgents !== null &&
+    "platformMappingAgent" in (mastraAgents as Record<string, unknown>);
 
-  // Initialize CopilotKit runtime with Mastra agents
+  if (!hasPlatformMappingAgent) {
+    return new Response(
+      JSON.stringify({
+        type: "error",
+        code: "AGENT_NOT_FOUND",
+        message:
+          "platformMappingAgent is not registered in mastra. Check mastra/index.ts agents registration.",
+      }),
+      { status: 500, headers: { "Content-Type": "application/json" } },
+    );
+  }
+
   const runtime = new CopilotRuntime({
     agents: mastraAgents,
   });
 
-
-  // Create the Next.js App Router endpoint handler
   const { handleRequest } = copilotRuntimeNextJSAppRouterEndpoint({
     runtime,
     serviceAdapter: new ExperimentalEmptyAdapter(),
     endpoint: "/api/copilotkit",
   });
 
-
   return handleRequest(req);
-};   
+};
