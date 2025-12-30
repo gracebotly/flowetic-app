@@ -1,70 +1,141 @@
-import { mastra } from "@/mastra";
 import { NextRequest } from "next/server";
 import { RuntimeContext } from "@mastra/core/runtime-context";
+import { mastra } from "@/mastra";
+import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 function detectIntent(message: string) {
   const m = message.toLowerCase();
+
   const wantsPreview =
     m.includes("preview") ||
-    m.includes("generate") ||
+    m.includes("generate preview") ||
+    m.includes("generate a preview") ||
+    m.includes("create a preview") ||
+    m.includes("build a preview") ||
+    m.includes("generate dashboard") ||
     m.includes("create dashboard") ||
-    m.includes("build dashboard") ||
-    m.includes("generate dashboard");
+    m.includes("build dashboard");
 
   const wantsMapping =
     m.includes("mapping") ||
     m.includes("map ") ||
     m.includes("template") ||
-    m.includes("recommend template");
+    m.includes("recommend template") ||
+    m.includes("best template");
 
   return { wantsPreview, wantsMapping };
 }
 
 export async function POST(req: NextRequest) {
+  const supabase = await createClient();
+
   try {
-    const body = await req.json();
+    const body = await req.json().catch(() => ({} as any));
 
-    const tenantId = body.tenantId as string | undefined;
-    const userId = body.userId as string | undefined;
-    const sourceId = body.sourceId as string | undefined;
-    const platformType = body.platformType as string | undefined;
-
-    // Support both shapes:
-    // 1) body.message (string)
-    // 2) body.messages (array) used by some UIs
+    // Accept either { message } or { messages: [...] }
     const message =
       (body.message as string | undefined) ??
+      (body.lastMessage as string | undefined) ??
       (body.messages?.[body.messages.length - 1]?.content as string | undefined) ??
       "";
 
-    if (!tenantId || !userId) {
+    // 1) Auth: derive userId from session
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user?.id) {
       return new Response(
         JSON.stringify({
           type: "error",
-          code: "MISSING_REQUIRED_FIELDS",
-          message: "tenantId and userId are required",
+          code: "AUTH_REQUIRED",
+          message: "Please sign in to continue.",
         }),
-        { status: 400, headers: { "Content-Type": "application/json" } },
+        { status: 401, headers: { "Content-Type": "application/json" } },
       );
     }
 
+    const userId = user.id;
+
+    // 2) Tenancy: derive tenantId + role from memberships
+    const { data: membership, error: membershipError } = await supabase
+      .from("memberships")
+      .select("tenant_id, role")
+      .eq("user_id", userId)
+      .single();
+
+    if (membershipError || !membership?.tenant_id) {
+      return new Response(
+        JSON.stringify({
+          type: "error",
+          code: "TENANT_ACCESS_DENIED",
+          message: "You do not have access to a tenant workspace.",
+        }),
+        { status: 403, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    const tenantId = membership.tenant_id as string;
+    const userRole = (membership.role ?? "admin") as "admin" | "client" | "viewer";
+
+    // 3) Resolve a connected source (sourceId + platformType)
+    // Allow explicit values only if provided (no placeholders)
+    let sourceId = typeof body.sourceId === "string" && body.sourceId.trim() ? body.sourceId : undefined;
+    let platformType =
+      typeof body.platformType === "string" && body.platformType.trim() ? body.platformType : undefined;
+
+    if (!sourceId) {
+      const { data: source, error: sourceError } = await supabase
+        .from("sources")
+        .select("id,type,status,created_at")
+        .eq("tenant_id", tenantId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (sourceError || !source?.id) {
+        return new Response(
+          JSON.stringify({
+            type: "error",
+            code: "CONNECTION_NOT_CONFIGURED",
+            message:
+              "No platform is connected yet. Go to Sources and connect your platform so I can generate a dashboard preview.",
+          }),
+          { status: 400, headers: { "Content-Type": "application/json" } },
+        );
+      }
+
+      sourceId = source.id;
+      platformType = platformType ?? source.type ?? "other";
+    }
+
+    if (!platformType) platformType = "other";
+
+    // 4) Thread context: accept threadId if present, else create stable fallback
+    const threadId =
+      (typeof body.threadId === "string" && body.threadId.trim()) || `thread-${tenantId}`;
+
+    // 5) RuntimeContext (partial but real; no placeholders)
     const runtimeContext = new RuntimeContext();
     runtimeContext.set("tenantId", tenantId);
     runtimeContext.set("userId", userId);
-    if (sourceId) runtimeContext.set("sourceId", sourceId);
-    if (platformType) runtimeContext.set("platformType", platformType);
+    runtimeContext.set("userRole", userRole);
+    runtimeContext.set("threadId", threadId);
+    runtimeContext.set("sourceId", sourceId);
+    runtimeContext.set("platformType", platformType);
 
-    // Always start with Master Router (single user-facing entrypoint)
-    const master = mastra.getAgent("masterRouter");
-    if (!master) {
+    // 6) Agents
+    const masterRouter = mastra.getAgent("masterRouter");
+    if (!masterRouter) {
       return new Response(
         JSON.stringify({
           type: "error",
           code: "AGENT_NOT_FOUND",
-          message: "masterRouter agent not registered in mastra/index.ts",
+          message: "masterRouter agent is not registered.",
         }),
         { status: 500, headers: { "Content-Type": "application/json" } },
       );
@@ -72,61 +143,55 @@ export async function POST(req: NextRequest) {
 
     const { wantsPreview, wantsMapping } = detectIntent(message);
 
-    // If the user wants mapping/template/preview, delegate to platformMapping agent
+    // Always let router speak first (Agent 1 voice), but keep it short
+    const routerResponse = await masterRouter.generate(message, {
+      maxSteps: 3,
+      runtimeContext,
+    });
+
     if (wantsPreview || wantsMapping) {
-      const mappingAgent = mastra.getAgent("platformMapping");
-      if (!mappingAgent) {
+      const platformMapping = mastra.getAgent("platformMapping");
+      if (!platformMapping) {
         return new Response(
           JSON.stringify({
             type: "error",
             code: "AGENT_NOT_FOUND",
-            message: "platformMapping agent not registered in mastra/index.ts",
+            message: "platformMapping agent is not registered.",
           }),
           { status: 500, headers: { "Content-Type": "application/json" } },
         );
       }
 
-      // 1) Master Router: short acknowledgement (keeps your architecture contract)
-      const routerResponse = await master.generate(message, {
-        maxSteps: 3,
-        runtimeContext,
-      });
-
-      // 2) Platform Mapping Agent: do the actual work (tools/mapping/template)
-      const mappingResponse = await mappingAgent.generate(message, {
+      const mappingResponse = await platformMapping.generate(message, {
         maxSteps: 8,
         runtimeContext,
       });
 
-      // Return combined text in a predictable way
       return new Response(
         JSON.stringify({
           type: "success",
           agentKey: "masterRouter->platformMapping",
-          text: `${routerResponse.text}\n\n${mappingResponse.text}`,
+          text: `${routerResponse.text ?? ""}\n\n${mappingResponse.text ?? ""}`.trim(),
         }),
         { headers: { "Content-Type": "application/json" } },
       );
     }
 
-    // Otherwise just use Master Router
-    const routerOnly = await master.generate(message, { maxSteps: 3, runtimeContext });
-
     return new Response(
       JSON.stringify({
         type: "success",
         agentKey: "masterRouter",
-        text: routerOnly.text ?? "",
+        text: routerResponse.text ?? "",
       }),
       { headers: { "Content-Type": "application/json" } },
     );
   } catch (error: any) {
-    console.error("Master route error:", error);
+    console.error("[/api/agent/master] error", error);
     return new Response(
       JSON.stringify({
         type: "error",
         code: "UNKNOWN_ERROR",
-        message: error?.message || "An unexpected error occurred.",
+        message: "Something went wrong. Please try again.",
       }),
       { status: 500, headers: { "Content-Type": "application/json" } },
     );
