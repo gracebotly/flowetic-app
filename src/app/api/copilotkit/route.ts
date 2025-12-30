@@ -1,74 +1,31 @@
-/**
- * CopilotKit API Route - Correct Implementation
- * Based on official CopilotKit integration pattern for custom agents
- */
+import { NextRequest } from "next/server";
+import { mastra } from "@/mastra";
+import {
+  CopilotRuntime,
+  ExperimentalEmptyAdapter,
+  copilotRuntimeNextJSAppRouterEndpoint,
+} from "@copilotkit/runtime";
+import { MastraAgent } from "@ag-ui/mastra";
 
-import { CopilotRuntime } from "@copilotkit/runtime";
-import { copilotRuntimeHandler } from "@copilotkit/runtime/nextjs";
-import { AbstractAgent } from "@ag-ui/client";
-import { platformMappingAgent } from "@/mastra/agents/platformMappingAgent";
+export const POST = async (req: NextRequest) => {
+  // Get local Mastra agents - using "platformMappingAgent" as the primary agent
+  // This agent handles platform detection and dashboard template selection
+  const mastraAgents = MastraAgent.getLocalAgents({
+    mastra,
+    agentId: "platformMappingAgent",
+  });
 
-/**
- * Mastra Agent Adapter
- * Wraps the Mastra platformMappingAgent in AbstractAgent interface
- */
-class MastraAgentAdapter extends AbstractAgent {
-  private mastraAgent: typeof platformMappingAgent;
+  // Initialize CopilotKit runtime with Mastra agents
+  const runtime = new CopilotRuntime({
+    agents: mastraAgents,
+  });
 
-  constructor(mastraAgent: typeof platformMappingAgent) {
-    super({
-      agentId: "default",
-      description: "Platform mapping agent for dashboard generation with Mastra workflows and tools",
-    });
-    this.mastraAgent = mastraAgent;
-  }
+  // Create the Next.js App Router endpoint handler
+  const { handleRequest } = copilotRuntimeNextJSAppRouterEndpoint({
+    runtime,
+    serviceAdapter: new ExperimentalEmptyAdapter(),
+    endpoint: "/api/copilotkit",
+  });
 
-  protected async run(input: any): Promise<any> {
-    try {
-      const messages = input.messages ?? [];
-      const userMessages = messages.filter((m: any) => m.role === "user");
-      const lastMessage = userMessages[userMessages.length - 1]?.content || "";
-
-      // Emit RUN_STARTED event
-      this.events$.next({ type: "RUN_STARTED" });
-
-      // Call Mastra agent
-      const result = await this.mastraAgent.generate(lastMessage, {
-        messages: messages.map((m: any) => ({
-          role: m.role,
-          content: m.content,
-        })),
-      });
-
-      const answerText = result.text || String(result);
-
-      // Emit message events
-      this.events$.next({ type: "TEXT_MESSAGE_START", payload: {} });
-      this.events$.next({ type: "TEXT_MESSAGE_CONTENT", delta: answerText });
-      this.events$.next({ type: "TEXT_MESSAGE_END" });
-      this.events$.next({ type: "RUN_FINISHED" });
-
-      return { result: answerText, newMessages: [] };
-    } catch (error) {
-      console.error("MastraAgentAdapter error:", error);
-      this.events$.next({
-        type: "TEXT_MESSAGE_CONTENT",
-        delta: "Sorry, I encountered an error. Please try again.",
-      });
-      this.events$.next({ type: "RUN_FINISHED" });
-      return { result: "Error occurred", newMessages: [] };
-    }
-  }
-
-  protected detachActiveRun(): void {
-    // Cleanup if needed
-  }
-}
-
-const defaultAgent = new MastraAgentAdapter(platformMappingAgent);
-
-const runtime = new CopilotRuntime({
-  agents: { default: defaultAgent },
-});
-
-export const { GET, POST } = copilotRuntimeHandler(runtime);
+  return handleRequest(req);
+};
