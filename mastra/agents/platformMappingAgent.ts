@@ -1,6 +1,6 @@
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
-import { RuntimeContext } from "../core/RuntimeContext";
+import { RuntimeContext } from "@mastra/core/runtime-context";
 import { loadSkill } from "../skills/loadSkill";
 
 import {

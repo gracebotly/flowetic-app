@@ -35,14 +35,14 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({} as any));
 
-    // Accept either { message } or { messages: [...] }
+    // Message can come from either shape
     const message =
       (body.message as string | undefined) ??
       (body.lastMessage as string | undefined) ??
       (body.messages?.[body.messages.length - 1]?.content as string | undefined) ??
       "";
 
-    // 1) Auth: derive userId from session
+    // 1) Resolve authenticated userId
     const {
       data: { user },
       error: userError,
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
 
     const userId = user.id;
 
-    // 2) Tenancy: derive tenantId + role from memberships
+    // 2) Resolve tenantId from memberships
     const { data: membership, error: membershipError } = await supabase
       .from("memberships")
       .select("tenant_id, role")
@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
         JSON.stringify({
           type: "error",
           code: "TENANT_ACCESS_DENIED",
-          message: "You do not have access to a tenant workspace.",
+          message: "No tenant membership found for this user.",
         }),
         { status: 403, headers: { "Content-Type": "application/json" } },
       );
@@ -82,11 +82,13 @@ export async function POST(req: NextRequest) {
     const tenantId = membership.tenant_id as string;
     const userRole = (membership.role ?? "admin") as "admin" | "client" | "viewer";
 
-    // 3) Resolve a connected source (sourceId + platformType)
-    // Allow explicit values only if provided (no placeholders)
-    let sourceId = typeof body.sourceId === "string" && body.sourceId.trim() ? body.sourceId : undefined;
-    let platformType =
-      typeof body.platformType === "string" && body.platformType.trim() ? body.platformType : undefined;
+    // 3) Resolve sourceId + platformType
+    // Allow body.sourceId/platformType only if they look like real values; otherwise ignore.
+    const bodySourceId = typeof body.sourceId === "string" ? body.sourceId : undefined;
+    const bodyPlatformType = typeof body.platformType === "string" ? body.platformType : undefined;
+
+    let sourceId = bodySourceId;
+    let platformType = bodyPlatformType;
 
     if (!sourceId) {
       const { data: source, error: sourceError } = await supabase
@@ -102,8 +104,7 @@ export async function POST(req: NextRequest) {
           JSON.stringify({
             type: "error",
             code: "CONNECTION_NOT_CONFIGURED",
-            message:
-              "No platform is connected yet. Go to Sources and connect your platform so I can generate a dashboard preview.",
+            message: "No platform source is connected yet. Go to Sources and connect a platform first.",
           }),
           { status: 400, headers: { "Content-Type": "application/json" } },
         );
@@ -115,39 +116,34 @@ export async function POST(req: NextRequest) {
 
     if (!platformType) platformType = "other";
 
-    // 4) Thread context: accept threadId if present, else create stable fallback
+    // ThreadId: allow body.threadId if present, else derive a stable fallback
     const threadId =
-      (typeof body.threadId === "string" && body.threadId.trim()) || `thread-${tenantId}`;
+      (typeof body.threadId === "string" && body.threadId.trim()) ||
+      `thread-${tenantId}`;
 
-    // 5) RuntimeContext (partial but real; no placeholders)
+    // 4) Build runtimeContext with real IDs
     const runtimeContext = new RuntimeContext();
     runtimeContext.set("tenantId", tenantId);
     runtimeContext.set("userId", userId);
     runtimeContext.set("userRole", userRole);
-    runtimeContext.set("threadId", threadId);
     runtimeContext.set("sourceId", sourceId);
     runtimeContext.set("platformType", platformType);
+    runtimeContext.set("threadId", threadId);
 
-    // 6) Agents
-    const masterRouter = mastra.getAgent("masterRouter");
-    if (!masterRouter) {
+    // 5) Always start with Master Router
+    const master = mastra.getAgent("masterRouter");
+    if (!master) {
       return new Response(
         JSON.stringify({
           type: "error",
           code: "AGENT_NOT_FOUND",
-          message: "masterRouter agent is not registered.",
+          message: "masterRouter agent not registered.",
         }),
         { status: 500, headers: { "Content-Type": "application/json" } },
       );
     }
 
     const { wantsPreview, wantsMapping } = detectIntent(message);
-
-    // Always let router speak first (Agent 1 voice), but keep it short
-    const routerResponse = await masterRouter.generate(message, {
-      maxSteps: 3,
-      runtimeContext,
-    });
 
     if (wantsPreview || wantsMapping) {
       const platformMapping = mastra.getAgent("platformMapping");
@@ -156,13 +152,18 @@ export async function POST(req: NextRequest) {
           JSON.stringify({
             type: "error",
             code: "AGENT_NOT_FOUND",
-            message: "platformMapping agent is not registered.",
+            message: "platformMapping agent not registered.",
           }),
           { status: 500, headers: { "Content-Type": "application/json" } },
         );
       }
 
-      const mappingResponse = await platformMapping.generate(message, {
+      const routerResponse = await master.generate(message, {
+        maxSteps: 3,
+        runtimeContext,
+      });
+
+      const mappingResponse = await mappingAgent.generate(message, {
         maxSteps: 8,
         runtimeContext,
       });
@@ -177,6 +178,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const routerOnly = await master.generate(message, {
+      maxSteps: 3,
+      runtimeContext,
+    });
+
     return new Response(
       JSON.stringify({
         type: "success",
@@ -187,6 +193,7 @@ export async function POST(req: NextRequest) {
     );
   } catch (error: any) {
     console.error("[/api/agent/master] error", error);
+
     return new Response(
       JSON.stringify({
         type: "error",
