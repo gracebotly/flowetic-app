@@ -44,13 +44,13 @@ export async function POST(req: NextRequest) {
     runtimeContext.set("platformType", platformType);
     runtimeContext.set("sourceId", sourceId);
 
-    const agent = mastra.getAgent("platformMappingMaster");
+    const agent = mastra.getAgent("platformMapping");
     if (!agent) {
       return new Response(
         JSON.stringify({
           type: "error",
           code: "AGENT_NOT_FOUND",
-          message: "platformMappingMaster agent not registered",
+          message: "platformMapping agent not registered",
         }),
         { status: 500, headers: { "Content-Type": "application/json" } },
       );
