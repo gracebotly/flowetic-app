@@ -4,7 +4,7 @@
 
 
 
-import { createAgent } from "@mastra/core/agent";
+import { Agent } from "@mastra/core/agent";
 import { z } from "zod";
 import { 
   appendThreadEvent 
@@ -12,7 +12,7 @@ import {
 import { loadSkillMarkdown } from "../skills/loadSkill";
 import { openai } from "@ai-sdk/openai";
 
-export const mappingGenerationAgent = createAgent({
+export const mappingGenerationAgent = new Agent({
   name: "MappingGenerationAgent",
   instructions: `You are an intelligent field mapping agent.
 

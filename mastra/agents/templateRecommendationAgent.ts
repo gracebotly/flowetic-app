@@ -4,7 +4,7 @@
 
 
 
-import { createAgent } from "@mastra/core/agent";
+import { Agent } from "@mastra/core/agent";
 import { z } from "zod";
 import { 
   appendThreadEvent 
@@ -12,7 +12,7 @@ import {
 import { loadSkillMarkdown } from "../skills/loadSkill";
 import { openai } from "@ai-sdk/openai";
 
-export const templateRecommendationAgent = createAgent({
+export const templateRecommendationAgent = new Agent({
   name: "TemplateRecommendationAgent",
   instructions: `You are a deterministic template recommendation agent.
 

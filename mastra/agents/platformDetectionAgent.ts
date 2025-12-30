@@ -4,14 +4,14 @@
 
 
 
-import { createAgent } from "@mastra/core/agent";
+import { Agent } from "@mastra/core/agent";
 import { z } from "zod";
 import { 
   appendThreadEvent 
 } from "../tools/platformMapping";
 import { openai } from "@ai-sdk/openai";
 
-export const platformDetectionAgent = createAgent({
+export const platformDetectionAgent = new Agent({
   name: "PlatformDetectionAgent",
   instructions: `You are a lightweight platform detection agent that operates first in the pipeline.
 

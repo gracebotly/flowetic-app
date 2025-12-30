@@ -4,21 +4,19 @@
 
 
 
-import { createAgent } from "@mastra/core/agent";
+import { Agent } from "@mastra/core/agent";
 import { z } from "zod";
 import { 
   getClientContext,
   getRecentEventSamples,
-  getSchemaSummary,
-  listTemplates,
   recommendTemplates,
   proposeMapping,
-  saveMapping,
-  runGeneratePreviewWorkflow
+  runGeneratePreviewWorkflow,
+  appendThreadEvent
 } from "../tools/platformMapping";
 import { openai } from "@ai-sdk/openai";
 
-export const platformMappingAgent = createAgent({
+export const platformMappingAgent = new Agent({
   name: "PlatformMappingMaster",
   instructions: `You are Platform Mapping Master, an expert at connecting AI agent platforms to dashboard generation.
 
@@ -32,22 +30,17 @@ Your core responsibilities:
 You have access to these tools:
 - getClientContext: Get user's platform and connection status
 - getRecentEventSamples: Fetch recent events for schema analysis
-- getSchemaSummary: Summarize event schema and field types
-- listTemplates: List available dashboard templates
 - recommendTemplates: Recommend best template based on schema
 - proposeMapping: Suggest field mappings with confidence scores
-- saveMapping: Save mapping configuration
 - runGeneratePreviewWorkflow: Execute full preview generation pipeline
+- appendThreadEvent: Log rationale and decisions to thread
 
 Always follow this workflow:
 1. Check platform connection status first using getClientContext
 2. Get recent event samples using getRecentEventSamples
-3. Analyze schema using getSchemaSummary
-4. List available templates using listTemplates
-5. Recommend templates using recommendTemplates
-6. Propose mappings using proposeMapping
-7. Save mappings using saveMapping
-8. Generate preview using runGeneratePreviewWorkflow
+3. Recommend templates using recommendTemplates
+4. Propose mappings using proposeMapping
+5. Generate preview using runGeneratePreviewWorkflow
 
 Best practices:
 - Always validate inputs before proceeding to next step
@@ -67,12 +60,10 @@ Error handling:
   tools: {
     getClientContext,
     getRecentEventSamples,
-    getSchemaSummary,
-    listTemplates,
     recommendTemplates,
     proposeMapping,
-    saveMapping,
     runGeneratePreviewWorkflow,
+    appendThreadEvent,
   },
 });
 
