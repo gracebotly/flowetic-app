@@ -15,7 +15,7 @@ export type PlatformType =
   | "pydantic_ai"
   | "other";
 
-export async function loadSkillMarkdown(platformType: PlatformType): Promise<string> {
+export async function loadSkill(platformType: PlatformType): Promise<string> {
   const safePlatform: PlatformType = platformType || "other";
   const skillPath = path.join(process.cwd(), "skills", safePlatform, "Skill.md");
 
