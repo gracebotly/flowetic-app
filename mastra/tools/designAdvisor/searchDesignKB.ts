@@ -10,11 +10,4 @@ export const searchDesignKB = createVectorQueryTool({
   indexName: process.env.MASTRA_DESIGN_KB_INDEX_NAME || "design_kb",
   model: openai.embedding("text-embedding-3-small"),
   enableFilter: true,
-  databaseConfig: {
-    pgvector: {
-      minScore: 0.72,
-      ef: 200,
-      probes: 10,
-    },
-  },
 });

@@ -8,7 +8,7 @@ import { loadDesignKBFiles } from "./loadDesignKB";
 export const searchDesignKBLocal = createTool({
   id: "searchDesignKBLocal",
   description:
-    "Fallback local design KB search (no vector DB). Returns a combined relevantContext string plus lightweight sources. Use when pgvector-based searchDesignKB is unavailable or returns empty.",
+    "Fallback local design KB search (no vector DB). Returns a combined relevantContext string plus lightweight sources. Use when vector search is unavailable or returns empty.",
   inputSchema: z.object({
     queryText: z.string().min(1),
     maxChars: z.number().int().min(500).max(12000).default(6000),
@@ -34,7 +34,8 @@ export const searchDesignKBLocal = createTool({
 
     const files = await loadDesignKBFiles();
 
-    const scored: Array<{ docPath: string; score: number; content: string }> = [];
+    const scored: Array<{ docPath: string; score: number; content: string }> =
+      [];
     for (const f of files) {
       const lower = f.content.toLowerCase();
       let score = 0;
@@ -48,7 +49,8 @@ export const searchDesignKBLocal = createTool({
     scored.sort((a, b) => b.score - a.score);
     const top = scored.slice(0, 5);
 
-    const sources: Array<{ docPath: string; score: number; excerpt: string }> = [];
+    const sources: Array<{ docPath: string; score: number; excerpt: string }> =
+      [];
     const parts: string[] = [];
 
     for (const t of top) {
