@@ -42,7 +42,6 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
   const [previewDevice, setPreviewDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
   const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
 
-  // MVP: hardcoded dashboard + version IDs until we have real objects from Supabase
   const [previewDashboardId] = useState("demo-dashboard");
   const [previewVersionId, setPreviewVersionId] = useState("v1");
 
@@ -55,7 +54,6 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
     async function loadAuthContext() {
       const supabase = createClient();
       
-      // Get current user
       const { data: { session } } = await supabase.auth.getSession();
       const userId = session?.user?.id;
       
@@ -64,7 +62,6 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
         return;
       }
       
-      // Get user's tenant from memberships
       const { data: membership } = await supabase
         .from('memberships')
         .select('tenant_id')
@@ -80,7 +77,6 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
     loadAuthContext();
   }, []);
 
-  // Terminal logs
   const [logs, setLogs] = useState<TerminalLog[]>([
     {
       id: "l1",
@@ -91,7 +87,6 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
     },
   ]);
 
-  // Messages
   const [messages, setMessages] = useState<Msg[]>([
     {
       id: "m1",
@@ -117,7 +112,6 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
     setLogs((prev) => [...prev, { id: crypto.randomUUID(), type, text, detail }]);
   }
 
-  // CopilotKit Action for Generate Preview
   useCopilotAction({
     name: "generatePreview",
     description: "Generate a dashboard preview based on current context",
@@ -135,7 +129,6 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
         return;
       }
 
-      // Hardcoded interfaceId for MVP
       const interfaceId = "demo-interface";
 
       addLog("running", "Generating dashboard preview...", "Starting workflow execution");
@@ -150,8 +143,8 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
             tenantId: authContext.tenantId,
             userId: authContext.userId,
             instructions: args.instructions,
-            sourceId: 'demo-source', // MVP: hardcoded
-            platformType: 'vapi', // MVP: hardcoded
+            sourceId: 'demo-source',
+            platformType: 'vapi',
             message: args.instructions || 'Generate dashboard preview',
           }),
         });
@@ -176,78 +169,76 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
   });
 
   const send = async () => {
-  const text = input.trim();
-  if (!text || isLoading) return;
+    const text = input.trim();
+    if (!text || isLoading) return;
 
-  setIsLoading(true);
-  setInput("");
+    setIsLoading(true);
+    setInput("");
 
-  const userMsg: Msg = { id: `u-${Date.now()}`, role: "user", content: text };
-  setMessages((prev) => [...prev, userMsg]);
+    const userMsg: Msg = { id: `u-${Date.now()}`, role: "user", content: text };
+    setMessages((prev) => [...prev, userMsg]);
 
-  try {
-    const tenantId = authContext.tenantId;
-    const userId = authContext.userId;
+    try {
+      const tenantId = authContext.tenantId;
+      const userId = authContext.userId;
 
-    if (!tenantId || !userId) {
-      addLog("error", "Not authenticated", "Please log in and try again.");
-      setIsLoading(false);
-      return;
-    }
+      if (!tenantId || !userId) {
+        addLog("error", "Not authenticated", "Please log in and try again.");
+        setIsLoading(false);
+        return;
+      }
 
-    // MVP placeholders (replace with real IDs once your interfaces/sources exist in Supabase)
-    const interfaceId = "00000000-0000-0000-0000-000000000001";
-    const sourceId = "00000000-0000-0000-0000-000000000002";
-    const threadId = `demo-thread-${userId}`;
-    const platformType = "vapi" as const;
+      const interfaceId = "00000000-0000-0000-0000-000000000001";
+      const sourceId = "00000000-0000-0000-0000-000000000002";
+      const threadId = `demo-thread-${userId}`;
+      const platformType = "vapi" as const;
 
-    addLog("running", "Sending message to agent...", text);
+      addLog("running", "Sending message to agent...", text);
 
-    const resp = await fetch("/api/agent/master", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        tenantId,
-        userId,
-        sourceId,
-        platformType,
-        message: text,
-      }),
-    });
+      const resp = await fetch("/api/agent/master", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenantId,
+          userId,
+          sourceId,
+          platformType,
+          message: text,
+        }),
+      });
 
-    const data = await resp.json();
+      const data = await resp.json();
 
-    if (!resp.ok || data.type === "error") {
-      addLog("error", "Agent error", data.message || "Unknown agent error");
+      if (!resp.ok || data.type === "error") {
+        addLog("error", "Agent error", data.message || "Unknown agent error");
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `a-${Date.now()}`,
+            role: "assistant",
+            content: data.message || "Something went wrong.",
+          },
+        ]);
+        return;
+      }
+
       setMessages((prev) => [
         ...prev,
-        {
-          id: `a-${Date.now()}`,
-          role: "assistant",
-          content: data.message || "Something went wrong.",
-        },
+        { id: `a-${Date.now()}`, role: "assistant", content: data.text || "" },
       ]);
-      return;
+
+      addLog("success", "Agent responded");
+    } catch (e: any) {
+      addLog("error", "Request failed", e?.message ?? "Unknown error");
+      setMessages((prev) => [
+        ...prev,
+        { id: `a-${Date.now()}`, role: "assistant", content: "Request failed." },
+      ]);
+    } finally {
+      setIsLoading(false);
     }
+  };
 
-    setMessages((prev) => [
-      ...prev,
-      { id: `a-${Date.now()}`, role: "assistant", content: data.text || "" },
-    ]);
-
-    addLog("success", "Agent responded");
-  } catch (e: any) {
-    addLog("error", "Request failed", e?.message ?? "Unknown error");
-    setMessages((prev) => [
-      ...prev,
-      { id: `a-${Date.now()}`, role: "assistant", content: "Request failed." },
-    ]);
-  } finally {
-    setIsLoading(false);
-  }
-  }
-
-  // Show loading state while auth is loading
   if (!authContext.userId || !authContext.tenantId) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -271,12 +262,11 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
         </div>
       )}
 
-      {/* Split layout 35/65 */}
       <div className="flex h-full min-h-0 w-full overflow-hidden rounded-xl border border-gray-300 bg-white">
-        {/* LEFT: chat (35%) */}
-        <div className="flex w-[35%] min-w-[360px] h-full min-h-0 flex-col border-r border-gray-300 bg-[#f9fafb]">
-          {/* messages */}
-          <div className="flex-1 min-h-0 overflow-y-auto p-4">
+        {/* LEFT: chat (35%) - FIXED VERSION */}
+        <div className="flex w-[35%] min-w-[360px] flex-col border-r border-gray-300 bg-[#f9fafb] overflow-hidden">
+          {/* messages - enforced flex-1 with overflow containment */}
+          <div className="flex-1 overflow-y-auto p-3 min-h-0">
             {renderedMessages.map((m) => {
               if (m.role === "system") {
                 return (
@@ -312,8 +302,8 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
             <div ref={messagesEndRef} />
           </div>
 
-          {/* input */}
-          <div className="shrink-0 border-t border-gray-300 bg-white p-4">
+          {/* input - explicitly prevent shrinking */}
+          <div className="flex-shrink-0 border-t border-gray-300 bg-white p-3">
             <textarea
               className="w-full resize-none rounded-lg border border-gray-300 px-3 py-2 text-[14px] leading-6 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               rows={3}
@@ -323,9 +313,7 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
               placeholder="Type your message..."
             />
             <div className="mt-2 flex items-center justify-between">
-              {/* Left: Lovable-style controls */}
               <div className="flex items-center gap-2">
-                {/* hidden file input */}
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -337,7 +325,6 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
                   }}
                 />
 
-                {/* Paperclip / Attach */}
                 <button
                   type="button"
                   title="Attach files"
@@ -347,7 +334,6 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
                   <Paperclip size={18} />
                 </button>
 
-                {/* Voice / Mic button */}
                 {chatMode === "chat" ? (
                   <button
                     type="button"
@@ -378,7 +364,6 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
                 )}
               </div>
 
-              {/* Right: Send button */}
               <button
                 type="button"
                 onClick={send}
@@ -402,8 +387,8 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
         </div>
 
         {/* RIGHT: split view */}
-        <div className="flex flex-1 flex-col">
-          <div className="flex items-center justify-between border-b border-gray-300 bg-white px-4 py-2">
+        <div className="flex flex-1 flex-col min-w-0">
+          <div className="flex items-center justify-between border-b border-gray-300 bg-white px-4 py-2 flex-shrink-0">
             <div className="flex items-center gap-3">
               <div className="text-sm font-semibold text-gray-900">
                 {view === "terminal" ? "Current Changes" : view === "preview" ? "Dashboard Preview" : "Publish"}
@@ -479,9 +464,10 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
               </button>
             </div>
           </div>
+
           {/* Terminal View */}
           {view === "terminal" ? (
-            <div className="flex flex-1 flex-col bg-[#1e1e1e]">
+            <div className="flex flex-1 flex-col bg-[#1e1e1e] min-h-0 overflow-hidden">
               <div className="flex-1 overflow-y-auto px-4 py-4 font-mono text-[13px] leading-6 text-[#d4d4d4]">
                 {logs.map((l) => {
                   const icon =
@@ -521,7 +507,7 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
 
           {/* Preview View */}
           {view === "preview" ? (
-            <div className="flex flex-1 flex-col bg-white">
+            <div className="flex flex-1 flex-col bg-white min-h-0 overflow-hidden">
               <div className="flex flex-1 overflow-auto bg-white p-4">
                 <div
                   className="rounded-xl border border-gray-300 bg-white shadow-sm overflow-auto"
@@ -554,7 +540,7 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
 
           {/* Publish View */}
           {view === "publish" ? (
-            <div className="flex flex-1 items-center justify-center bg-white">
+            <div className="flex flex-1 items-center justify-center bg-white overflow-auto">
               <div className="mx-auto w-full max-w-[480px] px-6 py-12 text-center">
                 <CheckCircle size={64} className="mx-auto mb-6 text-emerald-500" />
                 <div className="mb-2 text-2xl font-semibold text-gray-900">Ready to Publish?</div>
@@ -599,8 +585,8 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
               </div>
             </div>
           ) : null}
-          </div>
         </div>
       </div>
+    </div>
   );
 }
