@@ -21,3 +21,5 @@ export {
 export {
   persistPreviewVersion,
 } from './persistPreviewVersion';
+
+export * from "./specEditor";
