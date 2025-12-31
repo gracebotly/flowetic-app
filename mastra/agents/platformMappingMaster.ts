@@ -12,7 +12,7 @@ import {
   runGeneratePreviewWorkflow,
 } from "../tools/platformMapping";
 
-export const platformMappingMaster = new Agent({
+export const platformMappingMaster: Agent = new Agent({
   name: "platformMappingMaster",
   description:
     "Platform Mapping Agent: inspects event samples, recommends templates, proposes mappings, and triggers preview workflow.",
