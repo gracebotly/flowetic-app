@@ -37,3 +37,26 @@
   --sidebar-muted: 220 14% 63%; /* #9ca3af */
   --main-bg: 210 20% 98%;       /* #f9fafb */
 }
+
+/* Custom thin scrollbar for chat workspace panels */
+.thin-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.thin-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.thin-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+}
+
+.thin-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+/* Firefox support */
+.thin-scrollbar {
+  scrollbar-width: thin;
+}
