@@ -7,11 +7,10 @@ import { createClient } from "@/lib/supabase/server";
 
 export const getRecentEventSamples = createTool({
   id: "getRecentEventSamples",
-  description:
-    "Fetch recent raw event rows for internal analysis. Do not expose raw JSON to user by default.",
+  description: "Fetch recent raw event rows for internal analysis. Do not expose raw JSON to user by default.",
   inputSchema: z.object({
-    tenantId: z.string().uuid(),
-    sourceId: z.string().uuid(),
+    tenantId: z.string().uuid().optional(),
+    sourceId: z.string().uuid().optional(),
     lastN: z.number().int().min(1).max(500).default(100),
   }),
   outputSchema: z.object({
@@ -28,9 +27,21 @@ export const getRecentEventSamples = createTool({
       }),
     ),
   }),
-  execute: async ({ context }) => {
+  execute: async ({ context, runtimeContext }) => {
     const supabase = await createClient();
-    const { tenantId, sourceId, lastN } = context;
+
+    const tenantId =
+      context.tenantId ??
+      (runtimeContext?.get("tenantId") as string | undefined) ??
+      undefined;
+
+    const sourceId =
+      context.sourceId ??
+      (runtimeContext?.get("sourceId") as string | undefined) ??
+      undefined;
+
+    if (!tenantId) throw new Error("AUTH_REQUIRED");
+    if (!sourceId) throw new Error("CONNECTION_NOT_CONFIGURED");
 
     const { data, error } = await supabase
       .from("events")
@@ -38,7 +49,7 @@ export const getRecentEventSamples = createTool({
       .eq("tenant_id", tenantId)
       .eq("source_id", sourceId)
       .order("timestamp", { ascending: false })
-      .limit(lastN);
+      .limit(context.lastN);
 
     if (error) throw new Error(error.message);
 

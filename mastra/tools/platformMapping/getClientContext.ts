@@ -8,7 +8,7 @@ export const getClientContext = createTool({
   id: "getClientContext",
   description: "Fetch tenant context: connected sources and last event timestamp per source.",
   inputSchema: z.object({
-    tenantId: z.string().uuid(),
+    tenantId: z.string().uuid().optional(),
   }),
   outputSchema: z.object({
     tenantId: z.string().uuid(),
@@ -21,9 +21,17 @@ export const getClientContext = createTool({
       }),
     ),
   }),
-  execute: async ({ context }) => {
+  execute: async ({ context, runtimeContext }) => {
     const supabase = await createClient();
-    const { tenantId } = context;
+
+    const tenantId =
+      context.tenantId ??
+      (runtimeContext?.get("tenantId") as string | undefined) ??
+      undefined;
+
+    if (!tenantId) {
+      throw new Error("AUTH_REQUIRED");
+    }
 
     const { data: sources, error: sourcesError } = await supabase
       .from("sources")
