@@ -1,15 +1,20 @@
 import { NextRequest } from "next/server";
-import { CopilotRuntime, ExperimentalEmptyAdapter, copilotRuntimeNextJSAppRouterEndpoint } from "@copilotkit/runtime";
+import {
+  CopilotRuntime,
+  ExperimentalEmptyAdapter,
+  copilotRuntimeNextJSAppRouterEndpoint,
+} from "@copilotkit/runtime";
 import { MastraAgent } from "@ag-ui/mastra";
 import { mastra } from "@/mastra";
 import { createClient } from "@/lib/supabase/server";
+import { RuntimeContext } from "@mastra/core/runtime-context";
 
 export const runtime = "nodejs";
 
 export const POST = async (req: NextRequest) => {
   const supabase = await createClient();
 
-  // Auth/session → tenant context
+  // Get authenticated user
   const {
     data: { user },
     error: userErr,
@@ -22,10 +27,11 @@ export const POST = async (req: NextRequest) => {
         code: "AUTH_REQUIRED",
         message: "You must be signed in to use the assistant.",
       }),
-      { status: 401, headers: { "Content-Type": "application/json" } },
+      { status: 401, headers: { "Content-Type": "application/json" } }
     );
   }
 
+  // Get user's tenant from memberships
   const { data: membership, error: membershipErr } = await supabase
     .from("memberships")
     .select("tenant_id, role")
@@ -40,15 +46,15 @@ export const POST = async (req: NextRequest) => {
         code: "TENANT_ACCESS_DENIED",
         message: "No tenant membership found for this user.",
       }),
-      { status: 403, headers: { "Content-Type": "application/json" } },
+      { status: 403, headers: { "Content-Type": "application/json" } }
     );
   }
 
   const tenantId = membership.tenant_id as string;
   const userRole = (membership.role as "admin" | "client" | "viewer" | null) ?? "admin";
 
-  // Pick a default source/platform from DB (MVP). Never ask user for UUIDs.
-  const { data: source, error: sourceErr } = await supabase
+  // Get default source (most recent)
+  const { data: source } = await supabase
     .from("sources")
     .select("id, type, status")
     .eq("tenant_id", tenantId)
@@ -56,7 +62,6 @@ export const POST = async (req: NextRequest) => {
     .limit(1)
     .maybeSingle();
 
-  // Allow agent to still answer "what can you do?" even if not connected.
   const sourceId = source?.id ?? null;
   const platformType = (source?.type ?? "other") as
     | "vapi"
@@ -67,38 +72,31 @@ export const POST = async (req: NextRequest) => {
     | "pydantic_ai"
     | "other";
 
-  // Load local Mastra agents
-  const mastraAgents = MastraAgent.getLocalAgents({ mastra });
+  // Create RuntimeContext with auth/tenant data
+  const runtimeContext = new RuntimeContext();
+  runtimeContext.set("tenantId", tenantId);
+  runtimeContext.set("userId", user.id);
+  runtimeContext.set("userRole", userRole);
+  if (sourceId) {
+    runtimeContext.set("sourceId", sourceId);
+  }
+  runtimeContext.set("platformType", platformType);
 
-  const runtime = new CopilotRuntime({
+  // Get Mastra agents with injected context
+  const mastraAgents = MastraAgent.getLocalAgents({
+    mastra,
+    runtimeContext,
+  });
+
+  const copilotRuntime = new CopilotRuntime({
     agents: mastraAgents,
   });
 
   const { handleRequest } = copilotRuntimeNextJSAppRouterEndpoint({
-    runtime,
+    runtime: copilotRuntime,
     serviceAdapter: new ExperimentalEmptyAdapter(),
     endpoint: "/api/copilotkit",
-    // IMPORTANT: inject context into every request so tools can use it
-    onRequest: async ({ request, headers }) => {
-      return {
-        request,
-        headers: {
-          ...headers,
-          "x-gf-tenant-id": tenantId,
-          "x-gf-user-id": user.id,
-          "x-gf-user-role": userRole,
-          ...(sourceId ? { "x-gf-source-id": sourceId } : {}),
-          "x-gf-platform-type": platformType,
-        },
-      };
-    },
   });
-
-  // If there is no connected source, still allow chat, but tools will gate.
-  // The agent should guide user to Sources instead of asking for UUIDs.
-  if (sourceErr) {
-    console.error("[copilotkit] failed to fetch sources", sourceErr);
-  }
 
   return handleRequest(req);
 };
