@@ -146,13 +146,13 @@ export async function POST(req: NextRequest) {
     const { wantsPreview, wantsMapping } = detectIntent(message);
 
     if (wantsPreview || wantsMapping) {
-      const mappingAgent = mastra.getAgent("platformMapping");
+      const mappingAgent = mastra.getAgent("platformMappingMaster");
       if (!mappingAgent) {
         return new Response(
           JSON.stringify({
             type: "error",
             code: "AGENT_NOT_FOUND",
-            message: "platformMapping agent is not registered.",
+            message: "platformMappingMaster agent is not registered.",
           }),
           { status: 500, headers: { "Content-Type": "application/json" } },
         );
@@ -171,7 +171,7 @@ export async function POST(req: NextRequest) {
       return new Response(
         JSON.stringify({
           type: "success",
-          agentKey: "masterRouter->platformMapping",
+          agentKey: "masterRouter->platformMappingMaster",
           text: `${routerResponse.text ?? ""}\n\n${mappingResponse.text ?? ""}`.trim(),
         }),
         { headers: { "Content-Type": "application/json" } },

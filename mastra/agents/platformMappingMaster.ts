@@ -9,6 +9,7 @@ import {
   getRecentEventSamples,
   recommendTemplates,
   proposeMapping,
+  saveMapping,
   runGeneratePreviewWorkflow,
 } from "../tools/platformMapping";
 
@@ -46,6 +47,7 @@ export const platformMappingMaster: Agent = new Agent({
     getRecentEventSamples,
     recommendTemplates,
     proposeMapping,
+    saveMapping,
     runGeneratePreviewWorkflow,
   },
 });
