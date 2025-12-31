@@ -259,7 +259,7 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
   }
 
   return (
-    <div className="h-full min-h-0 flex flex-col">
+    <div className="h-full min-h-0 flex flex-col mx-auto max-w-[1920px]">
       {showEnterVibeButton && (
         <div className="mb-4 flex justify-end">
           <Link
@@ -271,10 +271,10 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
         </div>
       )}
 
-      {/* Split layout 40/60 */}
+      {/* Split layout 35/65 */}
       <div className="flex h-full min-h-0 w-full overflow-hidden rounded-xl border border-gray-300 bg-white">
-        {/* LEFT: chat (40%) */}
-        <div className="flex w-[40%] min-w-[360px] min-h-0 flex-col border-r border-gray-300 bg-[#f9fafb]">
+        {/* LEFT: chat (35%) */}
+        <div className="flex w-[35%] min-w-[360px] h-full min-h-0 flex-col border-r border-gray-300 bg-[#f9fafb]">
           {/* messages */}
           <div className="flex-1 min-h-0 overflow-y-auto p-4">
             {renderedMessages.map((m) => {
@@ -313,7 +313,7 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
           </div>
 
           {/* input */}
-          <div className="border-t border-gray-300 bg-white p-4">
+          <div className="shrink-0 border-t border-gray-300 bg-white p-4">
             <textarea
               className="w-full resize-none rounded-lg border border-gray-300 px-3 py-2 text-[14px] leading-6 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               rows={3}
