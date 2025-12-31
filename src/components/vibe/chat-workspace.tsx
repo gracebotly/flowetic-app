@@ -468,7 +468,7 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
           {/* Terminal View */}
           {view === "terminal" ? (
             <div className="flex flex-1 flex-col bg-[#1e1e1e] min-h-0 overflow-hidden">
-              <div className="flex-1 overflow-y-auto pl-4 pr-2 py-4 font-mono text-[13px] leading-6 text-[#d4d4d4]">
+              <div className="flex-1 overflow-y-auto px-4 py-4 font-mono text-[13px] leading-6 text-[#d4d4d4]">
                 {logs.map((l) => {
                   const icon =
                     l.type === "success"
