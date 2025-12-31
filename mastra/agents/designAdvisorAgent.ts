@@ -1,6 +1,5 @@
 
 
-
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 import { RuntimeContext } from "@mastra/core/runtime-context";
@@ -66,5 +65,3 @@ export const designAdvisorAgent: Agent = new Agent({
     savePreviewVersion,
   },
 });
-
-

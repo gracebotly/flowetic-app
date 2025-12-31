@@ -1,11 +1,11 @@
 
 
 
-import { Tool } from "@mastra/core/tool";
+import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { loadDesignKBFiles } from "./loadDesignKB";
 
-export const searchDesignKBLocal = new Tool({
+export const searchDesignKBLocal = createTool({
   id: "searchDesignKBLocal",
   description:
     "Keyword-based search through the local design knowledge base. Use this as a fallback when searchDesignKB (vector-based) is unavailable or returns no results.",
@@ -25,7 +25,7 @@ export const searchDesignKBLocal = new Tool({
       )
       .describe("Matching results from the design KB"),
   }),
-  async execute({ context }) {
+  execute: async ({ context }) => {
     const { query } = context;
     const lowerQuery = query.toLowerCase();
     const keywords = lowerQuery.split(/\s+/).filter((w) => w.length > 2);
