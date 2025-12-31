@@ -4,7 +4,7 @@
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 import { RuntimeContext } from "@mastra/core/runtime-context";
-import { searchDesignKB } from "../tools/designAdvisor";
+import { searchDesignKB, searchDesignKBLocal } from "../tools/designAdvisor";
 import {
   getCurrentSpec,
   applySpecPatch,
@@ -30,6 +30,7 @@ export const designAdvisorAgent: Agent = new Agent({
           "CRITICAL RULES:\n" +
           "- Never ask the user for tenantId, sourceId, interfaceId, threadId, versionId, or any UUID. Never mention internal identifiers.\n" +
           "- Use RAG retrieval before giving design recommendations: call searchDesignKB with the user's style request.\n" +
+          "If searchDesignKB fails or returns empty context, fall back to searchDesignKBLocal (keyword-based) and proceed with conservative recommendations.\n" +
           "- Never invent a design system. If retrieval is empty or low-quality, give conservative, broadly safe guidance and say it's a best-practice default.\n" +
           "- Prefer concrete edits: design tokens (colors, radius, spacing, typography), component prop defaults, and light layout tweaks.\n" +
           "- Do not show raw spec JSON unless explicitly requested.\n\n" +
@@ -58,6 +59,7 @@ export const designAdvisorAgent: Agent = new Agent({
   model: openai("gpt-4o"),
   tools: {
     searchDesignKB,
+    searchDesignKBLocal,
     getCurrentSpec,
     applySpecPatch,
     validateSpec,
