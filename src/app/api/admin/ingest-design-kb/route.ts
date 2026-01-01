@@ -91,7 +91,7 @@ export async function POST(req: Request) {
   }
 
   const indexName = process.env.MASTRA_DESIGN_KB_INDEX_NAME || "design_kb";
-  const store = new PgVector({ connectionString });
+  const store = new PgVector(connectionString);
 
   // OpenAI text-embedding-3-small is 1536 dims by default
   await store.createIndex({ indexName, dimension: 1536 });

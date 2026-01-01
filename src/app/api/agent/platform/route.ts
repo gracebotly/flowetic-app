@@ -128,13 +128,14 @@ export async function POST(req: NextRequest) {
       }),
       { status: 200, headers: { 'Content-Type': 'application/json' } },
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Platform API error', error);
+    const message = error instanceof Error ? error.message : String(error);
     return new Response(
       JSON.stringify({
         type: 'error',
         code: 'UNKNOWN_ERROR',
-        message: error?.message || 'An unexpected error occurred',
+        message: message,
       }),
       { status: 500, headers: { 'Content-Type': 'application/json' } },
     );

@@ -73,10 +73,11 @@ export const validateSpec = createTool({
         errors,
         score,
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
       return {
         valid: false,
-        errors: [error.message],
+        errors: [message],
         score: 0,
       };
     }
