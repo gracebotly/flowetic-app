@@ -162,8 +162,9 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
         } else {
           addLog("error", "Preview generation failed", result.message);
         }
-      } catch (error: any) {
-        addLog("error", "Preview generation failed", error.message);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        addLog("error", "Preview generation failed", message);
       }
     },
   });

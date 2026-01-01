@@ -8,74 +8,65 @@ import { loadDesignKBFiles } from "./loadDesignKB";
 export const searchDesignKBLocal = createTool({
   id: "searchDesignKBLocal",
   description:
-    "Keyword-based search through the local design knowledge base. Use this as a fallback when searchDesignKB (vector-based) is unavailable or returns no results.",
+    "Fallback local design KB search (no vector DB). Returns a combined relevantContext string plus lightweight sources. Use when vector search is unavailable or returns empty.",
   inputSchema: z.object({
-    query: z
-      .string()
-      .describe("Keywords to search for in the design knowledge base"),
+    queryText: z.string().min(1),
+    maxChars: z.number().int().min(500).max(12000).default(6000),
   }),
   outputSchema: z.object({
-    results: z
-      .array(
-        z.object({
-          file: z.string().describe("Filename of the matched document"),
-          snippet: z.string().describe("Relevant text snippet"),
-          relevance: z.number().describe("Relevance score (0-1)"),
-        })
-      )
-      .describe("Matching results from the design KB"),
+    relevantContext: z.string(),
+    sources: z.array(
+      z.object({
+        docPath: z.string(),
+        score: z.number(),
+        excerpt: z.string(),
+      }),
+    ),
   }),
   execute: async ({ context }) => {
-    const { query } = context;
-    const lowerQuery = query.toLowerCase();
-    const keywords = lowerQuery.split(/\s+/).filter((w) => w.length > 2);
+    const { queryText, maxChars } = context;
+    const q = queryText.toLowerCase();
+    const terms = q
+      .replace(/[^a-z0-9\s]/g, " ")
+      .split(/\s+/)
+      .filter((t) => t.length >= 3)
+      .slice(0, 30);
 
     const files = await loadDesignKBFiles();
 
-    if (files.length === 0) {
-      return {
-        results: [],
-      };
+    const scored: Array<{ docPath: string; score: number; content: string }> =
+      [];
+    for (const f of files) {
+      const lower = f.content.toLowerCase();
+      let score = 0;
+      for (const t of terms) {
+        const idx = lower.indexOf(t);
+        if (idx >= 0) score += 3;
+      }
+      if (score > 0) scored.push({ docPath: f.path, score, content: f.content });
     }
 
-    const results = files
-      .map((file) => {
-        const lowerContent = file.content.toLowerCase();
-        
-        let matchCount = 0;
-        for (const keyword of keywords) {
-          const regex = new RegExp(keyword, "gi");
-          const matches = lowerContent.match(regex);
-          matchCount += matches ? matches.length : 0;
-        }
+    scored.sort((a, b) => b.score - a.score);
+    const top = scored.slice(0, 5);
 
-        if (matchCount === 0) return null;
+    const sources: Array<{ docPath: string; score: number; excerpt: string }> =
+      [];
+    const parts: string[] = [];
 
-        const relevance = Math.min(
-          1,
-          matchCount / (file.content.length / 1000)
-        );
+    for (const t of top) {
+      const lower = t.content.toLowerCase();
+      const firstIdx = terms.length ? lower.indexOf(terms[0]!) : -1;
+      const start = Math.max(0, firstIdx >= 0 ? firstIdx - 200 : 0);
+      const end = Math.min(t.content.length, start + 1400);
+      const excerpt = t.content.slice(start, end).trim();
 
-        const firstKeyword = keywords[0];
-        const matchIndex = lowerContent.indexOf(firstKeyword);
-        const snippetStart = Math.max(0, matchIndex - 150);
-        const snippetEnd = Math.min(
-          file.content.length,
-          matchIndex + 300
-        );
-        const snippet = file.content.slice(snippetStart, snippetEnd).trim();
+      sources.push({ docPath: t.docPath, score: t.score, excerpt });
+      parts.push(`SOURCE: ${t.docPath}\n${excerpt}`.trim());
+    }
 
-        return {
-          file: file.path,
-          snippet: `...${snippet}...`,
-          relevance,
-        };
-      })
-      .filter((r): r is NonNullable<typeof r> => r !== null)
-      .sort((a, b) => b.relevance - a.relevance)
-      .slice(0, 5);
+    const relevantContext = parts.join("\n\n---\n\n").slice(0, maxChars);
 
-    return { results };
+    return { relevantContext, sources };
   },
 });
 

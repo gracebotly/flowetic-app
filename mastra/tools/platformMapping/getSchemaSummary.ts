@@ -70,8 +70,9 @@ export const getSchemaSummary = createTool({
         schemaComplexity: complexity,
         confidence: Math.min(0.95, samples.length / 100),
       };
-    } catch (error: any) {
-      throw new Error(`Failed to summarize schema: ${error.message}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to summarize schema: ${message}`);
     }
   },
 });

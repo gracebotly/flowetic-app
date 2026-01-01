@@ -77,8 +77,9 @@ export const saveMapping = createTool({
         fieldCount: Object.keys(mappings).length,
         requiresReview,
       };
-    } catch (error: any) {
-      throw new Error(`Failed to save mapping: ${error.message}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to save mapping: ${message}`);
     }
   },
 });
