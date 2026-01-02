@@ -20,6 +20,17 @@ export const getClientContext = createTool({
         lastEventTime: z.string().nullable(),
       }),
     ),
+    entities: z.array(
+      z.object({
+        sourceId: z.string().uuid(),
+        entityKind: z.string(),
+        externalId: z.string(),
+        displayName: z.string(),
+        enabledForAnalytics: z.boolean(),
+        enabledForActions: z.boolean(),
+        lastSeenAt: z.string().nullable(),
+      }),
+    ),
   }),
   execute: async ({ context, runtimeContext }) => {
     const supabase = await createClient();
@@ -39,6 +50,15 @@ export const getClientContext = createTool({
       .eq("tenant_id", tenantId);
 
     if (sourcesError) throw new Error(sourcesError.message);
+
+    const sourceIds = (sources ?? []).map((s) => s.id);
+
+    const { data: entities, error: entitiesError } = await supabase
+      .from("source_entities")
+      .select("source_id,entity_kind,external_id,display_name,enabled_for_analytics,enabled_for_actions,last_seen_at")
+      .in("source_id", sourceIds);
+
+    if (entitiesError) throw new Error(entitiesError.message);
 
     const results: Array<{
       id: string;
@@ -67,7 +87,19 @@ export const getClientContext = createTool({
       });
     }
 
-    return { tenantId, sources: results };
+    return {
+      tenantId,
+      sources: results,
+      entities: (entities ?? []).map((e) => ({
+        sourceId: e.source_id,
+        entityKind: e.entity_kind,
+        externalId: e.external_id,
+        displayName: e.display_name,
+        enabledForAnalytics: e.enabled_for_analytics,
+        enabledForActions: e.enabled_for_actions,
+        lastSeenAt: e.last_seen_at,
+      })),
+    };
   },
 });
 
