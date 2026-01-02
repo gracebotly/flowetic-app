@@ -50,6 +50,8 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
     tenantId: string | null;
   }>({ userId: null, tenantId: null });
 
+  const [vibeContextSnapshot, setVibeContextSnapshot] = useState<any>(null);
+
   useEffect(() => {
     async function loadAuthContext() {
       const supabase = createClient();
@@ -75,6 +77,21 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
     }
     
     loadAuthContext();
+  }, []);
+
+  useEffect(() => {
+    async function loadVibeContext() {
+      try {
+        const res = await fetch("/api/vibe/context", { method: "GET" });
+        const json = await res.json().catch(() => ({}));
+        if (res.ok && json?.ok) {
+          setVibeContextSnapshot(json.snapshot);
+        }
+      } catch {
+        // ignore
+      }
+    }
+    loadVibeContext();
   }, []);
 
   const [logs, setLogs] = useState<TerminalLog[]>([
