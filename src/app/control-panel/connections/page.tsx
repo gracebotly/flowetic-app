@@ -526,28 +526,31 @@ export default function ConnectionsPage() {
 
               {step === "platform" ? (
                 <div className="space-y-3">
-                  {(Object.keys(PLATFORM_META) as Array<keyof typeof PLATFORM_META>).map((k) => (
-                    <button
-                      key={k}
-                      type="button"
-                      onClick={() => {
-                        setSelectedPlatform(k);
-                        setErrMsg(null);
-                        // default kind
-                        setEntityKind(PLATFORM_META[k].category === "voice_ai" ? "agent" : "workflow");
-                        setStep("method");
-                      }}
-                      className="flex w-full items-center gap-4 rounded-xl border-2 border-gray-200 p-4 text-left hover:border-blue-500 hover:bg-slate-50"
-                    >
-                      <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-800">
-                        <PLATFORM_META[k].Icon className="h-6 w-6" />
-                      </div>
-                      <div>
-                        <div className="text-base font-semibold text-gray-900">{PLATFORM_META[k].label}</div>
-                        <div className="text-sm text-gray-600">{PLATFORM_META[k].description}</div>
-                      </div>
-                    </button>
-                  ))}
+                  {(Object.keys(PLATFORM_META) as Array<keyof typeof PLATFORM_META>).map((k) => {
+                    const Icon = PLATFORM_META[k].Icon;
+                    return (
+                      <button
+                        key={k}
+                        type="button"
+                        onClick={() => {
+                          setSelectedPlatform(k);
+                          setErrMsg(null);
+                          // default kind
+                          setEntityKind(PLATFORM_META[k].category === "voice_ai" ? "agent" : "workflow");
+                          setStep("method");
+                        }}
+                        className="flex w-full items-center gap-4 rounded-xl border-2 border-gray-200 p-4 text-left hover:border-blue-500 hover:bg-slate-50"
+                      >
+                        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-800">
+                          <Icon className="h-6 w-6" />
+                        </div>
+                        <div>
+                          <div className="text-base font-semibold text-gray-900">{PLATFORM_META[k].label}</div>
+                          <div className="text-sm text-gray-600">{PLATFORM_META[k].description}</div>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               ) : null}
 
