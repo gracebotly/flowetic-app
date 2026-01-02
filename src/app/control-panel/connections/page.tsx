@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { KeyRound, Webhook as WebhookIcon, Bot } from "lucide-react";
+import { ActivepiecesLogo, MakeLogo, N8nLogo, RetellLogo, VapiLogo } from "@/components/connections/platform-icons";
 
 type Source = {
   id: string;
@@ -13,13 +15,19 @@ type FilterKey = "all" | "connected" | "available" | "attention" | "error";
 
 const PLATFORM_META: Record<
   string,
-  { label: string; description: string; icon: string; iconBg: string; iconColor: string; category: "automations" | "voice_ai" }
+  {
+    label: string;
+    description: string;
+    Icon: React.ComponentType<{ className?: string }>;
+    category: "automations" | "voice_ai";
+    supportsMcp: boolean;
+  }
 > = {
-  n8n: { label: "n8n", description: "Workflow automation", icon: "⚡", iconBg: "#FEF3C7", iconColor: "#D97706", category: "automations" },
-  make: { label: "Make", description: "Automation scenarios", icon: "🔷", iconBg: "#E0E7FF", iconColor: "#4F46E5", category: "automations" },
-  activepieces: { label: "Activepieces", description: "Open-source automation", icon: "🔧", iconBg: "#F3E8FF", iconColor: "#7C3AED", category: "automations" },
-  vapi: { label: "Vapi", description: "Voice agent platform", icon: "📞", iconBg: "#DBEAFE", iconColor: "#1E40AF", category: "voice_ai" },
-  retell: { label: "Retell", description: "Voice agent platform", icon: "☎️", iconBg: "#FCE7F3", iconColor: "#BE185D", category: "voice_ai" },
+  n8n: { label: "n8n", description: "Workflow automation", Icon: N8nLogo, category: "automations", supportsMcp: true },
+  make: { label: "Make", description: "Automation scenarios", Icon: MakeLogo, category: "automations", supportsMcp: true },
+  activepieces: { label: "Activepieces", description: "Open-source automation", Icon: ActivepiecesLogo, category: "automations", supportsMcp: true },
+  vapi: { label: "Vapi", description: "Voice agent platform", Icon: VapiLogo, category: "voice_ai", supportsMcp: false },
+  retell: { label: "Retell", description: "Voice agent platform", Icon: RetellLogo, category: "voice_ai", supportsMcp: false },
 };
 
 function statusBucket(status: string | null): "connected" | "attention" | "error" | "available" {
@@ -357,11 +365,8 @@ export default function ConnectionsPage() {
                     <div key={s.id} className="rounded-2xl border bg-white p-6">
                       <div className="flex items-start justify-between">
                         <div className="flex items-center gap-4">
-                          <div
-                            className="flex h-12 w-12 items-center justify-center rounded-xl"
-                            style={{ background: meta?.iconBg || "#F3F4F6", color: meta?.iconColor || "#111827" }}
-                          >
-                            <span className="text-2xl">{meta?.icon || "🔌"}</span>
+                          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-800">
+                            <meta.Icon className="h-6 w-6" />
                           </div>
                           <div>
                             <div className="text-lg font-semibold text-gray-900">{meta?.label || s.name}</div>
@@ -416,11 +421,8 @@ export default function ConnectionsPage() {
                     >
                       <div className="flex items-start justify-between">
                         <div className="flex items-center gap-4">
-                          <div
-                            className="flex h-12 w-12 items-center justify-center rounded-xl"
-                            style={{ background: meta?.iconBg || "#F3F4F6", color: meta?.iconColor || "#111827" }}
-                          >
-                            <span className="text-2xl">{meta?.icon || "🔌"}</span>
+                          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-800">
+                            <meta.Icon className="h-6 w-6" />
                           </div>
                           <div>
                             <div className="text-lg font-semibold text-gray-900">{meta?.label || s.name}</div>
@@ -524,31 +526,31 @@ export default function ConnectionsPage() {
 
               {step === "platform" ? (
                 <div className="space-y-3">
-                  {(Object.keys(PLATFORM_META) as Array<keyof typeof PLATFORM_META>).map((k) => (
-                    <button
-                      key={k}
-                      type="button"
-                      onClick={() => {
-                        setSelectedPlatform(k);
-                        setErrMsg(null);
-                        // default kind
-                        setEntityKind(PLATFORM_META[k].category === "voice_ai" ? "agent" : "workflow");
-                        setStep("method");
-                      }}
-                      className="flex w-full items-center gap-4 rounded-xl border-2 border-gray-200 p-4 text-left hover:border-blue-500 hover:bg-slate-50"
-                    >
-                      <div
-                        className="flex h-12 w-12 items-center justify-center rounded-xl"
-                        style={{ background: PLATFORM_META[k].iconBg, color: PLATFORM_META[k].iconColor }}
+                  {(Object.keys(PLATFORM_META) as Array<keyof typeof PLATFORM_META>).map((k) => {
+                    const Icon = PLATFORM_META[k].Icon;
+                    return (
+                      <button
+                        key={k}
+                        type="button"
+                        onClick={() => {
+                          setSelectedPlatform(k);
+                          setErrMsg(null);
+                          // default kind
+                          setEntityKind(PLATFORM_META[k].category === "voice_ai" ? "agent" : "workflow");
+                          setStep("method");
+                        }}
+                        className="flex w-full items-center gap-4 rounded-xl border-2 border-gray-200 p-4 text-left hover:border-blue-500 hover:bg-slate-50"
                       >
-                        <span className="text-2xl">{PLATFORM_META[k].icon}</span>
-                      </div>
-                      <div>
-                        <div className="text-base font-semibold text-gray-900">{PLATFORM_META[k].label}</div>
-                        <div className="text-sm text-gray-600">{PLATFORM_META[k].description}</div>
-                      </div>
-                    </button>
-                  ))}
+                        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-800">
+                          <Icon className="h-6 w-6" />
+                        </div>
+                        <div>
+                          <div className="text-base font-semibold text-gray-900">{PLATFORM_META[k].label}</div>
+                          <div className="text-sm text-gray-600">{PLATFORM_META[k].description}</div>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               ) : null}
 
@@ -564,11 +566,19 @@ export default function ConnectionsPage() {
                     className="w-full rounded-xl border-2 border-emerald-200 bg-emerald-50 p-4 text-left hover:border-emerald-400"
                   >
                     <div className="flex items-center justify-between">
-                      <div className="text-base font-semibold text-gray-900">🔑 API Key</div>
-                      <span className="rounded bg-emerald-500 px-2 py-1 text-xs font-bold text-white">RECOMMENDED</span>
+                      <div className="flex items-center gap-2 text-base font-semibold text-gray-900">
+                        <KeyRound className="h-5 w-5 text-emerald-700" />
+                        API Key
+                      </div>
+                      <span className="rounded bg-emerald-600 px-2 py-1 text-xs font-bold text-white">RECOMMENDED</span>
                     </div>
                     <div className="mt-1 text-sm text-gray-700">
-                      Connect via API key to import catalog and enable analytics.
+                      Connect via API to import your catalog so you can select what to index for dashboards.
+                    </div>
+                    <div className="mt-2 text-xs text-gray-600">
+                      {selectedPlatform && PLATFORM_META[selectedPlatform].category === "voice_ai"
+                        ? "For voice platforms (Vapi/Retell), webhooks power real-time analytics."
+                        : "For automation platforms (n8n/Make/Activepieces), analytics is collected via polling run logs."}
                     </div>
                   </button>
 
@@ -581,24 +591,40 @@ export default function ConnectionsPage() {
                     }}
                     className="w-full rounded-xl border-2 border-gray-200 p-4 text-left hover:border-blue-500 hover:bg-slate-50"
                   >
-                    <div className="text-base font-semibold text-gray-900">🪝 Webhook Only</div>
-                    <div className="mt-1 text-sm text-gray-700">Manual events only. No catalog import.</div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedMethod("mcp");
-                      setErrMsg(null);
-                      setStep("credentials");
-                    }}
-                    className="w-full rounded-xl border-2 border-gray-200 p-4 text-left hover:border-blue-500 hover:bg-slate-50"
-                  >
-                    <div className="text-base font-semibold text-gray-900">🤖 MCP</div>
+                    <div className="flex items-center gap-2 text-base font-semibold text-gray-900">
+                      <WebhookIcon className="h-5 w-5 text-slate-700" />
+                      Webhook Only
+                    </div>
                     <div className="mt-1 text-sm text-gray-700">
-                      Validate MCP server and enable actions. Analytics indexing still requires selection.
+                      Manual event streaming to GetFlowetic. No catalog import.
+                    </div>
+                    <div className="mt-2 text-xs text-gray-600">
+                      Best for voice platforms if you want real-time events. Automation platforms generally rely on API polling.
                     </div>
                   </button>
+
+                  {selectedPlatform && PLATFORM_META[selectedPlatform].supportsMcp ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedMethod("mcp");
+                        setErrMsg(null);
+                        setStep("credentials");
+                      }}
+                      className="w-full rounded-xl border-2 border-gray-200 p-4 text-left hover:border-blue-500 hover:bg-slate-50"
+                    >
+                      <div className="flex items-center gap-2 text-base font-semibold text-gray-900">
+                        <Bot className="h-5 w-5 text-slate-700" />
+                        MCP (Actions)
+                      </div>
+                      <div className="mt-1 text-sm text-gray-700">
+                        Optional. Enables AI-triggered workflow actions. Does not replace analytics ingestion.
+                      </div>
+                      <div className="mt-2 text-xs text-gray-600">
+                        Supported for: n8n, Make, Activepieces. Not available for Vapi/Retell.
+                      </div>
+                    </button>
+                  ) : null}
                 </div>
               ) : null}
 
@@ -693,7 +719,7 @@ export default function ConnectionsPage() {
               {step === "entities" ? (
                 <div className="space-y-4">
                   <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
-                    Temporary MVP: add entities manually (external ID + display name). Later we'll import catalogs via API/MCP.
+                    Temporary MVP: you can add entities manually. GetFlowetic will ONLY index what you add here (not your full catalog).
                   </div>
 
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
