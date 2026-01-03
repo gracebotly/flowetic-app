@@ -68,16 +68,13 @@ export async function POST(req: Request) {
     );
   }
 
-  // n8n public API: GET /api/v1/workflows
-  const url = `${baseUrl}/api/v1/workflows`;
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if ((secret.authMode ?? "bearer") === "header") {
-    headers["X-N8N-API-KEY"] = secret.apiKey;
-  } else {
-    headers["Authorization"] = `Bearer ${secret.apiKey}`;
-  }
-
-  const res = await fetch(url, { method: "GET", headers });
+  const res = await fetch(`${baseUrl}/api/v1/workflows`, {
+    method: "GET",
+    headers: {
+      "X-N8N-API-KEY": secret.apiKey,
+      "Content-Type": "application/json",
+    },
+  });
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
@@ -89,6 +86,7 @@ export async function POST(req: Request) {
 
   const workflows = (await res.json().catch(() => [])) as any[];
 
+  const now = new Date().toISOString();
   const rows = workflows.map((w) => ({
     tenant_id: membership.tenant_id,
     source_id: sourceId,
@@ -98,6 +96,8 @@ export async function POST(req: Request) {
     enabled_for_analytics: true,
     enabled_for_actions: false,
     last_seen_at: null,
+    created_at: now,
+    updated_at: now,
   }));
 
   const { error: upErr } = await supabase.from("source_entities").upsert(rows, {
