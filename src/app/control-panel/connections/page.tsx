@@ -1,7 +1,8 @@
+
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { KeyRound, Webhook as WebhookIcon, Bot } from "lucide-react";
+import { KeyRound, Webhook as WebhookIcon, Bot, MoreVertical, Eye, Settings, Edit, Trash2 } from "lucide-react";
 import { ActivepiecesLogo, MakeLogo, N8nLogo, RetellLogo, VapiLogo } from "@/components/connections/platform-icons";
 
 type Source = {
@@ -11,7 +12,7 @@ type Source = {
   status: string | null;
 };
 
-type FilterKey = "all" | "connected" | "available" | "attention" | "error";
+type FilterKey = "all" | "credentials";
 
 const PLATFORM_META: Record<
   string,
@@ -31,7 +32,6 @@ const PLATFORM_META: Record<
 };
 
 function statusBucket(status: string | null): "connected" | "attention" | "error" | "available" {
-  // We only have sources.status today; treat "active" as connected and everything else as attention/error.
   if (!status || status === "active") return "connected";
   if (status === "error") return "error";
   if (status === "inactive") return "available";
@@ -104,6 +104,14 @@ export default function ConnectionsPage() {
   const [saving, setSaving] = useState(false);
   const [errMsg, setErrMsg] = useState<string | null>(null);
 
+  // Search and sort state
+  const [searchTerm, setSearchTerm] = useState("");
+  const [sortBy, setSortBy] = useState<"lastUpdated" | "name" | "type">("lastUpdated");
+  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
+
+  // Dropdown state
+  const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
+
   async function refreshSources() {
     setLoading(true);
     setErrMsg(null);
@@ -124,19 +132,23 @@ export default function ConnectionsPage() {
   }, []);
 
   const filteredSources = useMemo(() => {
-    if (filter === "all") return sources;
-    return sources.filter((s) => {
-      const bucket = statusBucket(s.status);
-      if (filter === "connected") return bucket === "connected";
-      if (filter === "available") return bucket === "available";
-      if (filter === "error") return bucket === "error";
-      if (filter === "attention") return bucket === "attention";
-      return true;
-    });
-  }, [sources, filter]);
-
-  const automations = filteredSources.filter((s) => PLATFORM_META[String(s.type)]?.category === "automations");
-  const voice = filteredSources.filter((s) => PLATFORM_META[String(s.type)]?.category === "voice_ai");
+    let filtered = sources;
+    
+    // Filter by tab
+    if (filter === "credentials") {
+      filtered = sources.filter(s => PLATFORM_META[String(s.type)]?.category === "automations");
+    }
+    
+    // Filter by search term
+    if (searchTerm) {
+      filtered = filtered.filter(s => 
+        s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        PLATFORM_META[String(s.type)]?.label.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+    
+    return filtered;
+  }, [sources, filter, searchTerm]);
 
   function resetModal() {
     setStep("platform");
@@ -151,7 +163,6 @@ export default function ConnectionsPage() {
     setEntities([]);
     setEntityExternalId("");
     setEntityDisplayName("");
-    setEntityKind("workflow");
     setSaving(false);
     setErrMsg(null);
   }
@@ -279,6 +290,101 @@ export default function ConnectionsPage() {
     setStep("success");
   }
 
+  // N8n workflow catalog fetch
+  const fetchN8nWorkflows = async (apiKey: string, instanceUrl: string) => {
+    try {
+      const res = await fetch(`${instanceUrl}/workflows`, {
+        method: "GET",
+        headers: {
+          "X-N8N-API-KEY": apiKey,
+          "Content-Type": "application/json",
+        },
+      });
+      
+      if (!res.ok) {
+        throw new Error("Failed to fetch workflows");
+      }
+      
+      const workflows = await res.json();
+      return workflows.map((wf: any) => ({
+        externalId: wf.id,
+        displayName: wf.name,
+        entityKind: "workflow" as const,
+      }));
+    } catch (error) {
+      console.error("Error fetching n8n workflows:", error);
+      return [];
+    }
+  };
+
+  // Dropdown menu component
+  const DropdownMenu = ({ sourceId, onClose }: { sourceId: string; onClose: () => void }) => {
+    const [isOpen, setIsOpen] = useState(true);
+
+    useEffect(() => {
+      const handleClickOutside = (event: MouseEvent) => {
+        if (event.target instanceof Element && !event.target.closest('.dropdown-menu')) {
+          setIsOpen(false);
+          onClose();
+        }
+      };
+
+      document.addEventListener('click', handleClickOutside);
+      return () => document.removeEventListener('click', handleClickOutside);
+    }, [onClose]);
+
+    if (!isOpen) return null;
+
+    return (
+      <div className="dropdown-menu absolute right-0 z-50 mt-1 w-48 rounded-lg border border-gray-200 bg-white shadow-lg">
+        <button
+          onClick={() => {
+            // View Details
+            console.log("View Details for", sourceId);
+            onClose();
+          }}
+          className="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+        >
+          <Eye className="h-4 w-4" />
+          View Details
+        </button>
+        <button
+          onClick={() => {
+            // Configure
+            console.log("Configure for", sourceId);
+            onClose();
+          }}
+          className="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+        >
+          <Settings className="h-4 w-4" />
+          Configure
+        </button>
+        <button
+          onClick={() => {
+            // Edit
+            console.log("Edit for", sourceId);
+            onClose();
+          }}
+          className="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+        >
+          <Edit className="h-4 w-4" />
+          Edit
+        </button>
+        <button
+          onClick={() => {
+            // Delete
+            console.log("Delete for", sourceId);
+            onClose();
+          }}
+          className="flex w-full items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+        >
+          <Trash2 className="h-4 w-4" />
+          Delete
+        </button>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen">
       <div className="px-8 pt-6">
@@ -286,7 +392,7 @@ export default function ConnectionsPage() {
           <div>
             <h1 className="text-3xl font-semibold text-gray-900">Connections</h1>
             <p className="mt-1 text-sm text-gray-600">
-              Connect your AI platforms to start ingesting events. Index only what you choose.
+              All the workflows, agents and credentials you have access to
             </p>
           </div>
 
@@ -299,14 +405,11 @@ export default function ConnectionsPage() {
           </button>
         </div>
 
-        {/* Filters */}
+        {/* Tabs */}
         <div className="mt-6 flex gap-2">
           {([
             ["all", "All"],
-            ["connected", "Connected"],
-            ["available", "Available"],
-            ["attention", "Attention Needed"],
-            ["error", "Error"],
+            ["credentials", "Credentials"],
           ] as Array<[FilterKey, string]>).map(([k, label]) => (
             <button
               key={k}
@@ -321,6 +424,51 @@ export default function ConnectionsPage() {
               {label}
             </button>
           ))}
+        </div>
+
+        {/* Search and controls */}
+        <div className="mt-6 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="relative">
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search credentials..."
+                className="w-64 rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+              />
+              <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+                <svg className="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as any)}
+              className="rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+            >
+              <option value="lastUpdated">Sort by last updated</option>
+              <option value="name">Sort by name</option>
+              <option value="type">Sort by type</option>
+            </select>
+            <button
+              onClick={() => setViewMode(viewMode === "list" ? "grid" : "list")}
+              className="rounded-lg border-2 border-gray-200 px-3 py-2 text-sm hover:border-blue-500"
+            >
+              {viewMode === "list" ? (
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              ) : (
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                </svg>
+              )}
+            </button>
+          </div>
         </div>
 
         {errMsg ? (
@@ -349,115 +497,46 @@ export default function ConnectionsPage() {
           </div>
         ) : null}
 
-        {/* Grouped sections */}
+        {/* List view */}
         {!loading && sources.length > 0 ? (
-          <div className="mt-8 space-y-10">
-            <section>
-              <div className="mb-4">
-                <h2 className="text-lg font-semibold text-gray-900">Automations</h2>
-                <p className="text-sm text-gray-600">Track workflows/scenarios/flows (polling-based analytics).</p>
-              </div>
-
-              <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-                {automations.map((s) => {
-                  const meta = PLATFORM_META[String(s.type)];
-                  return (
-                    <div key={s.id} className="rounded-2xl border bg-white p-6">
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-center gap-4">
-                          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-800">
-                            <meta.Icon className="h-6 w-6" />
-                          </div>
-                          <div>
-                            <div className="text-lg font-semibold text-gray-900">{meta?.label || s.name}</div>
-                            <div className="text-sm text-gray-600">{meta?.description || "Connected platform"}</div>
-                          </div>
+          <div className="mt-8">
+            <div className="space-y-3">
+              {filteredSources.map((s) => {
+                const meta = PLATFORM_META[String(s.type)];
+                return (
+                  <div key={s.id} className="rounded-lg border bg-white p-4 relative">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-800">
+                          <meta.Icon className="h-5 w-5" />
                         </div>
-                        <div className="flex items-center gap-2">
-                          <StatusPill status={s.status} />
+                        <div>
+                          <div className="text-base font-semibold text-gray-900">{meta?.label || s.name}</div>
+                          <div className="text-sm text-gray-600">{meta?.description || "Connected platform"}</div>
                         </div>
                       </div>
-
-                      <div className="mt-6 text-sm text-gray-600">
-                        <div>Indexing selection required after connect.</div>
-                        <div className="mt-1 text-gray-500">Tenant-level connection</div>
-                      </div>
-
-                      <div className="mt-6 flex gap-3">
-                        <button
-                          type="button"
-                          className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600"
-                        >
-                          View Details
-                        </button>
-                        <button
-                          type="button"
-                          className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-200"
-                        >
-                          View Activity
-                        </button>
+                      <div className="flex items-center gap-2">
+                        <StatusPill status={s.status} />
+                        <div className="relative">
+                          <button
+                            onClick={() => setOpenDropdownId(openDropdownId === s.id ? null : s.id)}
+                            className="p-1 rounded-lg hover:bg-gray-100"
+                          >
+                            <MoreVertical className="h-5 w-5 text-gray-600" />
+                          </button>
+                          {openDropdownId === s.id && (
+                            <DropdownMenu 
+                              sourceId={s.id} 
+                              onClose={() => setOpenDropdownId(null)} 
+                            />
+                          )}
+                        </div>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-            </section>
-
-            <section>
-              <div className="mb-4">
-                <h2 className="text-lg font-semibold text-gray-900">Voice AI</h2>
-                <p className="text-sm text-gray-600">Track call events (webhook-based analytics).</p>
-              </div>
-
-              <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-                {voice.map((s) => {
-                  const meta = PLATFORM_META[String(s.type)];
-                  return (
-                    <div
-                      key={s.id}
-                      className={`rounded-2xl border p-6 ${
-                        statusBucket(s.status) === "attention" ? "border-red-200 bg-red-50" : "bg-white"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-center gap-4">
-                          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-800">
-                            <meta.Icon className="h-6 w-6" />
-                          </div>
-                          <div>
-                            <div className="text-lg font-semibold text-gray-900">{meta?.label || s.name}</div>
-                            <div className="text-sm text-gray-600">{meta?.description || "Connected platform"}</div>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <StatusPill status={s.status} />
-                        </div>
-                      </div>
-
-                      <div className="mt-6 text-sm text-gray-600">
-                        <div>Webhooks recommended for real-time analytics.</div>
-                        <div className="mt-1 text-gray-500">Tenant-level connection</div>
-                      </div>
-
-                      <div className="mt-6 flex gap-3">
-                        <button
-                          type="button"
-                          className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600"
-                        >
-                          View Details
-                        </button>
-                        <button
-                          type="button"
-                          className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-200"
-                        >
-                          View Activity
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         ) : null}
       </div>
@@ -488,7 +567,7 @@ export default function ConnectionsPage() {
                       : step === "credentials"
                       ? "Enter credentials to validate and connect."
                       : step === "entities"
-                      ? "Add the agents/workflows you want GetFlowetic to index."
+                      ? "Add agents/workflows you want GetFlowetic to index."
                       : "Success."}
                   </div>
                 </div>
@@ -631,31 +710,29 @@ export default function ConnectionsPage() {
               {step === "credentials" ? (
                 <div className="space-y-4">
                   {selectedMethod === "api" ? (
-                    <>
-                      <div>
-                        <label className="mb-2 block text-sm font-semibold text-gray-900">API Key *</label>
-                        <input
-                          value={apiKey}
-                          onChange={(e) => setApiKey(e.target.value)}
-                          type="password"
-                          className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                          placeholder="••••••••••••••"
-                        />
-                      </div>
+                    <div>
+                      <label className="mb-2 block text-sm font-semibold text-gray-900">API Key *</label>
+                      <input
+                        value={apiKey}
+                        onChange={(e) => setApiKey(e.target.value)}
+                        type="password"
+                        className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                        placeholder="••••••••••••••"
+                      />
+                    </div>
+                  ) : null}
 
-                      {(selectedPlatform === "n8n" || selectedPlatform === "activepieces") ? (
-                        <div>
-                          <label className="mb-2 block text-sm font-semibold text-gray-900">Instance URL (optional)</label>
-                          <input
-                            value={instanceUrl}
-                            onChange={(e) => setInstanceUrl(e.target.value)}
-                            type="url"
-                            className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                            placeholder="https://your-instance..."
-                          />
-                        </div>
-                      ) : null}
-                    </>
+                  {(selectedPlatform === "n8n" || selectedPlatform === "activepieces") ? (
+                    <div>
+                      <label className="mb-2 block text-sm font-semibold text-gray-900">Instance URL (optional)</label>
+                      <input
+                        value={instanceUrl}
+                        onChange={(e) => setInstanceUrl(e.target.value)}
+                        type="url"
+                        className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                        placeholder="https://your-instance..."
+                      />
+                    </div>
                   ) : null}
 
                   {selectedMethod === "webhook" ? (
