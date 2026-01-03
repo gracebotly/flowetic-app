@@ -7,9 +7,13 @@ import { ActivepiecesLogo, MakeLogo, N8nLogo, RetellLogo, VapiLogo } from "@/com
 
 type Source = {
   id: string;
-  type: string;
+  type: string; // platform key, e.g. "n8n"
   name: string;
   status: string | null;
+  // optional fields returned by API (do not assume they exist)
+  method?: "api" | "webhook" | "mcp";
+  updatedAt?: string;
+  createdAt?: string;
 };
 
 type FilterKey = "all" | "credentials";
@@ -133,22 +137,47 @@ export default function ConnectionsPage() {
 
   const filteredSources = useMemo(() => {
     let filtered = sources;
-    
-    // Filter by tab
+
+    // Tab filtering
     if (filter === "credentials") {
-      filtered = sources.filter(s => PLATFORM_META[String(s.type)]?.category === "automations");
+      // Credentials tab should show only credential connections (API/Webhook/MCP).
+      // If the API returns a "method" field, use it. Otherwise, fall back to showing all connected sources
+      // (but this fallback should be replaced once the API includes method).
+      filtered = sources.filter((s) => {
+        const m = s.method;
+        if (m) return m === "api" || m === "webhook" || m === "mcp";
+        // Fallback: if method missing, at least ensure the source is "connected-ish"
+        // so we don't show random/unconnected items. This prevents "All == Credentials".
+        return Boolean(s.status);
+      });
     }
-    
-    // Filter by search term
-    if (searchTerm) {
-      filtered = filtered.filter(s => 
-        s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        PLATFORM_META[String(s.type)]?.label.toLowerCase().includes(searchTerm.toLowerCase())
-      );
+
+    // Search filtering
+    if (searchTerm.trim()) {
+      const q = searchTerm.trim().toLowerCase();
+      filtered = filtered.filter((s) => {
+        const platform = PLATFORM_META[String(s.type)];
+        return (
+          s.name.toLowerCase().includes(q) ||
+          platform?.label.toLowerCase().includes(q) ||
+          platform?.description.toLowerCase().includes(q)
+        );
+      });
     }
-    
+
+    // Sorting
+    const sortKey = sortBy;
+    filtered = [...filtered].sort((a, b) => {
+      if (sortKey === "name") return a.name.localeCompare(b.name);
+      if (sortKey === "type") return String(a.type).localeCompare(String(b.type));
+      // lastUpdated (default)
+      const aTime = a.updatedAt ? Date.parse(a.updatedAt) : 0;
+      const bTime = b.updatedAt ? Date.parse(b.updatedAt) : 0;
+      return bTime - aTime;
+    });
+
     return filtered;
-  }, [sources, filter, searchTerm]);
+  }, [sources, filter, searchTerm, sortBy]);
 
   function resetModal() {
     setStep("platform");
@@ -500,43 +529,106 @@ export default function ConnectionsPage() {
         {/* List view */}
         {!loading && sources.length > 0 ? (
           <div className="mt-8">
-            <div className="space-y-3">
-              {filteredSources.map((s) => {
-                const meta = PLATFORM_META[String(s.type)];
-                return (
-                  <div key={s.id} className="rounded-lg border bg-white p-4 relative">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-800">
-                          <meta.Icon className="h-5 w-5" />
+            {filter === "all" ? (
+              <div className="space-y-3">
+                {filteredSources.map((s) => {
+                  const meta = PLATFORM_META[String(s.type)];
+                  const Icon = meta?.Icon;
+                  return (
+                    <div
+                      key={s.id}
+                      className="flex items-center justify-between rounded-xl border border-gray-200 bg-white p-4"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-50">
+                          {Icon ? <Icon className="h-6 w-6" /> : null}
                         </div>
                         <div>
-                          <div className="text-base font-semibold text-gray-900">{meta?.label || s.name}</div>
-                          <div className="text-sm text-gray-600">{meta?.description || "Connected platform"}</div>
+                          <div className="text-sm font-semibold text-gray-900">{meta?.label ?? s.type}</div>
+                          <div className="text-sm text-gray-600">{meta?.description ?? ""}</div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
+
+                      <div className="flex items-center gap-3">
                         <StatusPill status={s.status} />
-                        <div className="relative">
-                          <button
-                            onClick={() => setOpenDropdownId(openDropdownId === s.id ? null : s.id)}
-                            className="p-1 rounded-lg hover:bg-gray-100"
-                          >
-                            <MoreVertical className="h-5 w-5 text-gray-600" />
-                          </button>
-                          {openDropdownId === s.id && (
-                            <DropdownMenu 
-                              sourceId={s.id} 
-                              onClose={() => setOpenDropdownId(null)} 
-                            />
-                          )}
-                        </div>
+                        {/* keep your existing 3-dot dropdown trigger here */}
+                        <button
+                          type="button"
+                          onClick={() => setOpenDropdownId(openDropdownId === s.id ? null : s.id)}
+                          className="rounded-lg p-2 text-gray-600 hover:bg-gray-100"
+                          aria-label="Open menu"
+                        >
+                          <MoreVertical className="h-5 w-5" />
+                        </button>
+                        {openDropdownId === s.id && (
+                          <DropdownMenu 
+                            sourceId={s.id} 
+                            onClose={() => setOpenDropdownId(null)} 
+                          />
+                        )}
                       </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {filteredSources.map((s) => {
+                  const meta = PLATFORM_META[String(s.type)];
+                  const Icon = meta?.Icon;
+                  const methodLabel =
+                    s.method === "api" ? "API" : s.method === "webhook" ? "Webhook" : s.method === "mcp" ? "MCP" : "Credential";
+                  const methodIcon =
+                    s.method === "api" ? <KeyRound className="h-4 w-4 text-emerald-700" /> : s.method === "webhook" ? (
+                      <WebhookIcon className="h-4 w-4 text-amber-800" />
+                    ) : (
+                      <Bot className="h-4 w-4 text-fuchsia-800" />
+                    );
+
+                  return (
+                    <div
+                      key={s.id}
+                      className="flex items-center justify-between rounded-xl border border-gray-200 bg-white p-4"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-50">
+                          {Icon ? <Icon className="h-6 w-6" /> : null}
+                        </div>
+                        <div>
+                          <div className="text-sm font-semibold text-gray-900">{s.name}</div>
+                          <div className="text-sm text-gray-600">{meta?.label ?? s.type}</div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-semibold text-gray-700">
+                          {methodIcon}
+                          {methodLabel}
+                        </span>
+
+                        <StatusPill status={s.status} />
+
+                        {/* keep your existing 3-dot dropdown trigger here */}
+                        <button
+                          type="button"
+                          onClick={() => setOpenDropdownId(openDropdownId === s.id ? null : s.id)}
+                          className="rounded-lg p-2 text-gray-600 hover:bg-gray-100"
+                          aria-label="Open menu"
+                        >
+                          <MoreVertical className="h-5 w-5" />
+                        </button>
+                        {openDropdownId === s.id && (
+                          <DropdownMenu 
+                            sourceId={s.id} 
+                            onClose={() => setOpenDropdownId(null)} 
+                          />
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         ) : null}
       </div>
@@ -654,11 +746,6 @@ export default function ConnectionsPage() {
                     <div className="mt-1 text-sm text-gray-700">
                       Connect via API to import your catalog so you can select what to index for dashboards.
                     </div>
-                    <div className="mt-2 text-xs text-gray-600">
-                      {selectedPlatform && PLATFORM_META[selectedPlatform].category === "voice_ai"
-                        ? "For voice platforms (Vapi/Retell), webhooks power real-time analytics."
-                        : "For automation platforms (n8n/Make/Activepieces), analytics is collected via polling run logs."}
-                    </div>
                   </button>
 
                   <button
@@ -676,9 +763,6 @@ export default function ConnectionsPage() {
                     </div>
                     <div className="mt-1 text-sm text-gray-700">
                       Manual event streaming to GetFlowetic. No catalog import.
-                    </div>
-                    <div className="mt-2 text-xs text-gray-600">
-                      Best for voice platforms if you want real-time events. Automation platforms generally rely on API polling.
                     </div>
                   </button>
 
@@ -698,9 +782,6 @@ export default function ConnectionsPage() {
                       </div>
                       <div className="mt-1 text-sm text-gray-700">
                         Optional. Enables AI-triggered workflow actions. Does not replace analytics ingestion.
-                      </div>
-                      <div className="mt-2 text-xs text-gray-600">
-                        Supported for: n8n, Make, Activepieces. Not available for Vapi/Retell.
                       </div>
                     </button>
                   ) : null}
