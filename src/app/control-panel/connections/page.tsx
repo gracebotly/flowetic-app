@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { KeyRound, Webhook as WebhookIcon, Bot, MoreVertical, Eye, Settings, Edit, Trash2 } from "lucide-react";
+import { KeyRound, Webhook as WebhookIcon, Bot, MoreVertical, Settings, Edit, Trash2 } from "lucide-react";
 import { ActivepiecesLogo, MakeLogo, N8nLogo, RetellLogo, VapiLogo } from "@/components/connections/platform-icons";
 
 type Source = {
@@ -320,28 +320,26 @@ export default function ConnectionsPage() {
   }
 
   function openEditCredentials(source: Source) {
-    // open the existing modal at credentials step, preselect platform + method
     resetModal();
     setConnectOpen(true);
     setSelectedPlatform(source.type as keyof typeof PLATFORM_META);
-    setSelectedMethod(source.method ?? "api");
+    setSelectedMethod("api"); // keep default; your sources API doesn't return method yet
     setStep("credentials");
-    setCreatedSourceId(source.id); // re-use id to save updates if you support it server-side
+    setCreatedSourceId(source.id);
   }
 
   function openConfigureIndexing(source: Source) {
-    // open the modal at entities step (catalog/index selection)
     resetModal();
     setConnectOpen(true);
     setSelectedPlatform(source.type as keyof typeof PLATFORM_META);
-    setSelectedMethod(source.method ?? "api");
+    setSelectedMethod("api"); // default; adjust later if you persist method
     setCreatedSourceId(source.id);
     setStep("entities");
   }
 
   async function deleteCredentials(source: Source) {
-    const platformLabel = PLATFORM_META[String(source.type)]?.label ?? source.type;
-    const ok = window.confirm(`Delete credentials for ${platformLabel}?`);
+    const label = PLATFORM_META[String(source.type)]?.label ?? source.type;
+    const ok = window.confirm(`Delete credentials for ${label}? This will also remove indexed entities.`);
     if (!ok) return;
 
     setSaving(true);
