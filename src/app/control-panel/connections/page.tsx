@@ -120,6 +120,7 @@ export default function ConnectionsPage() {
 
   const [busy, setBusy] = useState(false);
   const [errMsg, setErrMsg] = useState<string | null>(null);
+  const [openCredentialMenuId, setOpenCredentialMenuId] = useState<string | null>(null);
 
   async function loadSourcesAndEntities() {
     setLoading(true);
@@ -355,7 +356,9 @@ export default function ConnectionsPage() {
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-4xl font-semibold text-gray-900">Connections</h1>
-            <p className="mt-2 text-sm text-gray-600">All</p>
+            <p className="mt-2 text-sm text-gray-600">
+              All the workflows, agents and credentials you have access to
+            </p>
           </div>
 
           <button
@@ -472,11 +475,67 @@ export default function ConnectionsPage() {
                       <div className="truncate text-xs text-gray-500">{r.updated}</div>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 relative">
                       <MethodBadge method={r.method} />
-                      <button type="button" className="rounded p-1 hover:bg-gray-100">
+
+                      <span className="inline-flex items-center gap-2 rounded-md border bg-gray-50 px-2.5 py-1 text-xs font-semibold text-gray-700">
+                        <span className={`h-2 w-2 rounded-full ${r.active ? "bg-emerald-500" : "bg-red-500"}`} />
+                        {r.active ? "Connected" : "Disconnected"}
+                      </span>
+
+                      <button
+                        type="button"
+                        className="rounded p-1 hover:bg-gray-100"
+                        onClick={() => setOpenCredentialMenuId((prev) => (prev === r.source.id ? null : r.source.id))}
+                      >
                         <MoreVertical className="h-4 w-4 text-gray-400" />
                       </button>
+
+                      {openCredentialMenuId === r.source.id ? (
+                        <div className="absolute right-0 top-9 z-50 w-48 rounded-lg border bg-white p-1 shadow-lg">
+                          <button
+                            type="button"
+                            className="w-full rounded-md px-3 py-2 text-left text-sm hover:bg-gray-50"
+                            onClick={() => {
+                              setOpenCredentialMenuId(null);
+                              // placeholder: open details modal later
+                              alert("View Details");
+                            }}
+                          >
+                            View Details
+                          </button>
+                          <button
+                            type="button"
+                            className="w-full rounded-md px-3 py-2 text-left text-sm hover:bg-gray-50"
+                            onClick={() => {
+                              setOpenCredentialMenuId(null);
+                              alert("Configure");
+                            }}
+                          >
+                            Configure
+                          </button>
+                          <button
+                            type="button"
+                            className="w-full rounded-md px-3 py-2 text-left text-sm hover:bg-gray-50"
+                            onClick={() => {
+                              setOpenCredentialMenuId(null);
+                              alert("Edit");
+                            }}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            className="w-full rounded-md px-3 py-2 text-left text-sm text-red-700 hover:bg-red-50"
+                            onClick={() => {
+                              setOpenCredentialMenuId(null);
+                              alert("Delete");
+                            }}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                 ))}
@@ -488,7 +547,7 @@ export default function ConnectionsPage() {
 
       {/* Connect Platform Modal */}
       {connectOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/30">
           <div className="mx-4 w-full max-w-md rounded-xl bg-white p-6">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-xl font-semibold text-gray-900">
@@ -515,7 +574,7 @@ export default function ConnectionsPage() {
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Select Platform</label>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-3">
                     {(["n8n", "make", "activepieces", "vapi", "retell"] as PlatformType[]).map((p) => (
                       <button
                         key={p}
@@ -524,18 +583,24 @@ export default function ConnectionsPage() {
                           setSelectedPlatform(p);
                           setStep("method");
                         }}
-                        className={`rounded-lg border-2 p-4 text-center transition-colors ${
-                          selectedPlatform === p
-                            ? "border-blue-500 bg-blue-50"
-                            : "border-gray-200 bg-white hover:bg-gray-50"
+                        className={`flex w-full items-center gap-4 rounded-xl border-2 p-4 text-left transition-colors ${
+                          selectedPlatform === p ? "border-blue-500 bg-blue-50" : "border-gray-200 bg-white hover:bg-gray-50"
                         }`}
                       >
-                        <div className="text-lg font-semibold">{PLATFORM_LABEL[p]}</div>
-                        <div className="text-xs text-gray-500 mt-1">
-                          {p === "n8n" ? "Workflow automation" : 
-                           p === "make" ? "Automation scenarios" :
-                           p === "activepieces" ? "Open-source automation" :
-                           "Voice agent platform"}
+                        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gray-100">
+                          <span className="text-sm font-bold text-gray-700">{PLATFORM_LABEL[p]}</span>
+                        </div>
+                        <div>
+                          <div className="text-base font-semibold text-gray-900">{PLATFORM_LABEL[p]}</div>
+                          <div className="text-sm text-gray-500">
+                            {p === "n8n"
+                              ? "Workflow automation"
+                              : p === "make"
+                              ? "Automation scenarios"
+                              : p === "activepieces"
+                              ? "Open-source automation"
+                              : "Voice agent platform"}
+                          </div>
                         </div>
                       </button>
                     ))}
