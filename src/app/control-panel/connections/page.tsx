@@ -319,6 +319,51 @@ export default function ConnectionsPage() {
     setStep("success");
   }
 
+  function openEditCredentials(source: Source) {
+    // open the existing modal at credentials step, preselect platform + method
+    resetModal();
+    setConnectOpen(true);
+    setSelectedPlatform(source.type as keyof typeof PLATFORM_META);
+    setSelectedMethod(source.method ?? "api");
+    setStep("credentials");
+    setCreatedSourceId(source.id); // re-use id to save updates if you support it server-side
+  }
+
+  function openConfigureIndexing(source: Source) {
+    // open the modal at entities step (catalog/index selection)
+    resetModal();
+    setConnectOpen(true);
+    setSelectedPlatform(source.type as keyof typeof PLATFORM_META);
+    setSelectedMethod(source.method ?? "api");
+    setCreatedSourceId(source.id);
+    setStep("entities");
+  }
+
+  async function deleteConnection(source: Source) {
+    const ok = window.confirm(`Delete credentials for ${PLATFORM_META[String(source.type)]?.label ?? source.type}?`);
+    if (!ok) return;
+
+    setSaving(true);
+    setErrMsg(null);
+
+    const res = await fetch("/api/connections/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sourceId: source.id }),
+    });
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || !json?.ok) {
+      setSaving(false);
+      setErrMsg(json?.message || "Failed to delete connection.");
+      return;
+    }
+
+    setOpenDropdownId(null);
+    setSaving(false);
+    await refreshSources();
+  }
+
   // N8n workflow catalog fetch
   const fetchN8nWorkflows = async (apiKey: string, instanceUrl: string) => {
     try {
@@ -347,7 +392,7 @@ export default function ConnectionsPage() {
   };
 
   // Dropdown menu component
-  const DropdownMenu = ({ sourceId, onClose }: { sourceId: string; onClose: () => void }) => {
+  const DropdownMenu = ({ source, onClose }: { source: Source; onClose: () => void }) => {
     const [isOpen, setIsOpen] = useState(true);
 
     useEffect(() => {
@@ -367,45 +412,31 @@ export default function ConnectionsPage() {
     return (
       <div className="dropdown-menu absolute right-0 z-50 mt-1 w-48 rounded-lg border border-gray-200 bg-white shadow-lg">
         <button
+          type="button"
           onClick={() => {
-            // View Details
-            console.log("View Details for", sourceId);
-            onClose();
+            setOpenDropdownId(null);
+            openConfigureIndexing(source);
           }}
-          className="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-        >
-          <Eye className="h-4 w-4" />
-          View Details
-        </button>
-        <button
-          onClick={() => {
-            // Configure
-            console.log("Configure for", sourceId);
-            onClose();
-          }}
-          className="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
         >
           <Settings className="h-4 w-4" />
           Configure
         </button>
         <button
+          type="button"
           onClick={() => {
-            // Edit
-            console.log("Edit for", sourceId);
-            onClose();
+            setOpenDropdownId(null);
+            openEditCredentials(source);
           }}
-          className="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
         >
           <Edit className="h-4 w-4" />
           Edit
         </button>
         <button
-          onClick={() => {
-            // Delete
-            console.log("Delete for", sourceId);
-            onClose();
-          }}
-          className="flex w-full items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+          type="button"
+          onClick={() => deleteConnection(source)}
+          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
         >
           <Trash2 className="h-4 w-4" />
           Delete
@@ -554,7 +585,10 @@ export default function ConnectionsPage() {
                         {/* keep your existing 3-dot dropdown trigger here */}
                         <button
                           type="button"
-                          onClick={() => setOpenDropdownId(openDropdownId === s.id ? null : s.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setOpenDropdownId(openDropdownId === s.id ? null : s.id);
+                          }}
                           className="rounded-lg p-2 text-gray-600 hover:bg-gray-100"
                           aria-label="Open menu"
                         >
@@ -562,7 +596,7 @@ export default function ConnectionsPage() {
                         </button>
                         {openDropdownId === s.id && (
                           <DropdownMenu 
-                            sourceId={s.id} 
+                            source={s} 
                             onClose={() => setOpenDropdownId(null)} 
                           />
                         )}
@@ -611,7 +645,10 @@ export default function ConnectionsPage() {
                         {/* keep your existing 3-dot dropdown trigger here */}
                         <button
                           type="button"
-                          onClick={() => setOpenDropdownId(openDropdownId === s.id ? null : s.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setOpenDropdownId(openDropdownId === s.id ? null : s.id);
+                          }}
                           className="rounded-lg p-2 text-gray-600 hover:bg-gray-100"
                           aria-label="Open menu"
                         >
@@ -619,7 +656,7 @@ export default function ConnectionsPage() {
                         </button>
                         {openDropdownId === s.id && (
                           <DropdownMenu 
-                            sourceId={s.id} 
+                            source={s} 
                             onClose={() => setOpenDropdownId(null)} 
                           />
                         )}
