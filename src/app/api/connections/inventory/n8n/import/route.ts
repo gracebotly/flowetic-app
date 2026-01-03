@@ -53,6 +53,7 @@ export async function POST(req: Request) {
     method: "api" | "webhook" | "mcp";
     apiKey?: string;
     instanceUrl?: string | null;
+    authMode?: "header" | "bearer";
   };
 
   if (secret.method !== "api" || !secret.apiKey) {
@@ -69,15 +70,14 @@ export async function POST(req: Request) {
 
   // n8n public API: GET /api/v1/workflows
   const url = `${baseUrl}/api/v1/workflows`;
-  const res = await fetch(url, {
-    method: "GET",
-    headers: {
-      // n8n uses API key auth; header naming varies by deployment.
-      // Support common patterns via bearer token; user can paste token type in key itself if needed.
-      Authorization: `Bearer ${secret.apiKey}`,
-      "Content-Type": "application/json",
-    },
-  });
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if ((secret.authMode ?? "bearer") === "header") {
+    headers["X-N8N-API-KEY"] = secret.apiKey;
+  } else {
+    headers["Authorization"] = `Bearer ${secret.apiKey}`;
+  }
+
+  const res = await fetch(url, { method: "GET", headers });
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");

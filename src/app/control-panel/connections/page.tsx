@@ -11,7 +11,7 @@ type Source = {
   status: string | null;
 };
 
-type FilterKey = "all" | "connected" | "available" | "attention" | "error";
+type FilterKey = "all" | "needs_attention";
 
 const PLATFORM_META: Record<
   string,
@@ -30,32 +30,25 @@ const PLATFORM_META: Record<
   retell: { label: "Retell", description: "Voice agent platform", Icon: RetellLogo, category: "voice_ai", supportsMcp: false },
 };
 
-function statusBucket(status: string | null): "connected" | "attention" | "error" | "available" {
-  // We only have sources.status today; treat "active" as connected and everything else as attention/error.
-  if (!status || status === "active") return "connected";
-  if (status === "error") return "error";
-  if (status === "inactive") return "available";
-  return "attention";
+function needsAttention(status: string | null) {
+  return status === "error" || status === "inactive" || status === "attention";
 }
 
 function StatusPill({ status }: { status: string | null }) {
-  const bucket = statusBucket(status);
+  if (!needsAttention(status)) return null;
+  
   const text =
-    bucket === "connected"
-      ? "Connected"
-      : bucket === "available"
-      ? "Connected • Not indexing"
-      : bucket === "error"
+    status === "error"
       ? "Error"
+      : status === "inactive"
+      ? "Connected • Not indexing"
       : "Attention needed";
 
   const styles =
-    bucket === "connected"
-      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-      : bucket === "available"
-      ? "bg-blue-50 text-blue-700 border-blue-200"
-      : bucket === "error"
+    status === "error"
       ? "bg-red-50 text-red-700 border-red-200"
+      : status === "inactive"
+      ? "bg-blue-50 text-blue-700 border-blue-200"
       : "bg-amber-50 text-amber-800 border-amber-200";
 
   return (
@@ -105,6 +98,8 @@ export default function ConnectionsPage() {
   const [manageOpen, setManageOpen] = useState(false);
   const [manageSourceId, setManageSourceId] = useState<string | null>(null);
   const [manageEntities, setManageEntities] = useState<any[]>([]);
+  const [manageLoading, setManageLoading] = useState(false);
+  const [manageError, setManageError] = useState<string | null>(null);
 
   async function refreshSources() {
     setLoading(true);
@@ -140,19 +135,14 @@ export default function ConnectionsPage() {
   }, []);
 
   const filteredSources = useMemo(() => {
-    if (filter === "all") return sources;
-    return sources.filter((s) => {
-      const bucket = statusBucket(s.status);
-      if (filter === "connected") return bucket === "connected";
-      if (filter === "available") return bucket === "available";
-      if (filter === "error") return bucket === "error";
-      if (filter === "attention") return bucket === "attention";
-      return true;
-    });
+    if (filter === "needs_attention") return sources.filter((s) => needsAttention(s.status));
+    return sources;
   }, [sources, filter]);
 
   const automations = filteredSources.filter((s) => PLATFORM_META[String(s.type)]?.category === "automations");
   const voice = filteredSources.filter((s) => PLATFORM_META[String(s.type)]?.category === "voice_ai");
+  
+  const hasAttention = sources.some((s) => needsAttention(s.status));
 
   function resetModal() {
     setStep("platform");
@@ -180,10 +170,26 @@ export default function ConnectionsPage() {
 
   async function openManageWorkflows(sourceId: string) {
     setManageSourceId(sourceId);
+    setManageError(null);
     setManageOpen(true);
-    const res = await fetch(`/api/connections/entities/list?sourceId=${encodeURIComponent(sourceId)}`);
-    const json = await res.json().catch(() => ({}));
-    setManageEntities(res.ok && json?.ok ? (json.entities ?? []) : []);
+    setManageLoading(true);
+    
+    try {
+      const res = await fetch(`/api/connections/entities/list?sourceId=${encodeURIComponent(sourceId)}`);
+      const json = await res.json().catch(() => ({}));
+      
+      if (!res.ok || !json?.ok) {
+        setManageError(json?.message || "Failed to load workflows.");
+        setManageEntities([]);
+      } else {
+        setManageEntities(json.entities ?? []);
+      }
+    } catch (error) {
+      setManageError("Failed to load workflows.");
+      setManageEntities([]);
+    } finally {
+      setManageLoading(false);
+    }
   }
 
   async function createConnection() {
@@ -201,9 +207,19 @@ export default function ConnectionsPage() {
     if (selectedMethod === "api") {
       payload.apiKey = apiKey;
       if (instanceUrl) payload.instanceUrl = instanceUrl;
+      if (selectedPlatform === "n8n" && !instanceUrl) {
+        setErrMsg("Instance URL is required for n8n connections.");
+        setSaving(false);
+        return;
+      }
     }
     if (selectedMethod === "webhook") {
       if (instanceUrl) payload.instanceUrl = instanceUrl;
+      if (selectedPlatform === "n8n" && !instanceUrl) {
+        setErrMsg("Instance URL is required for n8n connections.");
+        setSaving(false);
+        return;
+      }
     }
     if (selectedMethod === "mcp") {
       payload.mcpUrl = mcpUrl;
@@ -234,15 +250,20 @@ export default function ConnectionsPage() {
 
     // n8n + API: auto-import workflows immediately
     if (selectedPlatform === "n8n" && selectedMethod === "api") {
-      setStep("success");
-      await fetch("/api/connections/inventory/n8n/import", {
+      const importRes = await fetch("/api/connections/inventory/n8n/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sourceId }),
-      }).catch(() => {});
-    } else {
-      setStep("success");
+      });
+      const importJson = await importRes.json().catch(() => ({}));
+      if (!importRes.ok || !importJson?.ok) {
+        setErrMsg(importJson?.message || "Connected, but workflow import failed.");
+        setStep("credentials");
+        return;
+      }
     }
+    
+    setStep("success");
     setSaving(false);
 
     // refresh cards in background
@@ -257,9 +278,6 @@ export default function ConnectionsPage() {
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-3xl font-semibold text-gray-900">Connections</h1>
-            <p className="mt-1 text-sm text-gray-600">
-              Connect your AI platforms to start ingesting events. Index only what you choose.
-            </p>
           </div>
 
           <button
@@ -273,26 +291,30 @@ export default function ConnectionsPage() {
 
         {/* Filters */}
         <div className="mt-6 flex gap-2">
-          {([
-            ["all", "All"],
-            ["connected", "Connected"],
-            ["available", "Available"],
-            ["attention", "Attention Needed"],
-            ["error", "Error"],
-          ] as Array<[FilterKey, string]>).map(([k, label]) => (
+          <button
+            type="button"
+            onClick={() => setFilter("all")}
+            className={
+              filter === "all"
+                ? "rounded-full bg-blue-500 px-4 py-2 text-sm font-semibold text-white"
+                : "rounded-full bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-200"
+            }
+          >
+            All
+          </button>
+          {hasAttention ? (
             <button
-              key={k}
               type="button"
-              onClick={() => setFilter(k)}
+              onClick={() => setFilter("needs_attention")}
               className={
-                filter === k
+                filter === "needs_attention"
                   ? "rounded-full bg-blue-500 px-4 py-2 text-sm font-semibold text-white"
                   : "rounded-full bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-200"
               }
             >
-              {label}
+              Needs attention
             </button>
-          ))}
+          ) : null}
         </div>
 
         {errMsg ? (
@@ -327,7 +349,6 @@ export default function ConnectionsPage() {
             <section>
               <div className="mb-4">
                 <h2 className="text-lg font-semibold text-gray-900">Automations</h2>
-                <p className="text-sm text-gray-600">Track workflows/scenarios/flows (polling-based analytics).</p>
               </div>
 
               <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
@@ -346,7 +367,7 @@ export default function ConnectionsPage() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <StatusPill status={s.status} />
+                          {s.type !== "n8n" ? <StatusPill status={s.status} /> : null}
                         </div>
                       </div>
 
@@ -385,7 +406,6 @@ export default function ConnectionsPage() {
             <section>
               <div className="mb-4">
                 <h2 className="text-lg font-semibold text-gray-900">Voice AI</h2>
-                <p className="text-sm text-gray-600">Track call events (webhook-based analytics).</p>
               </div>
 
               <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
@@ -409,7 +429,7 @@ export default function ConnectionsPage() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <StatusPill status={s.status} />
+                          {s.type !== "n8n" ? <StatusPill status={s.status} /> : null}
                         </div>
                       </div>
 
@@ -608,7 +628,7 @@ export default function ConnectionsPage() {
 
                       {(selectedPlatform === "n8n" || selectedPlatform === "activepieces") ? (
                         <div>
-                          <label className="mb-2 block text-sm font-semibold text-gray-900">Instance URL (optional)</label>
+                          <label className="mb-2 block text-sm font-semibold text-gray-900">Instance URL{selectedPlatform === "activepieces" ? " (optional)" : ""}</label>
                           <input
                             value={instanceUrl}
                             onChange={(e) => setInstanceUrl(e.target.value)}
@@ -625,7 +645,7 @@ export default function ConnectionsPage() {
                     <>
                       {(selectedPlatform === "n8n" || selectedPlatform === "activepieces") ? (
                         <div>
-                          <label className="mb-2 block text-sm font-semibold text-gray-900">Instance URL (optional)</label>
+                          <label className="mb-2 block text-sm font-semibold text-gray-900">Instance URL{selectedPlatform === "activepieces" ? " (optional)" : ""}</label>
                           <input
                             value={instanceUrl}
                             onChange={(e) => setInstanceUrl(e.target.value)}
@@ -749,32 +769,42 @@ export default function ConnectionsPage() {
             </div>
 
             <div className="px-6 py-5">
-              <div className="space-y-2">
-                {manageEntities.length === 0 ? (
-                  <div className="text-sm text-gray-600">No workflows found.</div>
-                ) : (
-                  manageEntities.map((entity) => (
-                    <div key={entity.id} className="flex items-center justify-between rounded-lg border p-3">
-                      <div>
-                        <div className="text-sm font-semibold text-gray-900">{entity.display_name}</div>
-                        <div className="text-xs text-gray-600">ID: {entity.external_id}</div>
+              {manageLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+                </div>
+              ) : manageError ? (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+                  <div className="text-sm text-red-700">{manageError}</div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {manageEntities.length === 0 ? (
+                    <div className="text-sm text-gray-600">No workflows found.</div>
+                  ) : (
+                    manageEntities.map((entity) => (
+                      <div key={entity.id} className="flex items-center justify-between rounded-lg border p-3">
+                        <div>
+                          <div className="text-sm font-semibold text-gray-900">{entity.display_name}</div>
+                          <div className="text-xs text-gray-600">ID: {entity.external_id}</div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {entity.enabled_for_analytics && (
+                            <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-700">
+                              Analytics
+                            </span>
+                          )}
+                          {entity.enabled_for_actions && (
+                            <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700">
+                              Actions
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        {entity.enabled_for_analytics && (
-                          <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-700">
-                            Analytics
-                          </span>
-                        )}
-                        {entity.enabled_for_actions && (
-                          <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700">
-                            Actions
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
+                    ))
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="flex items-center justify-end gap-2 border-t px-6 py-4">
