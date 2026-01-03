@@ -367,7 +367,7 @@ export default function ConnectionsPage() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          {s.type !== "n8n" ? <StatusPill status={s.status} /> : null}}
+                          {s.type !== "n8n" ? <StatusPill status={s.status} /> : null}
                         </div>
                       </div>
 
@@ -429,7 +429,7 @@ export default function ConnectionsPage() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          {s.type !== "n8n" ? <StatusPill status={s.status} /> : null}}
+                          {s.type !== "n8n" ? <StatusPill status={s.status} /> : null}
                         </div>
                       </div>
 
