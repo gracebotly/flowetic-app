@@ -339,8 +339,9 @@ export default function ConnectionsPage() {
     setStep("entities");
   }
 
-  async function deleteConnection(source: Source) {
-    const ok = window.confirm(`Delete credentials for ${PLATFORM_META[String(source.type)]?.label ?? source.type}?`);
+  async function deleteCredentials(source: Source) {
+    const platformLabel = PLATFORM_META[String(source.type)]?.label ?? source.type;
+    const ok = window.confirm(`Delete credentials for ${platformLabel}?`);
     if (!ok) return;
 
     setSaving(true);
@@ -355,11 +356,10 @@ export default function ConnectionsPage() {
     const json = await res.json().catch(() => ({}));
     if (!res.ok || !json?.ok) {
       setSaving(false);
-      setErrMsg(json?.message || "Failed to delete connection.");
+      setErrMsg(json?.message || "Failed to delete credentials.");
       return;
     }
 
-    setOpenDropdownId(null);
     setSaving(false);
     await refreshSources();
   }
@@ -392,19 +392,30 @@ export default function ConnectionsPage() {
   };
 
   // Dropdown menu component
-  const DropdownMenu = ({ source, onClose }: { source: Source; onClose: () => void }) => {
+  const DropdownMenu = ({
+    source,
+    onClose,
+    onConfigure,
+    onEdit,
+    onDelete,
+  }: {
+    source: Source;
+    onClose: () => void;
+    onConfigure: (s: Source) => void;
+    onEdit: (s: Source) => void;
+    onDelete: (s: Source) => void;
+  }) => {
     const [isOpen, setIsOpen] = useState(true);
 
     useEffect(() => {
       const handleClickOutside = (event: MouseEvent) => {
-        if (event.target instanceof Element && !event.target.closest('.dropdown-menu')) {
+        if (event.target instanceof Element && !event.target.closest(".dropdown-menu")) {
           setIsOpen(false);
           onClose();
         }
       };
-
-      document.addEventListener('click', handleClickOutside);
-      return () => document.removeEventListener('click', handleClickOutside);
+      document.addEventListener("click", handleClickOutside);
+      return () => document.removeEventListener("click", handleClickOutside);
     }, [onClose]);
 
     if (!isOpen) return null;
@@ -413,30 +424,38 @@ export default function ConnectionsPage() {
       <div className="dropdown-menu absolute right-0 z-50 mt-1 w-48 rounded-lg border border-gray-200 bg-white shadow-lg">
         <button
           type="button"
-          onClick={() => {
-            setOpenDropdownId(null);
-            openConfigureIndexing(source);
+          onClick={(e) => {
+            e.stopPropagation();
+            onClose();
+            onConfigure(source);
           }}
-          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+          className="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
         >
           <Settings className="h-4 w-4" />
           Configure
         </button>
+
         <button
           type="button"
-          onClick={() => {
-            setOpenDropdownId(null);
-            openEditCredentials(source);
+          onClick={(e) => {
+            e.stopPropagation();
+            onClose();
+            onEdit(source);
           }}
-          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+          className="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
         >
           <Edit className="h-4 w-4" />
           Edit
         </button>
+
         <button
           type="button"
-          onClick={() => deleteConnection(source)}
-          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+          onClick={(e) => {
+            e.stopPropagation();
+            onClose();
+            onDelete(source);
+          }}
+          className="flex w-full items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50"
         >
           <Trash2 className="h-4 w-4" />
           Delete
@@ -594,12 +613,15 @@ export default function ConnectionsPage() {
                         >
                           <MoreVertical className="h-5 w-5" />
                         </button>
-                        {openDropdownId === s.id && (
-                          <DropdownMenu 
-                            source={s} 
-                            onClose={() => setOpenDropdownId(null)} 
+                        {openDropdownId === s.id ? (
+                          <DropdownMenu
+                            source={s}
+                            onClose={() => setOpenDropdownId(null)}
+                            onConfigure={openConfigureIndexing}
+                            onEdit={openEditCredentials}
+                            onDelete={deleteCredentials}
                           />
-                        )}
+                        ) : null}
                       </div>
                     </div>
                   );
@@ -654,12 +676,15 @@ export default function ConnectionsPage() {
                         >
                           <MoreVertical className="h-5 w-5" />
                         </button>
-                        {openDropdownId === s.id && (
-                          <DropdownMenu 
-                            source={s} 
-                            onClose={() => setOpenDropdownId(null)} 
+                        {openDropdownId === s.id ? (
+                          <DropdownMenu
+                            source={s}
+                            onClose={() => setOpenDropdownId(null)}
+                            onConfigure={openConfigureIndexing}
+                            onEdit={openEditCredentials}
+                            onDelete={deleteCredentials}
                           />
-                        )}
+                        ) : null}
                       </div>
                     </div>
                   );
