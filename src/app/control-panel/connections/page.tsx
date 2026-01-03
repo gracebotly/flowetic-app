@@ -1,9 +1,8 @@
-
-
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Search, ChevronDown, Filter, LayoutGrid, MoreVertical } from "lucide-react";
+import { MoreVertical, Search, ChevronDown, Filter, LayoutGrid, KeyRound, Webhook as WebhookIcon, Bot } from "lucide-react";
+import { ActivepiecesLogo, MakeLogo, N8nLogo, RetellLogo, VapiLogo } from "@/components/connections/platform-icons";
 
 type PlatformType = "n8n" | "make" | "activepieces" | "vapi" | "retell";
 type ConnectionMethod = "api" | "webhook" | "mcp";
@@ -13,7 +12,6 @@ type Source = {
   type: PlatformType;
   name: string;
   status: string | null;
-  created_at?: string;
 };
 
 type SourceEntity = {
@@ -38,25 +36,21 @@ type N8nWorkflow = {
   createdAt: string | null;
 };
 
-type TabKey = "all" | "credentials";
-type StepKey = "platform" | "method" | "credentials" | "select";
-
-const PLATFORM_LABEL: Record<PlatformType, string> = {
-  n8n: "n8n",
-  make: "Make",
-  activepieces: "Activepieces",
-  vapi: "Vapi",
-  retell: "Retell",
+const PLATFORM_META: Record<
+  PlatformType,
+  {
+    label: string;
+    description: string;
+    Icon: React.ComponentType<{ className?: string }>;
+    supportsMcp: boolean;
+  }
+> = {
+  n8n: { label: "n8n", description: "Workflow automation", Icon: N8nLogo, supportsMcp: true },
+  make: { label: "Make", description: "Automation scenarios", Icon: MakeLogo, supportsMcp: true },
+  activepieces: { label: "Activepieces", description: "Open-source automation", Icon: ActivepiecesLogo, supportsMcp: true },
+  vapi: { label: "Vapi", description: "Voice agent platform", Icon: VapiLogo, supportsMcp: false },
+  retell: { label: "Retell", description: "Voice agent platform", Icon: RetellLogo, supportsMcp: false },
 };
-
-function PlatformBadge({ platform, active }: { platform: PlatformType; active: boolean }) {
-  return (
-    <span className="inline-flex items-center gap-2 rounded-md border bg-gray-50 px-2.5 py-1 text-xs font-semibold text-gray-700">
-      <span className={`h-2 w-2 rounded-full ${active ? "bg-emerald-500" : "bg-red-500"}`} />
-      {PLATFORM_LABEL[platform]}
-    </span>
-  );
-}
 
 function TriggerBadge({ trigger }: { trigger: "Webhook" | "Schedule" | "Chat" | "Form" }) {
   const styles =
@@ -85,41 +79,45 @@ function MethodBadge({ method }: { method: ConnectionMethod }) {
   return <span className={`inline-flex items-center rounded-md border px-2 py-1 text-[10px] font-semibold uppercase ${styles}`}>{label}</span>;
 }
 
-function EntityIcon() {
-  // Use existing "agent icons" component if available; keeping minimal + non-emoji fallback.
+function StatusPill({ active }: { active: boolean }) {
   return (
-    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-50 text-rose-700">
-      <div className="h-5 w-5 rounded bg-rose-200" />
-    </div>
+    <span className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+      <span className={`h-2 w-2 rounded-full ${active ? "bg-emerald-500" : "bg-red-500"}`} />
+      {active ? "Connected" : "Disconnected"}
+    </span>
   );
 }
 
 export default function ConnectionsPage() {
-  const [tab, setTab] = useState<TabKey>("all");
+  // Step 3 tabs
+  const [tab, setTab] = useState<"all" | "credentials">("all");
 
+  // data
   const [sources, setSources] = useState<Source[]>([]);
   const [entitiesBySource, setEntitiesBySource] = useState<Record<string, SourceEntity[]>>({});
   const [loading, setLoading] = useState(true);
 
+  // toolbar
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<"last_updated" | "name">("last_updated");
 
-  // Connect Platform modal (kept, minimal)
+  // connect modal (keep old flow styling)
   const [connectOpen, setConnectOpen] = useState(false);
-  const [step, setStep] = useState<StepKey>("platform");
+  const [step, setStep] = useState<"platform" | "method" | "credentials" | "select">("platform");
   const [selectedPlatform, setSelectedPlatform] = useState<PlatformType | null>(null);
   const [selectedMethod, setSelectedMethod] = useState<ConnectionMethod>("api");
 
   const [apiKey, setApiKey] = useState("");
   const [instanceUrl, setInstanceUrl] = useState("");
 
-  // n8n selection step
+  const [createdSourceId, setCreatedSourceId] = useState<string | null>(null);
   const [n8nWorkflows, setN8nWorkflows] = useState<N8nWorkflow[]>([]);
   const [selectedWorkflowIds, setSelectedWorkflowIds] = useState<Record<string, boolean>>({});
-  const [createdSourceId, setCreatedSourceId] = useState<string | null>(null);
 
   const [busy, setBusy] = useState(false);
   const [errMsg, setErrMsg] = useState<string | null>(null);
+
+  // credentials menu
   const [openCredentialMenuId, setOpenCredentialMenuId] = useState<string | null>(null);
 
   async function loadSourcesAndEntities() {
@@ -179,8 +177,7 @@ export default function ConnectionsPage() {
         if (created) metaParts.push(`Created ${created}`);
         const meta = metaParts.join(" | ");
 
-        // Trigger type detection is not implemented yet; must not guess.
-        // Use Webhook as a neutral placeholder until trigger parsing is implemented.
+        // Trigger parsing is not implemented; do not guess. Use Webhook placeholder.
         rows.push({
           key: `${s.id}:${e.external_id}`,
           platform: s.type,
@@ -193,26 +190,18 @@ export default function ConnectionsPage() {
     }
 
     const q = query.trim().toLowerCase();
-    const filtered = q
-      ? rows.filter((r) => r.title.toLowerCase().includes(q) || r.platform.toLowerCase().includes(q))
-      : rows;
+    const filtered = q ? rows.filter((r) => r.title.toLowerCase().includes(q)) : rows;
 
-    const sorted =
-      sort === "name"
-        ? [...filtered].sort((a, b) => a.title.localeCompare(b.title))
-        : [...filtered];
-
-    return sorted;
+    return sort === "name" ? [...filtered].sort((a, b) => a.title.localeCompare(b.title)) : filtered;
   }, [sources, entitiesBySource, query, sort]);
 
   const credentialRows = useMemo(() => {
     return sources.map((s) => ({
       source: s,
-      method: "api" as ConnectionMethod, // method is stored encrypted; do not guess it here yet
+      // do not guess method from encrypted secret yet
+      method: "api" as ConnectionMethod,
       active: s.status === "active",
-      updated: s.created_at
-        ? new Date(s.created_at).toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" })
-        : "",
+      updated: new Date().toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" }),
     }));
   }, [sources]);
 
@@ -225,16 +214,16 @@ export default function ConnectionsPage() {
     setSelectedMethod("api");
     setApiKey("");
     setInstanceUrl("");
+    setCreatedSourceId(null);
     setN8nWorkflows([]);
     setSelectedWorkflowIds({});
-    setCreatedSourceId(null);
   }
 
   function closeConnect() {
     setConnectOpen(false);
   }
 
-  async function connectAndLoadCatalog() {
+  async function connectAndLoadN8nCatalog() {
     if (!selectedPlatform) return;
 
     setErrMsg(null);
@@ -291,9 +280,9 @@ export default function ConnectionsPage() {
       setBusy(false);
       return;
     }
+
     setCreatedSourceId(sourceId);
 
-    // Load catalog with the same names as in n8n instance
     const listRes = await fetch(`/api/connections/inventory/n8n/list?sourceId=${encodeURIComponent(sourceId)}`);
     const listJson = await listRes.json().catch(() => ({}));
     if (!listRes.ok || !listJson?.ok) {
@@ -305,7 +294,6 @@ export default function ConnectionsPage() {
     const wf = (listJson.workflows as N8nWorkflow[]) ?? [];
     setN8nWorkflows(wf);
 
-    // default select all so user can unselect
     const sel: Record<string, boolean> = {};
     for (const w of wf) sel[w.id] = true;
     setSelectedWorkflowIds(sel);
@@ -324,7 +312,7 @@ export default function ConnectionsPage() {
     const entities = selected.map((w) => ({
       entityKind: "workflow",
       externalId: w.id,
-      displayName: w.name, // SAME as in n8n
+      displayName: w.name, // same as in n8n
       enabledForAnalytics: true,
       enabledForActions: false,
     }));
@@ -342,23 +330,20 @@ export default function ConnectionsPage() {
       return;
     }
 
-    // optional: import persists all workflows too; selection persists only chosen ones.
-    // we only display indexed (source_entities) so this is safe.
     setBusy(false);
-    closeConnect();
+    setConnectOpen(false);
     await loadSourcesAndEntities();
     setTab("all");
   }
 
   return (
     <div className="min-h-screen bg-white">
-      <div className="px-8 pt-7">
+      <div className="px-8 pt-6">
+        {/* Header (match your desired UI) */}
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-4xl font-semibold text-gray-900">Connections</h1>
-            <p className="mt-2 text-sm text-gray-600">
-              All the workflows, agents and credentials you have access to
-            </p>
+            <p className="mt-2 text-sm text-gray-600">All the workflows, agents and credentials you have access to</p>
           </div>
 
           <button
@@ -415,7 +400,7 @@ export default function ConnectionsPage() {
               className="inline-flex items-center gap-2 rounded-lg border bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
               onClick={() => setSort((p) => (p === "last_updated" ? "name" : "last_updated"))}
             >
-              Sort by last updated
+              Sort by {sort === "last_updated" ? "name" : "last updated"}
               <ChevronDown className="h-4 w-4 text-gray-400" />
             </button>
             <button type="button" className="rounded-lg border bg-white p-2 hover:bg-gray-50" title="Filter">
@@ -442,330 +427,305 @@ export default function ConnectionsPage() {
               <div>
                 {indexedRows.map((r) => (
                   <div key={r.key} className="flex items-center gap-4 border-b px-5 py-4 hover:bg-gray-50">
-                    <EntityIcon />
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-50 text-rose-700">
+                      <div className="h-5 w-5 rounded bg-rose-200" />
+                    </div>
+
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-semibold text-gray-900">{r.title}</div>
-                      <div className="truncate text-xs text-gray-500">{r.meta}</div>
+                      <div className="text-sm font-medium text-gray-900">{r.title}</div>
+                      <div className="text-sm text-gray-500">{r.meta}</div>
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <PlatformBadge platform={r.platform} active={r.active} />
                       <TriggerBadge trigger={r.trigger} />
-                      <button type="button" className="rounded p-1 hover:bg-gray-100">
-                        <MoreVertical className="h-4 w-4 text-gray-400" />
-                      </button>
+                      <StatusPill active={r.active} />
                     </div>
                   </div>
                 ))}
+
+                {/* Bottom pagination */}
+                <div className="border-t px-5 py-3 text-sm text-gray-500">
+                  Showing {indexedRows.length} of {indexedRows.length}
+                </div>
               </div>
             )
           ) : (
-            // Credentials tab content
-            credentialRows.length === 0 ? (
-              <div className="p-10 text-sm text-gray-600">No connected platforms yet.</div>
-            ) : (
-              <div>
-                {credentialRows.map((r, idx) => (
-                  <div key={idx} className="flex items-center gap-4 border-b px-5 py-4 hover:bg-gray-50">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
-                      <div className="h-5 w-5 rounded bg-blue-200" />
+            <div>
+              {credentialRows.length === 0 ? (
+                <div className="p-10 text-sm text-gray-600">No platform credentials yet.</div>
+              ) : (
+                <div>
+                  {credentialRows.map((r) => (
+                    <div key={r.source.id} className="flex items-center gap-4 border-b px-5 py-4 hover:bg-gray-50">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
+                        <KeyRound className="h-5 w-5" />
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-medium text-gray-900">{r.source.name}</div>
+                        <div className="text-sm text-gray-500">{r.updated}</div>
+                      </div>
+
+                      <div className="flex items-center gap-2 relative">
+                        <MethodBadge method={r.method} />
+
+                        <StatusPill active={r.active} />
+
+                        <button
+                          type="button"
+                          className="rounded p-1 hover:bg-gray-100"
+                          onClick={() => setOpenCredentialMenuId((prev) => (prev === r.source.id ? null : r.source.id))}
+                        >
+                          <MoreVertical className="h-4 w-4 text-gray-400" />
+                        </button>
+
+                        {openCredentialMenuId === r.source.id ? (
+                          <div className="absolute right-0 top-9 z-50 w-48 rounded-lg border bg-white p-1 shadow-lg">
+                            <button
+                              type="button"
+                              className="w-full rounded-md px-3 py-2 text-left text-sm hover:bg-gray-50"
+                              onClick={() => {
+                                setOpenCredentialMenuId(null);
+                                // placeholder: open details modal later
+                                alert("View Details");
+                              }}
+                            >
+                              View Details
+                            </button>
+                            <button
+                              type="button"
+                              className="w-full rounded-md px-3 py-2 text-left text-sm hover:bg-gray-50"
+                              onClick={() => {
+                                setOpenCredentialMenuId(null);
+                                alert("Configure");
+                              }}
+                            >
+                              Configure
+                            </button>
+                            <button
+                              type="button"
+                              className="w-full rounded-md px-3 py-2 text-left text-sm hover:bg-gray-50"
+                              onClick={() => {
+                                setOpenCredentialMenuId(null);
+                                alert("Edit");
+                              }}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              className="w-full rounded-md px-3 py-2 text-left text-sm text-red-700 hover:bg-red-50"
+                              onClick={() => {
+                                setOpenCredentialMenuId(null);
+                                alert("Delete");
+                              }}
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-semibold text-gray-900">{PLATFORM_LABEL[r.source.type]}</div>
-                      <div className="truncate text-xs text-gray-500">{r.updated}</div>
-                    </div>
+                  ))}
 
-                    <div className="flex items-center gap-2 relative">
-                      <MethodBadge method={r.method} />
-
-                      <span className="inline-flex items-center gap-2 rounded-md border bg-gray-50 px-2.5 py-1 text-xs font-semibold text-gray-700">
-                        <span className={`h-2 w-2 rounded-full ${r.active ? "bg-emerald-500" : "bg-red-500"}`} />
-                        {r.active ? "Connected" : "Disconnected"}
-                      </span>
-
-                      <button
-                        type="button"
-                        className="rounded p-1 hover:bg-gray-100"
-                        onClick={() => setOpenCredentialMenuId((prev) => (prev === r.source.id ? null : r.source.id))}
-                      >
-                        <MoreVertical className="h-4 w-4 text-gray-400" />
-                      </button>
-
-                      {openCredentialMenuId === r.source.id ? (
-                        <div className="absolute right-0 top-9 z-50 w-48 rounded-lg border bg-white p-1 shadow-lg">
-                          <button
-                            type="button"
-                            className="w-full rounded-md px-3 py-2 text-left text-sm hover:bg-gray-50"
-                            onClick={() => {
-                              setOpenCredentialMenuId(null);
-                              // placeholder: open details modal later
-                              alert("View Details");
-                            }}
-                          >
-                            View Details
-                          </button>
-                          <button
-                            type="button"
-                            className="w-full rounded-md px-3 py-2 text-left text-sm hover:bg-gray-50"
-                            onClick={() => {
-                              setOpenCredentialMenuId(null);
-                              alert("Configure");
-                            }}
-                          >
-                            Configure
-                          </button>
-                          <button
-                            type="button"
-                            className="w-full rounded-md px-3 py-2 text-left text-sm hover:bg-gray-50"
-                            onClick={() => {
-                              setOpenCredentialMenuId(null);
-                              alert("Edit");
-                            }}
-                          >
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            className="w-full rounded-md px-3 py-2 text-left text-sm text-red-700 hover:bg-red-50"
-                            onClick={() => {
-                              setOpenCredentialMenuId(null);
-                              alert("Delete");
-                            }}
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      ) : null}
-                    </div>
+                  {/* Bottom pagination */}
+                  <div className="border-t px-5 py-3 text-sm text-gray-500">
+                    Showing {credentialRows.length} of {credentialRows.length}
                   </div>
-                ))}
-              </div>
-            )
+                </div>
+              )}
+            </div>
           )}
         </div>
-      </div>
 
-      {/* Connect Platform Modal */}
-      {connectOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/30">
-          <div className="mx-4 w-full max-w-md rounded-xl bg-white p-6">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-xl font-semibold text-gray-900">
-                {step === "select" ? "Select Workflows" : step === "credentials" ? "Enter Credentials" : step === "method" ? "Choose Method" : "Connect Platform"}
-              </h2>
-              <button
-                type="button"
-                onClick={closeConnect}
-                className="rounded p-1 hover:bg-gray-100"
-                disabled={busy}
-              >
-                <svg className="h-5 w-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            {/* Error display */}
-            {errMsg ? (
-              <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{errMsg}</div>
-            ) : null}
-
-            {step === "platform" && (
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Select Platform</label>
-                  <div className="space-y-3">
-                    {(["n8n", "make", "activepieces", "vapi", "retell"] as PlatformType[]).map((p) => (
-                      <button
-                        key={p}
-                        type="button"
-                        onClick={() => {
-                          setSelectedPlatform(p);
-                          setStep("method");
-                        }}
-                        className={`flex w-full items-center gap-4 rounded-xl border-2 p-4 text-left transition-colors ${
-                          selectedPlatform === p ? "border-blue-500 bg-blue-50" : "border-gray-200 bg-white hover:bg-gray-50"
-                        }`}
-                      >
-                        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gray-100">
-                          <span className="text-sm font-bold text-gray-700">{PLATFORM_LABEL[p]}</span>
-                        </div>
-                        <div>
-                          <div className="text-base font-semibold text-gray-900">{PLATFORM_LABEL[p]}</div>
-                          <div className="text-sm text-gray-500">
-                            {p === "n8n"
-                              ? "Workflow automation"
-                              : p === "make"
-                              ? "Automation scenarios"
-                              : p === "activepieces"
-                              ? "Open-source automation"
-                              : "Voice agent platform"}
-                          </div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {step === "method" && (
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Connection Method</label>
-                  <div className="space-y-2">
-                    {[
-                      { value: "api", label: "API Key", desc: "Use platform API key (recommended)" },
-                      { value: "webhook", label: "Webhook", desc: "Receive webhook events" },
-                      { value: "mcp", label: "MCP", desc: "Model Context Protocol" }
-                    ].map((method) => (
-                      <button
-                        key={method.value}
-                        type="button"
-                        onClick={() => {
-                          setSelectedMethod(method.value as ConnectionMethod);
-                          setStep("credentials");
-                        }}
-                        className={`w-full rounded-lg border-2 p-4 text-left transition-colors ${
-                          selectedMethod === method.value
-                            ? "border-blue-500 bg-blue-50"
-                            : "border-gray-200 bg-white hover:bg-gray-50"
-                        }`}
-                      >
-                        <div className="font-semibold">{method.label}</div>
-                        <div className="text-sm text-gray-500">{method.desc}</div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
+        {/* Connect Platform Modal */}
+        {connectOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/30">
+            <div className="mx-4 w-full max-w-md rounded-xl bg-white p-6">
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="text-xl font-semibold text-gray-900">
+                  {step === "select" ? "Select Workflows" : step === "credentials" ? "Enter Credentials" : step === "method" ? "Choose Method" : "Connect Platform"}
+                </h2>
 
                 <button
                   type="button"
-                  onClick={() => setStep("platform")}
-                  className="text-sm text-gray-600 hover:text-gray-900"
+                  className="rounded p-1 hover:bg-gray-100"
+                  onClick={closeConnect}
                 >
-                  ← Back to platform selection
+                  <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
                 </button>
               </div>
-            )}
 
-            {step === "credentials" && (
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Instance URL</label>
-                  <input
-                    type="url"
-                    value={instanceUrl}
-                    onChange={(e) => setInstanceUrl(e.target.value)}
-                    placeholder="https://your-n8n-instance.com"
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                    disabled={busy}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">API Key</label>
-                  <input
-                    type="password"
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    placeholder="Your n8n API key"
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                    disabled={busy}
-                  />
-                </div>
-
-                <div className="flex gap-3">
-                  <button
-                    onClick={connectAndLoadCatalog}
-                    disabled={busy || !apiKey || !instanceUrl}
-                    className="flex-1 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-gray-300"
-                  >
-                    {busy ? "Connecting..." : "Connect"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setStep("method")}
-                    className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
-                    disabled={busy}
-                  >
-                    Back
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {step === "select" && (
-              <div className="space-y-4">
-                <div className="max-h-64 overflow-y-auto">
-                  <div className="space-y-2">
-                    {n8nWorkflows.map((w) => (
-                      <label key={w.id} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={!!selectedWorkflowIds[w.id]}
-                          onChange={(e) => {
-                            setSelectedWorkflowIds((prev) => ({
-                              ...prev,
-                              [w.id]: e.target.checked,
-                            }));
+              {step === "platform" && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Select Platform</label>
+                    <div className="space-y-3">
+                      {(["n8n", "make", "activepieces", "vapi", "retell"] as PlatformType[]).map((p) => (
+                        <button
+                          key={p}
+                          type="button"
+                          onClick={() => {
+                            setSelectedPlatform(p);
+                            setStep("method");
                           }}
-                          className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                          disabled={busy}
-                        />
-                        <div className="flex-1">
-                          <div className="font-medium text-gray-900">{w.name}</div>
-                          <div className="text-xs text-gray-500">ID: {w.id}</div>
-                        </div>
-                        <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ${
-                          w.active 
-                            ? "bg-green-100 text-green-800" 
-                            : "bg-gray-100 text-gray-800"
-                        }`}>
-                          {w.active ? "Active" : "Inactive"}
-                        </span>
-                      </label>
-                    ))}
+                          className={`flex w-full items-center gap-4 rounded-xl border-2 p-4 text-left transition-colors ${
+                            selectedPlatform === p ? "border-blue-500 bg-blue-50" : "border-gray-200 bg-white hover:bg-gray-50"
+                          }`}
+                        >
+                          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gray-100">
+                            <span className="text-sm font-bold text-gray-700">{PLATFORM_META[p].label}</span>
+                          </div>
+                          <div>
+                            <div className="text-base font-semibold text-gray-900">{PLATFORM_META[p].label}</div>
+                            <div className="text-sm text-gray-500">{PLATFORM_META[p].description}</div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
+              )}
 
-                <div className="flex items-center justify-between text-sm text-gray-600">
-                  <span>{Object.values(selectedWorkflowIds).filter(Boolean).length} of {n8nWorkflows.length} workflows selected</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const all = n8nWorkflows.reduce((acc, w) => (acc[w.id] = true, acc), {} as Record<string, boolean>);
-                      setSelectedWorkflowIds(all);
-                    }}
-                    className="text-blue-600 hover:text-blue-700"
-                  >
-                    Select all
-                  </button>
+              {step === "method" && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Connection Method</label>
+                    <div className="space-y-2">
+                      {(["api", "webhook"] as ConnectionMethod[]).map((m) => (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => {
+                            setSelectedMethod(m);
+                            if (m === "api") {
+                              setStep("credentials");
+                            } else {
+                              setErrMsg("Webhook method not yet implemented.");
+                            }
+                          }}
+                          className={`w-full rounded-lg border p-3 text-left transition-colors ${
+                            selectedMethod === m ? "border-blue-500 bg-blue-50" : "border-gray-200 bg-white hover:bg-gray-50"
+                          }`}
+                        >
+                          <div className="font-medium">{m === "api" ? "API Key" : "Webhook Endpoint"}</div>
+                          <div className="text-sm text-gray-500">
+                            {m === "api"
+                              ? "Connect using API key and instance URL"
+                              : "Connect using webhook endpoint for real-time events"}
+                          </div>
+                        </button>
+                      ))}
+
+                      {selectedPlatform && PLATFORM_META[selectedPlatform].supportsMcp ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedMethod("mcp");
+                            setErrMsg("MCP method not yet implemented.");
+                          }}
+                          className={`w-full rounded-lg border p-3 text-left transition-colors ${
+                            selectedMethod === "mcp"
+                              ? "border-blue-500 bg-blue-50"
+                              : "border-gray-200 bg-white hover:bg-gray-50"
+                          }`}
+                        >
+                          <div className="font-medium">Model Context Protocol (MCP)</div>
+                          <div className="text-sm text-gray-500">Connect using MCP for streaming workflows</div>
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
                 </div>
+              )}
 
-                <div className="flex gap-3">
-                  <button
-                    onClick={saveN8nSelection}
-                    disabled={busy || Object.values(selectedWorkflowIds).every(v => !v)}
-                    className="flex-1 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-gray-300"
-                  >
-                    {busy ? "Saving..." : "Save Selection"}
-                  </button>
+              {step === "credentials" && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">API Key</label>
+                    <input
+                      type="password"
+                      value={apiKey}
+                      onChange={(e) => setApiKey(e.target.value)}
+                      className="w-full rounded-lg border px-3 py-2 text-sm outline-none focus:border-blue-500"
+                      placeholder="Enter your n8n API key"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Instance URL</label>
+                    <input
+                      type="url"
+                      value={instanceUrl}
+                      onChange={(e) => setInstanceUrl(e.target.value)}
+                      className="w-full rounded-lg border px-3 py-2 text-sm outline-none focus:border-blue-500"
+                      placeholder="https://your-n8n-instance.com"
+                    />
+                  </div>
+
                   <button
                     type="button"
-                    onClick={closeConnect}
-                    className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
                     disabled={busy}
+                    onClick={connectAndLoadN8nCatalog}
+                    className="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
                   >
-                    Cancel
+                    {busy ? "Loading…" : "Continue"}
                   </button>
                 </div>
-              </div>
-            )}
+              )}
+
+              {step === "select" && (
+                <div className="space-y-4">
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-sm font-medium text-gray-700">Select Workflows</label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const sel: Record<string, boolean> = {};
+                          for (const w of n8nWorkflows) sel[w.id] = true;
+                          setSelectedWorkflowIds(sel);
+                        }}
+                        className="text-xs text-blue-600 hover:text-blue-700"
+                      >
+                        Select All
+                      </button>
+                    </div>
+                    <div className="max-h-64 overflow-y-auto space-y-2 border rounded-lg p-2">
+                      {n8nWorkflows.map((w) => (
+                        <label key={w.id} className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded">
+                          <input
+                            type="checkbox"
+                            checked={selectedWorkflowIds[w.id] ?? false}
+                            onChange={(e) =>
+                              setSelectedWorkflowIds((prev) => ({ ...prev, [w.id]: e.target.checked }))
+                            }
+                            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          <div className="flex-1 text-sm">{w.name}</div>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={saveN8nSelection}
+                    className="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {busy ? "Saving…" : "Import Selected"}
+                  </button>
+                </div>
+              )}
+
+              {errMsg && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{errMsg}</div>}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
-
