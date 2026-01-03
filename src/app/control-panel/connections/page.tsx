@@ -82,7 +82,7 @@ export default function ConnectionsPage() {
 
   // Modal state
   const [connectOpen, setConnectOpen] = useState(false);
-  const [step, setStep] = useState<"platform" | "method" | "credentials" | "entities" | "success">("platform");
+  const [step, setStep] = useState<"platform" | "method" | "credentials" | "success">("platform");
   const [selectedPlatform, setSelectedPlatform] = useState<keyof typeof PLATFORM_META | null>(null);
   const [selectedMethod, setSelectedMethod] = useState<ConnectMethod>("api");
 
@@ -96,13 +96,15 @@ export default function ConnectionsPage() {
   // connected source id (created)
   const [createdSourceId, setCreatedSourceId] = useState<string | null>(null);
 
-  // entity selection drafts (manual placeholder)
-  const [entities, setEntities] = useState<EntityDraft[]>([]);
-  const [entityExternalId, setEntityExternalId] = useState("");
-  const [entityDisplayName, setEntityDisplayName] = useState("");
-  const [entityKind, setEntityKind] = useState<EntityDraft["entityKind"]>("workflow");
+  
   const [saving, setSaving] = useState(false);
   const [errMsg, setErrMsg] = useState<string | null>(null);
+
+  // workflow management state
+  const [entityCounts, setEntityCounts] = useState<Record<string, number>>({});
+  const [manageOpen, setManageOpen] = useState(false);
+  const [manageSourceId, setManageSourceId] = useState<string | null>(null);
+  const [manageEntities, setManageEntities] = useState<any[]>([]);
 
   async function refreshSources() {
     setLoading(true);
@@ -117,6 +119,20 @@ export default function ConnectionsPage() {
     }
     setSources((json.sources as Source[]) ?? []);
     setLoading(false);
+
+    setTimeout(() => {
+      for (const s of (json.sources as Source[]) ?? []) {
+        if (s.type === "n8n") refreshEntityCount(s.id);
+      }
+    }, 0);
+  }
+
+  async function refreshEntityCount(sourceId: string) {
+    const res = await fetch(`/api/connections/entities/list?sourceId=${encodeURIComponent(sourceId)}`);
+    const json = await res.json().catch(() => ({}));
+    if (res.ok && json?.ok) {
+      setEntityCounts((prev) => ({ ...prev, [sourceId]: (json.entities?.length ?? 0) }));
+    }
   }
 
   useEffect(() => {
@@ -148,10 +164,6 @@ export default function ConnectionsPage() {
     setAuthHeader("");
     setConnectionName("");
     setCreatedSourceId(null);
-    setEntities([]);
-    setEntityExternalId("");
-    setEntityDisplayName("");
-    setEntityKind("workflow");
     setSaving(false);
     setErrMsg(null);
   }
@@ -164,6 +176,14 @@ export default function ConnectionsPage() {
   function closeConnect() {
     setConnectOpen(false);
     resetModal();
+  }
+
+  async function openManageWorkflows(sourceId: string) {
+    setManageSourceId(sourceId);
+    setManageOpen(true);
+    const res = await fetch(`/api/connections/entities/list?sourceId=${encodeURIComponent(sourceId)}`);
+    const json = await res.json().catch(() => ({}));
+    setManageEntities(res.ok && json?.ok ? (json.entities ?? []) : []);
   }
 
   async function createConnection() {
@@ -212,72 +232,24 @@ export default function ConnectionsPage() {
 
     setCreatedSourceId(sourceId);
 
-    // Next step is entity selection (manual placeholder)
-    setStep("entities");
+    // n8n + API: auto-import workflows immediately
+    if (selectedPlatform === "n8n" && selectedMethod === "api") {
+      setStep("success");
+      await fetch("/api/connections/inventory/n8n/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceId }),
+      }).catch(() => {});
+    } else {
+      setStep("success");
+    }
     setSaving(false);
 
     // refresh cards in background
     refreshSources();
   }
 
-  function addEntityDraft() {
-    const ext = entityExternalId.trim();
-    const name = entityDisplayName.trim();
-    if (!ext || !name) return;
-
-    setEntities((prev) => [
-      ...prev,
-      {
-        externalId: ext,
-        displayName: name,
-        entityKind,
-        enabledForAnalytics: true,
-        enabledForActions: selectedMethod === "mcp", // default: actions on if MCP
-      },
-    ]);
-    setEntityExternalId("");
-    setEntityDisplayName("");
-  }
-
-  function removeEntityDraft(idx: number) {
-    setEntities((prev) => prev.filter((_, i) => i !== idx));
-  }
-
-  async function saveEntitiesSelection() {
-    if (!createdSourceId) return;
-    if (entities.length === 0) {
-      setErrMsg("Add at least one entity to index (workflow/agent/etc.).");
-      return;
-    }
-
-    setSaving(true);
-    setErrMsg(null);
-
-    const res = await fetch("/api/connections/entities/select", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sourceId: createdSourceId,
-        entities: entities.map((e) => ({
-          entityKind: e.entityKind,
-          externalId: e.externalId,
-          displayName: e.displayName,
-          enabledForAnalytics: e.enabledForAnalytics,
-          enabledForActions: e.enabledForActions,
-        })),
-      }),
-    });
-
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok || !json?.ok) {
-      setSaving(false);
-      setErrMsg(json?.message || "Failed to save entity selection.");
-      return;
-    }
-
-    setSaving(false);
-    setStep("success");
-  }
+  
 
   return (
     <div className="min-h-screen">
@@ -379,16 +351,23 @@ export default function ConnectionsPage() {
                       </div>
 
                       <div className="mt-6 text-sm text-gray-600">
-                        <div>Indexing selection required after connect.</div>
-                        <div className="mt-1 text-gray-500">Tenant-level connection</div>
+                        {s.type === "n8n" ? (
+                          <div>Workflows: {entityCounts[s.id] ?? "—"}</div>
+                        ) : (
+                          <>
+                            <div>Indexing selection required after connect.</div>
+                            <div className="mt-1 text-gray-500">Tenant-level connection</div>
+                          </>
+                        )}
                       </div>
 
                       <div className="mt-6 flex gap-3">
                         <button
                           type="button"
+                          onClick={s.type === "n8n" ? () => openManageWorkflows(s.id) : undefined}
                           className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600"
                         >
-                          View Details
+                          {s.type === "n8n" ? "Manage Workflows" : "View Details"}
                         </button>
                         <button
                           type="button"
@@ -476,8 +455,6 @@ export default function ConnectionsPage() {
                       ? `Connect ${selectedPlatform ? PLATFORM_META[selectedPlatform].label : ""}`
                       : step === "credentials"
                       ? `Credentials`
-                      : step === "entities"
-                      ? "Select entities to index"
                       : "Connected"}
                   </div>
                   <div className="mt-1 text-sm text-gray-600">
@@ -487,8 +464,6 @@ export default function ConnectionsPage() {
                       ? "Choose a connection method."
                       : step === "credentials"
                       ? "Enter credentials to validate and connect."
-                      : step === "entities"
-                      ? "Add the agents/workflows you want GetFlowetic to index."
                       : "Success."}
                   </div>
                 </div>
@@ -516,7 +491,6 @@ export default function ConnectionsPage() {
                     setErrMsg(null);
                     if (step === "method") setStep("platform");
                     else if (step === "credentials") setStep("method");
-                    else if (step === "entities") setStep("credentials");
                   }}
                   className="mb-4 text-sm font-semibold text-gray-600 hover:text-gray-900"
                 >
@@ -535,8 +509,6 @@ export default function ConnectionsPage() {
                         onClick={() => {
                           setSelectedPlatform(k);
                           setErrMsg(null);
-                          // default kind
-                          setEntityKind(PLATFORM_META[k].category === "voice_ai" ? "agent" : "workflow");
                           setStep("method");
                         }}
                         className="flex w-full items-center gap-4 rounded-xl border-2 border-gray-200 p-4 text-left hover:border-blue-500 hover:bg-slate-50"
@@ -573,12 +545,9 @@ export default function ConnectionsPage() {
                       <span className="rounded bg-emerald-600 px-2 py-1 text-xs font-bold text-white">RECOMMENDED</span>
                     </div>
                     <div className="mt-1 text-sm text-gray-700">
-                      Connect via API to import your catalog so you can select what to index for dashboards.
-                    </div>
-                    <div className="mt-2 text-xs text-gray-600">
-                      {selectedPlatform && PLATFORM_META[selectedPlatform].category === "voice_ai"
-                        ? "For voice platforms (Vapi/Retell), webhooks power real-time analytics."
-                        : "For automation platforms (n8n/Make/Activepieces), analytics is collected via polling run logs."}
+                      {selectedPlatform === "n8n" 
+                        ? "Connect via API to auto-import workflows."
+                        : "Connect via API to import your catalog for analytics."}
                     </div>
                   </button>
 
@@ -596,10 +565,7 @@ export default function ConnectionsPage() {
                       Webhook Only
                     </div>
                     <div className="mt-1 text-sm text-gray-700">
-                      Manual event streaming to GetFlowetic. No catalog import.
-                    </div>
-                    <div className="mt-2 text-xs text-gray-600">
-                      Best for voice platforms if you want real-time events. Automation platforms generally rely on API polling.
+                      Manual event forwarding. No catalog import.
                     </div>
                   </button>
 
@@ -618,10 +584,7 @@ export default function ConnectionsPage() {
                         MCP (Actions)
                       </div>
                       <div className="mt-1 text-sm text-gray-700">
-                        Optional. Enables AI-triggered workflow actions. Does not replace analytics ingestion.
-                      </div>
-                      <div className="mt-2 text-xs text-gray-600">
-                        Supported for: n8n, Make, Activepieces. Not available for Vapi/Retell.
+                        Actions only
                       </div>
                     </button>
                   ) : null}
@@ -716,85 +679,12 @@ export default function ConnectionsPage() {
                 </div>
               ) : null}
 
-              {step === "entities" ? (
-                <div className="space-y-4">
-                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
-                    Temporary MVP: you can add entities manually. GetFlowetic will ONLY index what you add here (not your full catalog).
-                  </div>
+              
 
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                    <div className="md:col-span-1">
-                      <label className="mb-2 block text-sm font-semibold text-gray-900">Kind</label>
-                      <select
-                        value={entityKind}
-                        onChange={(e) => setEntityKind(e.target.value as any)}
-                        className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                      >
-                        <option value="workflow">workflow</option>
-                        <option value="scenario">scenario</option>
-                        <option value="flow">flow</option>
-                        <option value="agent">agent</option>
-                        <option value="assistant">assistant</option>
-                        <option value="squad">squad</option>
-                      </select>
-                    </div>
-                    <div className="md:col-span-1">
-                      <label className="mb-2 block text-sm font-semibold text-gray-900">External ID</label>
-                      <input
-                        value={entityExternalId}
-                        onChange={(e) => setEntityExternalId(e.target.value)}
-                        className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                        placeholder="agent_123 / workflowId..."
-                      />
-                    </div>
-                    <div className="md:col-span-1">
-                      <label className="mb-2 block text-sm font-semibold text-gray-900">Display name</label>
-                      <input
-                        value={entityDisplayName}
-                        onChange={(e) => setEntityDisplayName(e.target.value)}
-                        className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                        placeholder="Sales Agent"
-                      />
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={addEntityDraft}
-                    className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black"
-                  >
-                    Add entity
-                  </button>
-
-                  <div className="space-y-2">
-                    {entities.length === 0 ? (
-                      <div className="text-sm text-gray-600">No entities added yet.</div>
-                    ) : null}
-
-                    {entities.map((e, idx) => (
-                      <div key={`${e.externalId}-${idx}`} className="flex items-center justify-between rounded-lg border p-3">
-                        <div>
-                          <div className="text-sm font-semibold text-gray-900">{e.displayName}</div>
-                          <div className="text-xs text-gray-600">
-                            {e.entityKind} • {e.externalId}
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => removeEntityDraft(idx)}
-                          className="rounded-md bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-200"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
 
               {step === "success" ? (
                 <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-                  Connection created and indexing selection saved. You can now use Vibe and it will be aware of your configured entities.
+                  Connected. Workflows will be imported automatically.
                 </div>
               ) : null}
             </div>
@@ -820,16 +710,6 @@ export default function ConnectionsPage() {
                 </button>
               ) : null}
 
-              {step === "entities" ? (
-                <button
-                  type="button"
-                  onClick={saveEntitiesSelection}
-                  disabled={saving}
-                  className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600 disabled:opacity-50"
-                >
-                  {saving ? "Saving..." : "Save selection"}
-                </button>
-              ) : null}
 
               {step === "success" ? (
                 <button
@@ -843,6 +723,68 @@ export default function ConnectionsPage() {
                   Done
                 </button>
               ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Manage Workflows Modal */}
+      {manageOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="border-b px-6 py-5">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="text-xl font-semibold text-gray-900">Manage Workflows</div>
+                  <div className="mt-1 text-sm text-gray-600">View your n8n workflow catalog.</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setManageOpen(false)}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+
+            <div className="px-6 py-5">
+              <div className="space-y-2">
+                {manageEntities.length === 0 ? (
+                  <div className="text-sm text-gray-600">No workflows found.</div>
+                ) : (
+                  manageEntities.map((entity) => (
+                    <div key={entity.id} className="flex items-center justify-between rounded-lg border p-3">
+                      <div>
+                        <div className="text-sm font-semibold text-gray-900">{entity.display_name}</div>
+                        <div className="text-xs text-gray-600">ID: {entity.external_id}</div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {entity.enabled_for_analytics && (
+                          <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-700">
+                            Analytics
+                          </span>
+                        )}
+                        {entity.enabled_for_actions && (
+                          <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700">
+                            Actions
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 border-t px-6 py-4">
+              <button
+                type="button"
+                onClick={() => setManageOpen(false)}
+                className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-200"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>
