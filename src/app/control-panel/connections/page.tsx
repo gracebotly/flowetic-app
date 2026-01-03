@@ -415,7 +415,7 @@ export default function ConnectionsPage() {
                     <div
                       key={s.id}
                       className={`rounded-2xl border p-6 ${
-                        statusBucket(s.status) === "attention" ? "border-red-200 bg-red-50" : "bg-white"
+                        needsAttention(s.status) ? "border-red-200 bg-red-50" : "bg-white"
                       }`}
                     >
                       <div className="flex items-start justify-between">
