@@ -390,6 +390,7 @@ export default function ConnectionsPage() {
   // Connect form state
   const [selectedPlatform, setSelectedPlatform] = useState<keyof typeof PLATFORM_META | null>(null);
   const [selectedMethod, setSelectedMethod] = useState<"api" | "webhook" | "mcp">("api");
+  const [n8nAuthMode, setN8nAuthMode] = useState<"header" | "bearer">("bearer");
   const [apiKey, setApiKey] = useState("");
   const [instanceUrl, setInstanceUrl] = useState("");
   const [mcpUrl, setMcpUrl] = useState("");
@@ -543,6 +544,7 @@ export default function ConnectionsPage() {
     setStep("platform");
     setSelectedPlatform(null);
     setSelectedMethod("api");
+    setN8nAuthMode("bearer");
     setApiKey("");
     setInstanceUrl("");
     setMcpUrl("");
@@ -579,8 +581,21 @@ export default function ConnectionsPage() {
     };
 
     if (selectedMethod === "api") {
+      if (selectedPlatform === "n8n") {
+        if (!instanceUrl.trim()) {
+          setSaving(false);
+          setErrMsg("Instance URL is required for n8n API connections.");
+          return;
+        }
+      }
+      
       payload.apiKey = apiKey;
+
       if (instanceUrl) payload.instanceUrl = instanceUrl;
+
+      if (selectedPlatform === "n8n") {
+        payload.n8nAuthMode = n8nAuthMode;
+      }
     }
 
     if (selectedMethod === "webhook") {
@@ -1055,7 +1070,7 @@ export default function ConnectionsPage() {
 
       {/* Connect Platform Modal (in-page) */}
       {connectOpen ? (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-20">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl">
             <div className="border-b px-6 py-5">
               <div className="flex items-start justify-between gap-4">
@@ -1222,12 +1237,30 @@ export default function ConnectionsPage() {
           className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
           placeholder="••••••••••••••"
         />
+        {selectedPlatform === "n8n" && selectedMethod === "api" ? (
+          <div>
+            <label className="mb-2 block text-sm font-semibold text-gray-900">n8n auth mode</label>
+            <select
+              value={n8nAuthMode}
+              onChange={(e) => setN8nAuthMode(e.target.value as "header" | "bearer")}
+              className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+            >
+              <option value="bearer">Bearer token</option>
+              <option value="header">X-N8N-API-KEY header</option>
+            </select>
+            <div className="mt-1 text-xs text-gray-600">
+              If you see "X-N8N-API-KEY header required", switch to the header option.
+            </div>
+          </div>
+        ) : null}
       </div>
     ) : null}
 
     {(selectedPlatform === "n8n" || selectedPlatform === "activepieces") ? (
       <div>
-        <label className="mb-2 block text-sm font-semibold text-gray-900">Instance URL (optional)</label>
+        <label className="mb-2 block text-sm font-semibold text-gray-900">
+          {selectedPlatform === "n8n" && selectedMethod === "api" ? "Instance URL *" : "Instance URL (optional)"}
+        </label>
         <input
           value={instanceUrl}
           onChange={(e) => setInstanceUrl(e.target.value)}
@@ -1235,6 +1268,11 @@ export default function ConnectionsPage() {
           className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
           placeholder="https://your-instance..."
         />
+        {selectedPlatform === "n8n" && selectedMethod === "api" ? (
+          <div className="mt-1 text-xs text-gray-600">
+            Required for n8n API connections so we can validate your key against your instance.
+          </div>
+        ) : null}
       </div>
     ) : null}
 
