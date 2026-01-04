@@ -296,6 +296,10 @@ export default function ConnectionsPage() {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
 
+  // Connect modal state
+  const [connectOpen, setConnectOpen] = useState(false);
+  const [step, setStep] = useState<"platform" | "method" | "form">("platform");
+
   // Credentials state
   const [credentials, setCredentials] = useState<CredentialRow[]>([]);
   const [credentialsLoading, setCredentialsLoading] = useState(false);
@@ -371,6 +375,11 @@ export default function ConnectionsPage() {
     return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   }
 
+  function openConnect() {
+    setConnectOpen(true);
+    setStep("platform");
+  }
+
   const platformOptions = useMemo(() => {
     const set = new Set<string>();
     for (const e of entities) set.add(e.platform);
@@ -442,9 +451,21 @@ export default function ConnectionsPage() {
 
   return (
     <div className="mx-auto max-w-6xl p-6">
-      <div className="mb-6">
-        <h1 className="mb-2 text-2xl font-semibold text-gray-900">Connections</h1>
-        <p className="text-gray-600">Manage your platform connections and indexed entities</p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-semibold text-gray-900">Connections</h1>
+          <p className="mt-1 text-sm text-gray-600">
+            All the workflows, agents and credentials you have access to
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={openConnect}
+          className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600"
+        >
+          Connect Platform
+        </button>
       </div>
 
       {/* Tabs */}
