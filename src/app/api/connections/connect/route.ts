@@ -40,6 +40,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, code: "MISSING_PLATFORM_TYPE" }, { status: 400 });
   }
 
+  const methodStatus =
+    method === "webhook" ? "method:webhook" : method === "mcp" ? "method:mcp" : "method:api";
+
   // Credentials payload to encrypt into sources.secret_hash
   // NOTE: we store a JSON string inside the encrypted envelope.
   let secretJson: any = { method, platformType };
@@ -139,7 +142,7 @@ export async function POST(req: Request) {
       type: platformType,
       name: connectionName || platformType.toUpperCase(),
       secret_hash,
-      status: "active",
+      status: `active ${methodStatus}`,
     })
     .select("id,type,name,status")
     .single();

@@ -42,6 +42,21 @@ function statusBucket(status: string | null): "connected" | "attention" | "error
   return "attention";
 }
 
+function methodFromStatus(status: string | null): "api" | "webhook" | "mcp" | "unknown" {
+  const s = String(status ?? "");
+  if (s.includes("method:webhook")) return "webhook";
+  if (s.includes("method:mcp")) return "mcp";
+  if (s.includes("method:api")) return "api";
+  return "unknown";
+}
+
+function methodLabel(method: "api" | "webhook" | "mcp" | "unknown") {
+  if (method === "api") return "API";
+  if (method === "webhook") return "Webhook";
+  if (method === "mcp") return "MCP";
+  return "—";
+}
+
 function StatusPill({ status }: { status: string | null }) {
   const bucket = statusBucket(status);
   const text =
@@ -107,6 +122,11 @@ export default function ConnectionsPage() {
   const [entityKind, setEntityKind] = useState<EntityDraft["entityKind"]>("workflow");
   const [saving, setSaving] = useState(false);
   const [errMsg, setErrMsg] = useState<string | null>(null);
+
+  // Edit credentials modal state
+  const [editOpen, setEditOpen] = useState(false);
+  const [editSource, setEditSource] = useState<Source | null>(null);
+  const [editApiKey, setEditApiKey] = useState("");
 
   // Search and sort state
   const [searchTerm, setSearchTerm] = useState("");
@@ -320,12 +340,57 @@ export default function ConnectionsPage() {
   }
 
   function openEditCredentials(source: Source) {
-    resetModal();
-    setConnectOpen(true);
-    setSelectedPlatform(source.type as keyof typeof PLATFORM_META);
-    setSelectedMethod("api"); // keep default; your sources API doesn't return method yet
-    setStep("credentials");
-    setCreatedSourceId(source.id);
+    setEditSource(source);
+    setEditApiKey("");
+    setEditOpen(true);
+  }
+
+  function closeEditCredentials() {
+    setEditOpen(false);
+    setEditSource(null);
+    setEditApiKey("");
+  }
+
+  async function saveEditedCredentials() {
+    if (!editSource) return;
+
+    const m = methodFromStatus(editSource.status);
+    if (m !== "api") {
+      setErrMsg("Only API credential editing is supported in the UI right now.");
+      return;
+    }
+
+    const apiKey = editApiKey.trim();
+    if (!apiKey) {
+      setErrMsg("API key is required.");
+      return;
+    }
+
+    setSaving(true);
+    setErrMsg(null);
+
+    // Reuse connect endpoint to update credentials for same platform
+    const res = await fetch("/api/connections/connect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        platformType: editSource.type,
+        method: "api",
+        name: editSource.name,
+        apiKey,
+      }),
+    });
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || !json?.ok) {
+      setSaving(false);
+      setErrMsg(json?.message || "Failed to update credentials.");
+      return;
+    }
+
+    setSaving(false);
+    closeEditCredentials();
+    await refreshSources();
   }
 
   function openConfigureIndexing(source: Source) {
@@ -630,10 +695,9 @@ export default function ConnectionsPage() {
                 {filteredSources.map((s) => {
                   const meta = PLATFORM_META[String(s.type)];
                   const Icon = meta?.Icon;
-                  const methodLabel =
-                    s.method === "api" ? "API" : s.method === "webhook" ? "Webhook" : s.method === "mcp" ? "MCP" : "Credential";
+                  const m = methodFromStatus(s.status);
                   const methodIcon =
-                    s.method === "api" ? <KeyRound className="h-4 w-4 text-emerald-700" /> : s.method === "webhook" ? (
+                    m === "api" ? <KeyRound className="h-4 w-4 text-emerald-700" /> : m === "webhook" ? (
                       <WebhookIcon className="h-4 w-4 text-amber-800" />
                     ) : (
                       <Bot className="h-4 w-4 text-fuchsia-800" />
@@ -657,10 +721,8 @@ export default function ConnectionsPage() {
                       <div className="flex items-center gap-3">
                         <span className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-semibold text-gray-700">
                           {methodIcon}
-                          {methodLabel}
+                          {methodLabel(m)}
                         </span>
-
-                        <StatusPill status={s.status} />
 
                         {/* keep your existing 3-dot dropdown trigger here */}
                         <button
@@ -1061,6 +1123,68 @@ export default function ConnectionsPage() {
                   Done
                 </button>
               ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Edit Credentials Modal */}
+      {editOpen && editSource ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl">
+            <div className="flex items-start justify-between border-b px-6 py-4">
+              <div>
+                <div className="text-lg font-bold text-gray-900">Edit Credentials</div>
+                <div className="text-sm text-gray-600">
+                  Update {PLATFORM_META[String(editSource.type)]?.label ?? editSource.type} API key.
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={closeEditCredentials}
+                className="rounded-lg p-2 text-gray-600 hover:bg-gray-100"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4 px-6 py-5">
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-gray-900">API Key *</label>
+                <input
+                  value={editApiKey}
+                  onChange={(e) => setEditApiKey(e.target.value)}
+                  type="password"
+                  className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                  placeholder="••••••••••••••"
+                />
+              </div>
+
+              {errMsg ? (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                  {errMsg}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 border-t px-6 py-4">
+              <button
+                type="button"
+                onClick={closeEditCredentials}
+                className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-200"
+                disabled={saving}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={saveEditedCredentials}
+                className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600 disabled:opacity-50"
+                disabled={saving}
+              >
+                Save
+              </button>
             </div>
           </div>
         </div>
