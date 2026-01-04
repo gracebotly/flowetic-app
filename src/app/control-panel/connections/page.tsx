@@ -12,6 +12,8 @@ import {
   Edit,
   Trash2,
   Search as SearchIcon,
+  PlusCircle,
+  X,
 } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
@@ -67,6 +69,14 @@ type CredentialRow = {
 };
 
 type CredentialSort = "last_updated" | "last_created" | "name_az";
+
+type EntityDraft = {
+  externalId: string;
+  displayName: string;
+  entityKind: "workflow" | "scenario" | "flow" | "agent" | "assistant" | "squad";
+  enabledForAnalytics: boolean;
+  enabledForActions: boolean;
+};
 
 const entityTypeLabel: Record<EntityType, string> = {
   workflow: "Workflow",
@@ -375,10 +385,10 @@ export default function ConnectionsPage() {
 
   // Connect modal state
   const [connectOpen, setConnectOpen] = useState(false);
-  const [step, setStep] = useState<"platform" | "method" | "form" | "credentials" | "entities">("platform");
+  const [step, setStep] = useState<"platform" | "method" | "credentials" | "entities" | "success">("platform");
   
   // Connect form state
-  const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
+  const [selectedPlatform, setSelectedPlatform] = useState<keyof typeof PLATFORM_META | null>(null);
   const [selectedMethod, setSelectedMethod] = useState<"api" | "webhook" | "mcp">("api");
   const [apiKey, setApiKey] = useState("");
   const [instanceUrl, setInstanceUrl] = useState("");
@@ -386,7 +396,8 @@ export default function ConnectionsPage() {
   const [authHeader, setAuthHeader] = useState("");
   const [connectionName, setConnectionName] = useState("");
   const [createdSourceId, setCreatedSourceId] = useState<string | null>(null);
-  const [connectEntities, setConnectEntities] = useState<any[]>([]);
+  const [connectEntities, setConnectEntities] = useState<EntityDraft[]>([]);
+  const [entityKind, setEntityKind] = useState<EntityDraft["entityKind"]>("workflow");
   const [entityExternalId, setEntityExternalId] = useState("");
   const [entityDisplayName, setEntityDisplayName] = useState("");
   const [saving, setSaving] = useState(false);
@@ -553,6 +564,114 @@ export default function ConnectionsPage() {
   function closeConnect() {
     setConnectOpen(false);
     resetModal();
+  }
+
+  async function createConnection() {
+    if (!selectedPlatform) return;
+
+    setSaving(true);
+    setErrMsg(null);
+
+    const payload: any = {
+      platformType: selectedPlatform,
+      method: selectedMethod,
+      name: connectionName || PLATFORM_META[selectedPlatform].label,
+    };
+
+    if (selectedMethod === "api") {
+      payload.apiKey = apiKey;
+      if (instanceUrl) payload.instanceUrl = instanceUrl;
+    }
+
+    if (selectedMethod === "webhook") {
+      if (instanceUrl) payload.instanceUrl = instanceUrl;
+    }
+
+    if (selectedMethod === "mcp") {
+      payload.mcpUrl = mcpUrl;
+      if (authHeader) payload.authHeader = authHeader;
+    }
+
+    const res = await fetch("/api/connections/connect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    const json = await res.json().catch(() => ({}));
+
+    if (!res.ok || !json?.ok) {
+      setSaving(false);
+      setErrMsg(json?.message || "Connection failed. Please check your credentials.");
+      return;
+    }
+
+    const sourceId = json?.source?.id as string | undefined;
+    if (!sourceId) {
+      setSaving(false);
+      setErrMsg("Connection succeeded but no source ID returned.");
+      return;
+    }
+
+    setCreatedSourceId(sourceId);
+    setStep("entities");
+    setSaving(false);
+  }
+
+  function addEntityDraft() {
+    const ext = entityExternalId.trim();
+    const name = entityDisplayName.trim();
+    if (!ext || !name) return;
+
+    setConnectEntities((prev) => [
+      ...prev,
+      {
+        externalId: ext,
+        displayName: name,
+        entityKind,
+        enabledForAnalytics: true,
+        enabledForActions: selectedMethod === "mcp",
+      },
+    ]);
+
+    setEntityExternalId("");
+    setEntityDisplayName("");
+  }
+
+  function removeEntityDraft(idx: number) {
+    setConnectEntities((prev) => prev.filter((_, i) => i !== idx));
+  }
+
+  async function saveEntitiesSelection() {
+    if (!createdSourceId) return;
+
+    if (connectEntities.length === 0) {
+      setErrMsg("Add at least one entity to index (workflow/agent/etc.).");
+      return;
+    }
+
+    setSaving(true);
+    setErrMsg(null);
+
+    const res = await fetch("/api/connections/entities/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sourceId: createdSourceId,
+        entities: connectEntities,
+      }),
+    });
+
+    const json = await res.json().catch(() => ({}));
+
+    if (!res.ok || !json?.ok) {
+      setSaving(false);
+      setErrMsg(json?.message || "Failed to save entities.");
+      return;
+    }
+
+    setSaving(false);
+    setStep("success");
   }
 
   const platformOptions = useMemo(() => {
@@ -984,7 +1103,7 @@ export default function ConnectionsPage() {
               {/* Modal step content will go here */}
               {step === "platform" ? (
                 <div className="space-y-4">
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="grid grid-cols-1 gap-3">
                     {(Object.keys(PLATFORM_META) as Array<keyof typeof PLATFORM_META>).map((k) => {
                       const meta = PLATFORM_META[k];
                       const Icon = meta.Icon;
@@ -1015,9 +1134,294 @@ export default function ConnectionsPage() {
                   </div>
                 </div>
               ) : null}
-              {step === "method" && "Method selection coming soon..."}
-              {step === "credentials" && "Credentials form coming soon..."}
-              {step === "entities" && "Entity selection coming soon..."}
+              {step === "method" ? (
+  <div className="space-y-3">
+    <button
+      type="button"
+      onClick={() => {
+        setSelectedMethod("api");
+        setErrMsg(null);
+        setStep("credentials");
+      }}
+      className="w-full rounded-xl border-2 border-emerald-200 bg-emerald-50 p-4 text-left hover:border-emerald-400"
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-base font-semibold text-gray-900">
+          <KeyRound className="h-5 w-5 text-emerald-700" />
+          API Key
+        </div>
+        <span className="rounded bg-emerald-600 px-2 py-1 text-xs font-bold text-white">RECOMMENDED</span>
+      </div>
+      <div className="mt-1 text-sm text-gray-700">
+        Connect via API to import your catalog so you can select what to index for dashboards.
+      </div>
+      <div className="mt-2 text-xs text-gray-600">
+        {selectedPlatform && ["vapi", "retell"].includes(String(selectedPlatform))
+          ? "For voice platforms (Vapi/Retell), webhooks power real-time analytics."
+          : "For automation platforms (n8n/Make/Activepieces), analytics is collected via polling run logs."}
+      </div>
+    </button>
+
+    <button
+      type="button"
+      onClick={() => {
+        setSelectedMethod("webhook");
+        setErrMsg(null);
+        setStep("credentials");
+      }}
+      className="w-full rounded-xl border-2 border-gray-200 p-4 text-left hover:border-blue-500 hover:bg-slate-50"
+    >
+      <div className="flex items-center gap-2 text-base font-semibold text-gray-900">
+        <WebhookIcon className="h-5 w-5 text-slate-700" />
+        Webhook Only
+      </div>
+      <div className="mt-1 text-sm text-gray-700">Manual event streaming to GetFlowetic. No catalog import.</div>
+      <div className="mt-2 text-xs text-gray-600">
+        Best for voice platforms if you want real-time events. Automation platforms generally rely on API polling.
+      </div>
+    </button>
+
+    {selectedPlatform ? (
+      <button
+        type="button"
+        onClick={() => {
+          // MCP support in your current PLATFORM_META is not tracked; allow for automation platforms only
+          if (!["n8n", "make", "activepieces"].includes(String(selectedPlatform))) {
+            setErrMsg("MCP is only supported for n8n, Make, and Activepieces.");
+            return;
+          }
+          setSelectedMethod("mcp");
+          setErrMsg(null);
+          setStep("credentials");
+        }}
+        className="w-full rounded-xl border-2 border-gray-200 p-4 text-left hover:border-blue-500 hover:bg-slate-50"
+      >
+        <div className="flex items-center gap-2 text-base font-semibold text-gray-900">
+          <Bot className="h-5 w-5 text-slate-700" />
+          MCP (Actions)
+        </div>
+        <div className="mt-1 text-sm text-gray-700">
+          Optional. Enables AI-triggered workflow actions. Does not replace analytics ingestion.
+        </div>
+        <div className="mt-2 text-xs text-gray-600">
+          Supported for: n8n, Make, Activepieces. Not available for Vapi/Retell.
+        </div>
+      </button>
+    ) : null}
+  </div>
+) : null}
+{step === "credentials" ? (
+  <div className="space-y-4">
+    {selectedMethod === "api" ? (
+      <div>
+        <label className="mb-2 block text-sm font-semibold text-gray-900">API Key *</label>
+        <input
+          value={apiKey}
+          onChange={(e) => setApiKey(e.target.value)}
+          type="password"
+          className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+          placeholder="••••••••••••••"
+        />
+      </div>
+    ) : null}
+
+    {(selectedPlatform === "n8n" || selectedPlatform === "activepieces") ? (
+      <div>
+        <label className="mb-2 block text-sm font-semibold text-gray-900">Instance URL (optional)</label>
+        <input
+          value={instanceUrl}
+          onChange={(e) => setInstanceUrl(e.target.value)}
+          type="url"
+          className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+          placeholder="https://your-instance..."
+        />
+      </div>
+    ) : null}
+
+    {selectedMethod === "webhook" ? (
+      <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+        Webhook-only mode will create a connection, but you'll need to send events manually.
+      </div>
+    ) : null}
+
+    {selectedMethod === "mcp" ? (
+      <>
+        <div>
+          <label className="mb-2 block text-sm font-semibold text-gray-900">MCP Server URL *</label>
+          <input
+            value={mcpUrl}
+            onChange={(e) => setMcpUrl(e.target.value)}
+            type="url"
+            className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+            placeholder="https://..."
+          />
+        </div>
+        <div>
+          <label className="mb-2 block text-sm font-semibold text-gray-900">Authorization header (optional)</label>
+          <input
+            value={authHeader}
+            onChange={(e) => setAuthHeader(e.target.value)}
+            type="text"
+            className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+            placeholder="Bearer ..."
+          />
+        </div>
+      </>
+    ) : null}
+
+    <div>
+      <label className="mb-2 block text-sm font-semibold text-gray-900">Connection name (optional)</label>
+      <input
+        value={connectionName}
+        onChange={(e) => setConnectionName(e.target.value)}
+        type="text"
+        className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+        placeholder="Production"
+      />
+    </div>
+
+    <div className="flex justify-end gap-2 pt-2">
+      <button
+        type="button"
+        onClick={() => {
+          setStep("method");
+          setErrMsg(null);
+        }}
+        className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-200"
+        disabled={saving}
+      >
+        Back
+      </button>
+      <button
+        type="button"
+        onClick={createConnection}
+        disabled={saving}
+        className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600 disabled:opacity-50"
+      >
+        {saving ? "Connecting..." : "Connect"}
+      </button>
+    </div>
+  </div>
+) : null}
+{step === "entities" ? (
+  <div className="space-y-4">
+    <div className="text-sm text-gray-700">
+      Choose one or more entities (workflows/agents/etc.) to index for analytics and optional AI actions. Each requires a unique External ID and Display Name.
+    </div>
+
+    <div className="flex flex-col gap-3 pb-4">
+      <div className="flex items-center gap-2">
+        <select
+          value={entityKind}
+          onChange={(e) => setEntityKind(e.target.value as EntityDraft["entityKind"])}
+          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+        >
+          <option value="workflow">Workflow</option>
+          <option value="scenario">Scenario</option>
+          <option value="flow">Flow</option>
+          <option value="agent">Agent</option>
+          <option value="assistant">Assistant</option>
+          <option value="squad">Squad</option>
+        </select>
+
+        <input
+          value={entityExternalId}
+          onChange={(e) => setEntityExternalId(e.target.value)}
+          type="text"
+          className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+          placeholder="External ID (unique for each entity)"
+        />
+        <input
+          value={entityDisplayName}
+          onChange={(e) => setEntityDisplayName(e.target.value)}
+          type="text"
+          className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+          placeholder="Display Name"
+        />
+
+        <button
+          type="button"
+          onClick={addEntityDraft}
+          disabled={!entityExternalId.trim() || !entityDisplayName.trim()}
+          className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+          title="Add"
+        >
+          <PlusCircle className="h-5 w-5" />
+        </button>
+      </div>
+    </div>
+
+    <div className="space-y-1">
+      {connectEntities.length === 0 ? (
+        <div className="rounded-md bg-gray-50 p-4 text-center text-sm text-gray-600">
+          No entities added yet. Add at least one entity to continue.
+        </div>
+      ) : (
+        connectEntities.map((e, i) => (
+          <div key={i} className="flex items-center justify-between rounded-md border border-gray-200 bg-white px-3 py-2">
+            <div className="truncate text-sm">
+              <span className="font-mono text-xs text-gray-500 uppercase">{e.entityKind}</span>
+              <span className="mx-2 text-gray-400">•</span>
+              <span className="font-medium text-slate-900">{e.displayName}</span>
+              <span className="mx-2 text-gray-400">•</span>
+              <span className="font-mono text-xs text-gray-500">{e.externalId}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => removeEntityDraft(i)}
+              className="ml-4 text-red-500 hover:text-red-700"
+              title="Remove"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        ))
+      )}
+    </div>
+
+    <div className="flex justify-end gap-2 pt-2">
+      <button
+        type="button"
+        onClick={() => setStep("credentials")}
+        className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-200"
+        disabled={saving}
+      >
+        Back
+      </button>
+      <button
+        type="button"
+        onClick={saveEntitiesSelection}
+        disabled={saving || connectEntities.length === 0}
+        className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600 disabled:opacity-50"
+      >
+        {saving ? "Saving..." : "Continue"}
+      </button>
+    </div>
+  </div>
+) : null}
+{step === "success" ? (
+  <div className="space-y-4">
+    <div className="text-center text-sm text-gray-700">
+      Connection configuration saved successfully.
+    </div>
+
+    <div className="flex justify-end gap-2 pt-2">
+      <button
+        type="button"
+        onClick={() => {
+          // Close modal
+          closeConnect();
+          // Refetch connections
+          refreshCredentials();
+          refreshIndexedEntities();
+        }}
+        className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600 disabled:opacity-50"
+      >
+        Done
+      </button>
+    </div>
+  </div>
+) : null}
             </div>
           </div>
         </div>
