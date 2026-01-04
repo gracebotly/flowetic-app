@@ -600,6 +600,11 @@ export default function ConnectionsPage() {
       payload.apiKey = apiKey;
 
       if (instanceUrl) payload.instanceUrl = instanceUrl;
+
+      // n8n on your instance requires X-N8N-API-KEY header (no UI dropdown)
+      if (selectedPlatform === "n8n") {
+        payload.n8nAuthMode = "header";
+      }
     }
 
     if (selectedMethod === "webhook") {
@@ -1269,7 +1274,7 @@ export default function ConnectionsPage() {
       </div>
     ) : null}
 
-    {(selectedPlatform === "n8n" || selectedPlatform === "activepieces") ? (
+    {(selectedPlatform === "n8n" || selectedPlatform === "activepieces") && selectedMethod !== "mcp" ? (
       <div>
         <label className="mb-2 block text-sm font-semibold text-gray-900">
           {selectedPlatform === "n8n" && selectedMethod === "api" ? "Instance URL *" : "Instance URL (optional)"}
