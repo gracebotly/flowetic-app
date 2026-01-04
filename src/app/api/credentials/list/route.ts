@@ -1,70 +1,80 @@
 
 import { NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
+import { decryptSecret } from "@/lib/secrets";
+
+export const runtime = "nodejs";
 
 type ConnectMethod = "api" | "webhook" | "mcp";
 
-type Credential = {
+type CredentialRow = {
   id: string;
-  platformType: string; // matches existing PLATFORM_META keys in your app (e.g. "n8n", "make", etc.)
-  name: string; // display name (or connection name)
+  platformType: string;
+  name: string;
+  status: string | null;
   method: ConnectMethod;
-  status: "connected" | "attention" | "error";
-  created_at_ts: number;
-  last_updated_ts: number;
+  created_at: string;
+  updated_at: string;
 };
 
+function safeMethod(v: unknown): ConnectMethod {
+  return v === "api" || v === "webhook" || v === "mcp" ? v : "api";
+}
+
 export async function GET() {
-  const now = Date.now();
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ ok: false, code: "AUTH_REQUIRED" }, { status: 401 });
 
-  // NOTE: This is a stub. Replace with DB later.
-  const credentials: Credential[] = [
-    {
-      id: "cred_1",
-      platformType: "n8n",
-      name: "n8n",
-      method: "api",
-      status: "connected",
-      created_at_ts: now - 2 * 24 * 60 * 60 * 1000,
-      last_updated_ts: now - 2 * 60 * 60 * 1000,
-    },
-    {
-      id: "cred_2",
-      platformType: "make",
-      name: "Make",
-      method: "webhook",
-      status: "connected",
-      created_at_ts: now - 12 * 24 * 60 * 60 * 1000,
-      last_updated_ts: now - 5 * 60 * 60 * 1000,
-    },
-    {
-      id: "cred_3",
-      platformType: "activepieces",
-      name: "Activepieces",
-      method: "mcp",
-      status: "connected",
-      created_at_ts: now - 20 * 24 * 60 * 60 * 1000,
-      last_updated_ts: now - 24 * 60 * 60 * 1000,
-    },
-    {
-      id: "cred_4",
-      platformType: "vapi",
-      name: "Vapi",
-      method: "api",
-      status: "connected",
-      created_at_ts: now - 30 * 24 * 60 * 60 * 1000,
-      last_updated_ts: now - 3 * 24 * 60 * 60 * 1000,
-    },
-    {
-      id: "cred_5",
-      platformType: "retell",
-      name: "Retell",
-      method: "api",
-      status: "attention",
-      created_at_ts: now - 45 * 24 * 60 * 60 * 1000,
-      last_updated_ts: now - 7 * 24 * 60 * 60 * 1000,
-    },
-  ];
+  const { data: membership } = await supabase
+    .from("memberships")
+    .select("tenant_id")
+    .eq("user_id", user.id)
+    .limit(1)
+    .maybeSingle();
 
-  return NextResponse.json({ ok: true, credentials });
+  if (!membership?.tenant_id) {
+    return NextResponse.json({ ok: false, code: "TENANT_ACCESS_DENIED" }, { status: 403 });
+  }
+
+  // IMPORTANT:
+  // - We need secret_hash to derive method (api/webhook/mcp)
+  // - We need created_at and updated_at to display Created / Last updated (n8n-like)
+  const { data, error } = await supabase
+    .from("sources")
+    .select("id,type,name,status,created_at,updated_at,secret_hash")
+    .eq("tenant_id", membership.tenant_id)
+    .order("updated_at", { ascending: false });
+
+  if (error) {
+    return NextResponse.json({ ok: false, code: "UNKNOWN_ERROR", message: error.message }, { status: 500 });
+  }
+
+  const rows: CredentialRow[] = (data ?? []).map((s: any) => {
+    let method: ConnectMethod = "api";
+
+    // secret_hash contains JSON with `{ method, platformType, ... }` encrypted (see connections/connect route)
+    try {
+      if (typeof s.secret_hash === "string" && s.secret_hash.length > 0) {
+        const decrypted = decryptSecret(s.secret_hash);
+        const parsed = JSON.parse(decrypted);
+        method = safeMethod(parsed?.method);
+      }
+    } catch {
+      // keep default
+    }
+
+    return {
+      id: String(s.id),
+      platformType: String(s.type),
+      name: String(s.name ?? ""),
+      status: (s.status ?? null) as string | null,
+      method,
+      created_at: String(s.created_at ?? ""),
+      updated_at: String(s.updated_at ?? s.created_at ?? ""),
+    };
+  });
+
+  return NextResponse.json({ ok: true, credentials: rows });
 }
 

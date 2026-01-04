@@ -3,15 +3,16 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Eye,
-  Edit,
+  KeyRound,
+  Webhook as WebhookIcon,
+  Bot,
   MoreVertical,
+  Eye,
+  Settings,
+  Edit,
   Trash2,
   Filter as FilterIcon,
   Search as SearchIcon,
-  KeyRound,
-  WebhookIcon,
-  Bot,
 } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
@@ -45,10 +46,10 @@ type CredentialRow = {
   id: string;
   platformType: string;
   name: string;
+  status: string | null;
   method: ConnectMethod;
-  status: "connected" | "attention" | "error";
-  created_at_ts: number;
-  last_updated_ts: number;
+  created_at: string; // ISO string from Supabase
+  updated_at: string; // ISO string from Supabase
 };
 
 type CredentialSort = "last_updated" | "last_created" | "name_az";
@@ -68,14 +69,17 @@ const PLATFORM_META = {
   retell: { label: "Retell", Icon: RetellLogo },
 };
 
-function StatusPill({ status }: { status: "active" | "error" | "inactive" }) {
-  if (status === "active") {
+function StatusPill({ status }: { status: string | null }) {
+  if (status === "active" || status === "connected") {
     return <span className="inline-flex items-center gap-1.5 rounded-full border border-green-200 bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-700">Connected</span>;
   }
   if (status === "error") {
     return <span className="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700">Error</span>;
   }
-  return <span className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-semibold text-gray-700">Attention</span>;
+  if (status === "inactive") {
+    return <span className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-semibold text-gray-700">Inactive</span>;
+  }
+  return <span className="inline-flex items-center gap-1.5 rounded-full border border-yellow-200 bg-yellow-50 px-2.5 py-1 text-xs font-semibold text-yellow-700">Attention</span>;
 }
 
 function CredentialsDropdownMenu({ sourceId, onClose }: { sourceId: string; onClose: () => void }) {
@@ -328,7 +332,9 @@ export default function ConnectionsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter]);
 
-  function formatRelativeFromTs(ts: number) {
+  function formatRelativeFromIso(iso: string) {
+    const ts = Date.parse(iso);
+    if (!Number.isFinite(ts)) return "";
     const deltaMs = Date.now() - ts;
     const min = Math.floor(deltaMs / 60000);
     if (min < 60) return `${Math.max(min, 1)} min ago`;
@@ -340,8 +346,10 @@ export default function ConnectionsPage() {
     return `${wk} week${wk === 1 ? "" : "s"} ago`;
   }
 
-  function formatDateFromTs(ts: number) {
-    return new Date(ts).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  function formatDateFromIso(iso: string) {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "";
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   }
 
   const platformOptions = useMemo(() => {
@@ -403,11 +411,11 @@ export default function ConnectionsPage() {
     }
 
     if (credentialsSort === "name_az") {
-      rows.sort((a, b) => a.name.localeCompare(b.name));
+      rows.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
     } else if (credentialsSort === "last_created") {
-      rows.sort((a, b) => b.created_at_ts - a.created_at_ts);
+      rows.sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
     } else {
-      rows.sort((a, b) => b.last_updated_ts - a.last_updated_ts);
+      rows.sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at));
     }
 
     return rows;
@@ -632,7 +640,13 @@ export default function ConnectionsPage() {
 
                 const methodLabel = c.method === "api" ? "API" : c.method === "webhook" ? "Webhook" : "MCP";
                 const methodIcon =
-                  c.method === "api" ? <KeyRound className="h-3.5 w-3.5" /> : c.method === "webhook" ? <WebhookIcon className="h-3.5 w-3.5" /> : <Bot className="h-3.5 w-3.5" />;
+                  c.method === "api" ? (
+                    <KeyRound className="h-3.5 w-3.5" />
+                  ) : c.method === "webhook" ? (
+                    <WebhookIcon className="h-3.5 w-3.5" />
+                  ) : (
+                    <Bot className="h-3.5 w-3.5" />
+                  );
 
                 return (
                   <div key={c.id} className="rounded-lg border border-gray-200 bg-white p-4 hover:shadow-sm transition-shadow">
@@ -651,30 +665,26 @@ export default function ConnectionsPage() {
                             </span>
 
                             <span className="text-gray-300">|</span>
-                            <span>Last updated {formatRelativeFromTs(c.last_updated_ts)}</span>
+                            <span>Last updated {formatRelativeFromIso(c.updated_at)}</span>
 
                             <span className="text-gray-300">|</span>
-                            <span>Created {formatDateFromTs(c.created_at_ts)}</span>
+                            <span>Created {formatDateFromIso(c.created_at)}</span>
                           </div>
                         </div>
                       </div>
 
                       <div className="flex items-center gap-2">
-                        <StatusPill status={c.status === "connected" ? "active" : c.status === "error" ? "error" : "inactive"} />
+                        <StatusPill status={c.status} />
                         <div className="relative">
-                          <DropdownMenu.Root>
-                            <DropdownMenu.Trigger asChild>
-                              <button
-                                onClick={() => setOpenDropdownId(openDropdownId === c.id ? null : c.id)}
-                                className="p-1 rounded-lg hover:bg-gray-100"
-                              >
-                                <MoreVertical className="h-5 w-5 text-gray-600" />
-                              </button>
-                            </DropdownMenu.Trigger>
-                            {openDropdownId === c.id && (
-                              <CredentialsDropdownMenu sourceId={c.id} onClose={() => setOpenDropdownId(null)} />
-                            )}
-                          </DropdownMenu.Root>
+                          <button
+                            onClick={() => setOpenDropdownId(openDropdownId === c.id ? null : c.id)}
+                            className="p-1 rounded-lg hover:bg-gray-100"
+                          >
+                            <MoreVertical className="h-5 w-5 text-gray-600" />
+                          </button>
+                          {openDropdownId === c.id && (
+                            <CredentialsDropdownMenu sourceId={c.id} onClose={() => setOpenDropdownId(null)} />
+                          )}
                         </div>
                       </div>
                     </div>
