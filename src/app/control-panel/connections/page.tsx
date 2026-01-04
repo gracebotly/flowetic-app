@@ -216,7 +216,15 @@ function EntityRow({
   return (
     <div className="flex items-center justify-between rounded-lg border border-gray-100 p-4 hover:bg-gray-50">
       <div className="flex items-center space-x-3">
-        <PlatformIcon platform={entity.platform} />
+        {(() => {
+          const meta = PLATFORM_META[String(entity.platform).toLowerCase()];
+          const Icon = meta?.Icon;
+          return (
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-800">
+              {Icon ? <Icon className="h-5 w-5" /> : null}
+            </div>
+          );
+        })()}
         <div>
           <div className="font-medium text-gray-900">{entity.name}</div>
           <div className="text-sm text-gray-500">
@@ -635,7 +643,7 @@ export default function ConnectionsPage() {
           {!credentialsLoading ? (
             <div className="mt-6 space-y-3">
               {displayedCredentials.map((c) => {
-                const meta = PLATFORM_META[String(c.platformType)];
+                const meta = PLATFORM_META[String(c.platformType).toLowerCase()];
                 const Icon = meta?.Icon;
 
                 const methodLabel = c.method === "api" ? "API" : c.method === "webhook" ? "Webhook" : "MCP";
