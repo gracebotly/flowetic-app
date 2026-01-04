@@ -426,6 +426,12 @@ export default function ConnectionsPage() {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [selectedEntity, setSelectedEntity] = useState<IndexedEntityRow | null>(null);
 
+  // Inventory state for n8n workflows
+  const [inventoryLoading, setInventoryLoading] = useState(false);
+  const [inventoryErr, setInventoryErr] = useState<string | null>(null);
+  const [inventoryEntities, setInventoryEntities] = useState<Array<{ externalId: string; displayName: string; entityKind: string }>>([]);
+  const [selectedExternalIds, setSelectedExternalIds] = useState<Set<string>>(new Set());
+
   async function loadEntities() {
     setLoading(true);
     setErrMsg(null);
@@ -478,6 +484,39 @@ export default function ConnectionsPage() {
 
     setIndexedEntities((json.entities as IndexedEntityRow[]) ?? []);
     setIndexedLoading(false);
+  }
+
+  async function loadN8nInventory(sourceId: string) {
+    setInventoryLoading(true);
+    setInventoryErr(null);
+
+    // 1) Import from n8n into source_entities
+    const importRes = await fetch("/api/connections/inventory/n8n/import", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sourceId }),
+    });
+    const importJson = await importRes.json().catch(() => ({}));
+    if (!importRes.ok || !importJson?.ok) {
+      setInventoryLoading(false);
+      setInventoryEntities([]);
+      setInventoryErr(importJson?.message || "Failed to import workflows from n8n.");
+      return;
+    }
+
+    // 2) List imported entities
+    const listRes = await fetch(`/api/connections/inventory/n8n/list?sourceId=${encodeURIComponent(sourceId)}`, { method: "GET" });
+    const listJson = await listRes.json().catch(() => ({}));
+    if (!listRes.ok || !listJson?.ok) {
+      setInventoryLoading(false);
+      setInventoryEntities([]);
+      setInventoryErr(listJson?.message || "Failed to load workflows.");
+      return;
+    }
+
+    setInventoryEntities((listJson.entities as any[]) ?? []);
+    setSelectedExternalIds(new Set());
+    setInventoryLoading(false);
   }
 
   useEffect(() => {
@@ -659,6 +698,11 @@ export default function ConnectionsPage() {
 
     setCreatedSourceId(sourceId);
     setStep("entities");
+    
+    if (selectedPlatform === "n8n" && selectedMethod === "api") {
+      await loadN8nInventory(sourceId);
+    }
+    
     setSaving(false);
   }
 
@@ -1394,92 +1438,102 @@ export default function ConnectionsPage() {
 {step === "entities" ? (
   <div className="space-y-4">
     <div className="text-sm text-gray-700">
-      Choose one or more entities (workflows/agents/etc.) to index for analytics and optional AI actions. Each requires a unique External ID and Display Name.
+      Select the workflows you want GetFlowetic to index.
     </div>
 
-    <div className="flex flex-col gap-3 pb-4">
-      <div className="flex items-center gap-2">
-        <select
-          value={entityKind}
-          onChange={(e) => setEntityKind(e.target.value as EntityDraft["entityKind"])}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-        >
-          <option value="workflow">Workflow</option>
-          <option value="scenario">Scenario</option>
-          <option value="flow">Flow</option>
-          <option value="agent">Agent</option>
-          <option value="assistant">Assistant</option>
-          <option value="squad">Squad</option>
-        </select>
+    {inventoryErr ? (
+      <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{inventoryErr}</div>
+    ) : null}
 
-        <input
-          value={entityExternalId}
-          onChange={(e) => setEntityExternalId(e.target.value)}
-          type="text"
-          className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-          placeholder="External ID (unique for each entity)"
-        />
-        <input
-          value={entityDisplayName}
-          onChange={(e) => setEntityDisplayName(e.target.value)}
-          type="text"
-          className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-          placeholder="Display Name"
-        />
+    {inventoryLoading ? (
+      <div className="text-sm text-gray-600">Loading workflows…</div>
+    ) : null}
 
-        <button
-          type="button"
-          onClick={addEntityDraft}
-          disabled={!entityExternalId.trim() || !entityDisplayName.trim()}
-          className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-          title="Add"
-        >
-          <PlusCircle className="h-5 w-5" />
-        </button>
-      </div>
-    </div>
-
-    <div className="space-y-1">
-      {connectEntities.length === 0 ? (
-        <div className="rounded-md bg-gray-50 p-4 text-center text-sm text-gray-600">
-          No entities added yet. Add at least one entity to continue.
-        </div>
-      ) : (
-        connectEntities.map((e, i) => (
-          <div key={i} className="flex items-center justify-between rounded-md border border-gray-200 bg-white px-3 py-2">
-            <div className="truncate text-sm">
-              <span className="font-mono text-xs text-gray-500 uppercase">{e.entityKind}</span>
-              <span className="mx-2 text-gray-400">•</span>
-              <span className="font-medium text-slate-900">{e.displayName}</span>
-              <span className="mx-2 text-gray-400">•</span>
-              <span className="font-mono text-xs text-gray-500">{e.externalId}</span>
-            </div>
-            <button
-              type="button"
-              onClick={() => removeEntityDraft(i)}
-              className="ml-4 text-red-500 hover:text-red-700"
-              title="Remove"
-            >
-              <X className="h-4 w-4" />
-            </button>
+    {!inventoryLoading ? (
+      <div className="max-h-[320px] overflow-auto rounded-lg border border-gray-200">
+        {inventoryEntities.length === 0 ? (
+          <div className="p-4 text-sm text-gray-600">No workflows found in this n8n instance.</div>
+        ) : (
+          <div className="divide-y divide-gray-200">
+            {inventoryEntities.map((e) => {
+              const checked = selectedExternalIds.has(e.externalId);
+              return (
+                <label key={e.externalId} className="flex cursor-pointer items-center justify-between px-4 py-3 hover:bg-gray-50">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold text-gray-900">{e.displayName}</div>
+                    <div className="truncate text-xs text-gray-500">ID: {e.externalId}</div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => {
+                      setSelectedExternalIds((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(e.externalId)) next.delete(e.externalId);
+                        else next.add(e.externalId);
+                        return next;
+                      });
+                    }}
+                    className="h-4 w-4"
+                  />
+                </label>
+              );
+            })}
           </div>
-        ))
-      )}
-    </div>
+        )}
+      </div>
+    ) : null}
 
     <div className="flex justify-end gap-2 pt-2">
       <button
         type="button"
         onClick={() => setStep("credentials")}
         className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-200"
-        disabled={saving}
+        disabled={saving || inventoryLoading}
       >
         Back
       </button>
+
       <button
         type="button"
-        onClick={saveEntitiesSelection}
-        disabled={saving || connectEntities.length === 0}
+        onClick={async () => {
+          if (!createdSourceId) return;
+
+          const selected = inventoryEntities.filter((e) => selectedExternalIds.has(e.externalId));
+          if (selected.length === 0) {
+            setErrMsg("Select at least one workflow to continue.");
+            return;
+          }
+
+          setSaving(true);
+          setErrMsg(null);
+
+          const res = await fetch("/api/connections/entities/save", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              sourceId: createdSourceId,
+              entities: selected.map((w) => ({
+                externalId: w.externalId,
+                displayName: w.displayName,
+                entityKind: "workflow",
+                enabledForAnalytics: true,
+                enabledForActions: false,
+              })),
+            }),
+          });
+
+          const json = await res.json().catch(() => ({}));
+          if (!res.ok || !json?.ok) {
+            setSaving(false);
+            setErrMsg(json?.message || "Failed to save selection.");
+            return;
+          }
+
+          setSaving(false);
+          setStep("success");
+        }}
+        disabled={saving || inventoryLoading || selectedExternalIds.size === 0}
         className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600 disabled:opacity-50"
       >
         {saving ? "Saving..." : "Continue"}

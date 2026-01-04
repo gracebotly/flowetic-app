@@ -71,7 +71,7 @@ export async function POST(req: Request) {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
 
   if ((secret.authMode ?? "bearer") === "header") {
-    headers["X-N8N-API-KEY"] = secret.apiKey;
+    headers["X-N8N-API-KEY"] = secret.apiKey!;
   } else {
     headers["Authorization"] = `Bearer ${secret.apiKey}`;
   }
