@@ -294,6 +294,7 @@ export default function ConnectionsPage() {
   const [pendingStatusFilter, setPendingStatusFilter] = useState<string>("indexed");
 
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
 
   // Credentials state
   const [credentials, setCredentials] = useState<CredentialRow[]>([]);
