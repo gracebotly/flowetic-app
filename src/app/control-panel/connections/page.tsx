@@ -851,9 +851,7 @@ export default function ConnectionsPage() {
       {/* All Entities View */}
       {filter === "all" ? (
         <>
-          <div className="mb-6">
-            <h2 className="text-lg font-medium text-gray-900 mb-2">Workflows, agents, and automations you have indexed</h2>
-          </div>
+          
 
           <div className="mt-6 flex items-center justify-between">
             <div className="relative w-[400px]">

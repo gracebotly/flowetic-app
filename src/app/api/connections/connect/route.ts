@@ -142,7 +142,7 @@ export async function POST(req: Request) {
       type: platformType,
       name: connectionName || platformType.toUpperCase(),
       secret_hash,
-      status: "connected",
+      status: "active",
     })
     .select("id,type,name,status")
     .single();
