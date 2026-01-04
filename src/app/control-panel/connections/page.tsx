@@ -1,71 +1,74 @@
 
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { KeyRound, Webhook as WebhookIcon, Bot, MoreVertical, Eye, Settings, Edit, Trash2 } from "lucide-react";
-import { ActivepiecesLogo, MakeLogo, N8nLogo, RetellLogo, VapiLogo } from "@/components/connections/platform-icons";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  KeyRound,
+  Webhook as WebhookIcon,
+  Bot,
+  MoreVertical,
+  Eye,
+  Settings,
+  Edit,
+  Trash2,
+  Search as SearchIcon,
+  PlusCircle,
+  X,
+} from "lucide-react";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import {
+  N8nLogo,
+  MakeLogo,
+  ActivepiecesLogo,
+  VapiLogo,
+  RetellLogo,
+} from "@/components/connections/platform-icons";
 
-type Source = {
+type EntityType = "workflow" | "agent" | "voice_agent" | "automation";
+
+type IndexedEntity = {
   id: string;
-  type: string;
   name: string;
-  status: string | null;
+  platform: string;
+  type: EntityType;
+  last_seen_at: string; // display string (server can return formatted)
+  created_at: string; // display string (server can return formatted)
+  created_at_ts?: number; // optional unix ms for accurate sorting
+  last_updated_ts?: number; // optional unix ms for accurate sorting
+  last_updated_at?: string; // optional display
+  indexed?: boolean;
 };
 
-type FilterKey = "all" | "credentials";
-
-const PLATFORM_META: Record<
-  string,
-  {
-    label: string;
-    description: string;
-    Icon: React.ComponentType<{ className?: string }>;
-    category: "automations" | "voice_ai";
-    supportsMcp: boolean;
-  }
-> = {
-  n8n: { label: "n8n", description: "Workflow automation", Icon: N8nLogo, category: "automations", supportsMcp: true },
-  make: { label: "Make", description: "Automation scenarios", Icon: MakeLogo, category: "automations", supportsMcp: true },
-  activepieces: { label: "Activepieces", description: "Open-source automation", Icon: ActivepiecesLogo, category: "automations", supportsMcp: true },
-  vapi: { label: "Vapi", description: "Voice agent platform", Icon: VapiLogo, category: "voice_ai", supportsMcp: false },
-  retell: { label: "Retell", description: "Voice agent platform", Icon: RetellLogo, category: "voice_ai", supportsMcp: false },
-};
-
-function statusBucket(status: string | null): "connected" | "attention" | "error" | "available" {
-  if (!status || status === "active") return "connected";
-  if (status === "error") return "error";
-  if (status === "inactive") return "available";
-  return "attention";
-}
-
-function StatusPill({ status }: { status: string | null }) {
-  const bucket = statusBucket(status);
-  const text =
-    bucket === "connected"
-      ? "Connected"
-      : bucket === "available"
-      ? "Connected • Not indexing"
-      : bucket === "error"
-      ? "Error"
-      : "Attention needed";
-
-  const styles =
-    bucket === "connected"
-      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-      : bucket === "available"
-      ? "bg-blue-50 text-blue-700 border-blue-200"
-      : bucket === "error"
-      ? "bg-red-50 text-red-700 border-red-200"
-      : "bg-amber-50 text-amber-800 border-amber-200";
-
-  return (
-    <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${styles}`}>
-      {text}
-    </span>
-  );
-}
+type SortKey = "created_at" | "last_updated" | "name";
 
 type ConnectMethod = "api" | "webhook" | "mcp";
+
+type IndexedEntityRow = {
+  id: string;
+  name: string;
+  platform: string;
+  kind: "workflow" | "scenario" | "flow" | "agent" | "assistant" | "squad";
+  externalId: string;
+  sourceId: string;
+  lastSeenAt: string | null;
+  createdAt: string;
+  createdAtTs: number;
+  lastUpdatedTs: number;
+};
+
+type AllSort = "created_at" | "last_updated" | "name_az";
+
+type CredentialRow = {
+  id: string;
+  platformType: string;
+  name: string;
+  status: string | null;
+  method: ConnectMethod;
+  created_at: string; // ISO string from Supabase
+  updated_at: string; // ISO string from Supabase
+};
+
+type CredentialSort = "last_updated" | "last_created" | "name_az";
 
 type EntityDraft = {
   externalId: string;
@@ -75,92 +78,483 @@ type EntityDraft = {
   enabledForActions: boolean;
 };
 
-export default function ConnectionsPage() {
-  const [sources, setSources] = useState<Source[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<FilterKey>("all");
+const entityTypeLabel: Record<EntityType, string> = {
+  workflow: "Workflow",
+  agent: "Agent",
+  voice_agent: "Voice Agent",
+  automation: "Automation",
+};
 
-  // Modal state
+const PLATFORM_META = {
+  n8n: { 
+    label: "n8n", 
+    Icon: N8nLogo,
+    description: "Workflow automation platform"
+  },
+  make: { 
+    label: "Make", 
+    Icon: MakeLogo,
+    description: "Visual automation builder"
+  },
+  activepieces: { 
+    label: "Activepieces", 
+    Icon: ActivepiecesLogo,
+    description: "Open-source automation tool"
+  },
+  vapi: { 
+    label: "Vapi", 
+    Icon: VapiLogo,
+    description: "Voice AI platform"
+  },
+  retell: { 
+    label: "Retell", 
+    Icon: RetellLogo,
+    description: "Voice agent platform"
+  },
+};
+
+type PlatformKey = keyof typeof PLATFORM_META;
+
+const PLATFORM_KEYS = Object.keys(PLATFORM_META) as PlatformKey[];
+
+function getPlatformMeta(platformType: string) {
+  const normalized = platformType.toLowerCase();
+  const key = PLATFORM_KEYS.find((k) => k === normalized);
+  return key ? PLATFORM_META[key] : undefined;
+}
+
+function StatusPill({ status }: { status: string | null }) {
+  if (status === "active" || status === "connected") {
+    return <span className="inline-flex items-center gap-1.5 rounded-full border border-green-200 bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-700">Connected</span>;
+  }
+  if (status === "error") {
+    return <span className="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700">Error</span>;
+  }
+  if (status === "inactive") {
+    return <span className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-semibold text-gray-700">Inactive</span>;
+  }
+  return <span className="inline-flex items-center gap-1.5 rounded-full border border-yellow-200 bg-yellow-50 px-2.5 py-1 text-xs font-semibold text-yellow-700">Attention</span>;
+}
+
+function CredentialsDropdownMenu({ sourceId, onClose }: { sourceId: string; onClose: () => void }) {
+  return (
+    <DropdownMenu.Portal>
+      <DropdownMenu.Content side="bottom" align="end" className="z-50 min-w-[160px] rounded-md border bg-white p-1 shadow">
+        <DropdownMenu.Item 
+          className="rounded px-2 py-1.5 text-sm hover:bg-gray-100 cursor-pointer"
+          onClick={() => {
+            alert(`Configure: ${sourceId}`);
+            onClose();
+          }}
+        >
+          Configure
+        </DropdownMenu.Item>
+        <DropdownMenu.Item 
+          className="rounded px-2 py-1.5 text-sm hover:bg-gray-100 cursor-pointer" 
+          onClick={() => {
+            alert(`Edit: ${sourceId}`);
+            onClose();
+          }}
+        >
+          Edit
+        </DropdownMenu.Item>
+        <DropdownMenu.Item 
+          className="rounded px-2 py-1.5 text-sm text-red-600 hover:bg-gray-100 cursor-pointer" 
+          onClick={() => {
+            alert(`Delete: ${sourceId}`);
+            onClose();
+          }}
+        >
+          Delete
+        </DropdownMenu.Item>
+      </DropdownMenu.Content>
+    </DropdownMenu.Portal>
+  );
+}
+
+function KebabMenu({
+  isOpen,
+  onToggle,
+  onClose,
+  onViewDetails,
+  onEdit,
+  onDelete,
+}: {
+  isOpen: boolean;
+  onToggle: () => void;
+  onClose: () => void;
+  onViewDetails: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (!isOpen) return;
+      const t = e.target as Node | null;
+      if (!t) return;
+      if (!menuRef.current) return;
+      if (!menuRef.current.contains(t)) onClose();
+    }
+
+    document.addEventListener("click", handleClickOutside);
+    return () => document.removeEventListener("click", handleClickOutside);
+  }, [isOpen, onClose]);
+
+  return (
+    <div className="relative" ref={menuRef}>
+      <button
+        type="button"
+        onClick={onToggle}
+        className="text-gray-400 hover:text-gray-600"
+        aria-haspopup="menu"
+        aria-expanded={isOpen}
+        aria-label="Row actions"
+      >
+        <MoreVertical className="h-4 w-4" />
+      </button>
+
+      {isOpen ? (
+        <div className="absolute right-0 top-8 z-10 w-48 rounded-lg border border-gray-200 bg-white py-2 shadow-lg">
+          <button
+            type="button"
+            onClick={() => {
+              onViewDetails();
+              onClose();
+            }}
+            className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+          >
+            <Eye className="h-4 w-4" />
+            View Details
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              onEdit();
+              onClose();
+            }}
+            className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+          >
+            <Edit className="h-4 w-4" />
+            Edit
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              onDelete();
+              onClose();
+            }}
+            className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-gray-100 flex items-center gap-2"
+          >
+            <Trash2 className="h-4 w-4" />
+            Delete
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function EntityDropdownMenu({
+  entityId,
+  isOpen,
+  onClose,
+}: {
+  entityId: string;
+  isOpen: boolean;
+  onClose: () => void;
+}) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="dropdown-menu absolute right-0 z-50 mt-1 w-48 rounded-lg border border-gray-200 bg-white shadow-lg">
+      <button
+        onClick={() => {
+          console.log("View Details for entity", entityId);
+          onClose();
+        }}
+        className="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+      >
+        <Eye className="h-4 w-4" />
+        View Details
+      </button>
+
+      <button
+        onClick={() => {
+          console.log("Edit entity", entityId);
+          onClose();
+        }}
+        className="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+      >
+        <Edit className="h-4 w-4" />
+        Edit
+      </button>
+
+      <button
+        onClick={() => {
+          console.log("Delete entity", entityId);
+          onClose();
+        }}
+        className="flex w-full items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+      >
+        <Trash2 className="h-4 w-4" />
+        Delete
+      </button>
+    </div>
+  );
+}
+
+function EntityRow({
+  entity,
+  openEntityDropdownId,
+  setOpenEntityDropdownId,
+}: {
+  entity: IndexedEntity;
+  openEntityDropdownId: string | null;
+  setOpenEntityDropdownId: (id: string | null) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between rounded-lg border border-gray-100 p-4 hover:bg-gray-50">
+      <div className="flex items-center space-x-3">
+        {(() => {
+          const meta = getPlatformMeta(String(entity.platform));
+          const Icon = meta?.Icon;
+          return (
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-800">
+              {Icon ? <Icon className="h-5 w-5" /> : null}
+            </div>
+          );
+        })()}
+        <div>
+          <div className="font-medium text-gray-900">{entity.name}</div>
+          <div className="text-sm text-gray-500">
+            {entityTypeLabel[entity.type] || entity.type} • {entity.platform}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center space-x-4">
+        <div className="text-sm text-gray-500 text-right">
+          <div>Last seen: {entity.last_seen_at}</div>
+          <div>Created: {entity.created_at}</div>
+        </div>
+
+        <div className="flex items-center space-x-2">
+          <span className="rounded-full bg-green-100 px-2 py-1 text-xs font-medium text-green-700">
+            Indexed
+          </span>
+
+          <div className="relative">
+            <button
+              onClick={() => setOpenEntityDropdownId(openEntityDropdownId === entity.id ? null : entity.id)}
+              className="p-1 rounded-lg hover:bg-gray-100"
+            >
+              <MoreVertical className="h-5 w-5 text-gray-600" />
+            </button>
+
+            <EntityDropdownMenu
+              entityId={entity.id}
+              isOpen={openEntityDropdownId === entity.id}
+              onClose={() => setOpenEntityDropdownId(null)}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function ConnectionsPage() {
+  // Main data states
+  const [entities, setEntities] = useState<IndexedEntity[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [errMsg, setErrMsg] = useState<string | null>(null);
+
+  // UI state for All tab
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState<SortKey>("created_at");
+
+  // Tab state (for switching between All, Credentials)
+  const [filter, setFilter] = useState<string>("all");
+
+  // Dropdown states
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
+  const [openEntityDropdownId, setOpenEntityDropdownId] = useState<string | null>(null);
+
+  // Connect modal state
   const [connectOpen, setConnectOpen] = useState(false);
   const [step, setStep] = useState<"platform" | "method" | "credentials" | "entities" | "success">("platform");
+  const [mcpHelpOpen, setMcpHelpOpen] = useState(false);
+  
+  // Connect form state
   const [selectedPlatform, setSelectedPlatform] = useState<keyof typeof PLATFORM_META | null>(null);
-  const [selectedMethod, setSelectedMethod] = useState<ConnectMethod>("api");
-
-  // credentials
+  const [selectedMethod, setSelectedMethod] = useState<"api" | "webhook" | "mcp">("api");
+  const [n8nAuthMode, setN8nAuthMode] = useState<"header" | "bearer">("bearer");
   const [apiKey, setApiKey] = useState("");
   const [instanceUrl, setInstanceUrl] = useState("");
   const [mcpUrl, setMcpUrl] = useState("");
+  const [mcpAccessToken, setMcpAccessToken] = useState("");
   const [authHeader, setAuthHeader] = useState("");
   const [connectionName, setConnectionName] = useState("");
-
-  // connected source id (created)
   const [createdSourceId, setCreatedSourceId] = useState<string | null>(null);
-
-  // entity selection drafts (manual placeholder)
-  const [entities, setEntities] = useState<EntityDraft[]>([]);
+  const [connectEntities, setConnectEntities] = useState<EntityDraft[]>([]);
+  const [entityKind, setEntityKind] = useState<EntityDraft["entityKind"]>("workflow");
   const [entityExternalId, setEntityExternalId] = useState("");
   const [entityDisplayName, setEntityDisplayName] = useState("");
-  const [entityKind, setEntityKind] = useState<EntityDraft["entityKind"]>("workflow");
   const [saving, setSaving] = useState(false);
-  const [errMsg, setErrMsg] = useState<string | null>(null);
 
-  // Search and sort state
-  const [searchTerm, setSearchTerm] = useState("");
-  const [sortBy, setSortBy] = useState<"lastUpdated" | "name" | "type">("lastUpdated");
-  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
+  // Credentials state
+  const [credentials, setCredentials] = useState<CredentialRow[]>([]);
+  const [credentialsLoading, setCredentialsLoading] = useState(false);
+  const [credentialsErr, setCredentialsErr] = useState<string | null>(null);
+  const [credentialsSearch, setCredentialsSearch] = useState("");
+  const [credentialsSort, setCredentialsSort] = useState<CredentialSort>("last_updated");
 
-  // Dropdown state
-  const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
+  // All tab entity states
+  const [indexedEntities, setIndexedEntities] = useState<IndexedEntityRow[]>([]);
+  const [indexedLoading, setIndexedLoading] = useState(false);
+  const [indexedErr, setIndexedErr] = useState<string | null>(null);
 
-  async function refreshSources() {
+  const [allSearch, setAllSearch] = useState("");
+  const [allSort, setAllSort] = useState<AllSort>("created_at");
+
+  const [openEntityMenuId, setOpenEntityMenuId] = useState<string | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [selectedEntity, setSelectedEntity] = useState<IndexedEntityRow | null>(null);
+
+  async function loadEntities() {
     setLoading(true);
     setErrMsg(null);
-    const res = await fetch("/api/connections/list", { method: "GET" });
+
+    const res = await fetch("/api/indexed-entities/list", { method: "GET" });
     const json = await res.json().catch(() => ({}));
+
     if (!res.ok || !json?.ok) {
-      setSources([]);
+      setEntities([]);
       setLoading(false);
-      setErrMsg(json?.message || "Failed to load connections.");
+      setErrMsg(json?.message || "Failed to load indexed entities.");
       return;
     }
-    setSources((json.sources as Source[]) ?? []);
+
+    setEntities((json.entities as IndexedEntity[]) ?? []);
     setLoading(false);
   }
 
+  async function refreshCredentials() {
+    setCredentialsLoading(true);
+    setCredentialsErr(null);
+
+    const res = await fetch("/api/credentials/list", { method: "GET" });
+    const json = await res.json().catch(() => ({}));
+
+    if (!res.ok || !json?.ok) {
+      setCredentials([]);
+      setCredentialsLoading(false);
+      setCredentialsErr(json?.message || "Failed to load credentials.");
+      return;
+    }
+
+    setCredentials((json.credentials as CredentialRow[]) ?? []);
+    setCredentialsLoading(false);
+  }
+
+  async function refreshIndexedEntities() {
+    setIndexedLoading(true);
+    setIndexedErr(null);
+
+    const res = await fetch("/api/indexed-entities/list", { method: "GET" });
+    const json = await res.json().catch(() => ({}));
+
+    if (!res.ok || !json?.ok) {
+      setIndexedEntities([]);
+      setIndexedLoading(false);
+      setIndexedErr(json?.message || "Failed to load indexed items.");
+      return;
+    }
+
+    setIndexedEntities((json.entities as IndexedEntityRow[]) ?? []);
+    setIndexedLoading(false);
+  }
+
   useEffect(() => {
-    refreshSources();
+    refreshIndexedEntities();
+    loadEntities();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const filteredSources = useMemo(() => {
-    let filtered = sources;
-    
-    // Filter by tab
+  useEffect(() => {
     if (filter === "credentials") {
-      filtered = sources.filter(s => PLATFORM_META[String(s.type)]?.category === "automations");
+      refreshCredentials();
     }
-    
-    // Filter by search term
-    if (searchTerm) {
-      filtered = filtered.filter(s => 
-        s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        PLATFORM_META[String(s.type)]?.label.toLowerCase().includes(searchTerm.toLowerCase())
-      );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filter]);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      const target = event.target as Element;
+      if (!target.closest('[data-entity-menu]')) {
+        setOpenEntityMenuId(null);
+        setDeleteConfirmId(null);
+      }
     }
-    
-    return filtered;
-  }, [sources, filter, searchTerm]);
+
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, []);
+
+  function formatRelativeFromIso(iso: string) {
+    const ts = Date.parse(iso);
+    if (!Number.isFinite(ts)) return "";
+    const deltaMs = Date.now() - ts;
+    const min = Math.floor(deltaMs / 60000);
+    if (min < 60) return `${Math.max(min, 1)} min ago`;
+    const hr = Math.floor(min / 60);
+    if (hr < 24) return `${hr} hours ago`;
+    const day = Math.floor(hr / 24);
+    if (day < 7) return `${day} days ago`;
+    const wk = Math.floor(day / 7);
+    return `${wk} week${wk === 1 ? "" : "s"} ago`;
+  }
+
+  function formatDateFromIso(iso: string) {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "";
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  }
+
+  function formatRelativeFromTs(ts: number) {
+    const deltaMs = Date.now() - ts;
+    const min = Math.floor(deltaMs / 60000);
+    if (min < 60) return `${Math.max(min, 1)} min ago`;
+    const hr = Math.floor(min / 60);
+    if (hr < 24) return `${hr} hours ago`;
+    const day = Math.floor(hr / 24);
+    if (day < 7) return `${day} days ago`;
+    const wk = Math.floor(day / 7);
+    return `${wk} week${wk === 1 ? "" : "s"} ago`;
+  }
+
+  function formatDateFromTs(ts: number) {
+    return new Date(ts).toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" });
+  }
 
   function resetModal() {
     setStep("platform");
     setSelectedPlatform(null);
     setSelectedMethod("api");
+    setN8nAuthMode("bearer");
     setApiKey("");
     setInstanceUrl("");
     setMcpUrl("");
+    setMcpAccessToken("");
     setAuthHeader("");
     setConnectionName("");
     setCreatedSourceId(null);
-    setEntities([]);
+    setConnectEntities([]);
     setEntityExternalId("");
     setEntityDisplayName("");
     setSaving(false);
@@ -190,15 +584,53 @@ export default function ConnectionsPage() {
     };
 
     if (selectedMethod === "api") {
+      if (selectedPlatform === "n8n" && selectedMethod === "api") {
+        if (!apiKey.trim()) {
+          setSaving(false);
+          setErrMsg("API Key is required.");
+          return;
+        }
+        if (!instanceUrl.trim()) {
+          setSaving(false);
+          setErrMsg("Instance URL is required for n8n API connections.");
+          return;
+        }
+      }
+      
       payload.apiKey = apiKey;
+
       if (instanceUrl) payload.instanceUrl = instanceUrl;
+
+      // n8n on your instance requires X-N8N-API-KEY header (no UI dropdown)
+      if (selectedPlatform === "n8n") {
+        payload.n8nAuthMode = "header";
+      }
     }
+
     if (selectedMethod === "webhook") {
       if (instanceUrl) payload.instanceUrl = instanceUrl;
     }
+
     if (selectedMethod === "mcp") {
+      if (selectedPlatform === "n8n" && selectedMethod === "mcp") {
+        if (!instanceUrl.trim()) {
+          setSaving(false);
+          setErrMsg("Instance URL is required for n8n MCP connections.");
+          return;
+        }
+        if (!mcpAccessToken.trim()) {
+          setSaving(false);
+          setErrMsg("MCP Access Token is required.");
+          return;
+        }
+      }
+      
       payload.mcpUrl = mcpUrl;
       if (authHeader) payload.authHeader = authHeader;
+      
+      if (selectedPlatform === "n8n") {
+        payload.authHeader = `Bearer ${mcpAccessToken.trim()}`;
+      }
     }
 
     const res = await fetch("/api/connections/connect", {
@@ -208,6 +640,7 @@ export default function ConnectionsPage() {
     });
 
     const json = await res.json().catch(() => ({}));
+
     if (!res.ok || !json?.ok) {
       setSaving(false);
       setErrMsg(json?.message || "Connection failed. Please check your credentials.");
@@ -222,13 +655,8 @@ export default function ConnectionsPage() {
     }
 
     setCreatedSourceId(sourceId);
-
-    // Next step is entity selection (manual placeholder)
     setStep("entities");
     setSaving(false);
-
-    // refresh cards in background
-    refreshSources();
   }
 
   function addEntityDraft() {
@@ -236,27 +664,29 @@ export default function ConnectionsPage() {
     const name = entityDisplayName.trim();
     if (!ext || !name) return;
 
-    setEntities((prev) => [
+    setConnectEntities((prev) => [
       ...prev,
       {
         externalId: ext,
         displayName: name,
         entityKind,
         enabledForAnalytics: true,
-        enabledForActions: selectedMethod === "mcp", // default: actions on if MCP
+        enabledForActions: selectedMethod === "mcp",
       },
     ]);
+
     setEntityExternalId("");
     setEntityDisplayName("");
   }
 
   function removeEntityDraft(idx: number) {
-    setEntities((prev) => prev.filter((_, i) => i !== idx));
+    setConnectEntities((prev) => prev.filter((_, i) => i !== idx));
   }
 
   async function saveEntitiesSelection() {
     if (!createdSourceId) return;
-    if (entities.length === 0) {
+
+    if (connectEntities.length === 0) {
       setErrMsg("Add at least one entity to index (workflow/agent/etc.).");
       return;
     }
@@ -264,25 +694,20 @@ export default function ConnectionsPage() {
     setSaving(true);
     setErrMsg(null);
 
-    const res = await fetch("/api/connections/entities/select", {
+    const res = await fetch("/api/connections/entities/save", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         sourceId: createdSourceId,
-        entities: entities.map((e) => ({
-          entityKind: e.entityKind,
-          externalId: e.externalId,
-          displayName: e.displayName,
-          enabledForAnalytics: e.enabledForAnalytics,
-          enabledForActions: e.enabledForActions,
-        })),
+        entities: connectEntities,
       }),
     });
 
     const json = await res.json().catch(() => ({}));
+
     if (!res.ok || !json?.ok) {
       setSaving(false);
-      setErrMsg(json?.message || "Failed to save entity selection.");
+      setErrMsg(json?.message || "Failed to save entities.");
       return;
     }
 
@@ -290,245 +715,367 @@ export default function ConnectionsPage() {
     setStep("success");
   }
 
-  // N8n workflow catalog fetch
-  const fetchN8nWorkflows = async (apiKey: string, instanceUrl: string) => {
-    try {
-      const res = await fetch(`${instanceUrl}/workflows`, {
-        method: "GET",
-        headers: {
-          "X-N8N-API-KEY": apiKey,
-          "Content-Type": "application/json",
-        },
+  const platformOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const e of entities) set.add(e.platform);
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [entities]);
+
+  const filteredEntities = useMemo(() => {
+    let list = [...entities];
+
+    // Search
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      list = list.filter((e) => {
+        return (
+          e.name.toLowerCase().includes(q) ||
+          e.platform.toLowerCase().includes(q) ||
+          (entityTypeLabel[e.type] || e.type).toLowerCase().includes(q)
+        );
       });
-      
-      if (!res.ok) {
-        throw new Error("Failed to fetch workflows");
-      }
-      
-      const workflows = await res.json();
-      return workflows.map((wf: any) => ({
-        externalId: wf.id,
-        displayName: wf.name,
-        entityKind: "workflow" as const,
-      }));
-    } catch (error) {
-      console.error("Error fetching n8n workflows:", error);
-      return [];
     }
-  };
 
-  // Dropdown menu component
-  const DropdownMenu = ({ sourceId, onClose }: { sourceId: string; onClose: () => void }) => {
-    const [isOpen, setIsOpen] = useState(true);
+    // Sort
+    if (sortBy === "name") {
+      list.sort((a, b) => a.name.localeCompare(b.name));
+    } else if (sortBy === "created_at") {
+      list.sort((a, b) => (b.created_at_ts ?? 0) - (a.created_at_ts ?? 0));
+    } else if (sortBy === "last_updated") {
+      list.sort((a, b) => (b.last_updated_ts ?? 0) - (a.last_updated_ts ?? 0));
+    }
 
-    useEffect(() => {
-      const handleClickOutside = (event: MouseEvent) => {
-        if (event.target instanceof Element && !event.target.closest('.dropdown-menu')) {
-          setIsOpen(false);
-          onClose();
-        }
-      };
+    return list;
+  }, [entities, searchQuery, sortBy]);
 
-      document.addEventListener('click', handleClickOutside);
-      return () => document.removeEventListener('click', handleClickOutside);
-    }, [onClose]);
+  const displayedCredentials = useMemo(() => {
+    let rows = [...credentials];
 
-    if (!isOpen) return null;
+    if (credentialsSearch.trim()) {
+      const q = credentialsSearch.trim().toLowerCase();
+      rows = rows.filter((c) => {
+        const meta = getPlatformMeta(String(c.platformType));
+        const label = meta?.label ?? c.platformType;
+        return (
+          c.name.toLowerCase().includes(q) ||
+          label.toLowerCase().includes(q) ||
+          c.platformType.toLowerCase().includes(q)
+        );
+      });
+    }
 
-    return (
-      <div className="dropdown-menu absolute right-0 z-50 mt-1 w-48 rounded-lg border border-gray-200 bg-white shadow-lg">
-        <button
-          onClick={() => {
-            // View Details
-            console.log("View Details for", sourceId);
-            onClose();
-          }}
-          className="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-        >
-          <Eye className="h-4 w-4" />
-          View Details
-        </button>
-        <button
-          onClick={() => {
-            // Configure
-            console.log("Configure for", sourceId);
-            onClose();
-          }}
-          className="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-        >
-          <Settings className="h-4 w-4" />
-          Configure
-        </button>
-        <button
-          onClick={() => {
-            // Edit
-            console.log("Edit for", sourceId);
-            onClose();
-          }}
-          className="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-        >
-          <Edit className="h-4 w-4" />
-          Edit
-        </button>
-        <button
-          onClick={() => {
-            // Delete
-            console.log("Delete for", sourceId);
-            onClose();
-          }}
-          className="flex w-full items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50"
-        >
-          <Trash2 className="h-4 w-4" />
-          Delete
-        </button>
-      </div>
-    );
-  };
+    if (credentialsSort === "name_az") {
+      rows.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+    } else if (credentialsSort === "last_created") {
+      rows.sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+    } else {
+      rows.sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at));
+    }
+
+    return rows;
+  }, [credentials, credentialsSearch, credentialsSort]);
+
+  const displayedIndexedEntities = useMemo(() => {
+    let rows = [...indexedEntities];
+
+    if (allSearch.trim()) {
+      const q = allSearch.trim().toLowerCase();
+      rows = rows.filter((e) => {
+        return (
+          e.name.toLowerCase().includes(q) ||
+          e.platform.toLowerCase().includes(q) ||
+          e.kind.toLowerCase().includes(q)
+        );
+      });
+    }
+
+    if (allSort === "name_az") {
+      rows.sort((a, b) => a.name.localeCompare(b.name));
+    } else if (allSort === "last_updated") {
+      rows.sort((a, b) => b.lastUpdatedTs - a.lastUpdatedTs);
+    } else {
+      rows.sort((a, b) => b.createdAtTs - a.createdAtTs);
+    }
+
+    return rows;
+  }, [indexedEntities, allSearch, allSort]);
 
   return (
-    <div className="min-h-screen">
-      <div className="px-8 pt-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-semibold text-gray-900">Connections</h1>
-            <p className="mt-1 text-sm text-gray-600">
-              All the workflows, agents and credentials you have access to
-            </p>
-          </div>
+    <div className="mx-auto max-w-6xl p-6">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-semibold text-gray-900">Connections</h1>
+          <p className="mt-1 text-sm text-gray-600">
+            All the workflows, agents and credentials you have access to
+          </p>
+        </div>
 
+        <button
+          type="button"
+          onClick={openConnect}
+          className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600"
+        >
+          Connect Platform
+        </button>
+      </div>
+
+      {/* Tabs */}
+      <div className="mb-6 border-b border-gray-200">
+        <nav className="flex space-x-8">
           <button
-            type="button"
-            onClick={openConnect}
-            className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600"
+            onClick={() => setFilter("all")}
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+              filter === "all"
+                ? "border-blue-500 text-blue-600"
+                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+            }`}
           >
-            Connect Platform
+            All
           </button>
-        </div>
+          <button
+            onClick={() => setFilter("credentials")}
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+              filter === "credentials"
+                ? "border-blue-500 text-blue-600"
+                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+            }`}
+          >
+            Credentials
+          </button>
+        </nav>
+      </div>
 
-        {/* Tabs */}
-        <div className="mt-6 flex gap-2">
-          {([
-            ["all", "All"],
-            ["credentials", "Credentials"],
-          ] as Array<[FilterKey, string]>).map(([k, label]) => (
-            <button
-              key={k}
-              type="button"
-              onClick={() => setFilter(k)}
-              className={
-                filter === k
-                  ? "rounded-full bg-blue-500 px-4 py-2 text-sm font-semibold text-white"
-                  : "rounded-full bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-200"
-              }
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+      {/* All Entities View */}
+      {filter === "all" ? (
+        <>
+          <div className="mb-6">
+            <h2 className="text-lg font-medium text-gray-900 mb-2">Workflows, agents, and automations you have indexed</h2>
+          </div>
 
-        {/* Search and controls */}
-        <div className="mt-6 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="relative">
+          <div className="mt-6 flex items-center justify-between">
+            <div className="relative w-[400px]">
+              <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
               <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search credentials..."
-                className="w-64 rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                value={allSearch}
+                onChange={(e) => setAllSearch(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 py-2.5 pl-10 pr-4 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Search workflows & agents..."
               />
-              <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
-                <svg className="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-2">
+
             <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as any)}
-              className="rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+              value={allSort}
+              onChange={(e) => setAllSort(e.target.value as AllSort)}
+              className="min-w-[200px] rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700"
             >
-              <option value="lastUpdated">Sort by last updated</option>
-              <option value="name">Sort by name</option>
-              <option value="type">Sort by type</option>
+              <option value="created_at">Sort by Created Date</option>
+              <option value="last_updated">Sort by Last Updated</option>
+              <option value="name_az">Sort by Name (A-Z)</option>
             </select>
-            <button
-              onClick={() => setViewMode(viewMode === "list" ? "grid" : "list")}
-              className="rounded-lg border-2 border-gray-200 px-3 py-2 text-sm hover:border-blue-500"
-            >
-              {viewMode === "list" ? (
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
-              ) : (
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-                </svg>
-              )}
-            </button>
           </div>
-        </div>
 
-        {errMsg ? (
-          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-            {errMsg}
-          </div>
-        ) : null}
+        <div className="mt-6">
+          {indexedErr ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{indexedErr}</div>
+          ) : null}
 
-        {loading ? (
-          <div className="mt-8 text-sm text-gray-600">Loading connections…</div>
-        ) : null}
+          {indexedLoading ? <div className="mt-6 text-sm text-gray-600">Loading…</div> : null}
 
-        {!loading && sources.length === 0 ? (
-          <div className="mt-10 rounded-xl border bg-white p-10">
-            <h2 className="text-lg font-semibold text-gray-900">No connections yet</h2>
-            <p className="mt-1 text-sm text-gray-600">
-              Connect a platform to import your agents/workflows and start tracking events.
-            </p>
-            <button
-              type="button"
-              onClick={openConnect}
-              className="mt-4 rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600"
-            >
-              Connect Platform
-            </button>
-          </div>
-        ) : null}
+          {!indexedLoading ? (
+            <div className="mt-6 space-y-3">
+              {displayedIndexedEntities.map((entity) => {
+                const meta = getPlatformMeta(entity.platform);
+                const Icon = meta?.Icon;
 
-        {/* List view */}
-        {!loading && sources.length > 0 ? (
-          <div className="mt-8">
-            <div className="space-y-3">
-              {filteredSources.map((s) => {
-                const meta = PLATFORM_META[String(s.type)];
                 return (
-                  <div key={s.id} className="rounded-lg border bg-white p-4 relative">
+                  <div key={entity.id} className="rounded-xl border border-gray-200 bg-white px-5 py-4">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4">
                         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-800">
-                          <meta.Icon className="h-5 w-5" />
+                          {Icon ? <Icon className="h-5 w-5" /> : null}
                         </div>
                         <div>
-                          <div className="text-base font-semibold text-gray-900">{meta?.label || s.name}</div>
-                          <div className="text-sm text-gray-600">{meta?.description || "Connected platform"}</div>
+                          <div className="text-base font-semibold text-gray-900">{entity.name}</div>
+                          <div className="text-sm text-gray-600">
+                            {entity.kind} • {meta?.label ?? entity.platform}
+                          </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <StatusPill status={s.status} />
+
+                      <div className="flex items-center gap-4">
+                        <div className="text-right text-sm text-gray-500">
+                          <div>Last seen: {formatRelativeFromTs(entity.lastUpdatedTs)}</div>
+                          <div>Created: {formatDateFromTs(entity.createdAtTs)}</div>
+                        </div>
+
                         <div className="relative">
                           <button
-                            onClick={() => setOpenDropdownId(openDropdownId === s.id ? null : s.id)}
+                            type="button"
+                            onClick={() => {
+                              setDeleteConfirmId(null);
+                              setOpenEntityMenuId(openEntityMenuId === entity.id ? null : entity.id);
+                            }}
+                            className="rounded-lg p-2 hover:bg-gray-100"
+                            aria-label="Row actions"
+                          >
+                            <MoreVertical className="h-5 w-5 text-gray-600" />
+                          </button>
+
+                          {openEntityMenuId === entity.id ? (
+                            <div className="absolute right-0 z-50 mt-2 w-52 rounded-lg border border-gray-200 bg-white shadow-lg" data-entity-menu>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedEntity(entity);
+                                  setDetailsOpen(true);
+                                  setOpenEntityMenuId(null);
+                                  setDeleteConfirmId(null);
+                                }}
+                                className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                              >
+                                <Eye className="h-4 w-4" />
+                                View details
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (deleteConfirmId !== entity.id) {
+                                    setDeleteConfirmId(entity.id);
+                                    return;
+                                  }
+
+                                  // TODO (later): wire to real remove-from-index endpoint.
+                                  // For now: close menu and refresh list.
+                                  setOpenEntityMenuId(null);
+                                  setDeleteConfirmId(null);
+                                  refreshIndexedEntities();
+                                }}
+                                className={
+                                  "flex w-full items-start gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 " +
+                                  (deleteConfirmId === entity.id ? "bg-red-100" : "")
+                                }
+                              >
+                                <Trash2 className="mt-0.5 h-4 w-4" />
+                                <span className="leading-tight">
+                                  {deleteConfirmId === entity.id ? (
+                                    <>
+                                      <span className="font-semibold">Confirm delete</span>
+                                      <span className="mt-0.5 block text-xs font-normal text-red-500">
+                                        Removes from index. You can add it back later.
+                                      </span>
+                                    </>
+                                  ) : (
+                                    "Delete"
+                                  )}
+                                </span>
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {displayedIndexedEntities.length === 0 ? (
+                <div className="rounded-lg border bg-white p-8 text-sm text-gray-600">No results.</div>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+        </>
+      ) : null}
+
+      {/* Credentials View */}
+      {filter === "credentials" ? (
+        <div className="mt-6">
+          <div className="flex items-center justify-between">
+            <div className="relative w-80">
+              <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search credentials..."
+                value={credentialsSearch}
+                onChange={(e) => setCredentialsSearch(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 py-2.5 pl-10 pr-4 text-sm text-gray-900 placeholder-gray-500 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <select
+              value={credentialsSort}
+              onChange={(e) => setCredentialsSort(e.target.value as CredentialSort)}
+              className="min-w-[200px] rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              <option value="last_updated">Sort by last updated</option>
+              <option value="last_created">Sort by last created</option>
+              <option value="name_az">Sort by name (A-Z)</option>
+            </select>
+          </div>
+
+          {credentialsErr ? (
+            <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              {credentialsErr}
+            </div>
+          ) : null}
+
+          {credentialsLoading ? (
+            <div className="mt-8 text-sm text-gray-600">Loading credentials…</div>
+          ) : null}
+
+          {!credentialsLoading ? (
+            <div className="mt-6 space-y-3">
+              {displayedCredentials.map((c) => {
+                const meta = getPlatformMeta(String(c.platformType));
+                const Icon = meta?.Icon;
+
+                const methodLabel = c.method === "api" ? "API" : c.method === "webhook" ? "Webhook" : "MCP";
+                const methodIcon =
+                  c.method === "api" ? (
+                    <KeyRound className="h-3.5 w-3.5" />
+                  ) : c.method === "webhook" ? (
+                    <WebhookIcon className="h-3.5 w-3.5" />
+                  ) : (
+                    <Bot className="h-3.5 w-3.5" />
+                  );
+
+                return (
+                  <div key={c.id} className="rounded-lg border border-gray-200 bg-white p-4 hover:shadow-sm transition-shadow">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-800">
+                          {Icon ? <Icon className="h-5 w-5" /> : null}
+                        </div>
+
+                        <div>
+                          <div className="font-semibold text-gray-900">{meta?.label ?? c.name}</div>
+                          <div className="text-sm text-gray-500 flex flex-wrap items-center gap-2">
+                            <span className="inline-flex items-center gap-1">
+                              {methodIcon}
+                              <span>{methodLabel}</span>
+                            </span>
+
+                            <span className="text-gray-300">|</span>
+                            <span>Last updated {formatRelativeFromIso(c.updated_at)}</span>
+
+                            <span className="text-gray-300">|</span>
+                            <span>Created {formatDateFromIso(c.created_at)}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <StatusPill status={c.status} />
+                        <div className="relative">
+                          <button
+                            onClick={() => setOpenDropdownId(openDropdownId === c.id ? null : c.id)}
                             className="p-1 rounded-lg hover:bg-gray-100"
                           >
                             <MoreVertical className="h-5 w-5 text-gray-600" />
                           </button>
-                          {openDropdownId === s.id && (
-                            <DropdownMenu 
-                              sourceId={s.id} 
-                              onClose={() => setOpenDropdownId(null)} 
-                            />
+                          {openDropdownId === c.id && (
+                            <CredentialsDropdownMenu sourceId={c.id} onClose={() => setOpenDropdownId(null)} />
                           )}
                         </div>
                       </div>
@@ -536,10 +1083,16 @@ export default function ConnectionsPage() {
                   </div>
                 );
               })}
+
+              {displayedCredentials.length === 0 ? (
+                <div className="rounded-lg border bg-white p-8 text-sm text-gray-600">
+                  No credentials found.
+                </div>
+              ) : null}
             </div>
-          </div>
-        ) : null}
-      </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {/* Connect Platform Modal (in-page) */}
       {connectOpen ? (
@@ -548,16 +1101,27 @@ export default function ConnectionsPage() {
             <div className="border-b px-6 py-5">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <div className="text-xl font-semibold text-gray-900">
-                    {step === "platform"
-                      ? "Connect Platform"
-                      : step === "method"
-                      ? `Connect ${selectedPlatform ? PLATFORM_META[selectedPlatform].label : ""}`
-                      : step === "credentials"
-                      ? `Credentials`
-                      : step === "entities"
-                      ? "Select entities to index"
-                      : "Connected"}
+                  <div className="flex items-center gap-3">
+                    <div className="text-xl font-semibold text-gray-900">
+                      {step === "platform"
+                        ? "Connect Platform"
+                        : step === "method"
+                        ? `Connect ${selectedPlatform ? (getPlatformMeta(String(selectedPlatform))?.label ?? String(selectedPlatform)) : ""}`
+                        : step === "credentials"
+                        ? `Credentials`
+                        : step === "entities"
+                        ? "Select entities to index"
+                        : "Connected"}
+                    </div>
+                    {step === "credentials" && selectedPlatform === "n8n" && selectedMethod === "mcp" ? (
+                      <button
+                        type="button"
+                        onClick={() => setMcpHelpOpen(true)}
+                        className="text-sm font-medium text-blue-600 hover:underline"
+                      >
+                        What is this?
+                      </button>
+                    ) : null}
                   </div>
                   <div className="mt-1 text-sm text-gray-600">
                     {step === "platform"
@@ -588,338 +1152,527 @@ export default function ConnectionsPage() {
                 </div>
               ) : null}
 
-              {step !== "platform" ? (
+              {/* Modal step content will go here */}
+              {step === "platform" ? (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 gap-3">
+                    {(Object.keys(PLATFORM_META) as Array<keyof typeof PLATFORM_META>).map((k) => {
+                      const meta = PLATFORM_META[k];
+                      const Icon = meta.Icon;
+
+                      return (
+                        <button
+                          key={k}
+                          type="button"
+                          onClick={() => {
+                            setSelectedPlatform(k);
+                            setErrMsg(null);
+                            setStep("method");
+                          }}
+                          className="w-full rounded-xl border-2 border-gray-200 p-4 text-left hover:border-blue-500 hover:bg-slate-50"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-800">
+                              <Icon className="h-5 w-5" />
+                            </div>
+                            <div>
+                              <div className="text-base font-semibold text-gray-900">{meta.label}</div>
+                              <div className="text-sm text-gray-600">{meta.description}</div>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+              {step === "method" ? (
+  <div className="space-y-3">
+    <button
+      type="button"
+      onClick={() => {
+        setSelectedMethod("api");
+        setErrMsg(null);
+        setStep("credentials");
+      }}
+      className="w-full rounded-xl border-2 border-emerald-200 bg-emerald-50 p-4 text-left hover:border-emerald-400"
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-base font-semibold text-gray-900">
+          <KeyRound className="h-5 w-5 text-emerald-700" />
+          API Key
+        </div>
+        <span className="rounded bg-emerald-600 px-2 py-1 text-xs font-bold text-white">RECOMMENDED</span>
+      </div>
+      <div className="mt-1 text-sm text-gray-700">
+        Connect to your n8n instance using an API key to import and index workflows.
+      </div>
+    </button>
+
+    {selectedPlatform !== "n8n" ? (
+      <button
+        type="button"
+        onClick={() => {
+          setSelectedMethod("webhook");
+          setErrMsg(null);
+          setStep("credentials");
+        }}
+        className="w-full rounded-xl border-2 border-gray-200 p-4 text-left hover:border-blue-500 hover:bg-slate-50"
+      >
+        <div className="flex items-center gap-2 text-base font-semibold text-gray-900">
+          <WebhookIcon className="h-5 w-5 text-slate-700" />
+          Webhook Only
+        </div>
+        <div className="mt-1 text-sm text-gray-700">Manual event streaming to GetFlowetic. No catalog import.</div>
+        <div className="mt-2 text-xs text-gray-600">
+          Best for voice platforms if you want real-time events. Automation platforms generally rely on API polling.
+        </div>
+      </button>
+    ) : null}
+
+    {selectedPlatform ? (
+      <button
+        type="button"
+        onClick={() => {
+          // MCP support in your current PLATFORM_META is not tracked; allow for automation platforms only
+          if (!["n8n", "make", "activepieces"].includes(String(selectedPlatform))) {
+            setErrMsg("MCP is only supported for n8n, Make, and Activepieces.");
+            return;
+          }
+          setSelectedMethod("mcp");
+          setErrMsg(null);
+          setStep("credentials");
+        }}
+        className="w-full rounded-xl border-2 border-gray-200 p-4 text-left hover:border-blue-500 hover:bg-slate-50"
+      >
+        <div className="flex items-center gap-2 text-base font-semibold text-gray-900">
+          <Bot className="h-5 w-5 text-slate-700" />
+          MCP instances
+        </div>
+        <div className="mt-1 text-sm text-gray-700">
+          Connect to n8n's built-in MCP server to discover and run workflows enabled for MCP.
+        </div>
+        <div className="mt-2 text-xs text-gray-600">
+          Supported for: n8n, Make, Activepieces. Not available for Vapi/Retell.
+        </div>
+      </button>
+    ) : null}
+  </div>
+) : null}
+{step === "credentials" ? (
+  <div className="space-y-4">
+    {selectedMethod === "api" ? (
+      <div>
+        <label className="mb-2 block text-sm font-semibold text-gray-900">API Key *</label>
+        <input
+          value={apiKey}
+          onChange={(e) => setApiKey(e.target.value)}
+          type="password"
+          className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+          placeholder="••••••••••••••"
+        />
+      </div>
+    ) : null}
+
+    {(selectedPlatform === "n8n" || selectedPlatform === "activepieces") && selectedMethod !== "mcp" ? (
+      <div>
+        <label className="mb-2 block text-sm font-semibold text-gray-900">
+          {selectedPlatform === "n8n" && selectedMethod === "api" ? "Instance URL *" : "Instance URL (optional)"}
+        </label>
+        <input
+          value={instanceUrl}
+          onChange={(e) => setInstanceUrl(e.target.value)}
+          type="url"
+          className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+          placeholder="https://your-instance..."
+        />
+        {selectedPlatform === "n8n" && selectedMethod === "api" ? (
+          <div className="mt-1 text-xs text-gray-600">
+            Used to validate your key against your n8n instance.
+          </div>
+        ) : null}
+      </div>
+    ) : null}
+
+    {selectedMethod === "webhook" ? (
+      <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+        Webhook-only mode will create a connection, but you'll need to send events manually.
+      </div>
+    ) : null}
+
+    {selectedMethod === "mcp" ? (
+      <>
+        {selectedPlatform === "n8n" ? (
+          <>
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-gray-900">Instance URL *</label>
+              <input
+                value={instanceUrl}
+                onChange={(e) => setInstanceUrl(e.target.value)}
+                type="url"
+                className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                placeholder="https://your-instance..."
+              />
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-gray-900">MCP Access Token *</label>
+              <input
+                value={mcpAccessToken}
+                onChange={(e) => setMcpAccessToken(e.target.value)}
+                type="password"
+                className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                placeholder="••••••••••••••"
+              />
+              <div className="mt-1 text-xs text-gray-600">
+                Token used to authenticate with your n8n instance's MCP server.
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-gray-900">MCP Server URL *</label>
+              <input
+                value={mcpUrl}
+                onChange={(e) => setMcpUrl(e.target.value)}
+                type="url"
+                className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                placeholder="https://..."
+              />
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-gray-900">Authorization header (optional)</label>
+              <input
+                value={authHeader}
+                onChange={(e) => setAuthHeader(e.target.value)}
+                type="text"
+                className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                placeholder="Bearer ..."
+              />
+            </div>
+          </>
+        )}
+      </>
+    ) : null}
+
+    {selectedPlatform !== "n8n" ? (
+      <div>
+        <label className="mb-2 block text-sm font-semibold text-gray-900">Connection name (optional)</label>
+        <input
+          value={connectionName}
+          onChange={(e) => setConnectionName(e.target.value)}
+          type="text"
+          className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+          placeholder="Production"
+        />
+      </div>
+    ) : null}
+
+    <div className="flex justify-end gap-2 pt-2">
+      <button
+        type="button"
+        onClick={() => {
+          setStep("method");
+          setErrMsg(null);
+        }}
+        className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-200"
+        disabled={saving}
+      >
+        Back
+      </button>
+      <button
+        type="button"
+        onClick={createConnection}
+        disabled={saving}
+        className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600 disabled:opacity-50"
+      >
+        {saving ? "Connecting..." : "Connect"}
+      </button>
+    </div>
+  </div>
+) : null}
+{step === "entities" ? (
+  <div className="space-y-4">
+    <div className="text-sm text-gray-700">
+      Choose one or more entities (workflows/agents/etc.) to index for analytics and optional AI actions. Each requires a unique External ID and Display Name.
+    </div>
+
+    <div className="flex flex-col gap-3 pb-4">
+      <div className="flex items-center gap-2">
+        <select
+          value={entityKind}
+          onChange={(e) => setEntityKind(e.target.value as EntityDraft["entityKind"])}
+          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+        >
+          <option value="workflow">Workflow</option>
+          <option value="scenario">Scenario</option>
+          <option value="flow">Flow</option>
+          <option value="agent">Agent</option>
+          <option value="assistant">Assistant</option>
+          <option value="squad">Squad</option>
+        </select>
+
+        <input
+          value={entityExternalId}
+          onChange={(e) => setEntityExternalId(e.target.value)}
+          type="text"
+          className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+          placeholder="External ID (unique for each entity)"
+        />
+        <input
+          value={entityDisplayName}
+          onChange={(e) => setEntityDisplayName(e.target.value)}
+          type="text"
+          className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+          placeholder="Display Name"
+        />
+
+        <button
+          type="button"
+          onClick={addEntityDraft}
+          disabled={!entityExternalId.trim() || !entityDisplayName.trim()}
+          className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+          title="Add"
+        >
+          <PlusCircle className="h-5 w-5" />
+        </button>
+      </div>
+    </div>
+
+    <div className="space-y-1">
+      {connectEntities.length === 0 ? (
+        <div className="rounded-md bg-gray-50 p-4 text-center text-sm text-gray-600">
+          No entities added yet. Add at least one entity to continue.
+        </div>
+      ) : (
+        connectEntities.map((e, i) => (
+          <div key={i} className="flex items-center justify-between rounded-md border border-gray-200 bg-white px-3 py-2">
+            <div className="truncate text-sm">
+              <span className="font-mono text-xs text-gray-500 uppercase">{e.entityKind}</span>
+              <span className="mx-2 text-gray-400">•</span>
+              <span className="font-medium text-slate-900">{e.displayName}</span>
+              <span className="mx-2 text-gray-400">•</span>
+              <span className="font-mono text-xs text-gray-500">{e.externalId}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => removeEntityDraft(i)}
+              className="ml-4 text-red-500 hover:text-red-700"
+              title="Remove"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        ))
+      )}
+    </div>
+
+    <div className="flex justify-end gap-2 pt-2">
+      <button
+        type="button"
+        onClick={() => setStep("credentials")}
+        className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-200"
+        disabled={saving}
+      >
+        Back
+      </button>
+      <button
+        type="button"
+        onClick={saveEntitiesSelection}
+        disabled={saving || connectEntities.length === 0}
+        className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600 disabled:opacity-50"
+      >
+        {saving ? "Saving..." : "Continue"}
+      </button>
+    </div>
+  </div>
+) : null}
+{step === "success" ? (
+  <div className="space-y-4">
+    <div className="text-center text-sm text-gray-700">
+      Connection configuration saved successfully.
+    </div>
+
+    <div className="flex justify-end gap-2 pt-2">
+      <button
+        type="button"
+        onClick={() => {
+          // Close modal
+          closeConnect();
+          // Refetch connections
+          refreshCredentials();
+          refreshIndexedEntities();
+        }}
+        className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600 disabled:opacity-50"
+      >
+        Done
+      </button>
+    </div>
+  </div>
+) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {detailsOpen && selectedEntity ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="border-b px-6 py-5">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-800">
+                    {getPlatformMeta(selectedEntity.platform)?.Icon ? (
+                      (() => {
+                        const Icon = getPlatformMeta(selectedEntity.platform)?.Icon!;
+                        return <Icon className="h-5 w-5" />;
+                      })()
+                    ) : null}
+                  </div>
+                  <div>
+                    <div className="text-lg font-semibold text-gray-900">{selectedEntity.name}</div>
+                    <div className="text-sm text-gray-600">
+                      {selectedEntity.kind} • {getPlatformMeta(selectedEntity.platform)?.label ?? selectedEntity.platform}
+                    </div>
+                  </div>
+                </div>
+
                 <button
                   type="button"
-                  onClick={() => {
-                    setErrMsg(null);
-                    if (step === "method") setStep("platform");
-                    else if (step === "credentials") setStep("method");
-                    else if (step === "entities") setStep("credentials");
-                  }}
-                  className="mb-4 text-sm font-semibold text-gray-600 hover:text-gray-900"
+                  onClick={() => setDetailsOpen(false)}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200 text-xl"
                 >
-                  ← Back
+                  ×
                 </button>
-              ) : null}
-
-              {step === "platform" ? (
-                <div className="space-y-3">
-                  {(Object.keys(PLATFORM_META) as Array<keyof typeof PLATFORM_META>).map((k) => {
-                    const Icon = PLATFORM_META[k].Icon;
-                    return (
-                      <button
-                        key={k}
-                        type="button"
-                        onClick={() => {
-                          setSelectedPlatform(k);
-                          setErrMsg(null);
-                          // default kind
-                          setEntityKind(PLATFORM_META[k].category === "voice_ai" ? "agent" : "workflow");
-                          setStep("method");
-                        }}
-                        className="flex w-full items-center gap-4 rounded-xl border-2 border-gray-200 p-4 text-left hover:border-blue-500 hover:bg-slate-50"
-                      >
-                        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-800">
-                          <Icon className="h-6 w-6" />
-                        </div>
-                        <div>
-                          <div className="text-base font-semibold text-gray-900">{PLATFORM_META[k].label}</div>
-                          <div className="text-sm text-gray-600">{PLATFORM_META[k].description}</div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : null}
-
-              {step === "method" ? (
-                <div className="space-y-3">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedMethod("api");
-                      setErrMsg(null);
-                      setStep("credentials");
-                    }}
-                    className="w-full rounded-xl border-2 border-emerald-200 bg-emerald-50 p-4 text-left hover:border-emerald-400"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-base font-semibold text-gray-900">
-                        <KeyRound className="h-5 w-5 text-emerald-700" />
-                        API Key
-                      </div>
-                      <span className="rounded bg-emerald-600 px-2 py-1 text-xs font-bold text-white">RECOMMENDED</span>
-                    </div>
-                    <div className="mt-1 text-sm text-gray-700">
-                      Connect via API to import your catalog so you can select what to index for dashboards.
-                    </div>
-                    <div className="mt-2 text-xs text-gray-600">
-                      {selectedPlatform && PLATFORM_META[selectedPlatform].category === "voice_ai"
-                        ? "For voice platforms (Vapi/Retell), webhooks power real-time analytics."
-                        : "For automation platforms (n8n/Make/Activepieces), analytics is collected via polling run logs."}
-                    </div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedMethod("webhook");
-                      setErrMsg(null);
-                      setStep("credentials");
-                    }}
-                    className="w-full rounded-xl border-2 border-gray-200 p-4 text-left hover:border-blue-500 hover:bg-slate-50"
-                  >
-                    <div className="flex items-center gap-2 text-base font-semibold text-gray-900">
-                      <WebhookIcon className="h-5 w-5 text-slate-700" />
-                      Webhook Only
-                    </div>
-                    <div className="mt-1 text-sm text-gray-700">
-                      Manual event streaming to GetFlowetic. No catalog import.
-                    </div>
-                    <div className="mt-2 text-xs text-gray-600">
-                      Best for voice platforms if you want real-time events. Automation platforms generally rely on API polling.
-                    </div>
-                  </button>
-
-                  {selectedPlatform && PLATFORM_META[selectedPlatform].supportsMcp ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedMethod("mcp");
-                        setErrMsg(null);
-                        setStep("credentials");
-                      }}
-                      className="w-full rounded-xl border-2 border-gray-200 p-4 text-left hover:border-blue-500 hover:bg-slate-50"
-                    >
-                      <div className="flex items-center gap-2 text-base font-semibold text-gray-900">
-                        <Bot className="h-5 w-5 text-slate-700" />
-                        MCP (Actions)
-                      </div>
-                      <div className="mt-1 text-sm text-gray-700">
-                        Optional. Enables AI-triggered workflow actions. Does not replace analytics ingestion.
-                      </div>
-                      <div className="mt-2 text-xs text-gray-600">
-                        Supported for: n8n, Make, Activepieces. Not available for Vapi/Retell.
-                      </div>
-                    </button>
-                  ) : null}
-                </div>
-              ) : null}
-
-              {step === "credentials" ? (
-                <div className="space-y-4">
-                  {selectedMethod === "api" ? (
-                    <div>
-                      <label className="mb-2 block text-sm font-semibold text-gray-900">API Key *</label>
-                      <input
-                        value={apiKey}
-                        onChange={(e) => setApiKey(e.target.value)}
-                        type="password"
-                        className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                        placeholder="••••••••••••••"
-                      />
-                    </div>
-                  ) : null}
-
-                  {(selectedPlatform === "n8n" || selectedPlatform === "activepieces") ? (
-                    <div>
-                      <label className="mb-2 block text-sm font-semibold text-gray-900">Instance URL (optional)</label>
-                      <input
-                        value={instanceUrl}
-                        onChange={(e) => setInstanceUrl(e.target.value)}
-                        type="url"
-                        className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                        placeholder="https://your-instance..."
-                      />
-                    </div>
-                  ) : null}
-
-                  {selectedMethod === "webhook" ? (
-                    <>
-                      {(selectedPlatform === "n8n" || selectedPlatform === "activepieces") ? (
-                        <div>
-                          <label className="mb-2 block text-sm font-semibold text-gray-900">Instance URL (optional)</label>
-                          <input
-                            value={instanceUrl}
-                            onChange={(e) => setInstanceUrl(e.target.value)}
-                            type="url"
-                            className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                            placeholder="https://your-instance..."
-                          />
-                        </div>
-                      ) : null}
-                      <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
-                        Webhook-only mode will create a connection, but you'll need to send events manually.
-                      </div>
-                    </>
-                  ) : null}
-
-                  {selectedMethod === "mcp" ? (
-                    <>
-                      <div>
-                        <label className="mb-2 block text-sm font-semibold text-gray-900">MCP Server URL *</label>
-                        <input
-                          value={mcpUrl}
-                          onChange={(e) => setMcpUrl(e.target.value)}
-                          type="url"
-                          className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                          placeholder="https://..."
-                        />
-                      </div>
-                      <div>
-                        <label className="mb-2 block text-sm font-semibold text-gray-900">Authorization header (optional)</label>
-                        <input
-                          value={authHeader}
-                          onChange={(e) => setAuthHeader(e.target.value)}
-                          type="text"
-                          className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                          placeholder="Bearer ..."
-                        />
-                      </div>
-                    </>
-                  ) : null}
-
-                  <div>
-                    <label className="mb-2 block text-sm font-semibold text-gray-900">Connection name (optional)</label>
-                    <input
-                      value={connectionName}
-                      onChange={(e) => setConnectionName(e.target.value)}
-                      type="text"
-                      className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                      placeholder="Production"
-                    />
-                  </div>
-                </div>
-              ) : null}
-
-              {step === "entities" ? (
-                <div className="space-y-4">
-                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
-                    Temporary MVP: you can add entities manually. GetFlowetic will ONLY index what you add here (not your full catalog).
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                    <div className="md:col-span-1">
-                      <label className="mb-2 block text-sm font-semibold text-gray-900">Kind</label>
-                      <select
-                        value={entityKind}
-                        onChange={(e) => setEntityKind(e.target.value as any)}
-                        className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                      >
-                        <option value="workflow">workflow</option>
-                        <option value="scenario">scenario</option>
-                        <option value="flow">flow</option>
-                        <option value="agent">agent</option>
-                        <option value="assistant">assistant</option>
-                        <option value="squad">squad</option>
-                      </select>
-                    </div>
-                    <div className="md:col-span-1">
-                      <label className="mb-2 block text-sm font-semibold text-gray-900">External ID</label>
-                      <input
-                        value={entityExternalId}
-                        onChange={(e) => setEntityExternalId(e.target.value)}
-                        className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                        placeholder="agent_123 / workflowId..."
-                      />
-                    </div>
-                    <div className="md:col-span-1">
-                      <label className="mb-2 block text-sm font-semibold text-gray-900">Display name</label>
-                      <input
-                        value={entityDisplayName}
-                        onChange={(e) => setEntityDisplayName(e.target.value)}
-                        className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                        placeholder="Sales Agent"
-                      />
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={addEntityDraft}
-                    className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black"
-                  >
-                    Add entity
-                  </button>
-
-                  <div className="space-y-2">
-                    {entities.length === 0 ? (
-                      <div className="text-sm text-gray-600">No entities added yet.</div>
-                    ) : null}
-
-                    {entities.map((e, idx) => (
-                      <div key={`${e.externalId}-${idx}`} className="flex items-center justify-between rounded-lg border p-3">
-                        <div>
-                          <div className="text-sm font-semibold text-gray-900">{e.displayName}</div>
-                          <div className="text-xs text-gray-600">
-                            {e.entityKind} • {e.externalId}
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => removeEntityDraft(idx)}
-                          className="rounded-md bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-200"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-
-              {step === "success" ? (
-                <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-                  Connection created and indexing selection saved. You can now use Vibe and it will be aware of your configured entities.
-                </div>
-              ) : null}
+              </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 border-t px-6 py-4">
-              <button
-                type="button"
-                onClick={closeConnect}
-                className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-200"
-                disabled={saving}
-              >
-                Cancel
-              </button>
-
-              {step === "credentials" ? (
+            <div className="px-6 py-6 space-y-6">
+              <div>
                 <button
                   type="button"
-                  onClick={createConnection}
-                  disabled={saving}
-                  className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600 disabled:opacity-50"
-                >
-                  {saving ? "Connecting..." : "Connect"}
-                </button>
-              ) : null}
-
-              {step === "entities" ? (
-                <button
-                  type="button"
-                  onClick={saveEntitiesSelection}
-                  disabled={saving}
-                  className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600 disabled:opacity-50"
-                >
-                  {saving ? "Saving..." : "Save selection"}
-                </button>
-              ) : null}
-
-              {step === "success" ? (
-                <button
-                  type="button"
+                  className="w-full rounded-lg bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700"
+                  // NOTE: no wiring to VibeChat yet as requested
                   onClick={() => {
-                    closeConnect();
-                    refreshSources();
+                    console.log("Build dashboard in Chat (TODO):", selectedEntity);
+                    setDetailsOpen(false);
                   }}
-                  className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600"
                 >
-                  Done
+                  Build dashboard in Chat
                 </button>
-              ) : null}
+                <p className="mt-2 text-xs text-gray-500 text-center">
+                  Opens VibeChat with this agent pre-loaded so you can design its UI.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                  <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Index status</div>
+                  <div className="mt-1 flex items-center gap-2">
+                    <span className="h-2 w-2 rounded-full bg-green-500" />
+                    <span className="text-sm font-semibold text-gray-900">Indexed</span>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                  <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Dashboard</div>
+                  <div className="mt-1 text-sm font-semibold text-gray-900">Not created</div>
+                </div>
+
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                  <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Client access</div>
+                  <div className="mt-1 text-sm font-semibold text-gray-900">Not shared</div>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-gray-200 bg-white p-4">
+                <div className="mb-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Details</div>
+                <div className="grid grid-cols-2 gap-y-2 text-sm">
+                  <div className="text-gray-500">Platform</div>
+                  <div className="font-medium text-gray-900">
+                    {getPlatformMeta(selectedEntity.platform)?.label ?? selectedEntity.platform}
+                  </div>
+
+                  <div className="text-gray-500">Type</div>
+                  <div className="font-medium text-gray-900">{selectedEntity.kind}</div>
+
+                  <div className="text-gray-500">External ID</div>
+                  <div className="font-mono text-xs text-gray-900">{selectedEntity.externalId}</div>
+
+                  <div className="text-gray-500">Last seen</div>
+                  <div className="font-medium text-gray-900">{formatRelativeFromTs(selectedEntity.lastUpdatedTs)}</div>
+
+                  <div className="text-gray-500">Created</div>
+                  <div className="font-medium text-gray-900">{formatDateFromTs(selectedEntity.createdAtTs)}</div>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-gray-200 bg-white">
+                <div className="border-b px-4 py-3">
+                  <div className="text-sm font-semibold text-gray-900">Dashboards</div>
+                  <div className="text-xs text-gray-500">Dashboards created from this agent/workflow</div>
+                </div>
+                <div className="p-4 text-sm text-gray-500">
+                  No dashboards yet. Click &quot;Build dashboard in Chat&quot; to create one.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* MCP Help Modal */}
+      {mcpHelpOpen ? (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="border-b px-6 py-5">
+              <div className="flex items-start justify-between gap-4">
+                <div className="text-lg font-semibold text-gray-900">About n8n MCP instances</div>
+                <button
+                  type="button"
+                  onClick={() => setMcpHelpOpen(false)}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+
+            <div className="px-6 py-6 space-y-4 text-sm text-gray-700">
+              <p>
+                MCP lets AI tools discover and run workflows you explicitly enable in your n8n instance.
+              </p>
+
+              <ul className="list-disc pl-5 space-y-2">
+                <li>Workflows are created and edited in n8n — MCP cannot author workflows.</li>
+                <li>No workflows are exposed by default. You must enable MCP per workflow.</li>
+                <li>MCP access is instance-wide. All connected MCP clients see enabled workflows.</li>
+                <li>Only published workflows with supported triggers are eligible.</li>
+                <li>MCP-triggered workflows run normally and appear in n8n executions.</li>
+              </ul>
+
+              <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">
+                For full setup steps, limits, and revoking access, read{" "}
+                <a
+                  href="https://docs.n8n.io/advanced-ai/accessing-n8n-mcp-server/"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-semibold text-blue-700 underline decoration-blue-300 underline-offset-2 hover:decoration-blue-600"
+                >
+                  n8n's official MCP server guide
+                </a>
+                .
+              </div>
+
+              <div className="flex justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => setMcpHelpOpen(false)}
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                >
+                  Got it
+                </button>
+              </div>
             </div>
           </div>
         </div>
