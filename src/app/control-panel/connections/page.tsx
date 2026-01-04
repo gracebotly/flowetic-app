@@ -730,7 +730,7 @@ export default function ConnectionsPage() {
                     {step === "platform"
                       ? "Connect Platform"
                       : step === "method"
-                      ? `Connect ${selectedPlatform ? getPlatformMeta(selectedPlatform).label : ""}`
+                      ? `Connect ${selectedPlatform ? (getPlatformMeta(String(selectedPlatform))?.label ?? String(selectedPlatform)) : ""}`
                       : step === "credentials"
                       ? `Credentials`
                       : step === "entities"
