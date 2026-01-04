@@ -1252,9 +1252,6 @@ export default function ConnectionsPage() {
         <div className="mt-1 text-sm text-gray-700">
           Connect to n8n's built-in MCP server to discover and run workflows enabled for MCP.
         </div>
-        <div className="mt-2 text-xs text-gray-600">
-          Supported for: n8n, Make, Activepieces. Not available for Vapi/Retell.
-        </div>
       </button>
     ) : null}
   </div>
