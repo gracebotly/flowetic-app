@@ -41,6 +41,21 @@ type SortKey = "created_at" | "last_updated" | "name";
 
 type ConnectMethod = "api" | "webhook" | "mcp";
 
+type IndexedEntityRow = {
+  id: string;
+  name: string;
+  platform: string;
+  kind: "workflow" | "scenario" | "flow" | "agent" | "assistant" | "squad";
+  externalId: string;
+  sourceId: string;
+  lastSeenAt: string | null;
+  createdAt: string;
+  createdAtTs: number;
+  lastUpdatedTs: number;
+};
+
+type AllSort = "created_at" | "last_updated" | "name_az";
+
 type CredentialRow = {
   id: string;
   platformType: string;
@@ -363,6 +378,20 @@ export default function ConnectionsPage() {
   const [credentialsSearch, setCredentialsSearch] = useState("");
   const [credentialsSort, setCredentialsSort] = useState<CredentialSort>("last_updated");
 
+  // All tab entity states
+  const [indexedEntities, setIndexedEntities] = useState<IndexedEntityRow[]>([]);
+  const [indexedLoading, setIndexedLoading] = useState(false);
+  const [indexedErr, setIndexedErr] = useState<string | null>(null);
+
+  const [allSearch, setAllSearch] = useState("");
+  const [allSort, setAllSort] = useState<AllSort>("created_at");
+
+  const [openEntityMenuId, setOpenEntityMenuId] = useState<string | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [selectedEntity, setSelectedEntity] = useState<IndexedEntityRow | null>(null);
+
   async function loadEntities() {
     setLoading(true);
     setErrMsg(null);
@@ -399,8 +428,28 @@ export default function ConnectionsPage() {
     setCredentialsLoading(false);
   }
 
+  async function refreshIndexedEntities() {
+    setIndexedLoading(true);
+    setIndexedErr(null);
+
+    const res = await fetch("/api/indexed-entities/list", { method: "GET" });
+    const json = await res.json().catch(() => ({}));
+
+    if (!res.ok || !json?.ok) {
+      setIndexedEntities([]);
+      setIndexedLoading(false);
+      setIndexedErr(json?.message || "Failed to load indexed items.");
+      return;
+    }
+
+    setIndexedEntities((json.entities as IndexedEntityRow[]) ?? []);
+    setIndexedLoading(false);
+  }
+
   useEffect(() => {
+    refreshIndexedEntities();
     loadEntities();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -409,6 +458,19 @@ export default function ConnectionsPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter]);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      const target = event.target as Element;
+      if (!target.closest('[data-entity-menu]')) {
+        setOpenEntityMenuId(null);
+        setDeleteConfirmId(null);
+      }
+    }
+
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, []);
 
   function formatRelativeFromIso(iso: string) {
     const ts = Date.parse(iso);
@@ -428,6 +490,22 @@ export default function ConnectionsPage() {
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return "";
     return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  }
+
+  function formatRelativeFromTs(ts: number) {
+    const deltaMs = Date.now() - ts;
+    const min = Math.floor(deltaMs / 60000);
+    if (min < 60) return `${Math.max(min, 1)} min ago`;
+    const hr = Math.floor(min / 60);
+    if (hr < 24) return `${hr} hours ago`;
+    const day = Math.floor(hr / 24);
+    if (day < 7) return `${day} days ago`;
+    const wk = Math.floor(day / 7);
+    return `${wk} week${wk === 1 ? "" : "s"} ago`;
+  }
+
+  function formatDateFromTs(ts: number) {
+    return new Date(ts).toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" });
   }
 
   function resetModal() {
@@ -517,6 +595,31 @@ export default function ConnectionsPage() {
     return rows;
   }, [credentials, credentialsSearch, credentialsSort]);
 
+  const displayedIndexedEntities = useMemo(() => {
+    let rows = [...indexedEntities];
+
+    if (allSearch.trim()) {
+      const q = allSearch.trim().toLowerCase();
+      rows = rows.filter((e) => {
+        return (
+          e.name.toLowerCase().includes(q) ||
+          e.platform.toLowerCase().includes(q) ||
+          e.kind.toLowerCase().includes(q)
+        );
+      });
+    }
+
+    if (allSort === "name_az") {
+      rows.sort((a, b) => a.name.localeCompare(b.name));
+    } else if (allSort === "last_updated") {
+      rows.sort((a, b) => b.lastUpdatedTs - a.lastUpdatedTs);
+    } else {
+      rows.sort((a, b) => b.createdAtTs - a.createdAtTs);
+    }
+
+    return rows;
+  }, [indexedEntities, allSearch, allSort]);
+
   return (
     <div className="mx-auto max-w-6xl p-6">
       <div className="flex items-start justify-between gap-4">
@@ -569,56 +672,139 @@ export default function ConnectionsPage() {
             <h2 className="text-lg font-medium text-gray-900 mb-2">Workflows, agents, and automations you have indexed</h2>
           </div>
 
-          <div className="mb-6 flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <div className="relative">
-                <SearchIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search workflows & agents..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-80 rounded-lg border border-gray-300 py-2 pl-10 pr-4 focus:border-transparent focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
+          <div className="mt-6 flex items-center justify-between">
+            <div className="relative w-[400px]">
+              <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <input
+                value={allSearch}
+                onChange={(e) => setAllSearch(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 py-2.5 pl-10 pr-4 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Search workflows & agents..."
+              />
             </div>
 
             <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as SortKey)}
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              value={allSort}
+              onChange={(e) => setAllSort(e.target.value as AllSort)}
+              className="min-w-[200px] rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700"
             >
               <option value="created_at">Sort by Created Date</option>
               <option value="last_updated">Sort by Last Updated</option>
-              <option value="name">Sort by Name</option>
+              <option value="name_az">Sort by Name (A-Z)</option>
             </select>
           </div>
 
-          {errMsg ? (
-            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-              {errMsg}
-            </div>
+        <div className="mt-6">
+          {indexedErr ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{indexedErr}</div>
           ) : null}
 
-          {loading ? <div className="text-sm text-gray-600">Loading…</div> : null}
+          {indexedLoading ? <div className="mt-6 text-sm text-gray-600">Loading…</div> : null}
 
-          {!loading ? (
-            <div className="space-y-2">
-              {filteredEntities.map((entity) => (
-                <EntityRow
-                  key={entity.id}
-                  entity={entity}
-                  openEntityDropdownId={openEntityDropdownId}
-                  setOpenEntityDropdownId={setOpenEntityDropdownId}
-                />
-              ))}
-              {filteredEntities.length === 0 ? (
-                <div className="rounded-lg border bg-white p-8 text-sm text-gray-600">
-                  No results. Try a different search or filter.
-                </div>
+          {!indexedLoading ? (
+            <div className="mt-6 space-y-3">
+              {displayedIndexedEntities.map((entity) => {
+                const meta = getPlatformMeta(entity.platform);
+                const Icon = meta?.Icon;
+
+                return (
+                  <div key={entity.id} className="rounded-xl border border-gray-200 bg-white px-5 py-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-800">
+                          {Icon ? <Icon className="h-5 w-5" /> : null}
+                        </div>
+                        <div>
+                          <div className="text-base font-semibold text-gray-900">{entity.name}</div>
+                          <div className="text-sm text-gray-600">
+                            {entity.kind} • {meta?.label ?? entity.platform}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-4">
+                        <div className="text-right text-sm text-gray-500">
+                          <div>Last seen: {formatRelativeFromTs(entity.lastUpdatedTs)}</div>
+                          <div>Created: {formatDateFromTs(entity.createdAtTs)}</div>
+                        </div>
+
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDeleteConfirmId(null);
+                              setOpenEntityMenuId(openEntityMenuId === entity.id ? null : entity.id);
+                            }}
+                            className="rounded-lg p-2 hover:bg-gray-100"
+                            aria-label="Row actions"
+                          >
+                            <MoreVertical className="h-5 w-5 text-gray-600" />
+                          </button>
+
+                          {openEntityMenuId === entity.id ? (
+                            <div className="absolute right-0 z-50 mt-2 w-52 rounded-lg border border-gray-200 bg-white shadow-lg" data-entity-menu>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedEntity(entity);
+                                  setDetailsOpen(true);
+                                  setOpenEntityMenuId(null);
+                                  setDeleteConfirmId(null);
+                                }}
+                                className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                              >
+                                <Eye className="h-4 w-4" />
+                                View details
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (deleteConfirmId !== entity.id) {
+                                    setDeleteConfirmId(entity.id);
+                                    return;
+                                  }
+
+                                  // TODO (later): wire to real remove-from-index endpoint.
+                                  // For now: close menu and refresh list.
+                                  setOpenEntityMenuId(null);
+                                  setDeleteConfirmId(null);
+                                  refreshIndexedEntities();
+                                }}
+                                className={
+                                  "flex w-full items-start gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 " +
+                                  (deleteConfirmId === entity.id ? "bg-red-100" : "")
+                                }
+                              >
+                                <Trash2 className="mt-0.5 h-4 w-4" />
+                                <span className="leading-tight">
+                                  {deleteConfirmId === entity.id ? (
+                                    <>
+                                      <span className="font-semibold">Confirm delete</span>
+                                      <span className="mt-0.5 block text-xs font-normal text-red-500">
+                                        Removes from index. You can add it back later.
+                                      </span>
+                                    </>
+                                  ) : (
+                                    "Delete"
+                                  )}
+                                </span>
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {displayedIndexedEntities.length === 0 ? (
+                <div className="rounded-lg border bg-white p-8 text-sm text-gray-600">No results.</div>
               ) : null}
             </div>
           ) : null}
+        </div>
         </>
       ) : null}
 
@@ -782,6 +968,112 @@ export default function ConnectionsPage() {
                   {step === "method" && "Method selection coming soon..."}
                   {step === "credentials" && "Credentials form coming soon..."}
                   {step === "entities" && "Entity selection coming soon..."}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {detailsOpen && selectedEntity ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="border-b px-6 py-5">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-800">
+                    {getPlatformMeta(selectedEntity.platform)?.Icon ? (
+                      (() => {
+                        const Icon = getPlatformMeta(selectedEntity.platform)?.Icon!;
+                        return <Icon className="h-5 w-5" />;
+                      })()
+                    ) : null}
+                  </div>
+                  <div>
+                    <div className="text-lg font-semibold text-gray-900">{selectedEntity.name}</div>
+                    <div className="text-sm text-gray-600">
+                      {selectedEntity.kind} • {getPlatformMeta(selectedEntity.platform)?.label ?? selectedEntity.platform}
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setDetailsOpen(false)}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200 text-xl"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+
+            <div className="px-6 py-6 space-y-6">
+              <div>
+                <button
+                  type="button"
+                  className="w-full rounded-lg bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700"
+                  // NOTE: no wiring to VibeChat yet as requested
+                  onClick={() => {
+                    console.log("Build dashboard in Chat (TODO):", selectedEntity);
+                    setDetailsOpen(false);
+                  }}
+                >
+                  Build dashboard in Chat
+                </button>
+                <p className="mt-2 text-xs text-gray-500 text-center">
+                  Opens VibeChat with this agent pre-loaded so you can design its UI.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                  <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Index status</div>
+                  <div className="mt-1 flex items-center gap-2">
+                    <span className="h-2 w-2 rounded-full bg-green-500" />
+                    <span className="text-sm font-semibold text-gray-900">Indexed</span>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                  <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Dashboard</div>
+                  <div className="mt-1 text-sm font-semibold text-gray-900">Not created</div>
+                </div>
+
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                  <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Client access</div>
+                  <div className="mt-1 text-sm font-semibold text-gray-900">Not shared</div>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-gray-200 bg-white p-4">
+                <div className="mb-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Details</div>
+                <div className="grid grid-cols-2 gap-y-2 text-sm">
+                  <div className="text-gray-500">Platform</div>
+                  <div className="font-medium text-gray-900">
+                    {getPlatformMeta(selectedEntity.platform)?.label ?? selectedEntity.platform}
+                  </div>
+
+                  <div className="text-gray-500">Type</div>
+                  <div className="font-medium text-gray-900">{selectedEntity.kind}</div>
+
+                  <div className="text-gray-500">External ID</div>
+                  <div className="font-mono text-xs text-gray-900">{selectedEntity.externalId}</div>
+
+                  <div className="text-gray-500">Last seen</div>
+                  <div className="font-medium text-gray-900">{formatRelativeFromTs(selectedEntity.lastUpdatedTs)}</div>
+
+                  <div className="text-gray-500">Created</div>
+                  <div className="font-medium text-gray-900">{formatDateFromTs(selectedEntity.createdAtTs)}</div>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-gray-200 bg-white">
+                <div className="border-b px-4 py-3">
+                  <div className="text-sm font-semibold text-gray-900">Dashboards</div>
+                  <div className="text-xs text-gray-500">Dashboards created from this agent/workflow</div>
+                </div>
+                <div className="p-4 text-sm text-gray-500">
+                  No dashboards yet. Click &quot;Build dashboard in Chat&quot; to create one.
                 </div>
               </div>
             </div>
