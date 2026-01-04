@@ -262,8 +262,12 @@ function EntityDropdownMenu({
 
 function EntityRow({
   entity,
+  openEntityDropdownId,
+  setOpenEntityDropdownId,
 }: {
   entity: IndexedEntity;
+  openEntityDropdownId: string | null;
+  setOpenEntityDropdownId: (id: string | null) => void;
 }) {
   return (
     <div className="flex items-center justify-between rounded-lg border border-gray-100 p-4 hover:bg-gray-50">
@@ -601,6 +605,8 @@ export default function ConnectionsPage() {
                 <EntityRow
                   key={entity.id}
                   entity={entity}
+                  openEntityDropdownId={openEntityDropdownId}
+                  setOpenEntityDropdownId={setOpenEntityDropdownId}
                 />
               ))}
               {filteredEntities.length === 0 ? (
