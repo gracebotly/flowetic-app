@@ -299,6 +299,20 @@ export default function ConnectionsPage() {
   // Connect modal state
   const [connectOpen, setConnectOpen] = useState(false);
   const [step, setStep] = useState<"platform" | "method" | "form">("platform");
+  
+  // Connect form state
+  const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
+  const [selectedMethod, setSelectedMethod] = useState<"api" | "webhook" | "mcp">("api");
+  const [apiKey, setApiKey] = useState("");
+  const [instanceUrl, setInstanceUrl] = useState("");
+  const [mcpUrl, setMcpUrl] = useState("");
+  const [authHeader, setAuthHeader] = useState("");
+  const [connectionName, setConnectionName] = useState("");
+  const [createdSourceId, setCreatedSourceId] = useState<string | null>(null);
+  const [connectEntities, setConnectEntities] = useState<any[]>([]);
+  const [entityExternalId, setEntityExternalId] = useState("");
+  const [entityDisplayName, setEntityDisplayName] = useState("");
+  const [saving, setSaving] = useState(false);
 
   // Credentials state
   const [credentials, setCredentials] = useState<CredentialRow[]>([]);
@@ -375,9 +389,31 @@ export default function ConnectionsPage() {
     return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   }
 
-  function openConnect() {
-    setConnectOpen(true);
+  function resetModal() {
     setStep("platform");
+    setSelectedPlatform(null);
+    setSelectedMethod("api");
+    setApiKey("");
+    setInstanceUrl("");
+    setMcpUrl("");
+    setAuthHeader("");
+    setConnectionName("");
+    setCreatedSourceId(null);
+    setConnectEntities([]);
+    setEntityExternalId("");
+    setEntityDisplayName("");
+    setSaving(false);
+    setErrMsg(null);
+  }
+
+  function openConnect() {
+    resetModal();
+    setConnectOpen(true);
+  }
+
+  function closeConnect() {
+    setConnectOpen(false);
+    resetModal();
   }
 
   const platformOptions = useMemo(() => {
@@ -739,6 +775,67 @@ export default function ConnectionsPage() {
               ) : null}
             </div>
           ) : null}
+        </div>
+      ) : null}
+
+      {/* Connect Platform Modal (in-page) */}
+      {connectOpen ? (
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-20">
+          <div className="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="border-b px-6 py-5">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="text-xl font-semibold text-gray-900">
+                    {step === "platform"
+                      ? "Connect Platform"
+                      : step === "method"
+                      ? `Connect ${selectedPlatform ? getPlatformMeta(selectedPlatform).label : ""}`
+                      : step === "credentials"
+                      ? `Credentials`
+                      : step === "entities"
+                      ? "Select entities to index"
+                      : "Connected"}
+                  </div>
+                  <div className="mt-1 text-sm text-gray-600">
+                    {step === "platform"
+                      ? "Choose which platform you want to connect."
+                      : step === "method"
+                      ? "Choose a connection method."
+                      : step === "credentials"
+                      ? "Enter credentials to validate and connect."
+                      : step === "entities"
+                      ? "Add agents/workflows you want GetFlowetic to index."
+                      : "Success."}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeConnect}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+
+            <div className="px-6 py-5">
+              {errMsg ? (
+                <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                  {errMsg}
+                </div>
+              ) : null}
+
+              {/* Modal step content will go here */}
+              <div className="text-center py-8">
+                <div className="text-gray-600">
+                  {step === "platform" && "Platform selection coming soon..."}
+                  {step === "method" && "Method selection coming soon..."}
+                  {step === "credentials" && "Credentials form coming soon..."}
+                  {step === "entities" && "Entity selection coming soon..."}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       ) : null}
     </div>
