@@ -355,7 +355,7 @@ export default function ConnectionsPage() {
 
   // Connect modal state
   const [connectOpen, setConnectOpen] = useState(false);
-  const [step, setStep] = useState<"platform" | "method" | "form" | "credentials">("platform");
+  const [step, setStep] = useState<"platform" | "method" | "form" | "credentials" | "entities">("platform");
   
   // Connect form state
   const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
