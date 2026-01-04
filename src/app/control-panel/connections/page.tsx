@@ -11,7 +11,6 @@ import {
   Settings,
   Edit,
   Trash2,
-  Filter as FilterIcon,
   Search as SearchIcon,
 } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
@@ -212,16 +211,59 @@ function KebabMenu({
   );
 }
 
+function EntityDropdownMenu({
+  entityId,
+  isOpen,
+  onClose,
+}: {
+  entityId: string;
+  isOpen: boolean;
+  onClose: () => void;
+}) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="dropdown-menu absolute right-0 z-50 mt-1 w-48 rounded-lg border border-gray-200 bg-white shadow-lg">
+      <button
+        onClick={() => {
+          console.log("View Details for entity", entityId);
+          onClose();
+        }}
+        className="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+      >
+        <Eye className="h-4 w-4" />
+        View Details
+      </button>
+
+      <button
+        onClick={() => {
+          console.log("Edit entity", entityId);
+          onClose();
+        }}
+        className="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+      >
+        <Edit className="h-4 w-4" />
+        Edit
+      </button>
+
+      <button
+        onClick={() => {
+          console.log("Delete entity", entityId);
+          onClose();
+        }}
+        className="flex w-full items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+      >
+        <Trash2 className="h-4 w-4" />
+        Delete
+      </button>
+    </div>
+  );
+}
+
 function EntityRow({
   entity,
-  menuOpen,
-  onToggleMenu,
-  onCloseMenu,
 }: {
   entity: IndexedEntity;
-  menuOpen: boolean;
-  onToggleMenu: () => void;
-  onCloseMenu: () => void;
 }) {
   return (
     <div className="flex items-center justify-between rounded-lg border border-gray-100 p-4 hover:bg-gray-50">
@@ -254,22 +296,20 @@ function EntityRow({
             Indexed
           </span>
 
-          <KebabMenu
-            isOpen={menuOpen}
-            onToggle={onToggleMenu}
-            onClose={onCloseMenu}
-            onViewDetails={() => {
-              // Replace with real details route when ready.
-              window.alert(`View Details: ${entity.name}`);
-            }}
-            onEdit={() => {
-              window.alert(`Edit: ${entity.name}`);
-            }}
-            onDelete={() => {
-              // Replace with real delete API call when ready.
-              window.alert(`Delete: ${entity.name}`);
-            }}
-          />
+          <div className="relative">
+            <button
+              onClick={() => setOpenEntityDropdownId(openEntityDropdownId === entity.id ? null : entity.id)}
+              className="p-1 rounded-lg hover:bg-gray-100"
+            >
+              <MoreVertical className="h-5 w-5 text-gray-600" />
+            </button>
+
+            <EntityDropdownMenu
+              entityId={entity.id}
+              isOpen={openEntityDropdownId === entity.id}
+              onClose={() => setOpenEntityDropdownId(null)}
+            />
+          </div>
         </div>
       </div>
     </div>
@@ -284,17 +324,11 @@ export default function ConnectionsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortKey>("created_at");
 
-  const [showFilters, setShowFilters] = useState(false);
-  const [platformFilter, setPlatformFilter] = useState<string>("all");
-  const [typeFilter, setTypeFilter] = useState<string>("all");
-  const [statusFilter, setStatusFilter] = useState<string>("indexed");
 
-  const [pendingPlatformFilter, setPendingPlatformFilter] = useState<string>("all");
-  const [pendingTypeFilter, setPendingTypeFilter] = useState<string>("all");
-  const [pendingStatusFilter, setPendingStatusFilter] = useState<string>("indexed");
 
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
+  const [openEntityDropdownId, setOpenEntityDropdownId] = useState<string | null>(null);
 
   // Connect modal state
   const [connectOpen, setConnectOpen] = useState(false);
@@ -437,15 +471,6 @@ export default function ConnectionsPage() {
       });
     }
 
-    // Filters
-    if (statusFilter !== "all") {
-      // this UI currently only shows Indexed rows; keep for forward compatibility
-      if (statusFilter === "indexed") list = list.filter((e) => e.indexed !== false);
-      if (statusFilter === "not_indexed") list = list.filter((e) => e.indexed === false);
-    }
-    if (platformFilter !== "all") list = list.filter((e) => e.platform === platformFilter);
-    if (typeFilter !== "all") list = list.filter((e) => e.type === typeFilter);
-
     // Sort
     if (sortBy === "name") {
       list.sort((a, b) => a.name.localeCompare(b.name));
@@ -549,23 +574,6 @@ export default function ConnectionsPage() {
                   className="w-80 rounded-lg border border-gray-300 py-2 pl-10 pr-4 focus:border-transparent focus:ring-2 focus:ring-blue-500"
                 />
               </div>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setShowFilters((v) => !v);
-                  // initialize pending values from applied values when opening
-                  if (!showFilters) {
-                    setPendingPlatformFilter(platformFilter);
-                    setPendingTypeFilter(typeFilter);
-                    setPendingStatusFilter(statusFilter);
-                  }
-                }}
-                className="flex items-center space-x-2 rounded-lg border border-gray-300 px-4 py-2 hover:bg-gray-50"
-              >
-                <FilterIcon className="h-4 w-4" />
-                <span>Filters</span>
-              </button>
             </div>
 
             <select
@@ -578,70 +586,6 @@ export default function ConnectionsPage() {
               <option value="name">Sort by Name</option>
             </select>
           </div>
-
-          {showFilters ? (
-            <div className="mb-6 rounded-lg border border-gray-200 bg-gray-50 p-4">
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-gray-700">Platform</label>
-                  <select
-                    value={pendingPlatformFilter}
-                    onChange={(e) => setPendingPlatformFilter(e.target.value)}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                  >
-                    <option value="all">All platforms</option>
-                    {platformOptions.map((p) => (
-                      <option key={p} value={p}>
-                        {p}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-gray-700">Type</label>
-                  <select
-                    value={pendingTypeFilter}
-                    onChange={(e) => setPendingTypeFilter(e.target.value)}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                  >
-                    <option value="all">All types</option>
-                    <option value="workflow">Workflow</option>
-                    <option value="agent">Agent</option>
-                    <option value="voice_agent">Voice Agent</option>
-                    <option value="automation">Automation</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-gray-700">Status</label>
-                  <select
-                    value={pendingStatusFilter}
-                    onChange={(e) => setPendingStatusFilter(e.target.value)}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                  >
-                    <option value="all">All statuses</option>
-                    <option value="indexed">Indexed</option>
-                    <option value="not_indexed">Not indexed</option>
-                  </select>
-                </div>
-
-                <div className="flex items-end">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPlatformFilter(pendingPlatformFilter);
-                      setTypeFilter(pendingTypeFilter);
-                      setStatusFilter(pendingStatusFilter);
-                    }}
-                    className="w-full rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
-                  >
-                    Apply Filters
-                  </button>
-                </div>
-              </div>
-            </div>
-          ) : null}
 
           {errMsg ? (
             <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
@@ -657,9 +601,6 @@ export default function ConnectionsPage() {
                 <EntityRow
                   key={entity.id}
                   entity={entity}
-                  menuOpen={openMenuId === entity.id}
-                  onToggleMenu={() => setOpenMenuId((cur) => (cur === entity.id ? null : entity.id))}
-                  onCloseMenu={() => setOpenMenuId(null)}
                 />
               ))}
               {filteredEntities.length === 0 ? (
