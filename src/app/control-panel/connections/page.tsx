@@ -962,14 +962,42 @@ export default function ConnectionsPage() {
               ) : null}
 
               {/* Modal step content will go here */}
-              <div className="text-center py-8">
-                <div className="text-gray-600">
-                  {step === "platform" && "Platform selection coming soon..."}
-                  {step === "method" && "Method selection coming soon..."}
-                  {step === "credentials" && "Credentials form coming soon..."}
-                  {step === "entities" && "Entity selection coming soon..."}
+              {step === "platform" ? (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    {(Object.keys(PLATFORM_META) as Array<keyof typeof PLATFORM_META>).map((k) => {
+                      const meta = PLATFORM_META[k];
+                      const Icon = meta.Icon;
+
+                      return (
+                        <button
+                          key={k}
+                          type="button"
+                          onClick={() => {
+                            setSelectedPlatform(k);
+                            setErrMsg(null);
+                            setStep("method");
+                          }}
+                          className="w-full rounded-xl border-2 border-gray-200 p-4 text-left hover:border-blue-500 hover:bg-slate-50"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-800">
+                              <Icon className="h-5 w-5" />
+                            </div>
+                            <div>
+                              <div className="text-base font-semibold text-gray-900">{meta.label}</div>
+                              <div className="text-sm text-gray-600">{meta.description}</div>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+              ) : null}
+              {step === "method" && "Method selection coming soon..."}
+              {step === "credentials" && "Credentials form coming soon..."}
+              {step === "entities" && "Entity selection coming soon..."}
             </div>
           </div>
         </div>
