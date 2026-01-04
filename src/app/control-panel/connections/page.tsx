@@ -615,21 +615,24 @@ export default function ConnectionsPage() {
       if (selectedPlatform === "n8n" && selectedMethod === "mcp") {
         if (!instanceUrl.trim()) {
           setSaving(false);
-          setErrMsg("Instance URL is required for n8n MCP connections.");
+          setErrMsg("Server URL is required for n8n MCP connections.");
           return;
         }
         if (!mcpAccessToken.trim()) {
           setSaving(false);
-          setErrMsg("MCP Access Token is required.");
+          setErrMsg("Access token is required.");
           return;
         }
       }
       
-      payload.mcpUrl = mcpUrl;
-      if (authHeader) payload.authHeader = authHeader;
-      
       if (selectedPlatform === "n8n") {
+        // Use instanceUrl and mcpAccessToken from n8n MCP form
+        payload.mcpUrl = instanceUrl.trim();
         payload.authHeader = `Bearer ${mcpAccessToken.trim()}`;
+      } else {
+        // Use mcpUrl and authHeader for other platforms
+        payload.mcpUrl = mcpUrl;
+        if (authHeader) payload.authHeader = authHeader;
       }
     }
 
@@ -1129,7 +1132,9 @@ export default function ConnectionsPage() {
                       : step === "method"
                       ? "Choose a connection method."
                       : step === "credentials"
-                      ? "Enter credentials to validate and connect."
+                      ? selectedPlatform === "n8n" && selectedMethod === "mcp"
+                        ? "Enter the Server URL and Access token from n8n's Instance-level MCP settings."
+                        : "Enter credentials to validate and connect."
                       : step === "entities"
                       ? "Add agents/workflows you want GetFlowetic to index."
                       : "Success."}
@@ -1302,7 +1307,7 @@ export default function ConnectionsPage() {
         {selectedPlatform === "n8n" ? (
           <>
             <div>
-              <label className="mb-2 block text-sm font-semibold text-gray-900">Instance URL *</label>
+              <label className="mb-2 block text-sm font-semibold text-gray-900">Server URL *</label>
               <input
                 value={instanceUrl}
                 onChange={(e) => setInstanceUrl(e.target.value)}
@@ -1312,7 +1317,7 @@ export default function ConnectionsPage() {
               />
             </div>
             <div>
-              <label className="mb-2 block text-sm font-semibold text-gray-900">MCP Access Token *</label>
+              <label className="mb-2 block text-sm font-semibold text-gray-900">Access token *</label>
               <input
                 value={mcpAccessToken}
                 onChange={(e) => setMcpAccessToken(e.target.value)}
@@ -1321,7 +1326,7 @@ export default function ConnectionsPage() {
                 placeholder="••••••••••••••"
               />
               <div className="mt-1 text-xs text-gray-600">
-                Token used to authenticate with your n8n instance's MCP server.
+                From n8n: Instance-level MCP &rarr; Access token.
               </div>
             </div>
           </>
