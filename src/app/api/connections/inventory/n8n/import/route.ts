@@ -89,9 +89,18 @@ export async function POST(req: Request) {
     );
   }
 
-  const workflows = (await res.json().catch(() => [])) as any[];
+  const raw = await res.json().catch(() => null);
+
+  const workflows: any[] = Array.isArray(raw)
+    ? raw
+    : Array.isArray(raw?.data)
+    ? raw.data
+    : Array.isArray(raw?.workflows)
+    ? raw.workflows
+    : [];
 
   const now = new Date().toISOString();
+
   const rows = workflows.map((w) => ({
     tenant_id: membership.tenant_id,
     source_id: sourceId,
