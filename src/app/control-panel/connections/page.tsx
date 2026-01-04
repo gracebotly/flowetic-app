@@ -69,6 +69,16 @@ const PLATFORM_META = {
   retell: { label: "Retell", Icon: RetellLogo },
 };
 
+type PlatformKey = keyof typeof PLATFORM_META;
+
+const PLATFORM_KEYS = Object.keys(PLATFORM_META) as PlatformKey[];
+
+function getPlatformMeta(platformType: string) {
+  const normalized = platformType.toLowerCase();
+  const key = PLATFORM_KEYS.find((k) => k === normalized);
+  return key ? PLATFORM_META[key] : undefined;
+}
+
 function StatusPill({ status }: { status: string | null }) {
   if (status === "active" || status === "connected") {
     return <span className="inline-flex items-center gap-1.5 rounded-full border border-green-200 bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-700">Connected</span>;
@@ -217,7 +227,7 @@ function EntityRow({
     <div className="flex items-center justify-between rounded-lg border border-gray-100 p-4 hover:bg-gray-50">
       <div className="flex items-center space-x-3">
         {(() => {
-          const meta = PLATFORM_META[String(entity.platform).toLowerCase()];
+          const meta = getPlatformMeta(String(entity.platform));
           const Icon = meta?.Icon;
           return (
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-800">
@@ -408,7 +418,7 @@ export default function ConnectionsPage() {
     if (credentialsSearch.trim()) {
       const q = credentialsSearch.trim().toLowerCase();
       rows = rows.filter((c) => {
-        const meta = PLATFORM_META[String(c.platformType)];
+        const meta = getPlatformMeta(String(c.platformType));
         const label = meta?.label ?? c.platformType;
         return (
           c.name.toLowerCase().includes(q) ||
@@ -643,7 +653,7 @@ export default function ConnectionsPage() {
           {!credentialsLoading ? (
             <div className="mt-6 space-y-3">
               {displayedCredentials.map((c) => {
-                const meta = PLATFORM_META[String(c.platformType).toLowerCase()];
+                const meta = getPlatformMeta(String(c.platformType));
                 const Icon = meta?.Icon;
 
                 const methodLabel = c.method === "api" ? "API" : c.method === "webhook" ? "Webhook" : "MCP";
