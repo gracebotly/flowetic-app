@@ -140,7 +140,7 @@ export async function POST(req: Request) {
       tenant_id: membership.tenant_id,
       type: platformType,
       name: connectionName || `${platformType} Instance`,
-      status: 'active',
+      status: "active",
       method: method,
       secret_hash: encryptSecret(JSON.stringify(secretJson)),
       // ✅ REMOVED created_at and updated_at - let database handle them

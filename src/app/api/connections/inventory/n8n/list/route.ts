@@ -44,18 +44,28 @@ export async function GET(req: Request) {
   if (source.type !== "n8n") return NextResponse.json({ ok: false, code: "INVALID_PLATFORM" }, { status: 400 });
   if (!source.secret_hash) return NextResponse.json({ ok: false, code: "MISSING_SECRET" }, { status: 400 });
 
-  const secret = JSON.parse(decryptSecret(source.secret_hash)) as { method: "api" | "webhook" | "mcp"; apiKey?: string; instanceUrl?: string | null };
+  const secret = JSON.parse(decryptSecret(source.secret_hash)) as {
+    method: "api" | "webhook" | "mcp";
+    apiKey?: string;
+    instanceUrl?: string | null;
+    authMode?: "header" | "bearer";
+  };
   if (secret.method !== "api" || !secret.apiKey) return NextResponse.json({ ok: false, code: "N8N_API_REQUIRED" }, { status: 400 });
 
   const baseUrl = normalizeBaseUrl(secret.instanceUrl);
   if (!baseUrl) return NextResponse.json({ ok: false, code: "MISSING_INSTANCE_URL" }, { status: 400 });
 
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+
+  if ((secret.authMode ?? "bearer") === "header") {
+    headers["X-N8N-API-KEY"] = secret.apiKey;
+  } else {
+    headers["Authorization"] = `Bearer ${secret.apiKey}`;
+  }
+
   const res = await fetch(`${baseUrl}/api/v1/workflows`, {
     method: "GET",
-    headers: {
-      "X-N8N-API-KEY": secret.apiKey,
-      "Content-Type": "application/json",
-    },
+    headers,
   });
 
   if (!res.ok) {
