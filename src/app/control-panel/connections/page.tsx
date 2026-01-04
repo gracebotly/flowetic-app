@@ -9,7 +9,18 @@ import {
   Trash2,
   Filter as FilterIcon,
   Search as SearchIcon,
+  KeyRound,
+  WebhookIcon,
+  Bot,
 } from "lucide-react";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import {
+  N8nLogo,
+  MakeLogo,
+  ActivepiecesLogo,
+  VapiLogo,
+  RetellLogo,
+} from "@/components/connections/platform-icons";
 
 type EntityType = "workflow" | "agent" | "voice_agent" | "automation";
 
@@ -28,6 +39,20 @@ type IndexedEntity = {
 
 type SortKey = "created_at" | "last_updated" | "name";
 
+type ConnectMethod = "api" | "webhook" | "mcp";
+
+type CredentialRow = {
+  id: string;
+  platformType: string;
+  name: string;
+  method: ConnectMethod;
+  status: "connected" | "attention" | "error";
+  created_at_ts: number;
+  last_updated_ts: number;
+};
+
+type CredentialSort = "last_updated" | "last_created" | "name_az";
+
 const entityTypeLabel: Record<EntityType, string> = {
   workflow: "Workflow",
   agent: "Agent",
@@ -35,23 +60,57 @@ const entityTypeLabel: Record<EntityType, string> = {
   automation: "Automation",
 };
 
-function PlatformIcon({ platform }: { platform: string }) {
-  // Keep this simple and resilient: if you have real icons, swap this mapping later.
-  const icons: Record<string, string> = {
-    n8n: "https://placehold.co/24x24/ff5a5f/white?text=n8n",
-    Make: "https://placehold.co/24x24/3b82f6/white?text=M",
-    Activepieces: "https://placehold.co/24x24/10b981/white?text=AP",
-    Vapi: "https://placehold.co/24x24/8b5cf6/white?text=V",
-    Retell: "https://placehold.co/24x24/f59e0b/white?text=R",
-  };
+const PLATFORM_META = {
+  n8n: { label: "n8n", Icon: N8nLogo },
+  make: { label: "Make", Icon: MakeLogo },
+  activepieces: { label: "Activepieces", Icon: ActivepiecesLogo },
+  vapi: { label: "Vapi", Icon: VapiLogo },
+  retell: { label: "Retell", Icon: RetellLogo },
+};
 
+function StatusPill({ status }: { status: "active" | "error" | "inactive" }) {
+  if (status === "active") {
+    return <span className="inline-flex items-center gap-1.5 rounded-full border border-green-200 bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-700">Connected</span>;
+  }
+  if (status === "error") {
+    return <span className="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700">Error</span>;
+  }
+  return <span className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-semibold text-gray-700">Attention</span>;
+}
+
+function CredentialsDropdownMenu({ sourceId, onClose }: { sourceId: string; onClose: () => void }) {
   return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={icons[platform] || "https://placehold.co/24x24/6b7280/white?text=%F0%9F%93%8B"}
-      alt={`${platform} logo`}
-      className="h-6 w-6 rounded"
-    />
+    <DropdownMenu.Portal>
+      <DropdownMenu.Content side="bottom" align="end" className="z-50 min-w-[160px] rounded-md border bg-white p-1 shadow">
+        <DropdownMenu.Item 
+          className="rounded px-2 py-1.5 text-sm hover:bg-gray-100 cursor-pointer"
+          onClick={() => {
+            alert(`Configure: ${sourceId}`);
+            onClose();
+          }}
+        >
+          Configure
+        </DropdownMenu.Item>
+        <DropdownMenu.Item 
+          className="rounded px-2 py-1.5 text-sm hover:bg-gray-100 cursor-pointer" 
+          onClick={() => {
+            alert(`Edit: ${sourceId}`);
+            onClose();
+          }}
+        >
+          Edit
+        </DropdownMenu.Item>
+        <DropdownMenu.Item 
+          className="rounded px-2 py-1.5 text-sm text-red-600 hover:bg-gray-100 cursor-pointer" 
+          onClick={() => {
+            alert(`Delete: ${sourceId}`);
+            onClose();
+          }}
+        >
+          Delete
+        </DropdownMenu.Item>
+      </DropdownMenu.Content>
+    </DropdownMenu.Portal>
   );
 }
 
@@ -214,6 +273,14 @@ export default function ConnectionsPage() {
 
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
+  // Credentials state
+  const [credentials, setCredentials] = useState<CredentialRow[]>([]);
+  const [credentialsLoading, setCredentialsLoading] = useState(false);
+  const [credentialsErr, setCredentialsErr] = useState<string | null>(null);
+  const [credentialsSearch, setCredentialsSearch] = useState("");
+  const [credentialsSort, setCredentialsSort] = useState<CredentialSort>("last_updated");
+  const [filter, setFilter] = useState<string>("all");
+
   async function loadEntities() {
     setLoading(true);
     setErrMsg(null);
@@ -232,9 +299,50 @@ export default function ConnectionsPage() {
     setLoading(false);
   }
 
+  async function refreshCredentials() {
+    setCredentialsLoading(true);
+    setCredentialsErr(null);
+
+    const res = await fetch("/api/credentials/list", { method: "GET" });
+    const json = await res.json().catch(() => ({}));
+
+    if (!res.ok || !json?.ok) {
+      setCredentials([]);
+      setCredentialsLoading(false);
+      setCredentialsErr(json?.message || "Failed to load credentials.");
+      return;
+    }
+
+    setCredentials((json.credentials as CredentialRow[]) ?? []);
+    setCredentialsLoading(false);
+  }
+
   useEffect(() => {
     loadEntities();
   }, []);
+
+  useEffect(() => {
+    if (filter === "credentials") {
+      refreshCredentials();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filter]);
+
+  function formatRelativeFromTs(ts: number) {
+    const deltaMs = Date.now() - ts;
+    const min = Math.floor(deltaMs / 60000);
+    if (min < 60) return `${Math.max(min, 1)} min ago`;
+    const hr = Math.floor(min / 60);
+    if (hr < 24) return `${hr} hours ago`;
+    const day = Math.floor(hr / 24);
+    if (day < 7) return `${day} days ago`;
+    const wk = Math.floor(day / 7);
+    return `${wk} week${wk === 1 ? "" : "s"} ago`;
+  }
+
+  function formatDateFromTs(ts: number) {
+    return new Date(ts).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  }
 
   const platformOptions = useMemo(() => {
     const set = new Set<string>();
@@ -278,141 +386,307 @@ export default function ConnectionsPage() {
     return list;
   }, [entities, platformFilter, searchQuery, sortBy, statusFilter, typeFilter]);
 
+  const displayedCredentials = useMemo(() => {
+    let rows = [...credentials];
+
+    if (credentialsSearch.trim()) {
+      const q = credentialsSearch.trim().toLowerCase();
+      rows = rows.filter((c) => {
+        const meta = PLATFORM_META[String(c.platformType)];
+        const label = meta?.label ?? c.platformType;
+        return (
+          c.name.toLowerCase().includes(q) ||
+          label.toLowerCase().includes(q) ||
+          c.platformType.toLowerCase().includes(q)
+        );
+      });
+    }
+
+    if (credentialsSort === "name_az") {
+      rows.sort((a, b) => a.name.localeCompare(b.name));
+    } else if (credentialsSort === "last_created") {
+      rows.sort((a, b) => b.created_at_ts - a.created_at_ts);
+    } else {
+      rows.sort((a, b) => b.last_updated_ts - a.last_updated_ts);
+    }
+
+    return rows;
+  }, [credentials, credentialsSearch, credentialsSort]);
+
   return (
     <div className="mx-auto max-w-6xl p-6">
       <div className="mb-6">
-        <h1 className="mb-2 text-2xl font-semibold text-gray-900">All</h1>
-        <p className="text-gray-600">Workflows, agents, and automations you have indexed</p>
+        <h1 className="mb-2 text-2xl font-semibold text-gray-900">Connections</h1>
+        <p className="text-gray-600">Manage your platform connections and indexed entities</p>
       </div>
 
-      <div className="mb-6 flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <div className="relative">
-            <SearchIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search workflows & agents..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-80 rounded-lg border border-gray-300 py-2 pl-10 pr-4 focus:border-transparent focus:ring-2 focus:ring-blue-500"
-            />
+      {/* Tabs */}
+      <div className="mb-6 border-b border-gray-200">
+        <nav className="flex space-x-8">
+          <button
+            onClick={() => setFilter("all")}
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+              filter === "all"
+                ? "border-blue-500 text-blue-600"
+                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+            }`}
+          >
+            All
+          </button>
+          <button
+            onClick={() => setFilter("credentials")}
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+              filter === "credentials"
+                ? "border-blue-500 text-blue-600"
+                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+            }`}
+          >
+            Credentials
+          </button>
+        </nav>
+      </div>
+
+      {/* All Entities View */}
+      {filter === "all" ? (
+        <>
+          <div className="mb-6">
+            <h2 className="text-lg font-medium text-gray-900 mb-2">Workflows, agents, and automations you have indexed</h2>
           </div>
 
-          <button
-            type="button"
-            onClick={() => {
-              setShowFilters((v) => !v);
-              // initialize pending values from applied values when opening
-              if (!showFilters) {
-                setPendingPlatformFilter(platformFilter);
-                setPendingTypeFilter(typeFilter);
-                setPendingStatusFilter(statusFilter);
-              }
-            }}
-            className="flex items-center space-x-2 rounded-lg border border-gray-300 px-4 py-2 hover:bg-gray-50"
-          >
-            <FilterIcon className="h-4 w-4" />
-            <span>Filters</span>
-          </button>
-        </div>
+          <div className="mb-6 flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <div className="relative">
+                <SearchIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search workflows & agents..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-80 rounded-lg border border-gray-300 py-2 pl-10 pr-4 focus:border-transparent focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
 
-        <select
-          value={sortBy}
-          onChange={(e) => setSortBy(e.target.value as SortKey)}
-          className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
-        >
-          <option value="created_at">Sort by Created Date</option>
-          <option value="last_updated">Sort by Last Updated</option>
-          <option value="name">Sort by Name</option>
-        </select>
-      </div>
-
-      {showFilters ? (
-        <div className="mb-6 rounded-lg border border-gray-200 bg-gray-50 p-4">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">Platform</label>
-              <select
-                value={pendingPlatformFilter}
-                onChange={(e) => setPendingPlatformFilter(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-              >
-                <option value="all">All platforms</option>
-                {platformOptions.map((p) => (
-                  <option key={p} value={p}>
-                    {p}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">Type</label>
-              <select
-                value={pendingTypeFilter}
-                onChange={(e) => setPendingTypeFilter(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-              >
-                <option value="all">All types</option>
-                <option value="workflow">Workflow</option>
-                <option value="agent">Agent</option>
-                <option value="voice_agent">Voice Agent</option>
-                <option value="automation">Automation</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">Status</label>
-              <select
-                value={pendingStatusFilter}
-                onChange={(e) => setPendingStatusFilter(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-              >
-                <option value="all">All statuses</option>
-                <option value="indexed">Indexed</option>
-                <option value="not_indexed">Not indexed</option>
-              </select>
-            </div>
-
-            <div className="flex items-end">
               <button
                 type="button"
                 onClick={() => {
-                  setPlatformFilter(pendingPlatformFilter);
-                  setTypeFilter(pendingTypeFilter);
-                  setStatusFilter(pendingStatusFilter);
+                  setShowFilters((v) => !v);
+                  // initialize pending values from applied values when opening
+                  if (!showFilters) {
+                    setPendingPlatformFilter(platformFilter);
+                    setPendingTypeFilter(typeFilter);
+                    setPendingStatusFilter(statusFilter);
+                  }
                 }}
-                className="w-full rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+                className="flex items-center space-x-2 rounded-lg border border-gray-300 px-4 py-2 hover:bg-gray-50"
               >
-                Apply Filters
+                <FilterIcon className="h-4 w-4" />
+                <span>Filters</span>
               </button>
             </div>
+
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as SortKey)}
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            >
+              <option value="created_at">Sort by Created Date</option>
+              <option value="last_updated">Sort by Last Updated</option>
+              <option value="name">Sort by Name</option>
+            </select>
           </div>
-        </div>
+
+          {showFilters ? (
+            <div className="mb-6 rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">Platform</label>
+                  <select
+                    value={pendingPlatformFilter}
+                    onChange={(e) => setPendingPlatformFilter(e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  >
+                    <option value="all">All platforms</option>
+                    {platformOptions.map((p) => (
+                      <option key={p} value={p}>
+                        {p}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">Type</label>
+                  <select
+                    value={pendingTypeFilter}
+                    onChange={(e) => setPendingTypeFilter(e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  >
+                    <option value="all">All types</option>
+                    <option value="workflow">Workflow</option>
+                    <option value="agent">Agent</option>
+                    <option value="voice_agent">Voice Agent</option>
+                    <option value="automation">Automation</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">Status</label>
+                  <select
+                    value={pendingStatusFilter}
+                    onChange={(e) => setPendingStatusFilter(e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  >
+                    <option value="all">All statuses</option>
+                    <option value="indexed">Indexed</option>
+                    <option value="not_indexed">Not indexed</option>
+                  </select>
+                </div>
+
+                <div className="flex items-end">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPlatformFilter(pendingPlatformFilter);
+                      setTypeFilter(pendingTypeFilter);
+                      setStatusFilter(pendingStatusFilter);
+                    }}
+                    className="w-full rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+                  >
+                    Apply Filters
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {errMsg ? (
+            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              {errMsg}
+            </div>
+          ) : null}
+
+          {loading ? <div className="text-sm text-gray-600">Loading…</div> : null}
+
+          {!loading ? (
+            <div className="space-y-2">
+              {filteredEntities.map((entity) => (
+                <EntityRow
+                  key={entity.id}
+                  entity={entity}
+                  menuOpen={openMenuId === entity.id}
+                  onToggleMenu={() => setOpenMenuId((cur) => (cur === entity.id ? null : entity.id))}
+                  onCloseMenu={() => setOpenMenuId(null)}
+                />
+              ))}
+              {filteredEntities.length === 0 ? (
+                <div className="rounded-lg border bg-white p-8 text-sm text-gray-600">
+                  No results. Try a different search or filter.
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </>
       ) : null}
 
-      {errMsg ? (
-        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-          {errMsg}
-        </div>
-      ) : null}
+      {/* Credentials View */}
+      {filter === "credentials" ? (
+        <div className="mt-6">
+          <div className="flex items-center justify-between">
+            <div className="relative w-80">
+              <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search credentials..."
+                value={credentialsSearch}
+                onChange={(e) => setCredentialsSearch(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 py-2.5 pl-10 pr-4 text-sm text-gray-900 placeholder-gray-500 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
 
-      {loading ? <div className="text-sm text-gray-600">Loading…</div> : null}
+            <select
+              value={credentialsSort}
+              onChange={(e) => setCredentialsSort(e.target.value as CredentialSort)}
+              className="min-w-[200px] rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              <option value="last_updated">Sort by last updated</option>
+              <option value="last_created">Sort by last created</option>
+              <option value="name_az">Sort by name (A-Z)</option>
+            </select>
+          </div>
 
-      {!loading ? (
-        <div className="space-y-2">
-          {filteredEntities.map((entity) => (
-            <EntityRow
-              key={entity.id}
-              entity={entity}
-              menuOpen={openMenuId === entity.id}
-              onToggleMenu={() => setOpenMenuId((cur) => (cur === entity.id ? null : entity.id))}
-              onCloseMenu={() => setOpenMenuId(null)}
-            />
-          ))}
-          {filteredEntities.length === 0 ? (
-            <div className="rounded-lg border bg-white p-8 text-sm text-gray-600">
-              No results. Try a different search or filter.
+          {credentialsErr ? (
+            <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              {credentialsErr}
+            </div>
+          ) : null}
+
+          {credentialsLoading ? (
+            <div className="mt-8 text-sm text-gray-600">Loading credentials…</div>
+          ) : null}
+
+          {!credentialsLoading ? (
+            <div className="mt-6 space-y-3">
+              {displayedCredentials.map((c) => {
+                const meta = PLATFORM_META[String(c.platformType)];
+                const Icon = meta?.Icon;
+
+                const methodLabel = c.method === "api" ? "API" : c.method === "webhook" ? "Webhook" : "MCP";
+                const methodIcon =
+                  c.method === "api" ? <KeyRound className="h-3.5 w-3.5" /> : c.method === "webhook" ? <WebhookIcon className="h-3.5 w-3.5" /> : <Bot className="h-3.5 w-3.5" />;
+
+                return (
+                  <div key={c.id} className="rounded-lg border border-gray-200 bg-white p-4 hover:shadow-sm transition-shadow">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-800">
+                          {Icon ? <Icon className="h-5 w-5" /> : null}
+                        </div>
+
+                        <div>
+                          <div className="font-semibold text-gray-900">{meta?.label ?? c.name}</div>
+                          <div className="text-sm text-gray-500 flex flex-wrap items-center gap-2">
+                            <span className="inline-flex items-center gap-1">
+                              {methodIcon}
+                              <span>{methodLabel}</span>
+                            </span>
+
+                            <span className="text-gray-300">|</span>
+                            <span>Last updated {formatRelativeFromTs(c.last_updated_ts)}</span>
+
+                            <span className="text-gray-300">|</span>
+                            <span>Created {formatDateFromTs(c.created_at_ts)}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <StatusPill status={c.status === "connected" ? "active" : c.status === "error" ? "error" : "inactive"} />
+                        <div className="relative">
+                          <DropdownMenu.Root>
+                            <DropdownMenu.Trigger asChild>
+                              <button
+                                onClick={() => setOpenDropdownId(openDropdownId === c.id ? null : c.id)}
+                                className="p-1 rounded-lg hover:bg-gray-100"
+                              >
+                                <MoreVertical className="h-5 w-5 text-gray-600" />
+                              </button>
+                            </DropdownMenu.Trigger>
+                            {openDropdownId === c.id && (
+                              <CredentialsDropdownMenu sourceId={c.id} onClose={() => setOpenDropdownId(null)} />
+                            )}
+                          </DropdownMenu.Root>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {displayedCredentials.length === 0 ? (
+                <div className="rounded-lg border bg-white p-8 text-sm text-gray-600">
+                  No credentials found.
+                </div>
+              ) : null}
             </div>
           ) : null}
         </div>

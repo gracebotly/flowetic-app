@@ -32,16 +32,14 @@ function formatRelative(d: Date) {
 }
 
 export async function GET() {
-  // Temporary server-backed stub so UI is fully wired.
-  // Replace this with your real DB query later.
   const now = Date.now();
 
-  const rows: IndexedEntity[] = [
+  const raw = [
     {
       id: "1",
       name: "Customer Support Workflow",
       platform: "n8n",
-      type: "workflow",
+      type: "workflow" as const,
       created_at_ts: now - 7 * 24 * 60 * 60 * 1000,
       last_updated_ts: now - 2 * 60 * 60 * 1000,
       indexed: true,
@@ -50,7 +48,7 @@ export async function GET() {
       id: "2",
       name: "Sales Lead Bot",
       platform: "Make",
-      type: "agent",
+      type: "agent" as const,
       created_at_ts: now - 8 * 24 * 60 * 60 * 1000,
       last_updated_ts: now - 5 * 60 * 60 * 1000,
       indexed: true,
@@ -59,7 +57,7 @@ export async function GET() {
       id: "3",
       name: "Voice Assistant",
       platform: "Vapi",
-      type: "voice_agent",
+      type: "voice_agent" as const,
       created_at_ts: now - 10 * 24 * 60 * 60 * 1000,
       last_updated_ts: now - 24 * 60 * 60 * 1000,
       indexed: true,
@@ -68,7 +66,7 @@ export async function GET() {
       id: "4",
       name: "Data Processing Pipeline",
       platform: "Activepieces",
-      type: "automation",
+      type: "automation" as const,
       created_at_ts: now - 13 * 24 * 60 * 60 * 1000,
       last_updated_ts: now - 3 * 24 * 60 * 60 * 1000,
       indexed: true,
@@ -77,12 +75,14 @@ export async function GET() {
       id: "5",
       name: "Retell Integration",
       platform: "Retell",
-      type: "workflow",
+      type: "workflow" as const,
       created_at_ts: now - 17 * 24 * 60 * 60 * 1000,
       last_updated_ts: now - 7 * 24 * 60 * 60 * 1000,
       indexed: true,
     },
-  ].map((r) => {
+  ];
+
+  const entities: IndexedEntity[] = raw.map((r) => {
     const created = new Date(r.created_at_ts);
     const updated = new Date(r.last_updated_ts);
     return {
@@ -93,5 +93,5 @@ export async function GET() {
     };
   });
 
-  return NextResponse.json({ ok: true, entities: rows });
+  return NextResponse.json({ ok: true, entities });
 }
