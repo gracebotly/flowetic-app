@@ -321,15 +321,19 @@ function EntityRow({
 }
 
 export default function ConnectionsPage() {
+  // Main data states
   const [entities, setEntities] = useState<IndexedEntity[]>([]);
   const [loading, setLoading] = useState(true);
   const [errMsg, setErrMsg] = useState<string | null>(null);
 
+  // UI state for All tab
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortKey>("created_at");
 
+  // Tab state (for switching between All, Credentials)
+  const [filter, setFilter] = useState<string>("all");
 
-
+  // Dropdown states
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const [openEntityDropdownId, setOpenEntityDropdownId] = useState<string | null>(null);
@@ -358,7 +362,6 @@ export default function ConnectionsPage() {
   const [credentialsErr, setCredentialsErr] = useState<string | null>(null);
   const [credentialsSearch, setCredentialsSearch] = useState("");
   const [credentialsSort, setCredentialsSort] = useState<CredentialSort>("last_updated");
-  const [filter, setFilter] = useState<string>("all");
 
   async function loadEntities() {
     setLoading(true);
@@ -485,7 +488,7 @@ export default function ConnectionsPage() {
     }
 
     return list;
-  }, [entities, platformFilter, searchQuery, sortBy, statusFilter, typeFilter]);
+  }, [entities, searchQuery, sortBy]);
 
   const displayedCredentials = useMemo(() => {
     let rows = [...credentials];
