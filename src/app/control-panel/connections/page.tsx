@@ -386,6 +386,7 @@ export default function ConnectionsPage() {
   // Connect modal state
   const [connectOpen, setConnectOpen] = useState(false);
   const [step, setStep] = useState<"platform" | "method" | "credentials" | "entities" | "success">("platform");
+  const [mcpHelpOpen, setMcpHelpOpen] = useState(false);
   
   // Connect form state
   const [selectedPlatform, setSelectedPlatform] = useState<keyof typeof PLATFORM_META | null>(null);
@@ -394,6 +395,7 @@ export default function ConnectionsPage() {
   const [apiKey, setApiKey] = useState("");
   const [instanceUrl, setInstanceUrl] = useState("");
   const [mcpUrl, setMcpUrl] = useState("");
+  const [mcpAccessToken, setMcpAccessToken] = useState("");
   const [authHeader, setAuthHeader] = useState("");
   const [connectionName, setConnectionName] = useState("");
   const [createdSourceId, setCreatedSourceId] = useState<string | null>(null);
@@ -548,6 +550,7 @@ export default function ConnectionsPage() {
     setApiKey("");
     setInstanceUrl("");
     setMcpUrl("");
+    setMcpAccessToken("");
     setAuthHeader("");
     setConnectionName("");
     setCreatedSourceId(null);
@@ -581,7 +584,12 @@ export default function ConnectionsPage() {
     };
 
     if (selectedMethod === "api") {
-      if (selectedPlatform === "n8n") {
+      if (selectedPlatform === "n8n" && selectedMethod === "api") {
+        if (!apiKey.trim()) {
+          setSaving(false);
+          setErrMsg("API Key is required.");
+          return;
+        }
         if (!instanceUrl.trim()) {
           setSaving(false);
           setErrMsg("Instance URL is required for n8n API connections.");
@@ -592,10 +600,6 @@ export default function ConnectionsPage() {
       payload.apiKey = apiKey;
 
       if (instanceUrl) payload.instanceUrl = instanceUrl;
-
-      if (selectedPlatform === "n8n") {
-        payload.n8nAuthMode = n8nAuthMode;
-      }
     }
 
     if (selectedMethod === "webhook") {
@@ -603,8 +607,25 @@ export default function ConnectionsPage() {
     }
 
     if (selectedMethod === "mcp") {
+      if (selectedPlatform === "n8n" && selectedMethod === "mcp") {
+        if (!instanceUrl.trim()) {
+          setSaving(false);
+          setErrMsg("Instance URL is required for n8n MCP connections.");
+          return;
+        }
+        if (!mcpAccessToken.trim()) {
+          setSaving(false);
+          setErrMsg("MCP Access Token is required.");
+          return;
+        }
+      }
+      
       payload.mcpUrl = mcpUrl;
       if (authHeader) payload.authHeader = authHeader;
+      
+      if (selectedPlatform === "n8n") {
+        payload.authHeader = `Bearer ${mcpAccessToken.trim()}`;
+      }
     }
 
     const res = await fetch("/api/connections/connect", {
@@ -1075,16 +1096,27 @@ export default function ConnectionsPage() {
             <div className="border-b px-6 py-5">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <div className="text-xl font-semibold text-gray-900">
-                    {step === "platform"
-                      ? "Connect Platform"
-                      : step === "method"
-                      ? `Connect ${selectedPlatform ? (getPlatformMeta(String(selectedPlatform))?.label ?? String(selectedPlatform)) : ""}`
-                      : step === "credentials"
-                      ? `Credentials`
-                      : step === "entities"
-                      ? "Select entities to index"
-                      : "Connected"}
+                  <div className="flex items-center gap-3">
+                    <div className="text-xl font-semibold text-gray-900">
+                      {step === "platform"
+                        ? "Connect Platform"
+                        : step === "method"
+                        ? `Connect ${selectedPlatform ? (getPlatformMeta(String(selectedPlatform))?.label ?? String(selectedPlatform)) : ""}`
+                        : step === "credentials"
+                        ? `Credentials`
+                        : step === "entities"
+                        ? "Select entities to index"
+                        : "Connected"}
+                    </div>
+                    {step === "credentials" && selectedPlatform === "n8n" && selectedMethod === "mcp" ? (
+                      <button
+                        type="button"
+                        onClick={() => setMcpHelpOpen(true)}
+                        className="text-sm font-medium text-blue-600 hover:underline"
+                      >
+                        What is this?
+                      </button>
+                    ) : null}
                   </div>
                   <div className="mt-1 text-sm text-gray-600">
                     {step === "platform"
@@ -1168,33 +1200,30 @@ export default function ConnectionsPage() {
         <span className="rounded bg-emerald-600 px-2 py-1 text-xs font-bold text-white">RECOMMENDED</span>
       </div>
       <div className="mt-1 text-sm text-gray-700">
-        Connect via API to import your catalog so you can select what to index for dashboards.
-      </div>
-      <div className="mt-2 text-xs text-gray-600">
-        {selectedPlatform && ["vapi", "retell"].includes(String(selectedPlatform))
-          ? "For voice platforms (Vapi/Retell), webhooks power real-time analytics."
-          : "For automation platforms (n8n/Make/Activepieces), analytics is collected via polling run logs."}
+        Connect to your n8n instance using an API key to import and index workflows.
       </div>
     </button>
 
-    <button
-      type="button"
-      onClick={() => {
-        setSelectedMethod("webhook");
-        setErrMsg(null);
-        setStep("credentials");
-      }}
-      className="w-full rounded-xl border-2 border-gray-200 p-4 text-left hover:border-blue-500 hover:bg-slate-50"
-    >
-      <div className="flex items-center gap-2 text-base font-semibold text-gray-900">
-        <WebhookIcon className="h-5 w-5 text-slate-700" />
-        Webhook Only
-      </div>
-      <div className="mt-1 text-sm text-gray-700">Manual event streaming to GetFlowetic. No catalog import.</div>
-      <div className="mt-2 text-xs text-gray-600">
-        Best for voice platforms if you want real-time events. Automation platforms generally rely on API polling.
-      </div>
-    </button>
+    {selectedPlatform !== "n8n" ? (
+      <button
+        type="button"
+        onClick={() => {
+          setSelectedMethod("webhook");
+          setErrMsg(null);
+          setStep("credentials");
+        }}
+        className="w-full rounded-xl border-2 border-gray-200 p-4 text-left hover:border-blue-500 hover:bg-slate-50"
+      >
+        <div className="flex items-center gap-2 text-base font-semibold text-gray-900">
+          <WebhookIcon className="h-5 w-5 text-slate-700" />
+          Webhook Only
+        </div>
+        <div className="mt-1 text-sm text-gray-700">Manual event streaming to GetFlowetic. No catalog import.</div>
+        <div className="mt-2 text-xs text-gray-600">
+          Best for voice platforms if you want real-time events. Automation platforms generally rely on API polling.
+        </div>
+      </button>
+    ) : null}
 
     {selectedPlatform ? (
       <button
@@ -1213,10 +1242,10 @@ export default function ConnectionsPage() {
       >
         <div className="flex items-center gap-2 text-base font-semibold text-gray-900">
           <Bot className="h-5 w-5 text-slate-700" />
-          MCP (Actions)
+          MCP instances
         </div>
         <div className="mt-1 text-sm text-gray-700">
-          Optional. Enables AI-triggered workflow actions. Does not replace analytics ingestion.
+          Connect to n8n's built-in MCP server to discover and run workflows enabled for MCP.
         </div>
         <div className="mt-2 text-xs text-gray-600">
           Supported for: n8n, Make, Activepieces. Not available for Vapi/Retell.
@@ -1237,22 +1266,6 @@ export default function ConnectionsPage() {
           className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
           placeholder="••••••••••••••"
         />
-        {selectedPlatform === "n8n" && selectedMethod === "api" ? (
-          <div>
-            <label className="mb-2 block text-sm font-semibold text-gray-900">n8n auth mode</label>
-            <select
-              value={n8nAuthMode}
-              onChange={(e) => setN8nAuthMode(e.target.value as "header" | "bearer")}
-              className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-            >
-              <option value="bearer">Bearer token</option>
-              <option value="header">X-N8N-API-KEY header</option>
-            </select>
-            <div className="mt-1 text-xs text-gray-600">
-              If you see "X-N8N-API-KEY header required", switch to the header option.
-            </div>
-          </div>
-        ) : null}
       </div>
     ) : null}
 
@@ -1270,7 +1283,7 @@ export default function ConnectionsPage() {
         />
         {selectedPlatform === "n8n" && selectedMethod === "api" ? (
           <div className="mt-1 text-xs text-gray-600">
-            Required for n8n API connections so we can validate your key against your instance.
+            Used to validate your key against your n8n instance.
           </div>
         ) : null}
       </div>
@@ -1284,39 +1297,71 @@ export default function ConnectionsPage() {
 
     {selectedMethod === "mcp" ? (
       <>
-        <div>
-          <label className="mb-2 block text-sm font-semibold text-gray-900">MCP Server URL *</label>
-          <input
-            value={mcpUrl}
-            onChange={(e) => setMcpUrl(e.target.value)}
-            type="url"
-            className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-            placeholder="https://..."
-          />
-        </div>
-        <div>
-          <label className="mb-2 block text-sm font-semibold text-gray-900">Authorization header (optional)</label>
-          <input
-            value={authHeader}
-            onChange={(e) => setAuthHeader(e.target.value)}
-            type="text"
-            className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-            placeholder="Bearer ..."
-          />
-        </div>
+        {selectedPlatform === "n8n" ? (
+          <>
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-gray-900">Instance URL *</label>
+              <input
+                value={instanceUrl}
+                onChange={(e) => setInstanceUrl(e.target.value)}
+                type="url"
+                className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                placeholder="https://your-instance..."
+              />
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-gray-900">MCP Access Token *</label>
+              <input
+                value={mcpAccessToken}
+                onChange={(e) => setMcpAccessToken(e.target.value)}
+                type="password"
+                className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                placeholder="••••••••••••••"
+              />
+              <div className="mt-1 text-xs text-gray-600">
+                Token used to authenticate with your n8n instance's MCP server.
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-gray-900">MCP Server URL *</label>
+              <input
+                value={mcpUrl}
+                onChange={(e) => setMcpUrl(e.target.value)}
+                type="url"
+                className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                placeholder="https://..."
+              />
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-gray-900">Authorization header (optional)</label>
+              <input
+                value={authHeader}
+                onChange={(e) => setAuthHeader(e.target.value)}
+                type="text"
+                className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                placeholder="Bearer ..."
+              />
+            </div>
+          </>
+        )}
       </>
     ) : null}
 
-    <div>
-      <label className="mb-2 block text-sm font-semibold text-gray-900">Connection name (optional)</label>
-      <input
-        value={connectionName}
-        onChange={(e) => setConnectionName(e.target.value)}
-        type="text"
-        className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-        placeholder="Production"
-      />
-    </div>
+    {selectedPlatform !== "n8n" ? (
+      <div>
+        <label className="mb-2 block text-sm font-semibold text-gray-900">Connection name (optional)</label>
+        <input
+          value={connectionName}
+          onChange={(e) => setConnectionName(e.target.value)}
+          type="text"
+          className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+          placeholder="Production"
+        />
+      </div>
+    ) : null}
 
     <div className="flex justify-end gap-2 pt-2">
       <button
@@ -1565,6 +1610,63 @@ export default function ConnectionsPage() {
                 <div className="p-4 text-sm text-gray-500">
                   No dashboards yet. Click &quot;Build dashboard in Chat&quot; to create one.
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* MCP Help Modal */}
+      {mcpHelpOpen ? (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="border-b px-6 py-5">
+              <div className="flex items-start justify-between gap-4">
+                <div className="text-lg font-semibold text-gray-900">About n8n MCP instances</div>
+                <button
+                  type="button"
+                  onClick={() => setMcpHelpOpen(false)}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+
+            <div className="px-6 py-6 space-y-4 text-sm text-gray-700">
+              <p>
+                MCP lets AI tools discover and run workflows you explicitly enable in your n8n instance.
+              </p>
+
+              <ul className="list-disc pl-5 space-y-2">
+                <li>Workflows are created and edited in n8n — MCP cannot author workflows.</li>
+                <li>No workflows are exposed by default. You must enable MCP per workflow.</li>
+                <li>MCP access is instance-wide. All connected MCP clients see enabled workflows.</li>
+                <li>Only published workflows with supported triggers are eligible.</li>
+                <li>MCP-triggered workflows run normally and appear in n8n executions.</li>
+              </ul>
+
+              <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">
+                For full setup steps, limits, and revoking access, read{" "}
+                <a
+                  href="https://docs.n8n.io/advanced-ai/accessing-n8n-mcp-server/"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-semibold text-blue-700 underline decoration-blue-300 underline-offset-2 hover:decoration-blue-600"
+                >
+                  n8n's official MCP server guide
+                </a>
+                .
+              </div>
+
+              <div className="flex justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => setMcpHelpOpen(false)}
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                >
+                  Got it
+                </button>
               </div>
             </div>
           </div>
