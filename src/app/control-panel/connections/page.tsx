@@ -76,11 +76,31 @@ const entityTypeLabel: Record<EntityType, string> = {
 };
 
 const PLATFORM_META = {
-  n8n: { label: "n8n", Icon: N8nLogo },
-  make: { label: "Make", Icon: MakeLogo },
-  activepieces: { label: "Activepieces", Icon: ActivepiecesLogo },
-  vapi: { label: "Vapi", Icon: VapiLogo },
-  retell: { label: "Retell", Icon: RetellLogo },
+  n8n: { 
+    label: "n8n", 
+    Icon: N8nLogo,
+    description: "Workflow automation platform"
+  },
+  make: { 
+    label: "Make", 
+    Icon: MakeLogo,
+    description: "Visual automation builder"
+  },
+  activepieces: { 
+    label: "Activepieces", 
+    Icon: ActivepiecesLogo,
+    description: "Open-source automation tool"
+  },
+  vapi: { 
+    label: "Vapi", 
+    Icon: VapiLogo,
+    description: "Voice AI platform"
+  },
+  retell: { 
+    label: "Retell", 
+    Icon: RetellLogo,
+    description: "Voice agent platform"
+  },
 };
 
 type PlatformKey = keyof typeof PLATFORM_META;
