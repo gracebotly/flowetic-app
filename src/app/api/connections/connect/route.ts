@@ -133,18 +133,20 @@ export async function POST(req: Request) {
     }
   }
 
-  const secret_hash = encryptSecret(JSON.stringify(secretJson));
 
   const { data: source, error } = await supabase
     .from("sources")
     .insert({
       tenant_id: membership.tenant_id,
       type: platformType,
-      name: connectionName || platformType.toUpperCase(),
-      secret_hash,
-      status: "active",
+      name: `${platformType} Instance`,
+      status: 'pending',
+      method: method,  // ✅ ADD THIS LINE
+      secret_hash: encryptSecret(JSON.stringify(secretJson)),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     })
-    .select("id,type,name,status")
+    .select()
     .single();
 
   if (error) {
