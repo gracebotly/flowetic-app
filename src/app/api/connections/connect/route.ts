@@ -139,12 +139,11 @@ export async function POST(req: Request) {
     .insert({
       tenant_id: membership.tenant_id,
       type: platformType,
-      name: `${platformType} Instance`,
+      name: connectionName || `${platformType} Instance`,
       status: 'pending',
-      method: method,  // ✅ ADD THIS LINE
+      method: method,
       secret_hash: encryptSecret(JSON.stringify(secretJson)),
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      // ✅ REMOVED created_at and updated_at - let database handle them
     })
     .select()
     .single();
