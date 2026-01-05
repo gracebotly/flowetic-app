@@ -650,17 +650,22 @@ export default function ConnectionsPage() {
 
   const displayedSelectable = useMemo(() => {
     const q = inventorySearch.trim().toLowerCase();
-    const rows = !q
-      ? selectableFromThisSource
-      : selectableFromThisSource.filter((e) => {
-          const name = e.name.toLowerCase();
-          const id = e.externalId.toLowerCase();
-          return name.includes(q); // name-only to avoid confusing matches
-        });
+    const base = inventoryEntities.map((e) => ({
+      id: `${createdSourceId ?? "source"}:${e.externalId}`,
+      externalId: e.externalId,
+      name: e.displayName,
+      entityKind: e.entityKind,
+    }));
 
-    // auto-sort: last updated first
-    return [...rows].sort((a, b) => b.lastUpdatedTs - a.lastUpdatedTs);
-  }, [selectableFromThisSource, inventorySearch]);
+    const filtered = q
+      ? base.filter((e) => e.name.toLowerCase().includes(q) || e.externalId.toLowerCase().includes(q))
+      : base;
+
+    // Stable sort: name A-Z
+    filtered.sort((a, b) => a.name.localeCompare(b.name));
+
+    return filtered;
+  }, [inventoryEntities, inventorySearch, createdSourceId]);
 
   function resetModal() {
     setStep("platform");
@@ -836,17 +841,17 @@ export default function ConnectionsPage() {
   async function saveEntitiesSelection() {
     if (!createdSourceId) return;
 
-    const selected = new Set(selectedExternalIds);
-    if (selected.size === 0) {
+    if (selectedExternalIds.size === 0) {
       setErrMsg("Select at least one workflow to index.");
       return;
     }
 
-    const selectedRows = inventoryEntities.filter((e) => selected.has(String(e.externalId)));
-    const payloadEntities = selectedRows.map((e) => ({
-      externalId: String(e.externalId),
-      displayName: String(e.displayName ?? ""),
-      entityKind: String(e.entityKind ?? "workflow"),
+    const selectedRows = inventoryEntities.filter((e) => selectedExternalIds.has(e.externalId));
+
+    const entitiesPayload = selectedRows.map((e) => ({
+      externalId: e.externalId,
+      displayName: e.displayName,
+      entityKind: e.entityKind || "workflow",
       enabledForAnalytics: true,
       enabledForActions: false,
     }));
@@ -859,14 +864,14 @@ export default function ConnectionsPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         sourceId: createdSourceId,
-        entities: payloadEntities,
+        entities: entitiesPayload,
       }),
     });
 
     const json = await res.json().catch(() => ({}));
     if (!res.ok || !json?.ok) {
       setSaving(false);
-      setErrMsg(json?.message || "Failed to save entities.");
+      setErrMsg(json?.message || "Failed to save selection.");
       return;
     }
 
@@ -1663,38 +1668,7 @@ export default function ConnectionsPage() {
       <button
         type="button"
         onClick={async () => {
-          if (!createdSourceId) return;
-
-          setSaving(true);
-          setErrMsg(null);
-
-          const res = await fetch("/api/connections/entities/select", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              sourceId: createdSourceId,
-              entities: Array.from(selectedExternalIds).map((externalId) => {
-                const row = indexedEntities.find((x) => x.externalId === externalId && String(x.sourceId) === String(createdSourceId));
-                return {
-                  externalId,
-                  displayName: row?.name ?? externalId,
-                  entityKind: "workflow",
-                  enabledForAnalytics: true,
-                  enabledForActions: false,
-                };
-              }),
-            }),
-          });
-
-          const json = await res.json().catch(() => ({}));
-          if (!res.ok || !json?.ok) {
-            setSaving(false);
-            setErrMsg(json?.message || "Failed to save selection.");
-            return;
-          }
-
-          setSaving(false);
-          setStep("success");
+          await saveEntitiesSelection();
         }}
         disabled={saving || inventoryLoading || selectedExternalIds.size === 0}
         className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600 disabled:opacity-50"
