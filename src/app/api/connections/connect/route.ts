@@ -134,19 +134,20 @@ export async function POST(req: Request) {
   }
 
 
+  // IMPORTANT: sources table has NO updated_at, so never set it here.
   const { data: source, error } = await supabase
     .from("sources")
-    .upsert({
-      tenant_id: membership.tenant_id,
-      type: platformType,
-      method: method,
-      name: connectionName || `${platformType} Instance`,
-      status: "active",
-      secret_hash: encryptSecret(JSON.stringify(secretJson)),
-      updated_at: new Date().toISOString()
-    }, {
-      onConflict: "tenant_id,type,method"
-    })
+    .upsert(
+      {
+        tenant_id: membership.tenant_id,
+        type: platformType,
+        name: connectionName || `${platformType} Instance`,
+        status: "active",
+        method: method,
+        secret_hash: encryptSecret(JSON.stringify(secretJson)),
+      },
+      { onConflict: "tenant_id,type,method" },
+    )
     .select()
     .single();
 

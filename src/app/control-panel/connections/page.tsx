@@ -513,10 +513,12 @@ export default function ConnectionsPage() {
       return;
     }
 
-    // 2) List imported entities from Supabase-backed entity store
-    const listRes = await fetch("/api/indexed-entities/list", { method: "GET" });
+    // 2) List imported entities (including UNINDEXED) from inventory endpoint
+    const listRes = await fetch(
+      `/api/connections/inventory/n8n/list?sourceId=${encodeURIComponent(sourceId)}`,
+      { method: "GET" },
+    );
     const listJson = await listRes.json().catch(() => ({}));
-
     if (!listRes.ok || !listJson?.ok) {
       setInventoryLoading(false);
       setInventoryEntities([]);
@@ -524,21 +526,31 @@ export default function ConnectionsPage() {
       return;
     }
 
-    // Only show workflows from this connected sourceId
-    const rows = ((listJson.entities as any[]) ?? []).filter((r) => String(r.sourceId) === String(sourceId));
+    const rows = ((listJson.entities as any[]) ?? []) as Array<{
+      externalId: string;
+      displayName: string;
+      entityKind: string;
+      enabledForAnalytics: boolean;
+      createdAt?: string | null;
+      updatedAt?: string | null;
+    }>;
 
     setInventoryEntities(
       rows.map((r) => ({
-        externalId: r.externalId,
-        displayName: r.name,
-        entityKind: r.kind,
-        // these may not exist in this endpoint; keep for sorting fallback
-        updatedAt: r.lastSeenAt ?? null,
+        externalId: String(r.externalId),
+        displayName: String(r.displayName ?? ""),
+        entityKind: String(r.entityKind ?? "workflow"),
         createdAt: r.createdAt ?? null,
+        updatedAt: r.updatedAt ?? null,
       })),
     );
 
-    setSelectedExternalIds(new Set());
+    const preselected = new Set<string>();
+    for (const r of rows) {
+      if (r.enabledForAnalytics) preselected.add(String(r.externalId));
+    }
+    setSelectedExternalIds(preselected);
+
     setInventoryLoading(false);
   }
 
@@ -769,10 +781,17 @@ export default function ConnectionsPage() {
     }
 
     setCreatedSourceId(sourceId);
-    await refreshCredentials();
-    setFilter("credentials");
-    setConnectOpen(false);
-    setSaving(false);
+     await refreshCredentials();
+
+     if (selectedPlatform === "n8n" && selectedMethod === "api") {
+       await loadN8nInventory(sourceId);
+       setStep("entities");
+     } else {
+       setStep("success");
+     }
+
+     setSaving(false);
+     return;
   }
 
   function addEntityDraft() {
@@ -807,10 +826,20 @@ export default function ConnectionsPage() {
   async function saveEntitiesSelection() {
     if (!createdSourceId) return;
 
-    if (connectEntities.length === 0) {
-      setErrMsg("Add at least one entity to index (workflow/agent/etc.).");
+    const selected = new Set(selectedExternalIds);
+    if (selected.size === 0) {
+      setErrMsg("Select at least one workflow to index.");
       return;
     }
+
+    const selectedRows = inventoryEntities.filter((e) => selected.has(String(e.externalId)));
+    const payloadEntities = selectedRows.map((e) => ({
+      externalId: String(e.externalId),
+      displayName: String(e.displayName ?? ""),
+      entityKind: String(e.entityKind ?? "workflow"),
+      enabledForAnalytics: true,
+      enabledForActions: false,
+    }));
 
     setSaving(true);
     setErrMsg(null);
@@ -820,17 +849,19 @@ export default function ConnectionsPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         sourceId: createdSourceId,
-        entities: connectEntities,
+        entities: payloadEntities,
       }),
     });
 
     const json = await res.json().catch(() => ({}));
-
     if (!res.ok || !json?.ok) {
       setSaving(false);
       setErrMsg(json?.message || "Failed to save entities.");
       return;
     }
+
+    await refreshIndexedEntities();
+    await loadEntities();
 
     setSaving(false);
     setStep("success");
@@ -1204,38 +1235,31 @@ export default function ConnectionsPage() {
                       <div className="flex items-center gap-2">
                         <StatusPill status={c.status} />
                         <div className="relative">
-                          <button
-                            onClick={() => setOpenDropdownId(openDropdownId === c.id ? null : c.id)}
-                            className="p-1 rounded-lg hover:bg-gray-100"
-                          >
-                            <MoreVertical className="h-5 w-5 text-gray-600" />
-                          </button>
-                          {openDropdownId === c.id && (
-                            <DropdownMenu.Root open={true} onOpenChange={(open) => !open && setOpenDropdownId(null)}>
-                              <DropdownMenu.Portal>
-                                <DropdownMenu.Content side="bottom" align="end" className="z-50 min-w-[160px] rounded-md border bg-white p-1 shadow">
-                                  <DropdownMenu.Item 
-                                    className="rounded px-2 py-1.5 text-sm hover:bg-gray-100 cursor-pointer"
-                                    onClick={() => {
-                                      setEditingSourceId(c.id);
-                                      setOpenDropdownId(null);
-                                    }}
-                                  >
-                                    Edit
-                                  </DropdownMenu.Item>
-                                  <DropdownMenu.Item 
-                                    className="rounded px-2 py-1.5 text-sm text-red-600 hover:bg-gray-100 cursor-pointer"
-                                    onClick={() => {
-                                      setCredentialDeleteId(c.id);
-                                      setOpenDropdownId(null);
-                                    }}
-                                  >
-                                    Delete
-                                  </DropdownMenu.Item>
-                                </DropdownMenu.Content>
-                              </DropdownMenu.Portal>
-                            </DropdownMenu.Root>
-                          )}
+                          <DropdownMenu.Root>
+                            <DropdownMenu.Trigger asChild>
+                              <button
+                                className="p-1 rounded-lg hover:bg-gray-100"
+                              >
+                                <MoreVertical className="h-5 w-5 text-gray-600" />
+                              </button>
+                            </DropdownMenu.Trigger>
+                            <DropdownMenu.Portal>
+                              <DropdownMenu.Content side="bottom" align="end" className="z-50 min-w-[160px] rounded-md border bg-white p-1 shadow">
+                                <DropdownMenu.Item
+                                  className="rounded px-2 py-1.5 text-sm hover:bg-gray-100 cursor-pointer"
+                                  onClick={() => openEditCredential(c.id)}
+                                >
+                                  Edit
+                                </DropdownMenu.Item>
+                                <DropdownMenu.Item
+                                  className="rounded px-2 py-1.5 text-sm text-red-600 hover:bg-gray-100 cursor-pointer"
+                                  onClick={() => openDeleteCredential(c.id)}
+                                >
+                                  Delete
+                                </DropdownMenu.Item>
+                              </DropdownMenu.Content>
+                            </DropdownMenu.Portal>
+                          </DropdownMenu.Root>
                         </div>
                       </div>
                     </div>
