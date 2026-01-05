@@ -753,9 +753,8 @@ export default function ConnectionsPage() {
 
     if (editingSourceId) {
       setEditingSourceId(null);
-      setSaving(false);
-      closeConnect();
       await refreshCredentials();
+      closeConnect();
       return;
     }
 
@@ -768,21 +767,8 @@ export default function ConnectionsPage() {
 
     setCreatedSourceId(sourceId);
     await refreshCredentials();
-    
-    if (selectedPlatform === "n8n" && selectedMethod === "api") {
-      await fetch("/api/connections/inventory/n8n/import", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sourceId }),
-      }).catch(() => null);
-    }
-    
-    setStep("entities");
-    
-    if (selectedPlatform === "n8n" && selectedMethod === "api") {
-      await loadN8nInventory(sourceId);
-    }
-    
+    setFilter("credentials");
+    setConnectOpen(false);
     setSaving(false);
   }
 
@@ -808,6 +794,27 @@ export default function ConnectionsPage() {
 
   function removeEntityDraft(idx: number) {
     setConnectEntities((prev) => prev.filter((_, i) => i !== idx));
+  }
+
+  function openEditCredential(sourceId: string) {
+    setEditingSourceId(sourceId);
+
+    // We DO NOT display saved secrets; user re-enters them.
+    setApiKey("");
+    setInstanceUrl("");
+    setMcpUrl("");
+    setMcpAccessToken("");
+    setAuthHeader("");
+    setConnectionName("");
+
+    // Open the existing connect modal directly on credentials step
+    setConnectOpen(true);
+    setStep("credentials");
+  }
+
+  function openDeleteCredential(sourceId: string) {
+    setCredentialDeleteId(sourceId);
+    setCredentialDeleteConfirm(false);
   }
 
   async function saveEntitiesSelection() {
