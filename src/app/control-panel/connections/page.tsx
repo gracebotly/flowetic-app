@@ -429,7 +429,9 @@ export default function ConnectionsPage() {
   // Inventory state for n8n workflows
   const [inventoryLoading, setInventoryLoading] = useState(false);
   const [inventoryErr, setInventoryErr] = useState<string | null>(null);
-  const [inventoryEntities, setInventoryEntities] = useState<Array<{ externalId: string; displayName: string; entityKind: string }>>([]);
+  const [inventoryEntities, setInventoryEntities] = useState<Array<{ externalId: string; displayName: string; entityKind: string; createdAt?: string | null; updatedAt?: string | null }>>([]);
+  const [inventorySearch, setInventorySearch] = useState("");
+  const [inventorySort, setInventorySort] = useState<"updated_desc" | "created_desc" | "name_az">("updated_desc");
   const [selectedExternalIds, setSelectedExternalIds] = useState<Set<string>>(new Set());
 
   async function loadEntities() {
@@ -580,6 +582,30 @@ export default function ConnectionsPage() {
   function formatDateFromTs(ts: number) {
     return new Date(ts).toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" });
   }
+
+  const displayedInventory = useMemo(() => {
+    let rows = [...inventoryEntities];
+
+    if (inventorySearch.trim()) {
+      const q = inventorySearch.trim().toLowerCase();
+      rows = rows.filter((e: any) => {
+        return (
+          String(e.displayName ?? "").toLowerCase().includes(q) ||
+          String(e.externalId ?? "").toLowerCase().includes(q)
+        );
+      });
+    }
+
+    if (inventorySort === "name_az") {
+      rows.sort((a: any, b: any) => String(a.displayName ?? "").localeCompare(String(b.displayName ?? "")));
+    } else if (inventorySort === "created_desc") {
+      rows.sort((a: any, b: any) => Date.parse(String(b.createdAt ?? "")) - Date.parse(String(a.createdAt ?? "")));
+    } else {
+      rows.sort((a: any, b: any) => Date.parse(String(b.updatedAt ?? "")) - Date.parse(String(a.updatedAt ?? "")));
+    }
+
+    return rows;
+  }, [inventoryEntities, inventorySearch, inventorySort]);
 
   function resetModal() {
     setStep("platform");
@@ -1450,12 +1476,35 @@ export default function ConnectionsPage() {
     ) : null}
 
     {!inventoryLoading ? (
-      <div className="max-h-[320px] overflow-auto rounded-lg border border-gray-200">
+      <>
+      <div className="flex items-center justify-between gap-3">
+        <div className="relative w-[420px]">
+          <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <input
+            value={inventorySearch}
+            onChange={(e) => setInventorySearch(e.target.value)}
+            className="w-full rounded-lg border border-gray-300 py-2.5 pl-10 pr-4 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="Search workflows..."
+          />
+        </div>
+
+        <select
+          value={inventorySort}
+          onChange={(e) => setInventorySort(e.target.value as any)}
+          className="min-w-[220px] rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700"
+        >
+          <option value="updated_desc">Sort by last updated</option>
+          <option value="created_desc">Sort by created date</option>
+          <option value="name_az">Sort by name (A–Z)</option>
+        </select>
+      </div>
+
+      <div className="max-h-[320px] overflow-auto rounded-lg border border-gray-200 mt-3">
         {inventoryEntities.length === 0 ? (
           <div className="p-4 text-sm text-gray-600">No workflows found in this n8n instance.</div>
         ) : (
           <div className="divide-y divide-gray-200">
-            {inventoryEntities.map((e) => {
+            {displayedInventory.map((e) => {
               const checked = selectedExternalIds.has(e.externalId);
               return (
                 <label key={e.externalId} className="flex cursor-pointer items-center justify-between px-4 py-3 hover:bg-gray-50">
@@ -1482,6 +1531,7 @@ export default function ConnectionsPage() {
           </div>
         )}
       </div>
+      </>
     ) : null}
 
     <div className="flex justify-end gap-2 pt-2">

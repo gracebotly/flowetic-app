@@ -27,7 +27,7 @@ export async function GET(req: Request) {
 
   const { data: rows, error } = await supabase
     .from("source_entities")
-    .select("external_id,display_name,entity_kind,enabled_for_analytics,enabled_for_actions,last_seen_at")
+    .select("external_id,display_name,entity_kind,enabled_for_analytics,enabled_for_actions,last_seen_at,created_at,updated_at")
     .eq("source_id", sourceId)
     .order("display_name", { ascending: true });
 
@@ -44,6 +44,8 @@ export async function GET(req: Request) {
       enabledForAnalytics: Boolean(r.enabled_for_analytics),
       enabledForActions: Boolean(r.enabled_for_actions),
       lastSeenAt: r.last_seen_at ? String(r.last_seen_at) : null,
+      createdAt: r.created_at ? String(r.created_at) : null,
+      updatedAt: r.updated_at ? String(r.updated_at) : null,
     })),
   });
 }
