@@ -7,25 +7,23 @@ type EntityKind = "workflow" | "scenario" | "flow" | "agent" | "assistant" | "sq
 
 type IndexedEntity = {
   id: string; // `${source_id}:${external_id}`
-  name: string; // display_name
-  platform: string; // sources.type
-  kind: EntityKind; // entity_kind
+  name: string;
+  platform: string;
+  kind: EntityKind;
   externalId: string;
   sourceId: string;
-
-  lastSeenAt: string | null; // ISO
-  createdAt: string; // ISO (source.created_at)
-
+  lastSeenAt: string | null;
+  createdAt: string;
   createdAtTs: number;
-  lastUpdatedTs: number; // derived from lastSeenAt, fallback createdAt
+  lastUpdatedTs: number;
 };
 
 export async function GET() {
   const supabase = await createClient();
+
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
   if (!user) return NextResponse.json({ ok: false, code: "AUTH_REQUIRED" }, { status: 401 });
 
   const { data: membership } = await supabase

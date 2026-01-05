@@ -5,10 +5,10 @@ export const runtime = "nodejs";
 
 export async function POST(req: Request) {
   const supabase = await createClient();
+
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
   if (!user) return NextResponse.json({ ok: false, code: "AUTH_REQUIRED" }, { status: 401 });
 
   const { data: membership } = await supabase
@@ -18,28 +18,36 @@ export async function POST(req: Request) {
     .limit(1)
     .maybeSingle();
 
-  if (!membership?.tenant_id) return NextResponse.json({ ok: false, code: "TENANT_ACCESS_DENIED" }, { status: 403 });
+  if (!membership?.tenant_id) {
+    return NextResponse.json({ ok: false, code: "TENANT_ACCESS_DENIED" }, { status: 403 });
+  }
 
   const body = (await req.json().catch(() => ({}))) as any;
   const sourceId = (body.sourceId as string | undefined) ?? "";
   if (!sourceId) return NextResponse.json({ ok: false, code: "MISSING_SOURCE_ID" }, { status: 400 });
 
-  // Delete source_entities first (avoid orphaned index rows)
-  const { error: eErr } = await supabase
+  // Verify source belongs to tenant
+  const { data: source } = await supabase
+    .from("sources")
+    .select("id")
+    .eq("id", sourceId)
+    .eq("tenant_id", membership.tenant_id)
+    .maybeSingle();
+
+  if (!source) return NextResponse.json({ ok: false, code: "SOURCE_NOT_FOUND" }, { status: 404 });
+
+  // Remove indexed state so "All" clears immediately even if source_entities remain
+  const { error: disableErr } = await supabase
     .from("source_entities")
-    .delete()
+    .update({ enabled_for_analytics: false, enabled_for_actions: false })
     .eq("source_id", sourceId);
 
-  if (eErr) return NextResponse.json({ ok: false, code: "PERSISTENCE_FAILED", message: eErr.message }, { status: 400 });
+  if (disableErr) {
+    return NextResponse.json({ ok: false, code: "PERSISTENCE_FAILED", message: disableErr.message }, { status: 400 });
+  }
 
-  // Delete the source row
-  const { error: sErr } = await supabase
-    .from("sources")
-    .delete()
-    .eq("id", sourceId)
-    .eq("tenant_id", membership.tenant_id);
-
-  if (sErr) return NextResponse.json({ ok: false, code: "PERSISTENCE_FAILED", message: sErr.message }, { status: 400 });
+  const { error } = await supabase.from("sources").delete().eq("id", sourceId).eq("tenant_id", membership.tenant_id);
+  if (error) return NextResponse.json({ ok: false, code: "PERSISTENCE_FAILED", message: error.message }, { status: 400 });
 
   return NextResponse.json({ ok: true });
 }

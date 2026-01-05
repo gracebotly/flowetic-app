@@ -137,40 +137,42 @@ function StatusPill({ status }: { status: string | null }) {
   return <span className="inline-flex items-center gap-1.5 rounded-full border border-yellow-200 bg-yellow-50 px-2.5 py-1 text-xs font-semibold text-yellow-700">Attention</span>;
 }
 
-function CredentialsDropdownMenu({ 
-  sourceId, 
+function CredentialsDropdownMenu({   
+  sourceId,
   onClose,
   onEdit,
   onDelete 
 }: { 
   sourceId: string; 
-  onClose: () => void;
-  onEdit: (sourceId: string) => void;
-  onDelete: (sourceId: string) => void;
+  onClose: () => void; 
+  onEdit: (sourceId: string) => void; 
+  onDelete: (sourceId: string) => void; 
 }) {
   return (
-    <DropdownMenu.Portal>
-      <DropdownMenu.Content side="bottom" align="end" className="z-50 min-w-[160px] rounded-md border bg-white p-1 shadow">
-        <DropdownMenu.Item 
-          className="rounded px-2 py-1.5 text-sm hover:bg-gray-100 cursor-pointer" 
-          onClick={() => {
-            onEdit(sourceId);
-            onClose();
-          }}
-        >
-          Edit
-        </DropdownMenu.Item>
-        <DropdownMenu.Item 
-          className="rounded px-2 py-1.5 text-sm text-red-600 hover:bg-gray-100 cursor-pointer" 
-          onClick={() => {
-            onDelete(sourceId);
-            onClose();
-          }}
-        >
-          Delete
-        </DropdownMenu.Item>
-      </DropdownMenu.Content>
-    </DropdownMenu.Portal>
+    <DropdownMenu.Root>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content side="bottom" align="end" className="z-50 min-w-[160px] rounded-md border bg-white p-1 shadow">
+          <DropdownMenu.Item 
+            className="rounded px-2 py-1.5 text-sm hover:bg-gray-100 cursor-pointer"
+            onClick={() => {
+              onEdit(sourceId);
+              onClose();
+            }}
+          >
+            Edit
+          </DropdownMenu.Item>
+          <DropdownMenu.Item 
+            className="rounded px-2 py-1.5 text-sm text-red-600 hover:bg-gray-100 cursor-pointer"
+            onClick={() => {
+              onDelete(sourceId);
+              onClose();
+            }}
+          >
+            Delete
+          </DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
   );
 }
 
@@ -511,10 +513,12 @@ export default function ConnectionsPage() {
       return;
     }
 
-    // 2) List imported entities from Supabase-backed entity store
-    const listRes = await fetch("/api/indexed-entities/list", { method: "GET" });
+    // 2) List imported entities (including UNINDEXED) from inventory endpoint
+    const listRes = await fetch(
+      `/api/connections/inventory/n8n/list?sourceId=${encodeURIComponent(sourceId)}`,
+      { method: "GET" },
+    );
     const listJson = await listRes.json().catch(() => ({}));
-
     if (!listRes.ok || !listJson?.ok) {
       setInventoryLoading(false);
       setInventoryEntities([]);
@@ -522,44 +526,65 @@ export default function ConnectionsPage() {
       return;
     }
 
-    // Only show workflows from this connected sourceId
-    const rows = ((listJson.entities as any[]) ?? []).filter((r) => String(r.sourceId) === String(sourceId));
+    const rows = ((listJson.entities as any[]) ?? []) as Array<{
+      externalId: string;
+      displayName: string;
+      entityKind: string;
+      enabledForAnalytics: boolean;
+      createdAt?: string | null;
+      updatedAt?: string | null;
+    }>;
 
     setInventoryEntities(
       rows.map((r) => ({
-        externalId: r.externalId,
-        displayName: r.name,
-        entityKind: r.kind,
-        // these may not exist in this endpoint; keep for sorting fallback
-        updatedAt: r.lastSeenAt ?? null,
+        externalId: String(r.externalId),
+        displayName: String(r.displayName ?? ""),
+        entityKind: String(r.entityKind ?? "workflow"),
         createdAt: r.createdAt ?? null,
+        updatedAt: r.updatedAt ?? null,
       })),
     );
 
-    setSelectedExternalIds(new Set());
+    const preselected = new Set<string>();
+    for (const r of rows) {
+      if (r.enabledForAnalytics) preselected.add(String(r.externalId));
+    }
+    setSelectedExternalIds(preselected);
+
     setInventoryLoading(false);
   }
 
-  function openEditCredential(sourceId: string) {
-    setEditingSourceId(sourceId);
+  function beginEditCredential(credential: CredentialRow) {
+    // Ensure edit uses the same platform + method context as creation
+    setSelectedPlatform(credential.platformType as any);
+    setSelectedMethod(credential.method);
+    setConnectionName(credential.name || "");
+    setEditingSourceId(credential.id);
+
     setErrMsg(null);
     setSaving(false);
 
-    // Clear sensitive fields so user re-enters (we do not display stored secrets)
+    // Never display stored secrets; force re-entry
     setApiKey("");
     setInstanceUrl("");
     setMcpAccessToken("");
     setAuthHeader("");
     setMcpUrl("");
 
-    // Reuse the existing connect modal UI
     setConnectOpen(true);
     setStep("credentials");
+  }
+
+  function openEditCredential(sourceId: string) {
+    const cred = credentials.find((c) => c.id === sourceId);
+    if (!cred) return;
+    beginEditCredential(cred);
   }
 
   useEffect(() => {
     refreshIndexedEntities();
     loadEntities();
+    refreshCredentials();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -626,17 +651,20 @@ export default function ConnectionsPage() {
 
   const displayedSelectable = useMemo(() => {
     const q = inventorySearch.trim().toLowerCase();
-    const rows = !q
-      ? selectableFromThisSource
-      : selectableFromThisSource.filter((e) => {
-          const name = e.name.toLowerCase();
-          const id = e.externalId.toLowerCase();
-          return name.includes(q); // name-only to avoid confusing matches
-        });
 
-    // auto-sort: last updated first
-    return [...rows].sort((a, b) => b.lastUpdatedTs - a.lastUpdatedTs);
-  }, [selectableFromThisSource, inventorySearch]);
+    const base = inventoryEntities.map((e) => ({
+      id: `${createdSourceId ?? "source"}:${e.externalId}`,
+      externalId: e.externalId,
+      name: e.displayName,
+    }));
+
+    const filtered = q
+      ? base.filter((x) => x.name.toLowerCase().includes(q) || x.externalId.toLowerCase().includes(q))
+      : base;
+
+    filtered.sort((a, b) => a.name.localeCompare(b.name));
+    return filtered;
+  }, [inventoryEntities, inventorySearch, createdSourceId]);
 
   function resetModal() {
     setStep("platform");
@@ -767,10 +795,17 @@ export default function ConnectionsPage() {
     }
 
     setCreatedSourceId(sourceId);
-    await refreshCredentials();
-    setFilter("credentials");
-    setConnectOpen(false);
-    setSaving(false);
+     await refreshCredentials();
+
+     if (selectedPlatform === "n8n" && selectedMethod === "api") {
+       await loadN8nInventory(sourceId);
+       setStep("entities");
+     } else {
+       setStep("success");
+     }
+
+     setSaving(false);
+     return;
   }
 
   function addEntityDraft() {
@@ -805,10 +840,21 @@ export default function ConnectionsPage() {
   async function saveEntitiesSelection() {
     if (!createdSourceId) return;
 
-    if (connectEntities.length === 0) {
-      setErrMsg("Add at least one entity to index (workflow/agent/etc.).");
+    if (selectedExternalIds.size === 0) {
+      setErrMsg("Select at least one workflow to index.");
       return;
     }
+
+    const selected = new Set(selectedExternalIds);
+    const selectedRows = inventoryEntities.filter((e) => selected.has(String(e.externalId)));
+
+    const entitiesPayload = selectedRows.map((e) => ({
+      externalId: String(e.externalId),
+      displayName: String(e.displayName ?? ""),
+      entityKind: String(e.entityKind ?? "workflow"),
+      enabledForAnalytics: true,
+      enabledForActions: false,
+    }));
 
     setSaving(true);
     setErrMsg(null);
@@ -818,20 +864,29 @@ export default function ConnectionsPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         sourceId: createdSourceId,
-        entities: connectEntities,
+        entities: entitiesPayload,
       }),
     });
 
     const json = await res.json().catch(() => ({}));
-
     if (!res.ok || !json?.ok) {
+      console.error("[connections] saveEntitiesSelection failed", { status: res.status, json });
       setSaving(false);
-      setErrMsg(json?.message || "Failed to save entities.");
+      setErrMsg(json?.message || "Failed to save selection.");
       return;
     }
 
+    // Refresh server-backed lists BEFORE closing/resetting modal state
+    await refreshIndexedEntities();
+    await refreshCredentials();
+
+    // Ensure All tab actually shows the new items (search can hide results)
+    setAllSearch("");
+    setFilter("all");
+
+    // Close modal last
     setSaving(false);
-    setStep("success");
+    closeConnect();
   }
 
   const platformOptions = useMemo(() => {
@@ -1202,20 +1257,31 @@ export default function ConnectionsPage() {
                       <div className="flex items-center gap-2">
                         <StatusPill status={c.status} />
                         <div className="relative">
-                          <button
-                            onClick={() => setOpenDropdownId(openDropdownId === c.id ? null : c.id)}
-                            className="p-1 rounded-lg hover:bg-gray-100"
-                          >
-                            <MoreVertical className="h-5 w-5 text-gray-600" />
-                          </button>
-                          {openDropdownId === c.id && (
-                            <CredentialsDropdownMenu 
-                              sourceId={c.id} 
-                              onClose={() => setOpenDropdownId(null)}
-                              onEdit={(id) => setEditingSourceId(id)}
-                              onDelete={(id) => setCredentialDeleteId(id)}
-                            />
-                          )}
+                          <DropdownMenu.Root>
+                            <DropdownMenu.Trigger asChild>
+                              <button type="button" className="p-1 rounded-lg hover:bg-gray-100" aria-label="Row actions">
+                                <MoreVertical className="h-5 w-5 text-gray-600" />
+                              </button>
+                            </DropdownMenu.Trigger>
+
+                            <DropdownMenu.Portal>
+                              <DropdownMenu.Content side="bottom" align="end" className="z-50 min-w-[160px] rounded-md border bg-white p-1 shadow">
+                                <DropdownMenu.Item
+                                  className="rounded px-2 py-1.5 text-sm hover:bg-gray-100 cursor-pointer"
+                                  onSelect={() => openEditCredential(c.id)}
+                                >
+                                  Edit
+                                </DropdownMenu.Item>
+
+                                <DropdownMenu.Item
+                                  className="rounded px-2 py-1.5 text-sm text-red-600 hover:bg-gray-100 cursor-pointer"
+                                  onSelect={() => openDeleteCredential(c.id)}
+                                >
+                                  Delete
+                                </DropdownMenu.Item>
+                              </DropdownMenu.Content>
+                            </DropdownMenu.Portal>
+                          </DropdownMenu.Root>
                         </div>
                       </div>
                     </div>
@@ -1270,7 +1336,7 @@ export default function ConnectionsPage() {
                       : step === "credentials"
                       ? selectedPlatform === "n8n" && selectedMethod === "mcp"
                         ? "Enter the Server URL and Access token from n8n's Instance-level MCP settings."
-                        : "Enter credentials to validate and connect."
+                        : editingSourceId ? "Re-enter credentials to validate and save." : "Enter credentials to validate and connect."
                       : step === "entities"
                       ? "Add agents/workflows you want GetFlowetic to index."
                       : "Success."}
@@ -1507,33 +1573,32 @@ export default function ConnectionsPage() {
     ) : null}
 
     <div className="flex justify-end gap-2 pt-2">
-      <button
-        type="button"
-        onClick={() => {
-          setStep("method");
-          setErrMsg(null);
-        }}
-        className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-200"
-        disabled={saving}
-      >
-        Back
-      </button>
+      {!editingSourceId ? (
+        <button
+          type="button"
+          onClick={() => {
+            setStep("method");
+            setErrMsg(null);
+          }}
+          className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-200"
+          disabled={saving}
+        >
+          Back
+        </button>
+      ) : null}
       <button
         type="button"
         onClick={createConnection}
         disabled={saving}
         className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600 disabled:opacity-50"
       >
-        {saving ? "Connecting..." : "Connect"}
+        {saving ? (editingSourceId ? "Saving..." : "Connecting...") : (editingSourceId ? "Save" : "Connect")}
       </button>
     </div>
   </div>
 ) : null}
 {step === "entities" ? (
   <div className="space-y-4">
-    <div className="text-sm text-gray-700">
-      Select the workflows you want GetFlowetic to index.
-    </div>
 
     {inventoryErr ? (
       <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{inventoryErr}</div>
@@ -1557,39 +1622,35 @@ export default function ConnectionsPage() {
         </div>
       </div>
 
-      <div className="max-h-[320px] overflow-auto rounded-lg border border-gray-200">
+      <div className="max-h-[320px] overflow-auto rounded-lg border border-gray-200 bg-white">
         {displayedSelectable.length === 0 ? (
-          <div className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-600">
-            No workflows found in this n8n instance.
-          </div>
+          <div className="p-4 text-sm text-gray-600">No workflows found in this n8n instance.</div>
         ) : (
-          <div className="max-h-[320px] overflow-auto rounded-lg border border-gray-200">
-            <div className="divide-y divide-gray-200">
-              {displayedSelectable.map((e) => {
-                const checked = selectedExternalIds.has(e.externalId);
-                return (
-                  <label key={e.id} className="flex cursor-pointer items-center justify-between px-4 py-3 hover:bg-gray-50">
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-semibold text-gray-900">{e.name}</div>
-                      <div className="truncate text-xs text-gray-500">ID: {e.externalId}</div>
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => {
-                        setSelectedExternalIds((prev) => {
-                          const next = new Set(prev);
-                          if (next.has(e.externalId)) next.delete(e.externalId);
-                          else next.add(e.externalId);
-                          return next;
-                        });
-                      }}
-                      className="h-4 w-4"
-                    />
-                  </label>
-                );
-              })}
-            </div>
+          <div className="divide-y divide-gray-200">
+            {displayedSelectable.map((e) => {
+              const checked = selectedExternalIds.has(e.externalId);
+              return (
+                <label key={e.id} className="flex cursor-pointer items-center justify-between px-4 py-3 hover:bg-gray-50">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold text-gray-900">{e.name}</div>
+                    <div className="truncate text-xs text-gray-500">ID: {e.externalId}</div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => {
+                      setSelectedExternalIds((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(e.externalId)) next.delete(e.externalId);
+                        else next.add(e.externalId);
+                        return next;
+                      });
+                    }}
+                    className="h-4 w-4"
+                  />
+                </label>
+              );
+            })}
           </div>
         )}
       </div>
@@ -1609,38 +1670,7 @@ export default function ConnectionsPage() {
       <button
         type="button"
         onClick={async () => {
-          if (!createdSourceId) return;
-
-          setSaving(true);
-          setErrMsg(null);
-
-          const res = await fetch("/api/connections/entities/select", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              sourceId: createdSourceId,
-              entities: Array.from(selectedExternalIds).map((externalId) => {
-                const row = indexedEntities.find((x) => x.externalId === externalId && String(x.sourceId) === String(createdSourceId));
-                return {
-                  externalId,
-                  displayName: row?.name ?? externalId,
-                  entityKind: "workflow",
-                  enabledForAnalytics: true,
-                  enabledForActions: false,
-                };
-              }),
-            }),
-          });
-
-          const json = await res.json().catch(() => ({}));
-          if (!res.ok || !json?.ok) {
-            setSaving(false);
-            setErrMsg(json?.message || "Failed to save selection.");
-            return;
-          }
-
-          setSaving(false);
-          setStep("success");
+          await saveEntitiesSelection();
         }}
         disabled={saving || inventoryLoading || selectedExternalIds.size === 0}
         className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600 disabled:opacity-50"

@@ -70,6 +70,41 @@ export async function POST(req: Request) {
     secretJson = { ...secretJson, instanceUrl };
   }
 
+  // Validate n8n API credentials on update (same behavior as /api/connections/connect)
+  if (platformType === "n8n" && method === "api") {
+    const baseUrl = (() => {
+      try {
+        if (secretJson.instanceUrl) return new URL(secretJson.instanceUrl).origin;
+        return null;
+      } catch {
+        return null;
+      }
+    })();
+
+    if (!baseUrl) {
+      return NextResponse.json(
+        { ok: false, code: "MISSING_INSTANCE_URL", message: "n8n instance URL is required." },
+        { status: 400 },
+      );
+    }
+
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (secretJson.authMode === "header") {
+      headers["X-N8N-API-KEY"] = secretJson.apiKey;
+    } else {
+      headers["Authorization"] = `Bearer ${secretJson.apiKey}`;
+    }
+
+    const testRes = await fetch(`${baseUrl}/api/v1/workflows`, { method: "GET", headers });
+    if (!testRes.ok) {
+      const t = await testRes.text().catch(() => "");
+      return NextResponse.json(
+        { ok: false, code: "N8N_API_FAILED", message: `n8n API auth failed (${testRes.status}). ${t}`.trim() },
+        { status: 400 },
+      );
+    }
+  }
+
   const secret_hash = encryptSecret(JSON.stringify(secretJson));
 
   const { error } = await supabase
