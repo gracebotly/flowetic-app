@@ -1029,22 +1029,22 @@ export default function ConnectionsPage() {
 
           {!credentialsLoading ? (
             <div className="mt-6 space-y-3">
-              {displayedCredentials.map((c) => {
-                const meta = getPlatformMeta(String(c.platformType));
+              {displayedCredentials.map((cred) => {
+                const meta = getPlatformMeta(String(cred.platformType));
                 const Icon = meta?.Icon;
 
-                const methodLabel = c.method === "api" ? "API" : c.method === "webhook" ? "Webhook" : "MCP";
+                const methodLabel = cred.method === "api" ? "API" : cred.method === "webhook" ? "Webhook" : "MCP";
                 const methodIcon =
-                  c.method === "api" ? (
+                  cred.method === "api" ? (
                     <KeyRound className="h-3.5 w-3.5" />
-                  ) : c.method === "webhook" ? (
+                  ) : cred.method === "webhook" ? (
                     <WebhookIcon className="h-3.5 w-3.5" />
                   ) : (
                     <Bot className="h-3.5 w-3.5" />
                   );
 
                 return (
-                  <div key={c.id} className="rounded-lg border border-gray-200 bg-white p-4 hover:shadow-sm transition-shadow">
+                  <div key={cred.id} className="rounded-lg border border-gray-200 bg-white p-4 hover:shadow-sm transition-shadow">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4">
                         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-800">
@@ -1052,7 +1052,7 @@ export default function ConnectionsPage() {
                         </div>
 
                         <div>
-                          <div className="font-semibold text-gray-900">{meta?.label ?? c.name}</div>
+                          <div className="font-semibold text-gray-900">{meta?.label ?? cred.name}</div>
                           <div className="text-sm text-gray-500 flex flex-wrap items-center gap-2">
                             <span className="inline-flex items-center gap-1">
                               {methodIcon}
@@ -1060,20 +1060,20 @@ export default function ConnectionsPage() {
                             </span>
 
                             <span className="text-gray-300">|</span>
-                            <span>Last updated {formatRelativeFromIso(c.updated_at)}</span>
+                            <span>Last updated {formatRelativeFromIso(cred.updated_at)}</span>
 
                             <span className="text-gray-300">|</span>
-                            <span>Created {formatDateFromIso(c.created_at)}</span>
+                            <span>Created {formatDateFromIso(cred.created_at)}</span>
                           </div>
                         </div>
                       </div>
 
                       <div className="flex items-center gap-2">
-                        <StatusPill status={c.status} />
+                        <StatusPill status={cred.status} />
                         <button
                           type="button"
                           onClick={() => {
-                            setOpenCredentialMenuId(openCredentialMenuId === c.id ? null : c.id);
+                            setOpenCredentialMenuId(openCredentialMenuId === cred.id ? null : cred.id);
                           }}
                           className="rounded-lg p-2 hover:bg-gray-100"
                           aria-label="Credential actions"
