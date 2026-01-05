@@ -784,29 +784,8 @@ export default function ConnectionsPage() {
   }, [credentials, credentialsSearch, credentialsSort]);
 
   const displayedIndexedEntities = useMemo(() => {
-    // Apply sources filter: only items enabled for analytics
-    let rows = [...indexedEntities].filter((x) => x.enabled_for_analytics);
-
-    if (allSearch.trim()) {
-      const q = allSearch.trim().toLowerCase();
-      rows = rows.filter((e) => {
-        return (
-          e.name.toLowerCase().includes(q) ||
-          e.platform.toLowerCase().includes(q)
-        );
-      });
-    }
-
-    if (allSort === "name_az") {
-      rows.sort((a, b) => a.name.localeCompare(b.name));
-    } else if (allSort === "last_updated") {
-      rows.sort((a, b) => b.lastUpdatedTs - a.lastUpdatedTs);
-    } else {
-      rows.sort((a, b) => b.createdAtTs - a.createdAtTs);
-    }
-
-    return rows;
-  }, [indexedEntities, allSearch, allSort]);
+  return indexedEntities;
+}, [indexedEntities]);
 
   return (
     <div className="mx-auto max-w-6xl p-6">
@@ -934,7 +913,7 @@ export default function ConnectionsPage() {
                 );
               })}
 
-              {displayedIndexedEntities.length === 0 ? (
+              {indexedEntities.length === 0 ? (
                 <div className="rounded-lg border bg-white p-8 text-sm text-gray-600">No results.</div>
               ) : null}
             </div>
