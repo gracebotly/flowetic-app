@@ -51,6 +51,7 @@ export async function GET() {
     .from("source_entities")
     .select("source_id,entity_kind,external_id,display_name,last_seen_at")
     .in("source_id", sourceIds)
+    .eq("tenant_id", membership.tenant_id)
     .eq("enabled_for_analytics", true);
 
   if (eErr) return NextResponse.json({ ok: false, code: "UNKNOWN_ERROR", message: eErr.message }, { status: 500 });

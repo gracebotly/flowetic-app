@@ -260,124 +260,10 @@ function KebabMenu({
   );
 }
 
-function EntityDropdownMenu({
-  entityId,
-  isOpen,
-  onClose,
-}: {
-  entityId: string;
-  isOpen: boolean;
-  onClose: () => void;
-}) {
-  if (!isOpen) return null;
-
-  return (
-    <div className="dropdown-menu absolute right-0 z-50 mt-1 w-48 rounded-lg border border-gray-200 bg-white shadow-lg">
-      <button
-        onClick={() => {
-          console.log("View Details for entity", entityId);
-          onClose();
-        }}
-        className="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-      >
-        <Eye className="h-4 w-4" />
-        View Details
-      </button>
-
-      <button
-        onClick={() => {
-          console.log("Edit entity", entityId);
-          onClose();
-        }}
-        className="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-      >
-        <Edit className="h-4 w-4" />
-        Edit
-      </button>
-
-      <button
-        onClick={() => {
-          console.log("Delete entity", entityId);
-          onClose();
-        }}
-        className="flex w-full items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50"
-      >
-        <Trash2 className="h-4 w-4" />
-        Delete
-      </button>
-    </div>
-  );
-}
-
-function EntityRow({
-  entity,
-  openEntityDropdownId,
-  setOpenEntityDropdownId,
-}: {
-  entity: IndexedEntity;
-  openEntityDropdownId: string | null;
-  setOpenEntityDropdownId: (id: string | null) => void;
-}) {
-  return (
-    <div className="flex items-center justify-between rounded-lg border border-gray-100 p-4 hover:bg-gray-50">
-      <div className="flex items-center space-x-3">
-        {(() => {
-          const meta = getPlatformMeta(String(entity.platform));
-          const Icon = meta?.Icon;
-          return (
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-800">
-              {Icon ? <Icon className="h-5 w-5" /> : null}
-            </div>
-          );
-        })()}
-        <div>
-          <div className="font-medium text-gray-900">{entity.name}</div>
-          <div className="text-sm text-gray-500">
-            {entityTypeLabel[entity.type] || entity.type} • {entity.platform}
-          </div>
-        </div>
-      </div>
-
-      <div className="flex items-center space-x-4">
-        <div className="text-sm text-gray-500 text-right">
-          <div>Last seen: {entity.last_seen_at}</div>
-          <div>Created: {entity.created_at}</div>
-        </div>
-
-        <div className="flex items-center space-x-2">
-          <span className="rounded-full bg-green-100 px-2 py-1 text-xs font-medium text-green-700">
-            Indexed
-          </span>
-
-          <div className="relative">
-            <button
-              onClick={() => setOpenEntityDropdownId(openEntityDropdownId === entity.id ? null : entity.id)}
-              className="p-1 rounded-lg hover:bg-gray-100"
-            >
-              <MoreVertical className="h-5 w-5 text-gray-600" />
-            </button>
-
-            <EntityDropdownMenu
-              entityId={entity.id}
-              isOpen={openEntityDropdownId === entity.id}
-              onClose={() => setOpenEntityDropdownId(null)}
-            />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export default function ConnectionsPage() {
   // Main data states
-  const [entities, setEntities] = useState<IndexedEntity[]>([]);
-  const [loading, setLoading] = useState(true);
   const [errMsg, setErrMsg] = useState<string | null>(null);
-
-  // UI state for All tab
-  const [searchQuery, setSearchQuery] = useState("");
-  const [sortBy, setSortBy] = useState<SortKey>("created_at");
 
   // Tab state (for switching between All, Credentials)
   const [filter, setFilter] = useState<string>("all");
@@ -385,7 +271,6 @@ export default function ConnectionsPage() {
   // Dropdown states
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
-  const [openEntityDropdownId, setOpenEntityDropdownId] = useState<string | null>(null);
 
   // Connect modal state
   const [connectOpen, setConnectOpen] = useState(false);
@@ -441,23 +326,7 @@ export default function ConnectionsPage() {
   const [inventorySearch, setInventorySearch] = useState("");
   const [selectedExternalIds, setSelectedExternalIds] = useState<Set<string>>(new Set());
 
-  async function loadEntities() {
-    setLoading(true);
-    setErrMsg(null);
-
-    const res = await fetch("/api/indexed-entities/list", { method: "GET" });
-    const json = await res.json().catch(() => ({}));
-
-    if (!res.ok || !json?.ok) {
-      setEntities([]);
-      setLoading(false);
-      setErrMsg(json?.message || "Failed to load indexed entities.");
-      return;
-    }
-
-    setEntities((json.entities as IndexedEntity[]) ?? []);
-    setLoading(false);
-  }
+  
 
   async function refreshCredentials() {
     setCredentialsLoading(true);
@@ -583,7 +452,6 @@ export default function ConnectionsPage() {
 
   useEffect(() => {
     refreshIndexedEntities();
-    loadEntities();
     refreshCredentials();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -879,48 +747,15 @@ export default function ConnectionsPage() {
     // Refresh server-backed lists BEFORE closing/resetting modal state
     await refreshIndexedEntities();
     await refreshCredentials();
-
-    // Ensure All tab actually shows the new items (search can hide results)
     setAllSearch("");
+    setAllSort("created_at");
     setFilter("all");
-
-    // Close modal last
+    await refreshIndexedEntities();
     setSaving(false);
     closeConnect();
   }
 
-  const platformOptions = useMemo(() => {
-    const set = new Set<string>();
-    for (const e of entities) set.add(e.platform);
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [entities]);
-
-  const filteredEntities = useMemo(() => {
-    let list = [...entities];
-
-    // Search
-    if (searchQuery.trim()) {
-      const q = searchQuery.trim().toLowerCase();
-      list = list.filter((e) => {
-        return (
-          e.name.toLowerCase().includes(q) ||
-          e.platform.toLowerCase().includes(q) ||
-          (entityTypeLabel[e.type] || e.type).toLowerCase().includes(q)
-        );
-      });
-    }
-
-    // Sort
-    if (sortBy === "name") {
-      list.sort((a, b) => a.name.localeCompare(b.name));
-    } else if (sortBy === "created_at") {
-      list.sort((a, b) => (b.created_at_ts ?? 0) - (a.created_at_ts ?? 0));
-    } else if (sortBy === "last_updated") {
-      list.sort((a, b) => (b.last_updated_ts ?? 0) - (a.last_updated_ts ?? 0));
-    }
-
-    return list;
-  }, [entities, searchQuery, sortBy]);
+  
 
   const displayedCredentials = useMemo(() => {
     let rows = [...credentials];

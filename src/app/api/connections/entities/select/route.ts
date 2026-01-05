@@ -32,6 +32,7 @@ export async function POST(req: Request) {
   const { error: disableErr } = await supabase
     .from("source_entities")
     .update({ enabled_for_analytics: false, enabled_for_actions: false })
+    .eq("tenant_id", membership.tenant_id)
     .eq("source_id", sourceId);
 
   if (disableErr) {
