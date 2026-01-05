@@ -452,7 +452,6 @@ export default function ConnectionsPage() {
 
   useEffect(() => {
     refreshIndexedEntities();
-    refreshCredentials();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -882,6 +881,9 @@ export default function ConnectionsPage() {
           </div>
 
         <div className="mt-6">
+          <div className="mt-2 text-xs text-gray-400">
+            Debug: indexedEntities.length = {indexedEntities.length}
+          </div>
           {indexedErr ? (
             <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{indexedErr}</div>
           ) : null}
