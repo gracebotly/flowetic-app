@@ -68,12 +68,17 @@ export async function POST(req: Request) {
     );
   }
 
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+
+  if ((secret.authMode ?? "bearer") === "header") {
+    headers["X-N8N-API-KEY"] = secret.apiKey!;
+  } else {
+    headers["Authorization"] = `Bearer ${secret.apiKey}`;
+  }
+
   const res = await fetch(`${baseUrl}/api/v1/workflows`, {
     method: "GET",
-    headers: {
-      "X-N8N-API-KEY": secret.apiKey,
-      "Content-Type": "application/json",
-    },
+    headers,
   });
 
   if (!res.ok) {
@@ -84,16 +89,25 @@ export async function POST(req: Request) {
     );
   }
 
-  const workflows = (await res.json().catch(() => [])) as any[];
+  const raw = await res.json().catch(() => null);
+
+  const workflows: any[] = Array.isArray(raw)
+    ? raw
+    : Array.isArray(raw?.data)
+    ? raw.data
+    : Array.isArray(raw?.workflows)
+    ? raw.workflows
+    : [];
 
   const now = new Date().toISOString();
+
   const rows = workflows.map((w) => ({
     tenant_id: membership.tenant_id,
     source_id: sourceId,
     entity_kind: "workflow",
     external_id: String(w.id),
     display_name: String(w.name ?? `Workflow ${w.id}`),
-    enabled_for_analytics: true,
+    enabled_for_analytics: false,
     enabled_for_actions: false,
     last_seen_at: null,
     created_at: now,

@@ -54,6 +54,7 @@ type IndexedEntityRow = {
   createdAt: string;
   createdAtTs: number;
   lastUpdatedTs: number;
+  enabled_for_analytics?: boolean;
 };
 
 type AllSort = "created_at" | "last_updated" | "name_az";
@@ -136,23 +137,24 @@ function StatusPill({ status }: { status: string | null }) {
   return <span className="inline-flex items-center gap-1.5 rounded-full border border-yellow-200 bg-yellow-50 px-2.5 py-1 text-xs font-semibold text-yellow-700">Attention</span>;
 }
 
-function CredentialsDropdownMenu({ sourceId, onClose }: { sourceId: string; onClose: () => void }) {
+function CredentialsDropdownMenu({ 
+  sourceId, 
+  onClose,
+  onEdit,
+  onDelete 
+}: { 
+  sourceId: string; 
+  onClose: () => void;
+  onEdit: (sourceId: string) => void;
+  onDelete: (sourceId: string) => void;
+}) {
   return (
     <DropdownMenu.Portal>
       <DropdownMenu.Content side="bottom" align="end" className="z-50 min-w-[160px] rounded-md border bg-white p-1 shadow">
         <DropdownMenu.Item 
-          className="rounded px-2 py-1.5 text-sm hover:bg-gray-100 cursor-pointer"
-          onClick={() => {
-            alert(`Configure: ${sourceId}`);
-            onClose();
-          }}
-        >
-          Configure
-        </DropdownMenu.Item>
-        <DropdownMenu.Item 
           className="rounded px-2 py-1.5 text-sm hover:bg-gray-100 cursor-pointer" 
           onClick={() => {
-            alert(`Edit: ${sourceId}`);
+            onEdit(sourceId);
             onClose();
           }}
         >
@@ -161,7 +163,7 @@ function CredentialsDropdownMenu({ sourceId, onClose }: { sourceId: string; onCl
         <DropdownMenu.Item 
           className="rounded px-2 py-1.5 text-sm text-red-600 hover:bg-gray-100 cursor-pointer" 
           onClick={() => {
-            alert(`Delete: ${sourceId}`);
+            onDelete(sourceId);
             onClose();
           }}
         >
@@ -388,6 +390,10 @@ export default function ConnectionsPage() {
   const [step, setStep] = useState<"platform" | "method" | "credentials" | "entities" | "success">("platform");
   const [mcpHelpOpen, setMcpHelpOpen] = useState(false);
   
+  const [editingSourceId, setEditingSourceId] = useState<string | null>(null);
+  const [credentialDeleteId, setCredentialDeleteId] = useState<string | null>(null);
+  const [credentialDeleteConfirm, setCredentialDeleteConfirm] = useState(false);
+  
   // Connect form state
   const [selectedPlatform, setSelectedPlatform] = useState<keyof typeof PLATFORM_META | null>(null);
   const [selectedMethod, setSelectedMethod] = useState<"api" | "webhook" | "mcp">("api");
@@ -425,6 +431,13 @@ export default function ConnectionsPage() {
 
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [selectedEntity, setSelectedEntity] = useState<IndexedEntityRow | null>(null);
+
+  // Inventory state for n8n workflows
+  const [inventoryLoading, setInventoryLoading] = useState(false);
+  const [inventoryErr, setInventoryErr] = useState<string | null>(null);
+  const [inventoryEntities, setInventoryEntities] = useState<Array<{ externalId: string; displayName: string; entityKind: string; createdAt?: string | null; updatedAt?: string | null }>>([]);
+  const [inventorySearch, setInventorySearch] = useState("");
+  const [selectedExternalIds, setSelectedExternalIds] = useState<Set<string>>(new Set());
 
   async function loadEntities() {
     setLoading(true);
@@ -478,6 +491,70 @@ export default function ConnectionsPage() {
 
     setIndexedEntities((json.entities as IndexedEntityRow[]) ?? []);
     setIndexedLoading(false);
+  }
+
+  async function loadN8nInventory(sourceId: string) {
+    setInventoryLoading(true);
+    setInventoryErr(null);
+
+    // 1) Import from n8n into source_entities
+    const importRes = await fetch("/api/connections/inventory/n8n/import", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sourceId }),
+    });
+    const importJson = await importRes.json().catch(() => ({}));
+    if (!importRes.ok || !importJson?.ok) {
+      setInventoryLoading(false);
+      setInventoryEntities([]);
+      setInventoryErr(importJson?.message || "Failed to import workflows from n8n.");
+      return;
+    }
+
+    // 2) List imported entities from Supabase-backed entity store
+    const listRes = await fetch("/api/indexed-entities/list", { method: "GET" });
+    const listJson = await listRes.json().catch(() => ({}));
+
+    if (!listRes.ok || !listJson?.ok) {
+      setInventoryLoading(false);
+      setInventoryEntities([]);
+      setInventoryErr(listJson?.message || "Failed to load workflows.");
+      return;
+    }
+
+    // Only show workflows from this connected sourceId
+    const rows = ((listJson.entities as any[]) ?? []).filter((r) => String(r.sourceId) === String(sourceId));
+
+    setInventoryEntities(
+      rows.map((r) => ({
+        externalId: r.externalId,
+        displayName: r.name,
+        entityKind: r.kind,
+        // these may not exist in this endpoint; keep for sorting fallback
+        updatedAt: r.lastSeenAt ?? null,
+        createdAt: r.createdAt ?? null,
+      })),
+    );
+
+    setSelectedExternalIds(new Set());
+    setInventoryLoading(false);
+  }
+
+  function openEditCredential(sourceId: string) {
+    setEditingSourceId(sourceId);
+    setErrMsg(null);
+    setSaving(false);
+
+    // Clear sensitive fields so user re-enters (we do not display stored secrets)
+    setApiKey("");
+    setInstanceUrl("");
+    setMcpAccessToken("");
+    setAuthHeader("");
+    setMcpUrl("");
+
+    // Reuse the existing connect modal UI
+    setConnectOpen(true);
+    setStep("credentials");
   }
 
   useEffect(() => {
@@ -541,6 +618,25 @@ export default function ConnectionsPage() {
   function formatDateFromTs(ts: number) {
     return new Date(ts).toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" });
   }
+
+  const selectableFromThisSource = useMemo(() => {
+    if (!createdSourceId) return [];
+    return indexedEntities.filter((e) => String(e.sourceId) === String(createdSourceId));
+  }, [indexedEntities, createdSourceId]);
+
+  const displayedSelectable = useMemo(() => {
+    const q = inventorySearch.trim().toLowerCase();
+    const rows = !q
+      ? selectableFromThisSource
+      : selectableFromThisSource.filter((e) => {
+          const name = e.name.toLowerCase();
+          const id = e.externalId.toLowerCase();
+          return name.includes(q); // name-only to avoid confusing matches
+        });
+
+    // auto-sort: last updated first
+    return [...rows].sort((a, b) => b.lastUpdatedTs - a.lastUpdatedTs);
+  }, [selectableFromThisSource, inventorySearch]);
 
   function resetModal() {
     setStep("platform");
@@ -636,10 +732,16 @@ export default function ConnectionsPage() {
       }
     }
 
-    const res = await fetch("/api/connections/connect", {
+    const url = editingSourceId ? "/api/credentials/update" : "/api/connections/connect";
+
+    const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(
+        editingSourceId
+          ? { ...payload, sourceId: editingSourceId }
+          : payload
+      ),
     });
 
     const json = await res.json().catch(() => ({}));
@@ -647,6 +749,13 @@ export default function ConnectionsPage() {
     if (!res.ok || !json?.ok) {
       setSaving(false);
       setErrMsg(json?.message || "Connection failed. Please check your credentials.");
+      return;
+    }
+
+    if (editingSourceId) {
+      setEditingSourceId(null);
+      await refreshCredentials();
+      closeConnect();
       return;
     }
 
@@ -658,7 +767,9 @@ export default function ConnectionsPage() {
     }
 
     setCreatedSourceId(sourceId);
-    setStep("entities");
+    await refreshCredentials();
+    setFilter("credentials");
+    setConnectOpen(false);
     setSaving(false);
   }
 
@@ -686,6 +797,11 @@ export default function ConnectionsPage() {
     setConnectEntities((prev) => prev.filter((_, i) => i !== idx));
   }
 
+  function openDeleteCredential(sourceId: string) {
+    setCredentialDeleteId(sourceId);
+    setCredentialDeleteConfirm(false);
+  }
+
   async function saveEntitiesSelection() {
     if (!createdSourceId) return;
 
@@ -697,7 +813,7 @@ export default function ConnectionsPage() {
     setSaving(true);
     setErrMsg(null);
 
-    const res = await fetch("/api/connections/entities/save", {
+    const res = await fetch("/api/connections/entities/select", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -779,15 +895,15 @@ export default function ConnectionsPage() {
   }, [credentials, credentialsSearch, credentialsSort]);
 
   const displayedIndexedEntities = useMemo(() => {
-    let rows = [...indexedEntities];
+    // Apply sources filter: only items enabled for analytics
+    let rows = [...indexedEntities].filter((x) => x.enabled_for_analytics);
 
     if (allSearch.trim()) {
       const q = allSearch.trim().toLowerCase();
       rows = rows.filter((e) => {
         return (
           e.name.toLowerCase().includes(q) ||
-          e.platform.toLowerCase().includes(q) ||
-          e.kind.toLowerCase().includes(q)
+          e.platform.toLowerCase().includes(q)
         );
       });
     }
@@ -860,7 +976,7 @@ export default function ConnectionsPage() {
                 value={allSearch}
                 onChange={(e) => setAllSearch(e.target.value)}
                 className="w-full rounded-lg border border-gray-300 py-2.5 pl-10 pr-4 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Search workflows & agents..."
+                placeholder="Search by name..."
               />
             </div>
 
@@ -909,71 +1025,17 @@ export default function ConnectionsPage() {
                           <div>Created: {formatDateFromTs(entity.createdAtTs)}</div>
                         </div>
 
-                        <div className="relative">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setDeleteConfirmId(null);
-                              setOpenEntityMenuId(openEntityMenuId === entity.id ? null : entity.id);
-                            }}
-                            className="rounded-lg p-2 hover:bg-gray-100"
-                            aria-label="Row actions"
-                          >
-                            <MoreVertical className="h-5 w-5 text-gray-600" />
-                          </button>
-
-                          {openEntityMenuId === entity.id ? (
-                            <div className="absolute right-0 z-50 mt-2 w-52 rounded-lg border border-gray-200 bg-white shadow-lg" data-entity-menu>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setSelectedEntity(entity);
-                                  setDetailsOpen(true);
-                                  setOpenEntityMenuId(null);
-                                  setDeleteConfirmId(null);
-                                }}
-                                className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
-                              >
-                                <Eye className="h-4 w-4" />
-                                View details
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (deleteConfirmId !== entity.id) {
-                                    setDeleteConfirmId(entity.id);
-                                    return;
-                                  }
-
-                                  // TODO (later): wire to real remove-from-index endpoint.
-                                  // For now: close menu and refresh list.
-                                  setOpenEntityMenuId(null);
-                                  setDeleteConfirmId(null);
-                                  refreshIndexedEntities();
-                                }}
-                                className={
-                                  "flex w-full items-start gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 " +
-                                  (deleteConfirmId === entity.id ? "bg-red-100" : "")
-                                }
-                              >
-                                <Trash2 className="mt-0.5 h-4 w-4" />
-                                <span className="leading-tight">
-                                  {deleteConfirmId === entity.id ? (
-                                    <>
-                                      <span className="font-semibold">Confirm delete</span>
-                                      <span className="mt-0.5 block text-xs font-normal text-red-500">
-                                        Removes from index. You can add it back later.
-                                      </span>
-                                    </>
-                                  ) : (
-                                    "Delete"
-                                  )}
-                                </span>
-                              </button>
-                            </div>
-                          ) : null}
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDeleteConfirmId(null);
+                            setOpenEntityMenuId(openEntityMenuId === entity.id ? null : entity.id);
+                          }}
+                          className="rounded-lg p-2 hover:bg-gray-100"
+                          aria-label="Row actions"
+                        >
+                          <MoreVertical className="h-5 w-5 text-gray-600" />
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -988,6 +1050,77 @@ export default function ConnectionsPage() {
         </div>
         </>
       ) : null}
+
+      {/* Entity dropdown menus rendered at higher level */}
+      {filter === "all" && openEntityMenuId ? (() => {
+        const openEntity = displayedIndexedEntities.find((entity) => entity.id === openEntityMenuId);
+        if (!openEntity) return null;
+        return (
+          <div className="fixed inset-0 z-50" data-entity-menu onClick={() => setOpenEntityMenuId(null)}>
+            <div className="absolute right-4 top-20 w-52 rounded-lg border border-gray-200 bg-white shadow-lg" onClick={(e) => e.stopPropagation()}>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedEntity(openEntity);
+                  setDetailsOpen(true);
+                  setOpenEntityMenuId(null);
+                  setDeleteConfirmId(null);
+                }}
+                className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+              >
+                <Eye className="h-4 w-4" />
+                View details
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  if (deleteConfirmId !== openEntity.id) {
+                    setDeleteConfirmId(openEntity.id);
+                    return;
+                  }
+
+                  setOpenEntityMenuId(null);
+
+                  const res = await fetch("/api/indexed-entities/unindex", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ sourceId: openEntity.sourceId, externalId: openEntity.externalId }),
+                  });
+                  const json = await res.json().catch(() => ({}));
+
+                  setDeleteConfirmId(null);
+
+                  if (!res.ok || !json?.ok) {
+                    setIndexedErr(json?.message || "Failed to remove from index.");
+                    return;
+                  }
+
+                  refreshIndexedEntities();
+                }}
+                className={
+                  "flex w-full items-start gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 " +
+                  (deleteConfirmId === openEntity.id ? "bg-red-100" : "")
+                }
+              >
+                <Trash2 className="mt-0.5 h-4 w-4" />
+                <span className="leading-tight">
+                  {deleteConfirmId === openEntity.id ? (
+                    <>
+                      <span className="font-semibold">Confirm delete</span>
+                      <span className="mt-0.5 block text-xs font-normal text-red-500">
+                        Removes from index. You can add it back later.
+                      </span>
+                    </>
+                  ) : (
+                    "Delete"
+                  )}
+                </span>
+              </button>
+            </div>
+          </div>
+        );
+      })() : null}
 
       {/* Credentials View */}
       {filter === "credentials" ? (
@@ -1076,7 +1209,12 @@ export default function ConnectionsPage() {
                             <MoreVertical className="h-5 w-5 text-gray-600" />
                           </button>
                           {openDropdownId === c.id && (
-                            <CredentialsDropdownMenu sourceId={c.id} onClose={() => setOpenDropdownId(null)} />
+                            <CredentialsDropdownMenu 
+                              sourceId={c.id} 
+                              onClose={() => setOpenDropdownId(null)}
+                              onEdit={(id) => setEditingSourceId(id)}
+                              onDelete={(id) => setCredentialDeleteId(id)}
+                            />
                           )}
                         </div>
                       </div>
@@ -1394,92 +1532,117 @@ export default function ConnectionsPage() {
 {step === "entities" ? (
   <div className="space-y-4">
     <div className="text-sm text-gray-700">
-      Choose one or more entities (workflows/agents/etc.) to index for analytics and optional AI actions. Each requires a unique External ID and Display Name.
+      Select the workflows you want GetFlowetic to index.
     </div>
 
-    <div className="flex flex-col gap-3 pb-4">
-      <div className="flex items-center gap-2">
-        <select
-          value={entityKind}
-          onChange={(e) => setEntityKind(e.target.value as EntityDraft["entityKind"])}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-        >
-          <option value="workflow">Workflow</option>
-          <option value="scenario">Scenario</option>
-          <option value="flow">Flow</option>
-          <option value="agent">Agent</option>
-          <option value="assistant">Assistant</option>
-          <option value="squad">Squad</option>
-        </select>
+    {inventoryErr ? (
+      <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{inventoryErr}</div>
+    ) : null}
 
-        <input
-          value={entityExternalId}
-          onChange={(e) => setEntityExternalId(e.target.value)}
-          type="text"
-          className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-          placeholder="External ID (unique for each entity)"
-        />
-        <input
-          value={entityDisplayName}
-          onChange={(e) => setEntityDisplayName(e.target.value)}
-          type="text"
-          className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-          placeholder="Display Name"
-        />
+    {inventoryLoading ? (
+      <div className="text-sm text-gray-600">Loading workflows…</div>
+    ) : null}
 
-        <button
-          type="button"
-          onClick={addEntityDraft}
-          disabled={!entityExternalId.trim() || !entityDisplayName.trim()}
-          className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-          title="Add"
-        >
-          <PlusCircle className="h-5 w-5" />
-        </button>
-      </div>
-    </div>
-
-    <div className="space-y-1">
-      {connectEntities.length === 0 ? (
-        <div className="rounded-md bg-gray-50 p-4 text-center text-sm text-gray-600">
-          No entities added yet. Add at least one entity to continue.
+    {!inventoryLoading ? (
+      <>
+      <div className="flex items-center justify-between gap-3">
+        <div className="relative w-[420px]">
+          <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <input
+            value={inventorySearch}
+            onChange={(e) => setInventorySearch(e.target.value)}
+            className="w-full rounded-lg border border-gray-300 py-2.5 pl-10 pr-4 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="Search workflows..."
+          />
         </div>
-      ) : (
-        connectEntities.map((e, i) => (
-          <div key={i} className="flex items-center justify-between rounded-md border border-gray-200 bg-white px-3 py-2">
-            <div className="truncate text-sm">
-              <span className="font-mono text-xs text-gray-500 uppercase">{e.entityKind}</span>
-              <span className="mx-2 text-gray-400">•</span>
-              <span className="font-medium text-slate-900">{e.displayName}</span>
-              <span className="mx-2 text-gray-400">•</span>
-              <span className="font-mono text-xs text-gray-500">{e.externalId}</span>
-            </div>
-            <button
-              type="button"
-              onClick={() => removeEntityDraft(i)}
-              className="ml-4 text-red-500 hover:text-red-700"
-              title="Remove"
-            >
-              <X className="h-4 w-4" />
-            </button>
+      </div>
+
+      <div className="max-h-[320px] overflow-auto rounded-lg border border-gray-200">
+        {displayedSelectable.length === 0 ? (
+          <div className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-600">
+            No workflows found in this n8n instance.
           </div>
-        ))
-      )}
-    </div>
+        ) : (
+          <div className="max-h-[320px] overflow-auto rounded-lg border border-gray-200">
+            <div className="divide-y divide-gray-200">
+              {displayedSelectable.map((e) => {
+                const checked = selectedExternalIds.has(e.externalId);
+                return (
+                  <label key={e.id} className="flex cursor-pointer items-center justify-between px-4 py-3 hover:bg-gray-50">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-semibold text-gray-900">{e.name}</div>
+                      <div className="truncate text-xs text-gray-500">ID: {e.externalId}</div>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => {
+                        setSelectedExternalIds((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(e.externalId)) next.delete(e.externalId);
+                          else next.add(e.externalId);
+                          return next;
+                        });
+                      }}
+                      className="h-4 w-4"
+                    />
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+      </>
+    ) : null}
 
     <div className="flex justify-end gap-2 pt-2">
       <button
         type="button"
         onClick={() => setStep("credentials")}
         className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-200"
-        disabled={saving}
+        disabled={saving || inventoryLoading}
       >
         Back
       </button>
+
       <button
         type="button"
-        onClick={saveEntitiesSelection}
-        disabled={saving || connectEntities.length === 0}
+        onClick={async () => {
+          if (!createdSourceId) return;
+
+          setSaving(true);
+          setErrMsg(null);
+
+          const res = await fetch("/api/connections/entities/select", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              sourceId: createdSourceId,
+              entities: Array.from(selectedExternalIds).map((externalId) => {
+                const row = indexedEntities.find((x) => x.externalId === externalId && String(x.sourceId) === String(createdSourceId));
+                return {
+                  externalId,
+                  displayName: row?.name ?? externalId,
+                  entityKind: "workflow",
+                  enabledForAnalytics: true,
+                  enabledForActions: false,
+                };
+              }),
+            }),
+          });
+
+          const json = await res.json().catch(() => ({}));
+          if (!res.ok || !json?.ok) {
+            setSaving(false);
+            setErrMsg(json?.message || "Failed to save selection.");
+            return;
+          }
+
+          setSaving(false);
+          setStep("success");
+        }}
+        disabled={saving || inventoryLoading || selectedExternalIds.size === 0}
         className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600 disabled:opacity-50"
       >
         {saving ? "Saving..." : "Continue"}
@@ -1671,6 +1834,94 @@ export default function ConnectionsPage() {
                   className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
                 >
                   Got it
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {credentialDeleteId ? (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="border-b px-6 py-5">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="text-lg font-semibold text-gray-900">Delete credentials?</div>
+                  <div className="mt-1 text-sm text-gray-600">
+                    Deleting credentials will remove GetFlowetic's access to your workflows.
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCredentialDeleteId(null);
+                    setCredentialDeleteConfirm(false);
+                  }}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+
+            <div className="px-6 py-5 space-y-4">
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                This does not delete anything in n8n. It only removes this connection from GetFlowetic.
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  id="confirmCredDelete"
+                  type="checkbox"
+                  checked={credentialDeleteConfirm}
+                  onChange={(e) => setCredentialDeleteConfirm(e.target.checked)}
+                />
+                <label htmlFor="confirmCredDelete" className="text-sm text-gray-700">
+                  I understand this will disconnect my workflows.
+                </label>
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCredentialDeleteId(null);
+                    setCredentialDeleteConfirm(false);
+                  }}
+                  className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={!credentialDeleteConfirm}
+                  onClick={async () => {
+                    const id = credentialDeleteId;
+                    setSaving(true);
+                    setErrMsg(null);
+
+                    const res = await fetch("/api/credentials/delete", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ sourceId: id }),
+                    });
+                    const json = await res.json().catch(() => ({}));
+                    if (!res.ok || !json?.ok) {
+                      setSaving(false);
+                      setErrMsg(json?.message || "Failed to delete credentials.");
+                      return;
+                    }
+
+                    setSaving(false);
+                    setCredentialDeleteId(null);
+                    setCredentialDeleteConfirm(false);
+                    await refreshCredentials();
+                    await refreshIndexedEntities();
+                  }}
+                  className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+                >
+                  Delete
                 </button>
               </div>
             </div>

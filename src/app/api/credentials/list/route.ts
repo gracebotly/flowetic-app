@@ -38,9 +38,9 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from("sources")
-    .select("id,type,name,status,created_at,updated_at,method")
+    .select("id,type,name,status,created_at,method")
     .eq("tenant_id", membership.tenant_id)
-    .order("updated_at", { ascending: false });
+    .order("created_at", { ascending: false });
 
   if (error) {
     return NextResponse.json({ ok: false, code: "UNKNOWN_ERROR", message: error.message }, { status: 500 });
@@ -52,9 +52,9 @@ export async function GET() {
       platformType: String(s.type),
       name: String(s.name ?? ""),
       status: (s.status ?? null) as string | null,
-      method: safeMethod(s.method), // ✅ Just read from column
+      method: safeMethod((s as any).method), // ✅ Just read from column
       created_at: String(s.created_at ?? ""),
-      updated_at: String(s.updated_at ?? s.created_at ?? ""),
+      updated_at: String((s as any).updated_at ?? s.created_at ?? ""),
     };
   });
 
