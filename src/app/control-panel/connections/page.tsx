@@ -618,33 +618,24 @@ export default function ConnectionsPage() {
     return new Date(ts).toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" });
   }
 
-  const displayedInventory = useMemo(() => {
-    const q = inventorySearch.trim().toLowerCase();
+  const selectableFromThisSource = useMemo(() => {
+    if (!createdSourceId) return [];
+    return indexedEntities.filter((e) => String(e.sourceId) === String(createdSourceId));
+  }, [indexedEntities, createdSourceId]);
 
-    const filtered = !q
-      ? inventoryEntities
-      : inventoryEntities.filter((e: any) => {
-          const name = String(e.displayName ?? "").toLowerCase();
-          const id = String(e.externalId ?? "").toLowerCase();
-          return name.includes(q) || id.includes(q);
+  const displayedSelectable = useMemo(() => {
+    const q = inventorySearch.trim().toLowerCase();
+    const rows = !q
+      ? selectableFromThisSource
+      : selectableFromThisSource.filter((e) => {
+          const name = e.name.toLowerCase();
+          const id = e.externalId.toLowerCase();
+          return name.includes(q); // name-only to avoid confusing matches
         });
 
-    // Auto-sort: last updated first. If updatedAt missing, fall back to createdAt, then name.
-    const withSort = [...filtered];
-    withSort.sort((a: any, b: any) => {
-      const bu = Date.parse(String(b.updatedAt ?? "")); // NaN if missing
-      const au = Date.parse(String(a.updatedAt ?? ""));
-      if (Number.isFinite(bu) || Number.isFinite(au)) return (Number.isFinite(bu) ? bu : 0) - (Number.isFinite(au) ? au : 0);
-
-      const bc = Date.parse(String(b.createdAt ?? ""));
-      const ac = Date.parse(String(a.createdAt ?? ""));
-      if (Number.isFinite(bc) || Number.isFinite(ac)) return (Number.isFinite(bc) ? bc : 0) - (Number.isFinite(ac) ? ac : 0);
-
-      return String(a.displayName ?? "").localeCompare(String(b.displayName ?? ""));
-    });
-
-    return withSort;
-  }, [inventoryEntities, inventorySearch]);
+    // auto-sort: last updated first
+    return [...rows].sort((a, b) => b.lastUpdatedTs - a.lastUpdatedTs);
+  }, [selectableFromThisSource, inventorySearch]);
 
   function resetModal() {
     setStep("platform");
@@ -777,6 +768,15 @@ export default function ConnectionsPage() {
 
     setCreatedSourceId(sourceId);
     await refreshCredentials();
+    
+    if (selectedPlatform === "n8n" && selectedMethod === "api") {
+      await fetch("/api/connections/inventory/n8n/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceId }),
+      }).catch(() => null);
+    }
+    
     setStep("entities");
     
     if (selectedPlatform === "n8n" && selectedMethod === "api") {
@@ -903,7 +903,8 @@ export default function ConnectionsPage() {
   }, [credentials, credentialsSearch, credentialsSort]);
 
   const displayedIndexedEntities = useMemo(() => {
-    let rows = [...indexedEntities];
+    // Apply sources filter: only items enabled for analytics
+    let rows = [...indexedEntities].filter((x) => x.enabled_for_analytics);
 
     if (allSearch.trim()) {
       const q = allSearch.trim().toLowerCase();
@@ -1032,83 +1033,17 @@ export default function ConnectionsPage() {
                           <div>Created: {formatDateFromTs(entity.createdAtTs)}</div>
                         </div>
 
-                        <div className="relative">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setDeleteConfirmId(null);
-                              setOpenEntityMenuId(openEntityMenuId === entity.id ? null : entity.id);
-                            }}
-                            className="rounded-lg p-2 hover:bg-gray-100"
-                            aria-label="Row actions"
-                          >
-                            <MoreVertical className="h-5 w-5 text-gray-600" />
-                          </button>
-
-                          {openEntityMenuId === entity.id ? (
-                            <div className="absolute right-0 z-50 mt-2 w-52 rounded-lg border border-gray-200 bg-white shadow-lg" data-entity-menu>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setSelectedEntity(entity);
-                                  setDetailsOpen(true);
-                                  setOpenEntityMenuId(null);
-                                  setDeleteConfirmId(null);
-                                }}
-                                className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
-                              >
-                                <Eye className="h-4 w-4" />
-                                View details
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={async () => {
-                                  if (deleteConfirmId !== entity.id) {
-                                    setDeleteConfirmId(entity.id);
-                                    return;
-                                  }
-
-                                  setOpenEntityMenuId(null);
-
-                                  const res = await fetch("/api/indexed-entities/unindex", {
-                                    method: "POST",
-                                    headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({ sourceId: entity.sourceId, externalId: entity.externalId }),
-                                  });
-                                  const json = await res.json().catch(() => ({}));
-
-                                  setDeleteConfirmId(null);
-
-                                  if (!res.ok || !json?.ok) {
-                                    setIndexedErr(json?.message || "Failed to remove from index.");
-                                    return;
-                                  }
-
-                                  refreshIndexedEntities();
-                                }}
-                                className={
-                                  "flex w-full items-start gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 " +
-                                  (deleteConfirmId === entity.id ? "bg-red-100" : "")
-                                }
-                              >
-                                <Trash2 className="mt-0.5 h-4 w-4" />
-                                <span className="leading-tight">
-                                  {deleteConfirmId === entity.id ? (
-                                    <>
-                                      <span className="font-semibold">Confirm delete</span>
-                                      <span className="mt-0.5 block text-xs font-normal text-red-500">
-                                        Removes from index. You can add it back later.
-                                      </span>
-                                    </>
-                                  ) : (
-                                    "Delete"
-                                  )}
-                                </span>
-                              </button>
-                            </div>
-                          ) : null}
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDeleteConfirmId(null);
+                            setOpenEntityMenuId(openEntityMenuId === entity.id ? null : entity.id);
+                          }}
+                          className="rounded-lg p-2 hover:bg-gray-100"
+                          aria-label="Row actions"
+                        >
+                          <MoreVertical className="h-5 w-5 text-gray-600" />
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -1123,6 +1058,77 @@ export default function ConnectionsPage() {
         </div>
         </>
       ) : null}
+
+      {/* Entity dropdown menus rendered at higher level */}
+      {filter === "all" && openEntityMenuId ? (() => {
+        const openEntity = displayedIndexedEntities.find((entity) => entity.id === openEntityMenuId);
+        if (!openEntity) return null;
+        return (
+          <div className="fixed inset-0 z-50" data-entity-menu onClick={() => setOpenEntityMenuId(null)}>
+            <div className="absolute right-4 top-20 w-52 rounded-lg border border-gray-200 bg-white shadow-lg" onClick={(e) => e.stopPropagation()}>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedEntity(openEntity);
+                  setDetailsOpen(true);
+                  setOpenEntityMenuId(null);
+                  setDeleteConfirmId(null);
+                }}
+                className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+              >
+                <Eye className="h-4 w-4" />
+                View details
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  if (deleteConfirmId !== openEntity.id) {
+                    setDeleteConfirmId(openEntity.id);
+                    return;
+                  }
+
+                  setOpenEntityMenuId(null);
+
+                  const res = await fetch("/api/indexed-entities/unindex", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ sourceId: openEntity.sourceId, externalId: openEntity.externalId }),
+                  });
+                  const json = await res.json().catch(() => ({}));
+
+                  setDeleteConfirmId(null);
+
+                  if (!res.ok || !json?.ok) {
+                    setIndexedErr(json?.message || "Failed to remove from index.");
+                    return;
+                  }
+
+                  refreshIndexedEntities();
+                }}
+                className={
+                  "flex w-full items-start gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 " +
+                  (deleteConfirmId === openEntity.id ? "bg-red-100" : "")
+                }
+              >
+                <Trash2 className="mt-0.5 h-4 w-4" />
+                <span className="leading-tight">
+                  {deleteConfirmId === openEntity.id ? (
+                    <>
+                      <span className="font-semibold">Confirm delete</span>
+                      <span className="mt-0.5 block text-xs font-normal text-red-500">
+                        Removes from index. You can add it back later.
+                      </span>
+                    </>
+                  ) : (
+                    "Delete"
+                  )}
+                </span>
+              </button>
+            </div>
+          </div>
+        );
+      })() : null}
 
       {/* Credentials View */}
       {filter === "credentials" ? (
@@ -1559,35 +1565,39 @@ export default function ConnectionsPage() {
         </div>
       </div>
 
-      <div className="max-h-[320px] overflow-auto rounded-lg border border-gray-200 mt-3">
-        {inventoryEntities.length === 0 ? (
-          <div className="p-4 text-sm text-gray-600">No workflows found in this n8n instance.</div>
+      <div className="max-h-[320px] overflow-auto rounded-lg border border-gray-200">
+        {displayedSelectable.length === 0 ? (
+          <div className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-600">
+            No workflows found in this n8n instance.
+          </div>
         ) : (
-          <div className="divide-y divide-gray-200">
-            {displayedInventory.map((e) => {
-              const checked = selectedExternalIds.has(e.externalId);
-              return (
-                <label key={e.externalId} className="flex cursor-pointer items-center justify-between px-4 py-3 hover:bg-gray-50">
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-semibold text-gray-900">{e.displayName}</div>
-                    <div className="truncate text-xs text-gray-500">ID: {e.externalId}</div>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => {
-                      setSelectedExternalIds((prev) => {
-                        const next = new Set(prev);
-                        if (next.has(e.externalId)) next.delete(e.externalId);
-                        else next.add(e.externalId);
-                        return next;
-                      });
-                    }}
-                    className="h-4 w-4"
-                  />
-                </label>
-              );
-            })}
+          <div className="max-h-[320px] overflow-auto rounded-lg border border-gray-200">
+            <div className="divide-y divide-gray-200">
+              {displayedSelectable.map((e) => {
+                const checked = selectedExternalIds.has(e.externalId);
+                return (
+                  <label key={e.id} className="flex cursor-pointer items-center justify-between px-4 py-3 hover:bg-gray-50">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-semibold text-gray-900">{e.name}</div>
+                      <div className="truncate text-xs text-gray-500">ID: {e.externalId}</div>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => {
+                        setSelectedExternalIds((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(e.externalId)) next.delete(e.externalId);
+                          else next.add(e.externalId);
+                          return next;
+                        });
+                      }}
+                      className="h-4 w-4"
+                    />
+                  </label>
+                );
+              })}
+            </div>
           </div>
         )}
       </div>
@@ -1609,27 +1619,24 @@ export default function ConnectionsPage() {
         onClick={async () => {
           if (!createdSourceId) return;
 
-          const selected = inventoryEntities.filter((e) => selectedExternalIds.has(e.externalId));
-          if (selected.length === 0) {
-            setErrMsg("Select at least one workflow to continue.");
-            return;
-          }
-
           setSaving(true);
           setErrMsg(null);
 
-          const res = await fetch("/api/connections/entities/save", {
+          const res = await fetch("/api/connections/entities/select", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               sourceId: createdSourceId,
-              entities: selected.map((w) => ({
-                externalId: w.externalId,
-                displayName: w.displayName,
-                entityKind: "workflow",
-                enabledForAnalytics: true,
-                enabledForActions: false,
-              })),
+              entities: Array.from(selectedExternalIds).map((externalId) => {
+                const row = indexedEntities.find((x) => x.externalId === externalId && String(x.sourceId) === String(createdSourceId));
+                return {
+                  externalId,
+                  displayName: row?.name ?? externalId,
+                  entityKind: "workflow",
+                  enabledForAnalytics: true,
+                  enabledForActions: false,
+                };
+              }),
             }),
           });
 
