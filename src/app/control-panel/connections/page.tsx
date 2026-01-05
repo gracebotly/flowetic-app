@@ -54,6 +54,7 @@ type IndexedEntityRow = {
   createdAt: string;
   createdAtTs: number;
   lastUpdatedTs: number;
+  enabled_for_analytics?: boolean;
 };
 
 type AllSort = "created_at" | "last_updated" | "name_az";
