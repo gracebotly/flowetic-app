@@ -898,10 +898,10 @@ export default function ConnectionsPage() {
     }
 
     await refreshIndexedEntities();
+    await refreshCredentials();
     setAllSearch("");
     setFilter("all");
-    await refreshIndexedEntities(); // intentional: avoid tab/state race
-    await refreshCredentials();
+    await refreshIndexedEntities();
     setSaving(false);
     closeConnect();
   }
