@@ -28,6 +28,7 @@ export async function GET(req: Request) {
   const { data: rows, error } = await supabase
     .from("source_entities")
     .select("external_id,display_name,entity_kind,enabled_for_analytics,enabled_for_actions,last_seen_at,created_at,updated_at")
+    .eq("tenant_id", membership.tenant_id)
     .eq("source_id", sourceId)
     .order("display_name", { ascending: true });
 

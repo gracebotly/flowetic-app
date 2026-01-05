@@ -98,14 +98,17 @@ export async function POST(req: Request) {
   const raw = await res.json().catch(() => null);
   const workflows = extractWorkflows(raw);
 
-  // IMPORTANT: don't silently "succeed" with 0 unless it is truly empty.
-  // If your instance has workflows but you still see 0, you'll now have a clear response.
   if (workflows.length === 0) {
-    return NextResponse.json({
-      ok: true,
-      importedCount: 0,
-      warning: "No workflows returned by n8n. Check if your n8n instance has workflows and that API user can access them.",
-    });
+    return NextResponse.json(
+      {
+        ok: false,
+        code: "N8N_EMPTY_WORKFLOWS",
+        message:
+          "Connected successfully, but n8n returned 0 workflows. Check that the API key has access and that your instance has workflows.",
+        debug: { baseUrl },
+      },
+      { status: 400 },
+    );
   }
 
   const now = new Date().toISOString();

@@ -608,6 +608,13 @@ export default function ConnectionsPage() {
     return () => document.removeEventListener('click', handleClickOutside);
   }, []);
 
+  useEffect(() => {
+    if (connectOpen && step === "entities" && selectedPlatform === "n8n" && createdSourceId) {
+      loadN8nInventory(createdSourceId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connectOpen, step, selectedPlatform, createdSourceId]);
+
   function formatRelativeFromIso(iso: string) {
     const ts = Date.parse(iso);
     if (!Number.isFinite(ts)) return "";
@@ -795,17 +802,31 @@ export default function ConnectionsPage() {
     }
 
     setCreatedSourceId(sourceId);
-     await refreshCredentials();
 
-     if (selectedPlatform === "n8n" && selectedMethod === "api") {
-       await loadN8nInventory(sourceId);
-       setStep("entities");
-     } else {
-       setStep("success");
-     }
+    // Import catalog for n8n API connections before moving to entity selection
+    if (selectedPlatform === "n8n" && selectedMethod === "api") {
+      const importRes = await fetch("/api/connections/inventory/n8n/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceId }),
+      });
 
-     setSaving(false);
-     return;
+      const importJson = await importRes.json().catch(() => ({}));
+
+      if (!importRes.ok || !importJson?.ok) {
+        setSaving(false);
+        setErrMsg(importJson?.message || "Failed to import workflows from n8n.");
+        return;
+      }
+
+      await loadN8nInventory(sourceId);
+      setStep("entities");
+    } else {
+      setStep("success");
+    }
+
+    setSaving(false);
+    return;
   }
 
   function addEntityDraft() {
