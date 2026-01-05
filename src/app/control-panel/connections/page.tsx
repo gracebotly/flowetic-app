@@ -1237,23 +1237,23 @@ export default function ConnectionsPage() {
                         <div className="relative">
                           <DropdownMenu.Root>
                             <DropdownMenu.Trigger asChild>
-                              <button
-                                className="p-1 rounded-lg hover:bg-gray-100"
-                              >
+                              <button type="button" className="p-1 rounded-lg hover:bg-gray-100" aria-label="Row actions">
                                 <MoreVertical className="h-5 w-5 text-gray-600" />
                               </button>
                             </DropdownMenu.Trigger>
+
                             <DropdownMenu.Portal>
                               <DropdownMenu.Content side="bottom" align="end" className="z-50 min-w-[160px] rounded-md border bg-white p-1 shadow">
                                 <DropdownMenu.Item
                                   className="rounded px-2 py-1.5 text-sm hover:bg-gray-100 cursor-pointer"
-                                  onClick={() => openEditCredential(c.id)}
+                                  onSelect={() => openEditCredential(c.id)}
                                 >
                                   Edit
                                 </DropdownMenu.Item>
+
                                 <DropdownMenu.Item
                                   className="rounded px-2 py-1.5 text-sm text-red-600 hover:bg-gray-100 cursor-pointer"
-                                  onClick={() => openDeleteCredential(c.id)}
+                                  onSelect={() => openDeleteCredential(c.id)}
                                 >
                                   Delete
                                 </DropdownMenu.Item>
