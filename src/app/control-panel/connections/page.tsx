@@ -271,6 +271,7 @@ export default function ConnectionsPage() {
   // Dropdown states
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
+  const [openCredentialMenuId, setOpenCredentialMenuId] = useState<string | null>(null);
 
   // Connect modal state
   const [connectOpen, setConnectOpen] = useState(false);
@@ -414,11 +415,8 @@ export default function ConnectionsPage() {
       })),
     );
 
-    const preselected = new Set<string>();
-    for (const r of rows) {
-      if (r.enabledForAnalytics) preselected.add(String(r.externalId));
-    }
-    setSelectedExternalIds(preselected);
+    // Always start with nothing selected (authoritative user choice)
+    setSelectedExternalIds(new Set());
 
     setInventoryLoading(false);
   }
@@ -468,6 +466,7 @@ export default function ConnectionsPage() {
       if (!target.closest('[data-entity-menu]')) {
         setOpenEntityMenuId(null);
         setDeleteConfirmId(null);
+        setOpenCredentialMenuId(null);
       }
     }
 
@@ -662,17 +661,19 @@ export default function ConnectionsPage() {
     }
 
     setCreatedSourceId(sourceId);
-     await refreshCredentials();
 
-     if (selectedPlatform === "n8n" && selectedMethod === "api") {
-       await loadN8nInventory(sourceId);
-       setStep("entities");
-     } else {
-       setStep("success");
-     }
+    await refreshCredentials();
 
-     setSaving(false);
-     return;
+    if (selectedPlatform === "n8n" && selectedMethod === "api") {
+      await loadN8nInventory(sourceId);
+      setStep("entities");
+      setSaving(false);
+      return;
+    }
+
+    setStep("success");
+    setSaving(false);
+    return;
   }
 
   function addEntityDraft() {
@@ -860,9 +861,6 @@ export default function ConnectionsPage() {
           </div>
 
         <div className="mt-6">
-          <div className="mt-2 text-xs text-gray-400">
-            Debug: indexedEntities.length = {indexedEntities.length}
-          </div>
           {indexedErr ? (
             <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{indexedErr}</div>
           ) : null}
@@ -1072,33 +1070,16 @@ export default function ConnectionsPage() {
 
                       <div className="flex items-center gap-2">
                         <StatusPill status={c.status} />
-                        <div className="relative">
-                          <DropdownMenu.Root>
-                            <DropdownMenu.Trigger asChild>
-                              <button type="button" className="p-1 rounded-lg hover:bg-gray-100" aria-label="Row actions">
-                                <MoreVertical className="h-5 w-5 text-gray-600" />
-                              </button>
-                            </DropdownMenu.Trigger>
-
-                            <DropdownMenu.Portal>
-                              <DropdownMenu.Content side="bottom" align="end" className="z-50 min-w-[160px] rounded-md border bg-white p-1 shadow">
-                                <DropdownMenu.Item
-                                  className="rounded px-2 py-1.5 text-sm hover:bg-gray-100 cursor-pointer"
-                                  onSelect={() => openEditCredential(c.id)}
-                                >
-                                  Edit
-                                </DropdownMenu.Item>
-
-                                <DropdownMenu.Item
-                                  className="rounded px-2 py-1.5 text-sm text-red-600 hover:bg-gray-100 cursor-pointer"
-                                  onSelect={() => openDeleteCredential(c.id)}
-                                >
-                                  Delete
-                                </DropdownMenu.Item>
-                              </DropdownMenu.Content>
-                            </DropdownMenu.Portal>
-                          </DropdownMenu.Root>
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOpenCredentialMenuId(openCredentialMenuId === c.id ? null : c.id);
+                          }}
+                          className="rounded-lg p-2 hover:bg-gray-100"
+                          aria-label="Credential actions"
+                        >
+                          <MoreVertical className="h-5 w-5 text-gray-600" />
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -1114,6 +1095,49 @@ export default function ConnectionsPage() {
           ) : null}
         </div>
       ) : null}
+
+      {/* Credential dropdown menus rendered at higher level */}
+      {filter === "credentials" && openCredentialMenuId ? (() => {
+        const openCred = displayedCredentials.find((c) => c.id === openCredentialMenuId);
+        if (!openCred) return null;
+
+        return (
+          <div
+            className="fixed inset-0 z-50"
+            data-entity-menu
+            onClick={() => setOpenCredentialMenuId(null)}
+          >
+            <div
+              className="absolute right-4 top-20 w-52 rounded-lg border border-gray-200 bg-white shadow-lg"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  setOpenCredentialMenuId(null);
+                  beginEditCredential(openCred);
+                }}
+                className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+              >
+                <Edit className="h-4 w-4" />
+                Edit
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setOpenCredentialMenuId(null);
+                  openDeleteCredential(openCred.id);
+                }}
+                className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50"
+              >
+                <Trash2 className="h-4 w-4" />
+                Delete
+              </button>
+            </div>
+          </div>
+        );
+      })() : null}
 
       {/* Connect Platform Modal (in-page) */}
       {connectOpen ? (
