@@ -14,9 +14,29 @@ function normalizeBaseUrl(instanceUrl?: string | null) {
   }
 }
 
+function extractWorkflows(raw: any): any[] {
+  if (!raw) return [];
+  // n8n can return: [ ... ]
+  if (Array.isArray(raw)) return raw;
+
+  // or { data: [ ... ] }
+  if (Array.isArray(raw.data)) return raw.data;
+
+  // or { workflows: [ ... ] }
+  if (Array.isArray(raw.workflows)) return raw.workflows;
+
+  // or { data: { data: [ ... ] } } (some proxies/wrappers)
+  if (raw.data && Array.isArray(raw.data.data)) return raw.data.data;
+
+  return [];
+}
+
 export async function POST(req: Request) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ ok: false, code: "AUTH_REQUIRED" }, { status: 401 });
 
   const { data: membership } = await supabase
@@ -25,7 +45,6 @@ export async function POST(req: Request) {
     .eq("user_id", user.id)
     .limit(1)
     .maybeSingle();
-
   if (!membership?.tenant_id) return NextResponse.json({ ok: false, code: "TENANT_ACCESS_DENIED" }, { status: 403 });
 
   const body = (await req.json().catch(() => ({}))) as any;
@@ -39,15 +58,9 @@ export async function POST(req: Request) {
     .eq("tenant_id", membership.tenant_id)
     .maybeSingle();
 
-  if (sErr || !source) {
-    return NextResponse.json({ ok: false, code: "SOURCE_NOT_FOUND" }, { status: 404 });
-    }
-  if (source.type !== "n8n") {
-    return NextResponse.json({ ok: false, code: "INVALID_PLATFORM" }, { status: 400 });
-  }
-  if (!source.secret_hash) {
-    return NextResponse.json({ ok: false, code: "MISSING_SECRET" }, { status: 400 });
-  }
+  if (sErr || !source) return NextResponse.json({ ok: false, code: "SOURCE_NOT_FOUND" }, { status: 404 });
+  if (source.type !== "n8n") return NextResponse.json({ ok: false, code: "INVALID_PLATFORM" }, { status: 400 });
+  if (!source.secret_hash) return NextResponse.json({ ok: false, code: "MISSING_SECRET" }, { status: 400 });
 
   const secret = JSON.parse(decryptSecret(source.secret_hash)) as {
     method: "api" | "webhook" | "mcp";
@@ -69,17 +82,10 @@ export async function POST(req: Request) {
   }
 
   const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if ((secret.authMode ?? "bearer") === "header") headers["X-N8N-API-KEY"] = secret.apiKey!;
+  else headers["Authorization"] = `Bearer ${secret.apiKey}`;
 
-  if ((secret.authMode ?? "bearer") === "header") {
-    headers["X-N8N-API-KEY"] = secret.apiKey!;
-  } else {
-    headers["Authorization"] = `Bearer ${secret.apiKey}`;
-  }
-
-  const res = await fetch(`${baseUrl}/api/v1/workflows`, {
-    method: "GET",
-    headers,
-  });
+  const res = await fetch(`${baseUrl}/api/v1/workflows`, { method: "GET", headers });
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
@@ -90,17 +96,19 @@ export async function POST(req: Request) {
   }
 
   const raw = await res.json().catch(() => null);
+  const workflows = extractWorkflows(raw);
 
-  const workflows: any[] = Array.isArray(raw)
-    ? raw
-    : Array.isArray(raw?.data)
-    ? raw.data
-    : Array.isArray(raw?.workflows)
-    ? raw.workflows
-    : [];
+  // IMPORTANT: don't silently "succeed" with 0 unless it is truly empty.
+  // If your instance has workflows but you still see 0, you'll now have a clear response.
+  if (workflows.length === 0) {
+    return NextResponse.json({
+      ok: true,
+      importedCount: 0,
+      warning: "No workflows returned by n8n. Check if your n8n instance has workflows and that API user can access them.",
+    });
+  }
 
   const now = new Date().toISOString();
-
   const rows = workflows.map((w) => ({
     tenant_id: membership.tenant_id,
     source_id: sourceId,
@@ -122,8 +130,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, code: "PERSISTENCE_FAILED", message: upErr.message }, { status: 400 });
   }
 
-  return NextResponse.json({
-    ok: true,
-    importedCount: rows.length,
-  });
+  return NextResponse.json({ ok: true, importedCount: rows.length });
 }

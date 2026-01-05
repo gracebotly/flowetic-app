@@ -650,20 +650,18 @@ export default function ConnectionsPage() {
 
   const displayedSelectable = useMemo(() => {
     const q = inventorySearch.trim().toLowerCase();
+
     const base = inventoryEntities.map((e) => ({
       id: `${createdSourceId ?? "source"}:${e.externalId}`,
       externalId: e.externalId,
       name: e.displayName,
-      entityKind: e.entityKind,
     }));
 
     const filtered = q
-      ? base.filter((e) => e.name.toLowerCase().includes(q) || e.externalId.toLowerCase().includes(q))
+      ? base.filter((x) => x.name.toLowerCase().includes(q) || x.externalId.toLowerCase().includes(q))
       : base;
 
-    // Stable sort: name A-Z
     filtered.sort((a, b) => a.name.localeCompare(b.name));
-
     return filtered;
   }, [inventoryEntities, inventorySearch, createdSourceId]);
 
@@ -1566,17 +1564,19 @@ export default function ConnectionsPage() {
     ) : null}
 
     <div className="flex justify-end gap-2 pt-2">
-      <button
-        type="button"
-        onClick={() => {
-          setStep("method");
-          setErrMsg(null);
-        }}
-        className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-200"
-        disabled={saving}
-      >
-        Back
-      </button>
+      {!editingSourceId ? (
+        <button
+          type="button"
+          onClick={() => {
+            setStep("method");
+            setErrMsg(null);
+          }}
+          className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-200"
+          disabled={saving}
+        >
+          Back
+        </button>
+      ) : null}
       <button
         type="button"
         onClick={createConnection}
