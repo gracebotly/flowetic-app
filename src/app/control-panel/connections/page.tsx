@@ -554,21 +554,31 @@ export default function ConnectionsPage() {
     setInventoryLoading(false);
   }
 
-  function openEditCredential(sourceId: string) {
-    setEditingSourceId(sourceId);
+  function beginEditCredential(credential: CredentialRow) {
+    // Ensure edit uses the same platform + method context as creation
+    setSelectedPlatform(credential.platformType as any);
+    setSelectedMethod(credential.method);
+    setConnectionName(credential.name || "");
+    setEditingSourceId(credential.id);
+
     setErrMsg(null);
     setSaving(false);
 
-    // Clear sensitive fields so user re-enters (we do not display stored secrets)
+    // Never display stored secrets; force re-entry
     setApiKey("");
     setInstanceUrl("");
     setMcpAccessToken("");
     setAuthHeader("");
     setMcpUrl("");
 
-    // Reuse the existing connect modal UI
     setConnectOpen(true);
     setStep("credentials");
+  }
+
+  function openEditCredential(sourceId: string) {
+    const cred = credentials.find((c) => c.id === sourceId);
+    if (!cred) return;
+    beginEditCredential(cred);
   }
 
   useEffect(() => {
@@ -1314,7 +1324,7 @@ export default function ConnectionsPage() {
                       : step === "credentials"
                       ? selectedPlatform === "n8n" && selectedMethod === "mcp"
                         ? "Enter the Server URL and Access token from n8n's Instance-level MCP settings."
-                        : "Enter credentials to validate and connect."
+                        : editingSourceId ? "Re-enter credentials to validate and save." : "Enter credentials to validate and connect."
                       : step === "entities"
                       ? "Add agents/workflows you want GetFlowetic to index."
                       : "Success."}
@@ -1568,7 +1578,7 @@ export default function ConnectionsPage() {
         disabled={saving}
         className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600 disabled:opacity-50"
       >
-        {saving ? "Connecting..." : "Connect"}
+        {saving ? (editingSourceId ? "Saving..." : "Connecting...") : (editingSourceId ? "Save" : "Connect")}
       </button>
     </div>
   </div>
