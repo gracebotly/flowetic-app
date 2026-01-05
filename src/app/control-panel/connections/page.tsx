@@ -876,15 +876,11 @@ export default function ConnectionsPage() {
       return;
     }
 
-    // Refresh server-backed lists BEFORE closing/resetting modal state
     await refreshIndexedEntities();
-    await refreshCredentials();
-
-    // Ensure All tab actually shows the new items (search can hide results)
     setAllSearch("");
     setFilter("all");
-
-    // Close modal last
+    await refreshIndexedEntities(); // intentional: avoid tab/state race
+    await refreshCredentials();
     setSaving(false);
     closeConnect();
   }

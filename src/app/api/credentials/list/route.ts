@@ -13,7 +13,6 @@ type CredentialRow = {
   status: string | null;
   method: ConnectMethod;
   created_at: string;
-  updated_at: string;
 };
 
 function safeMethod(v: unknown): ConnectMethod {
@@ -54,7 +53,6 @@ export async function GET() {
       status: (s.status ?? null) as string | null,
       method: safeMethod((s as any).method), // ✅ Just read from column
       created_at: String(s.created_at ?? ""),
-      updated_at: String((s as any).updated_at ?? s.created_at ?? ""),
     };
   });
 
