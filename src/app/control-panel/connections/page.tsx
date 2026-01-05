@@ -484,6 +484,12 @@ export default function ConnectionsPage() {
     const res = await fetch("/api/indexed-entities/list", { method: "GET" });
     const json = await res.json().catch(() => ({}));
 
+    console.log("[connections] indexed-entities/list response", {
+      ok: json?.ok,
+      count: Array.isArray(json?.entities) ? json.entities.length : null,
+      sample: Array.isArray(json?.entities) ? json.entities[0] : null,
+    });
+
     if (!res.ok || !json?.ok) {
       setIndexedEntities([]);
       setIndexedLoading(false);
@@ -583,7 +589,6 @@ export default function ConnectionsPage() {
 
   useEffect(() => {
     refreshIndexedEntities();
-    loadEntities();
     refreshCredentials();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -897,11 +902,16 @@ export default function ConnectionsPage() {
       return;
     }
 
-    await refreshIndexedEntities();
     await refreshCredentials();
+
+    // Reset All tab filters so nothing can hide the results
     setAllSearch("");
+    setAllSort("created_at");
     setFilter("all");
+
+    // Refetch AFTER switching to All tab
     await refreshIndexedEntities();
+
     setSaving(false);
     closeConnect();
   }
