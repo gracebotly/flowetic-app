@@ -141,18 +141,9 @@ function CredentialsDropdownMenu({ sourceId, onClose }: { sourceId: string; onCl
     <DropdownMenu.Portal>
       <DropdownMenu.Content side="bottom" align="end" className="z-50 min-w-[160px] rounded-md border bg-white p-1 shadow">
         <DropdownMenu.Item 
-          className="rounded px-2 py-1.5 text-sm hover:bg-gray-100 cursor-pointer"
-          onClick={() => {
-            alert(`Configure: ${sourceId}`);
-            onClose();
-          }}
-        >
-          Configure
-        </DropdownMenu.Item>
-        <DropdownMenu.Item 
           className="rounded px-2 py-1.5 text-sm hover:bg-gray-100 cursor-pointer" 
           onClick={() => {
-            alert(`Edit: ${sourceId}`);
+            openEditCredential(sourceId);
             onClose();
           }}
         >
@@ -161,7 +152,7 @@ function CredentialsDropdownMenu({ sourceId, onClose }: { sourceId: string; onCl
         <DropdownMenu.Item 
           className="rounded px-2 py-1.5 text-sm text-red-600 hover:bg-gray-100 cursor-pointer" 
           onClick={() => {
-            alert(`Delete: ${sourceId}`);
+            setCredentialDeleteId(sourceId);
             onClose();
           }}
         >
@@ -388,6 +379,10 @@ export default function ConnectionsPage() {
   const [step, setStep] = useState<"platform" | "method" | "credentials" | "entities" | "success">("platform");
   const [mcpHelpOpen, setMcpHelpOpen] = useState(false);
   
+  const [editingSourceId, setEditingSourceId] = useState<string | null>(null);
+  const [credentialDeleteId, setCredentialDeleteId] = useState<string | null>(null);
+  const [credentialDeleteConfirm, setCredentialDeleteConfirm] = useState(false);
+  
   // Connect form state
   const [selectedPlatform, setSelectedPlatform] = useState<keyof typeof PLATFORM_META | null>(null);
   const [selectedMethod, setSelectedMethod] = useState<"api" | "webhook" | "mcp">("api");
@@ -532,6 +527,23 @@ export default function ConnectionsPage() {
 
     setSelectedExternalIds(new Set());
     setInventoryLoading(false);
+  }
+
+  function openEditCredential(sourceId: string) {
+    setEditingSourceId(sourceId);
+    setErrMsg(null);
+    setSaving(false);
+
+    // Clear sensitive fields so user re-enters (we do not display stored secrets)
+    setApiKey("");
+    setInstanceUrl("");
+    setMcpAccessToken("");
+    setAuthHeader("");
+    setMcpUrl("");
+
+    // Reuse the existing connect modal UI
+    setConnectOpen(true);
+    setStep("credentials");
   }
 
   useEffect(() => {
@@ -718,10 +730,16 @@ export default function ConnectionsPage() {
       }
     }
 
-    const res = await fetch("/api/connections/connect", {
+    const url = editingSourceId ? "/api/credentials/update" : "/api/connections/connect";
+
+    const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(
+        editingSourceId
+          ? { ...payload, sourceId: editingSourceId }
+          : payload
+      ),
     });
 
     const json = await res.json().catch(() => ({}));
@@ -729,6 +747,14 @@ export default function ConnectionsPage() {
     if (!res.ok || !json?.ok) {
       setSaving(false);
       setErrMsg(json?.message || "Connection failed. Please check your credentials.");
+      return;
+    }
+
+    if (editingSourceId) {
+      setEditingSourceId(null);
+      setSaving(false);
+      closeConnect();
+      await refreshCredentials();
       return;
     }
 
@@ -874,8 +900,7 @@ export default function ConnectionsPage() {
       rows = rows.filter((e) => {
         return (
           e.name.toLowerCase().includes(q) ||
-          e.platform.toLowerCase().includes(q) ||
-          e.kind.toLowerCase().includes(q)
+          e.platform.toLowerCase().includes(q)
         );
       });
     }
@@ -948,7 +973,7 @@ export default function ConnectionsPage() {
                 value={allSearch}
                 onChange={(e) => setAllSearch(e.target.value)}
                 className="w-full rounded-lg border border-gray-300 py-2.5 pl-10 pr-4 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Search workflows & agents..."
+                placeholder="Search by name..."
               />
             </div>
 
@@ -1028,16 +1053,28 @@ export default function ConnectionsPage() {
 
                               <button
                                 type="button"
-                                onClick={() => {
+                                onClick={async () => {
                                   if (deleteConfirmId !== entity.id) {
                                     setDeleteConfirmId(entity.id);
                                     return;
                                   }
 
-                                  // TODO (later): wire to real remove-from-index endpoint.
-                                  // For now: close menu and refresh list.
                                   setOpenEntityMenuId(null);
+
+                                  const res = await fetch("/api/indexed-entities/unindex", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ sourceId: entity.sourceId, externalId: entity.externalId }),
+                                  });
+                                  const json = await res.json().catch(() => ({));
+
                                   setDeleteConfirmId(null);
+
+                                  if (!res.ok || !json?.ok) {
+                                    setIndexedErr(json?.message || "Failed to remove from index.");
+                                    return;
+                                  }
+
                                   refreshIndexedEntities();
                                 }}
                                 className={
@@ -1783,6 +1820,94 @@ export default function ConnectionsPage() {
                   className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
                 >
                   Got it
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {credentialDeleteId ? (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="border-b px-6 py-5">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="text-lg font-semibold text-gray-900">Delete credentials?</div>
+                  <div className="mt-1 text-sm text-gray-600">
+                    Deleting credentials will remove GetFlowetic's access to your workflows.
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCredentialDeleteId(null);
+                    setCredentialDeleteConfirm(false);
+                  }}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+
+            <div className="px-6 py-5 space-y-4">
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                This does not delete anything in n8n. It only removes this connection from GetFlowetic.
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  id="confirmCredDelete"
+                  type="checkbox"
+                  checked={credentialDeleteConfirm}
+                  onChange={(e) => setCredentialDeleteConfirm(e.target.checked)}
+                />
+                <label htmlFor="confirmCredDelete" className="text-sm text-gray-700">
+                  I understand this will disconnect my workflows.
+                </label>
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCredentialDeleteId(null);
+                    setCredentialDeleteConfirm(false);
+                  }}
+                  className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={!credentialDeleteConfirm}
+                  onClick={async () => {
+                    const id = credentialDeleteId;
+                    setSaving(true);
+                    setErrMsg(null);
+
+                    const res = await fetch("/api/credentials/delete", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ sourceId: id }),
+                    });
+                    const json = await res.json().catch(() => ({}));
+                    if (!res.ok || !json?.ok) {
+                      setSaving(false);
+                      setErrMsg(json?.message || "Failed to delete credentials.");
+                      return;
+                    }
+
+                    setSaving(false);
+                    setCredentialDeleteId(null);
+                    setCredentialDeleteConfirm(false);
+                    await refreshCredentials();
+                    await refreshIndexedEntities();
+                  }}
+                  className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+                >
+                  Delete
                 </button>
               </div>
             </div>

@@ -52,7 +52,8 @@ export async function GET() {
   const { data: entities, error: eErr } = await supabase
     .from("source_entities")
     .select("source_id,entity_kind,external_id,display_name,last_seen_at")
-    .in("source_id", sourceIds);
+    .in("source_id", sourceIds)
+    .eq("enabled_for_analytics", true);
 
   if (eErr) return NextResponse.json({ ok: false, code: "UNKNOWN_ERROR", message: eErr.message }, { status: 500 });
 
