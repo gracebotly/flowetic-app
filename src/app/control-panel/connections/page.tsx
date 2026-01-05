@@ -431,7 +431,6 @@ export default function ConnectionsPage() {
   const [inventoryErr, setInventoryErr] = useState<string | null>(null);
   const [inventoryEntities, setInventoryEntities] = useState<Array<{ externalId: string; displayName: string; entityKind: string; createdAt?: string | null; updatedAt?: string | null }>>([]);
   const [inventorySearch, setInventorySearch] = useState("");
-  const [inventorySort, setInventorySort] = useState<"updated_desc" | "created_desc" | "name_az">("updated_desc");
   const [selectedExternalIds, setSelectedExternalIds] = useState<Set<string>>(new Set());
 
   async function loadEntities() {
@@ -506,9 +505,10 @@ export default function ConnectionsPage() {
       return;
     }
 
-    // 2) List imported entities
-    const listRes = await fetch(`/api/connections/inventory/n8n/list?sourceId=${encodeURIComponent(sourceId)}`, { method: "GET" });
+    // 2) List imported entities from Supabase-backed entity store
+    const listRes = await fetch("/api/indexed-entities/list", { method: "GET" });
     const listJson = await listRes.json().catch(() => ({}));
+
     if (!listRes.ok || !listJson?.ok) {
       setInventoryLoading(false);
       setInventoryEntities([]);
@@ -516,7 +516,20 @@ export default function ConnectionsPage() {
       return;
     }
 
-    setInventoryEntities((listJson.entities as any[]) ?? []);
+    // Only show workflows from this connected sourceId
+    const rows = ((listJson.entities as any[]) ?? []).filter((r) => String(r.sourceId) === String(sourceId));
+
+    setInventoryEntities(
+      rows.map((r) => ({
+        externalId: r.externalId,
+        displayName: r.name,
+        entityKind: r.kind,
+        // these may not exist in this endpoint; keep for sorting fallback
+        updatedAt: r.lastSeenAt ?? null,
+        createdAt: r.createdAt ?? null,
+      })),
+    );
+
     setSelectedExternalIds(new Set());
     setInventoryLoading(false);
   }
@@ -584,28 +597,32 @@ export default function ConnectionsPage() {
   }
 
   const displayedInventory = useMemo(() => {
-    let rows = [...inventoryEntities];
+    const q = inventorySearch.trim().toLowerCase();
 
-    if (inventorySearch.trim()) {
-      const q = inventorySearch.trim().toLowerCase();
-      rows = rows.filter((e: any) => {
-        return (
-          String(e.displayName ?? "").toLowerCase().includes(q) ||
-          String(e.externalId ?? "").toLowerCase().includes(q)
-        );
-      });
-    }
+    const filtered = !q
+      ? inventoryEntities
+      : inventoryEntities.filter((e: any) => {
+          const name = String(e.displayName ?? "").toLowerCase();
+          const id = String(e.externalId ?? "").toLowerCase();
+          return name.includes(q) || id.includes(q);
+        });
 
-    if (inventorySort === "name_az") {
-      rows.sort((a: any, b: any) => String(a.displayName ?? "").localeCompare(String(b.displayName ?? "")));
-    } else if (inventorySort === "created_desc") {
-      rows.sort((a: any, b: any) => Date.parse(String(b.createdAt ?? "")) - Date.parse(String(a.createdAt ?? "")));
-    } else {
-      rows.sort((a: any, b: any) => Date.parse(String(b.updatedAt ?? "")) - Date.parse(String(a.updatedAt ?? "")));
-    }
+    // Auto-sort: last updated first. If updatedAt missing, fall back to createdAt, then name.
+    const withSort = [...filtered];
+    withSort.sort((a: any, b: any) => {
+      const bu = Date.parse(String(b.updatedAt ?? "")); // NaN if missing
+      const au = Date.parse(String(a.updatedAt ?? ""));
+      if (Number.isFinite(bu) || Number.isFinite(au)) return (Number.isFinite(bu) ? bu : 0) - (Number.isFinite(au) ? au : 0);
 
-    return rows;
-  }, [inventoryEntities, inventorySearch, inventorySort]);
+      const bc = Date.parse(String(b.createdAt ?? ""));
+      const ac = Date.parse(String(a.createdAt ?? ""));
+      if (Number.isFinite(bc) || Number.isFinite(ac)) return (Number.isFinite(bc) ? bc : 0) - (Number.isFinite(ac) ? ac : 0);
+
+      return String(a.displayName ?? "").localeCompare(String(b.displayName ?? ""));
+    });
+
+    return withSort;
+  }, [inventoryEntities, inventorySearch]);
 
   function resetModal() {
     setStep("platform");
@@ -723,6 +740,7 @@ export default function ConnectionsPage() {
     }
 
     setCreatedSourceId(sourceId);
+    await refreshCredentials();
     setStep("entities");
     
     if (selectedPlatform === "n8n" && selectedMethod === "api") {
@@ -1487,16 +1505,6 @@ export default function ConnectionsPage() {
             placeholder="Search workflows..."
           />
         </div>
-
-        <select
-          value={inventorySort}
-          onChange={(e) => setInventorySort(e.target.value as any)}
-          className="min-w-[220px] rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700"
-        >
-          <option value="updated_desc">Sort by last updated</option>
-          <option value="created_desc">Sort by created date</option>
-          <option value="name_az">Sort by name (A–Z)</option>
-        </select>
       </div>
 
       <div className="max-h-[320px] overflow-auto rounded-lg border border-gray-200 mt-3">
