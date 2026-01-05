@@ -870,21 +870,23 @@ export default function ConnectionsPage() {
 
     const json = await res.json().catch(() => ({}));
     if (!res.ok || !json?.ok) {
+      console.error("[connections] saveEntitiesSelection failed", { status: res.status, json });
       setSaving(false);
       setErrMsg(json?.message || "Failed to save selection.");
       return;
     }
 
-    // Refresh UI data so All + Credentials reflect changes immediately
+    // Refresh server-backed lists BEFORE closing/resetting modal state
     await refreshIndexedEntities();
-    await loadEntities();
     await refreshCredentials();
 
-    // Switch to All tab and close modal
+    // Ensure All tab actually shows the new items (search can hide results)
+    setAllSearch("");
     setFilter("all");
-    closeConnect();
 
+    // Close modal last
     setSaving(false);
+    closeConnect();
   }
 
   const platformOptions = useMemo(() => {
