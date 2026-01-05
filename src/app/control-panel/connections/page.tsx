@@ -584,6 +584,7 @@ export default function ConnectionsPage() {
   useEffect(() => {
     refreshIndexedEntities();
     loadEntities();
+    refreshCredentials();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -884,7 +885,6 @@ export default function ConnectionsPage() {
     closeConnect();
 
     setSaving(false);
-    setStep("success");
   }
 
   const platformOptions = useMemo(() => {
@@ -1597,9 +1597,6 @@ export default function ConnectionsPage() {
 ) : null}
 {step === "entities" ? (
   <div className="space-y-4">
-    <div className="text-sm text-gray-700">
-      Select the workflows you want GetFlowetic to index.
-    </div>
 
     {inventoryErr ? (
       <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{inventoryErr}</div>
@@ -1623,39 +1620,35 @@ export default function ConnectionsPage() {
         </div>
       </div>
 
-      <div className="max-h-[320px] overflow-auto rounded-lg border border-gray-200">
+      <div className="max-h-[320px] overflow-auto rounded-lg border border-gray-200 bg-white">
         {displayedSelectable.length === 0 ? (
-          <div className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-600">
-            No workflows found in this n8n instance.
-          </div>
+          <div className="p-4 text-sm text-gray-600">No workflows found in this n8n instance.</div>
         ) : (
-          <div className="max-h-[320px] overflow-auto rounded-lg border border-gray-200">
-            <div className="divide-y divide-gray-200">
-              {displayedSelectable.map((e) => {
-                const checked = selectedExternalIds.has(e.externalId);
-                return (
-                  <label key={e.id} className="flex cursor-pointer items-center justify-between px-4 py-3 hover:bg-gray-50">
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-semibold text-gray-900">{e.name}</div>
-                      <div className="truncate text-xs text-gray-500">ID: {e.externalId}</div>
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => {
-                        setSelectedExternalIds((prev) => {
-                          const next = new Set(prev);
-                          if (next.has(e.externalId)) next.delete(e.externalId);
-                          else next.add(e.externalId);
-                          return next;
-                        });
-                      }}
-                      className="h-4 w-4"
-                    />
-                  </label>
-                );
-              })}
-            </div>
+          <div className="divide-y divide-gray-200">
+            {displayedSelectable.map((e) => {
+              const checked = selectedExternalIds.has(e.externalId);
+              return (
+                <label key={e.id} className="flex cursor-pointer items-center justify-between px-4 py-3 hover:bg-gray-50">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold text-gray-900">{e.name}</div>
+                    <div className="truncate text-xs text-gray-500">ID: {e.externalId}</div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => {
+                      setSelectedExternalIds((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(e.externalId)) next.delete(e.externalId);
+                        else next.add(e.externalId);
+                        return next;
+                      });
+                    }}
+                    className="h-4 w-4"
+                  />
+                </label>
+              );
+            })}
           </div>
         )}
       </div>
