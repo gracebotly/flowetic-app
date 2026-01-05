@@ -107,7 +107,7 @@ export async function POST(req: Request) {
     entity_kind: "workflow",
     external_id: String(w.id),
     display_name: String(w.name ?? `Workflow ${w.id}`),
-    enabled_for_analytics: true,
+    enabled_for_analytics: false,
     enabled_for_actions: false,
     last_seen_at: null,
     created_at: now,

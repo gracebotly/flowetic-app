@@ -28,6 +28,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, code: "MISSING_FIELDS" }, { status: 400 });
   }
 
+  const { error: disableErr } = await supabase
+    .from("source_entities")
+    .update({ enabled_for_analytics: false, enabled_for_actions: false })
+    .eq("source_id", sourceId);
+
+  if (disableErr) {
+    return NextResponse.json(
+      { ok: false, code: "PERSISTENCE_FAILED", message: disableErr.message },
+      { status: 400 },
+    );
+  }
+
   const rows = entities.map((e) => ({
     tenant_id: membership.tenant_id,
     source_id: sourceId,
