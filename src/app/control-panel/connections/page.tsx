@@ -844,12 +844,13 @@ export default function ConnectionsPage() {
       return;
     }
 
-    const selectedRows = inventoryEntities.filter((e) => selectedExternalIds.has(e.externalId));
+    const selected = new Set(selectedExternalIds);
+    const selectedRows = inventoryEntities.filter((e) => selected.has(String(e.externalId)));
 
     const entitiesPayload = selectedRows.map((e) => ({
-      externalId: e.externalId,
-      displayName: e.displayName,
-      entityKind: e.entityKind || "workflow",
+      externalId: String(e.externalId),
+      displayName: String(e.displayName ?? ""),
+      entityKind: String(e.entityKind ?? "workflow"),
       enabledForAnalytics: true,
       enabledForActions: false,
     }));
@@ -873,8 +874,14 @@ export default function ConnectionsPage() {
       return;
     }
 
+    // Refresh UI data so All + Credentials reflect changes immediately
     await refreshIndexedEntities();
     await loadEntities();
+    await refreshCredentials();
+
+    // Switch to All tab and close modal
+    setFilter("all");
+    closeConnect();
 
     setSaving(false);
     setStep("success");
