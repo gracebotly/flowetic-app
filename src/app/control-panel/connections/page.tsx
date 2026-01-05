@@ -1066,7 +1066,7 @@ export default function ConnectionsPage() {
                                     headers: { "Content-Type": "application/json" },
                                     body: JSON.stringify({ sourceId: entity.sourceId, externalId: entity.externalId }),
                                   });
-                                  const json = await res.json().catch(() => ({));
+                                  const json = await res.json().catch(() => ({}));
 
                                   setDeleteConfirmId(null);
 
