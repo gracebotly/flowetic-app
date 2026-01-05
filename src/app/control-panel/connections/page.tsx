@@ -143,7 +143,7 @@ function CredentialsDropdownMenu({ sourceId, onClose }: { sourceId: string; onCl
         <DropdownMenu.Item 
           className="rounded px-2 py-1.5 text-sm hover:bg-gray-100 cursor-pointer" 
           onClick={() => {
-            openEditCredential(sourceId);
+            setEditingSourceId(sourceId);
             onClose();
           }}
         >
