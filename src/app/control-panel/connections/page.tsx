@@ -796,22 +796,6 @@ export default function ConnectionsPage() {
     setConnectEntities((prev) => prev.filter((_, i) => i !== idx));
   }
 
-  function openEditCredential(sourceId: string) {
-    setEditingSourceId(sourceId);
-
-    // We DO NOT display saved secrets; user re-enters them.
-    setApiKey("");
-    setInstanceUrl("");
-    setMcpUrl("");
-    setMcpAccessToken("");
-    setAuthHeader("");
-    setConnectionName("");
-
-    // Open the existing connect modal directly on credentials step
-    setConnectOpen(true);
-    setStep("credentials");
-  }
-
   function openDeleteCredential(sourceId: string) {
     setCredentialDeleteId(sourceId);
     setCredentialDeleteConfirm(false);
