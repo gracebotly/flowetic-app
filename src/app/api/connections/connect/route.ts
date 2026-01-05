@@ -136,14 +136,16 @@ export async function POST(req: Request) {
 
   const { data: source, error } = await supabase
     .from("sources")
-    .insert({
+    .upsert({
       tenant_id: membership.tenant_id,
       type: platformType,
+      method: method,
       name: connectionName || `${platformType} Instance`,
       status: "active",
-      method: method,
       secret_hash: encryptSecret(JSON.stringify(secretJson)),
-      // ✅ REMOVED created_at and updated_at - let database handle them
+      updated_at: new Date().toISOString()
+    }, {
+      onConflict: "tenant_id,type,method"
     })
     .select()
     .single();
