@@ -137,40 +137,42 @@ function StatusPill({ status }: { status: string | null }) {
   return <span className="inline-flex items-center gap-1.5 rounded-full border border-yellow-200 bg-yellow-50 px-2.5 py-1 text-xs font-semibold text-yellow-700">Attention</span>;
 }
 
-function CredentialsDropdownMenu({ 
-  sourceId, 
+function CredentialsDropdownMenu({   
+  sourceId,
   onClose,
   onEdit,
   onDelete 
 }: { 
   sourceId: string; 
-  onClose: () => void;
-  onEdit: (sourceId: string) => void;
-  onDelete: (sourceId: string) => void;
+  onClose: () => void; 
+  onEdit: (sourceId: string) => void; 
+  onDelete: (sourceId: string) => void; 
 }) {
   return (
-    <DropdownMenu.Portal>
-      <DropdownMenu.Content side="bottom" align="end" className="z-50 min-w-[160px] rounded-md border bg-white p-1 shadow">
-        <DropdownMenu.Item 
-          className="rounded px-2 py-1.5 text-sm hover:bg-gray-100 cursor-pointer" 
-          onClick={() => {
-            onEdit(sourceId);
-            onClose();
-          }}
-        >
-          Edit
-        </DropdownMenu.Item>
-        <DropdownMenu.Item 
-          className="rounded px-2 py-1.5 text-sm text-red-600 hover:bg-gray-100 cursor-pointer" 
-          onClick={() => {
-            onDelete(sourceId);
-            onClose();
-          }}
-        >
-          Delete
-        </DropdownMenu.Item>
-      </DropdownMenu.Content>
-    </DropdownMenu.Portal>
+    <DropdownMenu.Root>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content side="bottom" align="end" className="z-50 min-w-[160px] rounded-md border bg-white p-1 shadow">
+          <DropdownMenu.Item 
+            className="rounded px-2 py-1.5 text-sm hover:bg-gray-100 cursor-pointer"
+            onClick={() => {
+              onEdit(sourceId);
+              onClose();
+            }}
+          >
+            Edit
+          </DropdownMenu.Item>
+          <DropdownMenu.Item 
+            className="rounded px-2 py-1.5 text-sm text-red-600 hover:bg-gray-100 cursor-pointer"
+            onClick={() => {
+              onDelete(sourceId);
+              onClose();
+            }}
+          >
+            Delete
+          </DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
   );
 }
 
@@ -1209,12 +1211,30 @@ export default function ConnectionsPage() {
                             <MoreVertical className="h-5 w-5 text-gray-600" />
                           </button>
                           {openDropdownId === c.id && (
-                            <CredentialsDropdownMenu 
-                              sourceId={c.id} 
-                              onClose={() => setOpenDropdownId(null)}
-                              onEdit={(id) => setEditingSourceId(id)}
-                              onDelete={(id) => setCredentialDeleteId(id)}
-                            />
+                            <DropdownMenu.Root open={true} onOpenChange={(open) => !open && setOpenDropdownId(null)}>
+                              <DropdownMenu.Portal>
+                                <DropdownMenu.Content side="bottom" align="end" className="z-50 min-w-[160px] rounded-md border bg-white p-1 shadow">
+                                  <DropdownMenu.Item 
+                                    className="rounded px-2 py-1.5 text-sm hover:bg-gray-100 cursor-pointer"
+                                    onClick={() => {
+                                      setEditingSourceId(c.id);
+                                      setOpenDropdownId(null);
+                                    }}
+                                  >
+                                    Edit
+                                  </DropdownMenu.Item>
+                                  <DropdownMenu.Item 
+                                    className="rounded px-2 py-1.5 text-sm text-red-600 hover:bg-gray-100 cursor-pointer"
+                                    onClick={() => {
+                                      setCredentialDeleteId(c.id);
+                                      setOpenDropdownId(null);
+                                    }}
+                                  >
+                                    Delete
+                                  </DropdownMenu.Item>
+                                </DropdownMenu.Content>
+                              </DropdownMenu.Portal>
+                            </DropdownMenu.Root>
                           )}
                         </div>
                       </div>
