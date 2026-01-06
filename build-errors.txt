@@ -1,1 +1,0 @@
-bash: npx: command not found
