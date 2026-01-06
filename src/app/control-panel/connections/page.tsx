@@ -488,6 +488,13 @@ export default function ConnectionsPage() {
     }
   }, [detailsOpen]);
 
+  useEffect(() => {
+    if (connectOpen && step === "entities" && selectedPlatform === "n8n" && createdSourceId) {
+      loadN8nInventory(createdSourceId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connectOpen, step, selectedPlatform, createdSourceId]);
+
   function formatRelativeFromIso(iso: string) {
     const ts = Date.parse(iso);
     if (!Number.isFinite(ts)) return "";
@@ -681,9 +688,6 @@ export default function ConnectionsPage() {
     if (selectedPlatform === "n8n" && (selectedMethod === "api" || selectedMethod === "mcp")) {
       await loadN8nInventory(sourceId);
       setStep("entities");
-      await refreshIndexedEntities();
-      setAllSearch("");
-      setFilter("all"); // All will show 0 because nothing indexed yet
       setSaving(false);
       return;
     }
