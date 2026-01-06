@@ -1,21 +1,8 @@
 /* eslint-disable no-console */
 
 declare global {
-  interface Navigator {
-    modelContext?: {
-      registerTool?: (tool: {
-        name: string;
-        description?: string;
-        inputSchema?: any;
-        execute: (args: any) => Promise<any> | any;
-      }) => void;
-    };
-  }
-
   // eslint-disable-next-line no-var
-  var __GF_CONSOLE_PATCHED__:
-    | boolean
-    | undefined;
+  var __GF_CONSOLE_PATCHED__: boolean | undefined;
 
   // eslint-disable-next-line no-var
   var __GF_CONSOLE_BUFFER__:
@@ -76,7 +63,8 @@ function registerToolOrThrow(tool: {
   inputSchema?: any;
   execute: (args: any) => Promise<any> | any;
 }) {
-  const registerTool = navigator?.modelContext?.registerTool;
+  const mc = (navigator as any)?.modelContext;
+  const registerTool = mc?.registerTool as ((tool: any) => void) | undefined;
   if (!registerTool) {
     throw new Error("navigator.modelContext.registerTool is not available (WebMCP polyfill not loaded?)");
   }
