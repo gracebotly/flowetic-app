@@ -260,124 +260,10 @@ function KebabMenu({
   );
 }
 
-function EntityDropdownMenu({
-  entityId,
-  isOpen,
-  onClose,
-}: {
-  entityId: string;
-  isOpen: boolean;
-  onClose: () => void;
-}) {
-  if (!isOpen) return null;
-
-  return (
-    <div className="dropdown-menu absolute right-0 z-50 mt-1 w-48 rounded-lg border border-gray-200 bg-white shadow-lg">
-      <button
-        onClick={() => {
-          console.log("View Details for entity", entityId);
-          onClose();
-        }}
-        className="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-      >
-        <Eye className="h-4 w-4" />
-        View Details
-      </button>
-
-      <button
-        onClick={() => {
-          console.log("Edit entity", entityId);
-          onClose();
-        }}
-        className="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-      >
-        <Edit className="h-4 w-4" />
-        Edit
-      </button>
-
-      <button
-        onClick={() => {
-          console.log("Delete entity", entityId);
-          onClose();
-        }}
-        className="flex w-full items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50"
-      >
-        <Trash2 className="h-4 w-4" />
-        Delete
-      </button>
-    </div>
-  );
-}
-
-function EntityRow({
-  entity,
-  openEntityDropdownId,
-  setOpenEntityDropdownId,
-}: {
-  entity: IndexedEntity;
-  openEntityDropdownId: string | null;
-  setOpenEntityDropdownId: (id: string | null) => void;
-}) {
-  return (
-    <div className="flex items-center justify-between rounded-lg border border-gray-100 p-4 hover:bg-gray-50">
-      <div className="flex items-center space-x-3">
-        {(() => {
-          const meta = getPlatformMeta(String(entity.platform));
-          const Icon = meta?.Icon;
-          return (
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-800">
-              {Icon ? <Icon className="h-5 w-5" /> : null}
-            </div>
-          );
-        })()}
-        <div>
-          <div className="font-medium text-gray-900">{entity.name}</div>
-          <div className="text-sm text-gray-500">
-            {entityTypeLabel[entity.type] || entity.type} • {entity.platform}
-          </div>
-        </div>
-      </div>
-
-      <div className="flex items-center space-x-4">
-        <div className="text-sm text-gray-500 text-right">
-          <div>Last seen: {entity.last_seen_at}</div>
-          <div>Created: {entity.created_at}</div>
-        </div>
-
-        <div className="flex items-center space-x-2">
-          <span className="rounded-full bg-green-100 px-2 py-1 text-xs font-medium text-green-700">
-            Indexed
-          </span>
-
-          <div className="relative">
-            <button
-              onClick={() => setOpenEntityDropdownId(openEntityDropdownId === entity.id ? null : entity.id)}
-              className="p-1 rounded-lg hover:bg-gray-100"
-            >
-              <MoreVertical className="h-5 w-5 text-gray-600" />
-            </button>
-
-            <EntityDropdownMenu
-              entityId={entity.id}
-              isOpen={openEntityDropdownId === entity.id}
-              onClose={() => setOpenEntityDropdownId(null)}
-            />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export default function ConnectionsPage() {
   // Main data states
-  const [entities, setEntities] = useState<IndexedEntity[]>([]);
-  const [loading, setLoading] = useState(true);
   const [errMsg, setErrMsg] = useState<string | null>(null);
-
-  // UI state for All tab
-  const [searchQuery, setSearchQuery] = useState("");
-  const [sortBy, setSortBy] = useState<SortKey>("created_at");
 
   // Tab state (for switching between All, Credentials)
   const [filter, setFilter] = useState<string>("all");
@@ -385,7 +271,7 @@ export default function ConnectionsPage() {
   // Dropdown states
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
-  const [openEntityDropdownId, setOpenEntityDropdownId] = useState<string | null>(null);
+  const [openCredentialMenuId, setOpenCredentialMenuId] = useState<string | null>(null);
 
   // Connect modal state
   const [connectOpen, setConnectOpen] = useState(false);
@@ -430,6 +316,7 @@ export default function ConnectionsPage() {
 
   const [openEntityMenuId, setOpenEntityMenuId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
 
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [selectedEntity, setSelectedEntity] = useState<IndexedEntityRow | null>(null);
@@ -441,23 +328,7 @@ export default function ConnectionsPage() {
   const [inventorySearch, setInventorySearch] = useState("");
   const [selectedExternalIds, setSelectedExternalIds] = useState<Set<string>>(new Set());
 
-  async function loadEntities() {
-    setLoading(true);
-    setErrMsg(null);
-
-    const res = await fetch("/api/indexed-entities/list", { method: "GET" });
-    const json = await res.json().catch(() => ({}));
-
-    if (!res.ok || !json?.ok) {
-      setEntities([]);
-      setLoading(false);
-      setErrMsg(json?.message || "Failed to load indexed entities.");
-      return;
-    }
-
-    setEntities((json.entities as IndexedEntity[]) ?? []);
-    setLoading(false);
-  }
+  
 
   async function refreshCredentials() {
     setCredentialsLoading(true);
@@ -545,11 +416,8 @@ export default function ConnectionsPage() {
       })),
     );
 
-    const preselected = new Set<string>();
-    for (const r of rows) {
-      if (r.enabledForAnalytics) preselected.add(String(r.externalId));
-    }
-    setSelectedExternalIds(preselected);
+    // Always start with nothing selected (authoritative user choice)
+    setSelectedExternalIds(new Set());
 
     setInventoryLoading(false);
   }
@@ -583,8 +451,6 @@ export default function ConnectionsPage() {
 
   useEffect(() => {
     refreshIndexedEntities();
-    loadEntities();
-    refreshCredentials();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -601,12 +467,33 @@ export default function ConnectionsPage() {
       if (!target.closest('[data-entity-menu]')) {
         setOpenEntityMenuId(null);
         setDeleteConfirmId(null);
+        setOpenCredentialMenuId(null);
       }
     }
 
     document.addEventListener('click', handleClickOutside);
     return () => document.removeEventListener('click', handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setDetailsOpen(false);
+        setSelectedEntity(null);
+      }
+    }
+    if (detailsOpen) {
+      window.addEventListener("keydown", onKeyDown);
+      return () => window.removeEventListener("keydown", onKeyDown);
+    }
+  }, [detailsOpen]);
+
+  useEffect(() => {
+    if (connectOpen && step === "entities" && selectedPlatform === "n8n" && createdSourceId) {
+      loadN8nInventory(createdSourceId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connectOpen, step, selectedPlatform, createdSourceId]);
 
   function formatRelativeFromIso(iso: string) {
     const ts = Date.parse(iso);
@@ -795,17 +682,19 @@ export default function ConnectionsPage() {
     }
 
     setCreatedSourceId(sourceId);
-     await refreshCredentials();
 
-     if (selectedPlatform === "n8n" && selectedMethod === "api") {
-       await loadN8nInventory(sourceId);
-       setStep("entities");
-     } else {
-       setStep("success");
-     }
+    await refreshCredentials();
 
-     setSaving(false);
-     return;
+    if (selectedPlatform === "n8n" && (selectedMethod === "api" || selectedMethod === "mcp")) {
+      await loadN8nInventory(sourceId);
+      setStep("entities");
+      setSaving(false);
+      return;
+    }
+
+    setStep("success");
+    setSaving(false);
+    return;
   }
 
   function addEntityDraft() {
@@ -879,48 +768,15 @@ export default function ConnectionsPage() {
     // Refresh server-backed lists BEFORE closing/resetting modal state
     await refreshIndexedEntities();
     await refreshCredentials();
-
-    // Ensure All tab actually shows the new items (search can hide results)
     setAllSearch("");
+    setAllSort("created_at");
     setFilter("all");
-
-    // Close modal last
+    await refreshIndexedEntities();
     setSaving(false);
     closeConnect();
   }
 
-  const platformOptions = useMemo(() => {
-    const set = new Set<string>();
-    for (const e of entities) set.add(e.platform);
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [entities]);
-
-  const filteredEntities = useMemo(() => {
-    let list = [...entities];
-
-    // Search
-    if (searchQuery.trim()) {
-      const q = searchQuery.trim().toLowerCase();
-      list = list.filter((e) => {
-        return (
-          e.name.toLowerCase().includes(q) ||
-          e.platform.toLowerCase().includes(q) ||
-          (entityTypeLabel[e.type] || e.type).toLowerCase().includes(q)
-        );
-      });
-    }
-
-    // Sort
-    if (sortBy === "name") {
-      list.sort((a, b) => a.name.localeCompare(b.name));
-    } else if (sortBy === "created_at") {
-      list.sort((a, b) => (b.created_at_ts ?? 0) - (a.created_at_ts ?? 0));
-    } else if (sortBy === "last_updated") {
-      list.sort((a, b) => (b.last_updated_ts ?? 0) - (a.last_updated_ts ?? 0));
-    }
-
-    return list;
-  }, [entities, searchQuery, sortBy]);
+  
 
   const displayedCredentials = useMemo(() => {
     let rows = [...credentials];
@@ -950,29 +806,8 @@ export default function ConnectionsPage() {
   }, [credentials, credentialsSearch, credentialsSort]);
 
   const displayedIndexedEntities = useMemo(() => {
-    // Apply sources filter: only items enabled for analytics
-    let rows = [...indexedEntities].filter((x) => x.enabled_for_analytics);
-
-    if (allSearch.trim()) {
-      const q = allSearch.trim().toLowerCase();
-      rows = rows.filter((e) => {
-        return (
-          e.name.toLowerCase().includes(q) ||
-          e.platform.toLowerCase().includes(q)
-        );
-      });
-    }
-
-    if (allSort === "name_az") {
-      rows.sort((a, b) => a.name.localeCompare(b.name));
-    } else if (allSort === "last_updated") {
-      rows.sort((a, b) => b.lastUpdatedTs - a.lastUpdatedTs);
-    } else {
-      rows.sort((a, b) => b.createdAtTs - a.createdAtTs);
-    }
-
-    return rows;
-  }, [indexedEntities, allSearch, allSort]);
+  return indexedEntities;
+}, [indexedEntities]);
 
   return (
     <div className="mx-auto max-w-6xl p-6">
@@ -1054,7 +889,7 @@ export default function ConnectionsPage() {
           {indexedLoading ? <div className="mt-6 text-sm text-gray-600">Loading…</div> : null}
 
           {!indexedLoading ? (
-            <div className="mt-6 space-y-3">
+            <div className="mt-6 max-h-[calc(100vh-320px)] overflow-auto space-y-3 pb-6">
               {displayedIndexedEntities.map((entity) => {
                 const meta = getPlatformMeta(entity.platform);
                 const Icon = meta?.Icon;
@@ -1080,24 +915,29 @@ export default function ConnectionsPage() {
                           <div>Created: {formatDateFromTs(entity.createdAtTs)}</div>
                         </div>
 
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setDeleteConfirmId(null);
-                            setOpenEntityMenuId(openEntityMenuId === entity.id ? null : entity.id);
-                          }}
-                          className="rounded-lg p-2 hover:bg-gray-100"
-                          aria-label="Row actions"
-                        >
-                          <MoreVertical className="h-5 w-5 text-gray-600" />
-                        </button>
+                        <div data-entity-menu className="relative">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
+                              setMenuPos({ top: rect.bottom + 8, left: Math.min(rect.left, window.innerWidth - 240) });
+                              setDeleteConfirmId(null);
+                              setOpenEntityMenuId(openEntityMenuId === entity.id ? null : entity.id);
+                            }}
+                            className="rounded-lg p-2 hover:bg-gray-100"
+                            aria-label="Row actions"
+                          >
+                            <MoreVertical className="h-5 w-5 text-gray-600" />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
                 );
               })}
 
-              {displayedIndexedEntities.length === 0 ? (
+              {indexedEntities.length === 0 ? (
                 <div className="rounded-lg border bg-white p-8 text-sm text-gray-600">No results.</div>
               ) : null}
             </div>
@@ -1111,8 +951,12 @@ export default function ConnectionsPage() {
         const openEntity = displayedIndexedEntities.find((entity) => entity.id === openEntityMenuId);
         if (!openEntity) return null;
         return (
-          <div className="fixed inset-0 z-50" data-entity-menu onClick={() => setOpenEntityMenuId(null)}>
-            <div className="absolute right-4 top-20 w-52 rounded-lg border border-gray-200 bg-white shadow-lg" onClick={(e) => e.stopPropagation()}>
+          <div className="fixed inset-0 z-50" data-entity-menu onClick={() => { setOpenEntityMenuId(null); setMenuPos(null); }}>
+            <div
+              className="fixed z-[60] w-60 rounded-lg border border-gray-200 bg-white shadow-lg"
+              style={{ top: menuPos?.top ?? 80, left: menuPos?.left ?? (window.innerWidth - 260) }}
+              onClick={(e) => e.stopPropagation()}
+            >
               <button
                 type="button"
                 onClick={() => {
@@ -1120,6 +964,7 @@ export default function ConnectionsPage() {
                   setDetailsOpen(true);
                   setOpenEntityMenuId(null);
                   setDeleteConfirmId(null);
+                  setMenuPos(null);
                 }}
                 className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
               >
@@ -1136,6 +981,7 @@ export default function ConnectionsPage() {
                   }
 
                   setOpenEntityMenuId(null);
+                  setMenuPos(null);
 
                   const res = await fetch("/api/indexed-entities/unindex", {
                     method: "POST",
@@ -1145,6 +991,7 @@ export default function ConnectionsPage() {
                   const json = await res.json().catch(() => ({}));
 
                   setDeleteConfirmId(null);
+                  setMenuPos(null);
 
                   if (!res.ok || !json?.ok) {
                     setIndexedErr(json?.message || "Failed to remove from index.");
@@ -1214,23 +1061,23 @@ export default function ConnectionsPage() {
           ) : null}
 
           {!credentialsLoading ? (
-            <div className="mt-6 space-y-3">
-              {displayedCredentials.map((c) => {
-                const meta = getPlatformMeta(String(c.platformType));
+            <div className="mt-6 max-h-[calc(100vh-320px)] overflow-auto space-y-3 pb-6">
+              {displayedCredentials.map((cred) => {
+                const meta = getPlatformMeta(String(cred.platformType));
                 const Icon = meta?.Icon;
 
-                const methodLabel = c.method === "api" ? "API" : c.method === "webhook" ? "Webhook" : "MCP";
+                const methodLabel = cred.method === "api" ? "API" : cred.method === "webhook" ? "Webhook" : "MCP";
                 const methodIcon =
-                  c.method === "api" ? (
+                  cred.method === "api" ? (
                     <KeyRound className="h-3.5 w-3.5" />
-                  ) : c.method === "webhook" ? (
+                  ) : cred.method === "webhook" ? (
                     <WebhookIcon className="h-3.5 w-3.5" />
                   ) : (
                     <Bot className="h-3.5 w-3.5" />
                   );
 
                 return (
-                  <div key={c.id} className="rounded-lg border border-gray-200 bg-white p-4 hover:shadow-sm transition-shadow">
+                  <div key={cred.id} className="rounded-lg border border-gray-200 bg-white p-4 hover:shadow-sm transition-shadow">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4">
                         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-800">
@@ -1238,7 +1085,7 @@ export default function ConnectionsPage() {
                         </div>
 
                         <div>
-                          <div className="font-semibold text-gray-900">{meta?.label ?? c.name}</div>
+                          <div className="font-semibold text-gray-900">{meta?.label ?? cred.name}</div>
                           <div className="text-sm text-gray-500 flex flex-wrap items-center gap-2">
                             <span className="inline-flex items-center gap-1">
                               {methodIcon}
@@ -1246,42 +1093,30 @@ export default function ConnectionsPage() {
                             </span>
 
                             <span className="text-gray-300">|</span>
-                            <span>Last updated {formatRelativeFromIso(c.updated_at)}</span>
+                            <span>Last updated {formatRelativeFromIso(cred.updated_at)}</span>
 
                             <span className="text-gray-300">|</span>
-                            <span>Created {formatDateFromIso(c.created_at)}</span>
+                            <span>Created {formatDateFromIso(cred.created_at)}</span>
                           </div>
                         </div>
                       </div>
 
                       <div className="flex items-center gap-2">
-                        <StatusPill status={c.status} />
-                        <div className="relative">
-                          <DropdownMenu.Root>
-                            <DropdownMenu.Trigger asChild>
-                              <button type="button" className="p-1 rounded-lg hover:bg-gray-100" aria-label="Row actions">
-                                <MoreVertical className="h-5 w-5 text-gray-600" />
-                              </button>
-                            </DropdownMenu.Trigger>
-
-                            <DropdownMenu.Portal>
-                              <DropdownMenu.Content side="bottom" align="end" className="z-50 min-w-[160px] rounded-md border bg-white p-1 shadow">
-                                <DropdownMenu.Item
-                                  className="rounded px-2 py-1.5 text-sm hover:bg-gray-100 cursor-pointer"
-                                  onSelect={() => openEditCredential(c.id)}
-                                >
-                                  Edit
-                                </DropdownMenu.Item>
-
-                                <DropdownMenu.Item
-                                  className="rounded px-2 py-1.5 text-sm text-red-600 hover:bg-gray-100 cursor-pointer"
-                                  onSelect={() => openDeleteCredential(c.id)}
-                                >
-                                  Delete
-                                </DropdownMenu.Item>
-                              </DropdownMenu.Content>
-                            </DropdownMenu.Portal>
-                          </DropdownMenu.Root>
+                        <StatusPill status={cred.status} />
+                        <div data-entity-menu className="relative">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
+                              setMenuPos({ top: rect.bottom + 8, left: Math.min(rect.left, window.innerWidth - 240) });
+                              setOpenCredentialMenuId(openCredentialMenuId === cred.id ? null : cred.id);
+                            }}
+                            className="rounded-lg p-2 hover:bg-gray-100"
+                            aria-label="Credential actions"
+                          >
+                            <MoreVertical className="h-5 w-5 text-gray-600" />
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -1298,6 +1133,52 @@ export default function ConnectionsPage() {
           ) : null}
         </div>
       ) : null}
+
+      {/* Credential dropdown menus rendered at higher level */}
+      {filter === "credentials" && openCredentialMenuId ? (() => {
+        const openCred = displayedCredentials.find((c) => c.id === openCredentialMenuId);
+        if (!openCred) return null;
+
+        return (
+          <div
+            className="fixed inset-0 z-50"
+            data-entity-menu
+            onClick={() => { setOpenCredentialMenuId(null); setMenuPos(null); }}
+          >
+            <div
+              className="fixed z-[60] w-60 rounded-lg border border-gray-200 bg-white shadow-lg"
+              style={{ top: menuPos?.top ?? 80, left: menuPos?.left ?? (window.innerWidth - 260) }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  setOpenCredentialMenuId(null);
+                  setMenuPos(null);
+                  beginEditCredential(openCred);
+                }}
+                className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+              >
+                <Edit className="h-4 w-4" />
+                Edit
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setOpenCredentialMenuId(null);
+                  setMenuPos(null);
+                  openDeleteCredential(openCred.id);
+                }}
+                className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50"
+              >
+                <Trash2 className="h-4 w-4" />
+                Delete
+              </button>
+            </div>
+          </div>
+        );
+      })() : null}
 
       {/* Connect Platform Modal (in-page) */}
       {connectOpen ? (
@@ -1709,38 +1590,50 @@ export default function ConnectionsPage() {
       ) : null}
 
       {detailsOpen && selectedEntity ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl">
-            <div className="border-b px-6 py-5">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-800">
-                    {getPlatformMeta(selectedEntity.platform)?.Icon ? (
-                      (() => {
-                        const Icon = getPlatformMeta(selectedEntity.platform)?.Icon!;
-                        return <Icon className="h-5 w-5" />;
-                      })()
-                    ) : null}
-                  </div>
-                  <div>
-                    <div className="text-lg font-semibold text-gray-900">{selectedEntity.name}</div>
-                    <div className="text-sm text-gray-600">
-                      {selectedEntity.kind} • {getPlatformMeta(selectedEntity.platform)?.label ?? selectedEntity.platform}
-                    </div>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setDetailsOpen(false)}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200 text-xl"
-                >
-                  ×
-                </button>
-              </div>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => {
+            setDetailsOpen(false);
+            setSelectedEntity(null);
+          }}
+        >
+          <div
+            className="w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="border-b px-6 py-4 flex items-center justify-between">
+              <div className="text-lg font-semibold text-gray-900">Details</div>
+              <button
+                type="button"
+                onClick={() => {
+                  setDetailsOpen(false);
+                  setSelectedEntity(null);
+                }}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200"
+                aria-label="Close"
+              >
+                ×
+              </button>
             </div>
 
-            <div className="px-6 py-6 space-y-6">
+            {/* KEEP your existing details modal body content below */}
+            <div className="px-6 py-5 space-y-6">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-800">
+                  {getPlatformMeta(selectedEntity.platform)?.Icon ? (
+                    (() => {
+                      const Icon = getPlatformMeta(selectedEntity.platform)?.Icon!;
+                      return <Icon className="h-5 w-5" />;
+                    })()
+                  ) : null}
+                </div>
+                <div>
+                  <div className="text-lg font-semibold text-gray-900">{selectedEntity.name}</div>
+                  <div className="text-sm text-gray-600">
+                    {selectedEntity.kind} • {getPlatformMeta(selectedEntity.platform)?.label ?? selectedEntity.platform}
+                  </div>
+                </div>
+              </div>
               <div>
                 <button
                   type="button"
