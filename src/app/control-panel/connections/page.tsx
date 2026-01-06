@@ -451,6 +451,7 @@ export default function ConnectionsPage() {
 
   useEffect(() => {
     refreshIndexedEntities();
+    refreshCredentials();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
