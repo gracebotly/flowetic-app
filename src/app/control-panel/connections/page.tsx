@@ -316,6 +316,7 @@ export default function ConnectionsPage() {
 
   const [openEntityMenuId, setOpenEntityMenuId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
 
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [selectedEntity, setSelectedEntity] = useState<IndexedEntityRow | null>(null);
@@ -473,6 +474,19 @@ export default function ConnectionsPage() {
     document.addEventListener('click', handleClickOutside);
     return () => document.removeEventListener('click', handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setDetailsOpen(false);
+        setSelectedEntity(null);
+      }
+    }
+    if (detailsOpen) {
+      window.addEventListener("keydown", onKeyDown);
+      return () => window.removeEventListener("keydown", onKeyDown);
+    }
+  }, [detailsOpen]);
 
   function formatRelativeFromIso(iso: string) {
     const ts = Date.parse(iso);
@@ -664,9 +678,12 @@ export default function ConnectionsPage() {
 
     await refreshCredentials();
 
-    if (selectedPlatform === "n8n" && selectedMethod === "api") {
+    if (selectedPlatform === "n8n" && (selectedMethod === "api" || selectedMethod === "mcp")) {
       await loadN8nInventory(sourceId);
       setStep("entities");
+      await refreshIndexedEntities();
+      setAllSearch("");
+      setFilter("all"); // All will show 0 because nothing indexed yet
       setSaving(false);
       return;
     }
@@ -897,7 +914,10 @@ export default function ConnectionsPage() {
                         <div data-entity-menu className="relative">
                           <button
                             type="button"
-                            onClick={() => {
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
+                              setMenuPos({ top: rect.bottom + 8, left: Math.min(rect.left, window.innerWidth - 240) });
                               setDeleteConfirmId(null);
                               setOpenEntityMenuId(openEntityMenuId === entity.id ? null : entity.id);
                             }}
@@ -927,8 +947,12 @@ export default function ConnectionsPage() {
         const openEntity = displayedIndexedEntities.find((entity) => entity.id === openEntityMenuId);
         if (!openEntity) return null;
         return (
-          <div className="fixed inset-0 z-50" data-entity-menu onClick={() => setOpenEntityMenuId(null)}>
-            <div className="absolute right-4 top-20 w-52 rounded-lg border border-gray-200 bg-white shadow-lg" onClick={(e) => e.stopPropagation()}>
+          <div className="fixed inset-0 z-50" data-entity-menu onClick={() => { setOpenEntityMenuId(null); setMenuPos(null); }}>
+            <div
+              className="fixed z-[60] w-60 rounded-lg border border-gray-200 bg-white shadow-lg"
+              style={{ top: menuPos?.top ?? 80, left: menuPos?.left ?? (window.innerWidth - 260) }}
+              onClick={(e) => e.stopPropagation()}
+            >
               <button
                 type="button"
                 onClick={() => {
@@ -936,6 +960,7 @@ export default function ConnectionsPage() {
                   setDetailsOpen(true);
                   setOpenEntityMenuId(null);
                   setDeleteConfirmId(null);
+                  setMenuPos(null);
                 }}
                 className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
               >
@@ -952,6 +977,7 @@ export default function ConnectionsPage() {
                   }
 
                   setOpenEntityMenuId(null);
+                  setMenuPos(null);
 
                   const res = await fetch("/api/indexed-entities/unindex", {
                     method: "POST",
@@ -961,6 +987,7 @@ export default function ConnectionsPage() {
                   const json = await res.json().catch(() => ({}));
 
                   setDeleteConfirmId(null);
+                  setMenuPos(null);
 
                   if (!res.ok || !json?.ok) {
                     setIndexedErr(json?.message || "Failed to remove from index.");
@@ -1075,7 +1102,10 @@ export default function ConnectionsPage() {
                         <div data-entity-menu className="relative">
                           <button
                             type="button"
-                            onClick={() => {
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
+                              setMenuPos({ top: rect.bottom + 8, left: Math.min(rect.left, window.innerWidth - 240) });
                               setOpenCredentialMenuId(openCredentialMenuId === cred.id ? null : cred.id);
                             }}
                             className="rounded-lg p-2 hover:bg-gray-100"
@@ -1109,16 +1139,18 @@ export default function ConnectionsPage() {
           <div
             className="fixed inset-0 z-50"
             data-entity-menu
-            onClick={() => setOpenCredentialMenuId(null)}
+            onClick={() => { setOpenCredentialMenuId(null); setMenuPos(null); }}
           >
             <div
-              className="absolute right-4 top-20 w-52 rounded-lg border border-gray-200 bg-white shadow-lg"
+              className="fixed z-[60] w-60 rounded-lg border border-gray-200 bg-white shadow-lg"
+              style={{ top: menuPos?.top ?? 80, left: menuPos?.left ?? (window.innerWidth - 260) }}
               onClick={(e) => e.stopPropagation()}
             >
               <button
                 type="button"
                 onClick={() => {
                   setOpenCredentialMenuId(null);
+                  setMenuPos(null);
                   beginEditCredential(openCred);
                 }}
                 className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
@@ -1131,6 +1163,7 @@ export default function ConnectionsPage() {
                 type="button"
                 onClick={() => {
                   setOpenCredentialMenuId(null);
+                  setMenuPos(null);
                   openDeleteCredential(openCred.id);
                 }}
                 className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50"
@@ -1553,38 +1586,50 @@ export default function ConnectionsPage() {
       ) : null}
 
       {detailsOpen && selectedEntity ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl">
-            <div className="border-b px-6 py-5">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-800">
-                    {getPlatformMeta(selectedEntity.platform)?.Icon ? (
-                      (() => {
-                        const Icon = getPlatformMeta(selectedEntity.platform)?.Icon!;
-                        return <Icon className="h-5 w-5" />;
-                      })()
-                    ) : null}
-                  </div>
-                  <div>
-                    <div className="text-lg font-semibold text-gray-900">{selectedEntity.name}</div>
-                    <div className="text-sm text-gray-600">
-                      {selectedEntity.kind} • {getPlatformMeta(selectedEntity.platform)?.label ?? selectedEntity.platform}
-                    </div>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setDetailsOpen(false)}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200 text-xl"
-                >
-                  ×
-                </button>
-              </div>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => {
+            setDetailsOpen(false);
+            setSelectedEntity(null);
+          }}
+        >
+          <div
+            className="w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="border-b px-6 py-4 flex items-center justify-between">
+              <div className="text-lg font-semibold text-gray-900">Details</div>
+              <button
+                type="button"
+                onClick={() => {
+                  setDetailsOpen(false);
+                  setSelectedEntity(null);
+                }}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200"
+                aria-label="Close"
+              >
+                ×
+              </button>
             </div>
 
-            <div className="px-6 py-6 space-y-6">
+            {/* KEEP your existing details modal body content below */}
+            <div className="px-6 py-5 space-y-6">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-800">
+                  {getPlatformMeta(selectedEntity.platform)?.Icon ? (
+                    (() => {
+                      const Icon = getPlatformMeta(selectedEntity.platform)?.Icon!;
+                      return <Icon className="h-5 w-5" />;
+                    })()
+                  ) : null}
+                </div>
+                <div>
+                  <div className="text-lg font-semibold text-gray-900">{selectedEntity.name}</div>
+                  <div className="text-sm text-gray-600">
+                    {selectedEntity.kind} • {getPlatformMeta(selectedEntity.platform)?.label ?? selectedEntity.platform}
+                  </div>
+                </div>
+              </div>
               <div>
                 <button
                   type="button"
