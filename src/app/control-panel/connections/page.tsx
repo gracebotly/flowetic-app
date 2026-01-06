@@ -868,7 +868,7 @@ export default function ConnectionsPage() {
           {indexedLoading ? <div className="mt-6 text-sm text-gray-600">Loading…</div> : null}
 
           {!indexedLoading ? (
-            <div className="mt-6 space-y-3">
+            <div className="mt-6 max-h-[calc(100vh-320px)] overflow-auto space-y-3 pb-6">
               {displayedIndexedEntities.map((entity) => {
                 const meta = getPlatformMeta(entity.platform);
                 const Icon = meta?.Icon;
@@ -894,17 +894,19 @@ export default function ConnectionsPage() {
                           <div>Created: {formatDateFromTs(entity.createdAtTs)}</div>
                         </div>
 
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setDeleteConfirmId(null);
-                            setOpenEntityMenuId(openEntityMenuId === entity.id ? null : entity.id);
-                          }}
-                          className="rounded-lg p-2 hover:bg-gray-100"
-                          aria-label="Row actions"
-                        >
-                          <MoreVertical className="h-5 w-5 text-gray-600" />
-                        </button>
+                        <div data-entity-menu className="relative">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDeleteConfirmId(null);
+                              setOpenEntityMenuId(openEntityMenuId === entity.id ? null : entity.id);
+                            }}
+                            className="rounded-lg p-2 hover:bg-gray-100"
+                            aria-label="Row actions"
+                          >
+                            <MoreVertical className="h-5 w-5 text-gray-600" />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1028,7 +1030,7 @@ export default function ConnectionsPage() {
           ) : null}
 
           {!credentialsLoading ? (
-            <div className="mt-6 space-y-3">
+            <div className="mt-6 max-h-[calc(100vh-320px)] overflow-auto space-y-3 pb-6">
               {displayedCredentials.map((cred) => {
                 const meta = getPlatformMeta(String(cred.platformType));
                 const Icon = meta?.Icon;
@@ -1070,16 +1072,18 @@ export default function ConnectionsPage() {
 
                       <div className="flex items-center gap-2">
                         <StatusPill status={cred.status} />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setOpenCredentialMenuId(openCredentialMenuId === cred.id ? null : cred.id);
-                          }}
-                          className="rounded-lg p-2 hover:bg-gray-100"
-                          aria-label="Credential actions"
-                        >
-                          <MoreVertical className="h-5 w-5 text-gray-600" />
-                        </button>
+                        <div data-entity-menu className="relative">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setOpenCredentialMenuId(openCredentialMenuId === cred.id ? null : cred.id);
+                            }}
+                            className="rounded-lg p-2 hover:bg-gray-100"
+                            aria-label="Credential actions"
+                          >
+                            <MoreVertical className="h-5 w-5 text-gray-600" />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
