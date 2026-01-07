@@ -16,18 +16,15 @@ declare global {
     | undefined;
 }
 
-async function waitForModelContextReady(opts?: { timeoutMs?: number; intervalMs?: number }) {
-  const timeoutMs = opts?.timeoutMs ?? 5000;
-  const intervalMs = opts?.intervalMs ?? 50;
-
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    const mc = (navigator as any)?.modelContext;
-    // readiness heuristic: object exists AND has registerTool function
-    if (mc && typeof mc.registerTool === "function") return;
-    await new Promise((r) => setTimeout(r, intervalMs));
+async function waitForModelContextReady() {
+  // Per MCP-B docs, modelContext should be available immediately after import
+  // Just verify it exists, don't poll
+  const mc = (navigator as any)?.modelContext;
+  if (!mc || typeof mc.registerTool !== "function") {
+    throw new Error("WebMCP modelContext not available after import");
   }
-  throw new Error("WebMCP modelContext not ready after timeout");
+  // Give polyfill one tick to finish internal setup
+  await new Promise((r) => setTimeout(r, 50));
 }
 
 export async function initControlPanelWebMcp(): Promise<void> {
@@ -35,21 +32,20 @@ export async function initControlPanelWebMcp(): Promise<void> {
   if (typeof window === "undefined") return;
 
   if (globalThis.__GF_WEBMCP_INIT__) return;
-
-  // Mark early to avoid double-init in React strict mode or remounts
   globalThis.__GF_WEBMCP_INIT__ = true;
 
   try {
-    // WebMCP polyfill
     await import("@mcp-b/global");
-
-    // Wait for modelContext to be ready before registering tools
     await waitForModelContextReady();
-
+    
+    // CRITICAL FIX: Wait 500ms for polyfill internal state to fully initialize
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
     await registerControlPanelDebugTools();
     await registerConnectionsDebugTools();
+
+    console.log("[webmcp] ✅ All tools registered successfully");
   } catch (err) {
-    // If something fails, allow re-init on refresh
     globalThis.__GF_WEBMCP_INIT__ = false;
     console.error("[webmcp] init failed", err);
   }
