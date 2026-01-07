@@ -116,6 +116,12 @@ const PLATFORM_META = {
 
 type PlatformKey = keyof typeof PLATFORM_META;
 
+declare global {
+  interface Window {
+    __GF_CONNECTIONS_DEBUG_STATE__?: any;
+  }
+}
+
 const PLATFORM_KEYS = Object.keys(PLATFORM_META) as PlatformKey[];
 
 function getPlatformMeta(platformType: string) {
@@ -487,6 +493,57 @@ export default function ConnectionsPage() {
       return () => window.removeEventListener("keydown", onKeyDown);
     }
   }, [detailsOpen]);
+
+  useEffect(() => {
+    if (process.env.NEXT_PUBLIC_ENABLE_WEBMCP !== "true") return;
+    if (typeof window === "undefined") return;
+
+    window.__GF_CONNECTIONS_DEBUG_STATE__ = {
+      ts: new Date().toISOString(),
+      pathname: window.location.pathname,
+
+      // core UI state
+      filter,
+      connectOpen,
+      step,
+      selectedPlatform,
+      selectedMethod,
+      createdSourceId,
+
+      // counts only (no sensitive payloads)
+      credentialsCount: credentials.length,
+      indexedEntitiesCount: indexedEntities.length,
+      inventoryCount: inventoryEntities.length,
+
+      // menus / modal state
+      openCredentialMenuId,
+      openEntityMenuId,
+      detailsOpen,
+
+      // errors
+      errMsg,
+      credentialsErr,
+      indexedErr,
+      inventoryErr,
+    };
+  }, [
+    filter,
+    connectOpen,
+    step,
+    selectedPlatform,
+    selectedMethod,
+    createdSourceId,
+    credentials.length,
+    indexedEntities.length,
+    inventoryEntities.length,
+    openCredentialMenuId,
+    openEntityMenuId,
+    detailsOpen,
+    errMsg,
+    credentialsErr,
+    indexedErr,
+    inventoryErr,
+  ]);
 
   useEffect(() => {
     if (connectOpen && step === "entities" && selectedPlatform === "n8n" && createdSourceId) {
