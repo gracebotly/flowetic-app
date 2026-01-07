@@ -1019,8 +1019,8 @@ export default function ConnectionsPage() {
             <div
               className="fixed z-50 w-40 rounded-lg border bg-white shadow-lg"
               style={{
-                top: `${menuPos.top}px`,
-                left: `${menuPos.left}px`,
+                top: `${menuPos!.top}px`,
+                left: `${menuPos!.left}px`,
               }}
               onClick={(e) => e.stopPropagation()}
             >
@@ -1218,8 +1218,8 @@ export default function ConnectionsPage() {
             <div
               className="fixed z-50 w-40 rounded-lg border bg-white shadow-lg"
               style={{
-                top: `${menuPos.top}px`,
-                left: `${menuPos.left}px`,
+                top: `${menuPos!.top}px`,
+                left: `${menuPos!.left}px`,
               }}
               onClick={(e) => e.stopPropagation()}
             >
