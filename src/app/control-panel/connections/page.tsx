@@ -298,6 +298,23 @@ export default function ConnectionsPage() {
   const [mcpAccessToken, setMcpAccessToken] = useState("");
   const [authHeader, setAuthHeader] = useState("");
   const [connectionName, setConnectionName] = useState("");
+  
+  // Edit modal state for "Saved" indicators
+  const [editingMeta, setEditingMeta] = useState<{
+    sourceId: string;
+    platformType: string;
+    method: ConnectMethod;
+    name: string;
+  } | null>(null);
+
+  const [showApiKeyEditor, setShowApiKeyEditor] = useState(false);
+  const [apiKeySaved, setApiKeySaved] = useState(false);
+  const [instanceUrlSaved, setInstanceUrlSaved] = useState(false);
+
+  const [showMcpTokenEditor, setShowMcpTokenEditor] = useState(false);
+  const [mcpTokenSaved, setMcpTokenSaved] = useState(false);
+  const [mcpUrlSaved, setMcpUrlSaved] = useState(false);
+  
   const [createdSourceId, setCreatedSourceId] = useState<string | null>(null);
   const [connectEntities, setConnectEntities] = useState<EntityDraft[]>([]);
   const [entityKind, setEntityKind] = useState<EntityDraft["entityKind"]>("workflow");
@@ -429,21 +446,47 @@ export default function ConnectionsPage() {
   }
 
   function beginEditCredential(credential: CredentialRow) {
-    // Ensure edit uses the same platform + method context as creation
     setSelectedPlatform(credential.platformType as any);
     setSelectedMethod(credential.method);
     setConnectionName(credential.name || "");
     setEditingSourceId(credential.id);
 
+    setEditingMeta({
+      sourceId: credential.id,
+      platformType: credential.platformType,
+      method: credential.method,
+      name: credential.name || "",
+    });
+
     setErrMsg(null);
     setSaving(false);
 
-    // Never display stored secrets; force re-entry
-    setApiKey("");
-    setInstanceUrl("");
-    setMcpAccessToken("");
-    setAuthHeader("");
-    setMcpUrl("");
+    // Indicators: we know something is saved because the connection exists.
+    // We never show the secret, but we show that it's present.
+    if (credential.method === "api") {
+      setApiKeySaved(true);
+      setInstanceUrlSaved(true);
+      setShowApiKeyEditor(false);
+
+      // Keep API key empty until user clicks "Change"
+      setApiKey("");
+
+      // Allow URL editing: we cannot read it back from DB today,
+      // so require re-entry OR keep last typed value if any.
+      // Keep empty but show "Saved" pill.
+      setInstanceUrl("");
+    }
+
+    if (credential.method === "mcp") {
+      setMcpTokenSaved(true);
+      setMcpUrlSaved(true);
+      setShowMcpTokenEditor(false);
+
+      setMcpAccessToken("");
+      setInstanceUrl(""); // you use instanceUrl for n8n mcp URL input
+      setAuthHeader("");
+      setMcpUrl("");
+    }
 
     setConnectOpen(true);
     setStep("credentials");
@@ -653,8 +696,11 @@ export default function ConnectionsPage() {
     };
 
     if (selectedMethod === "api") {
+      const isEdit = !!editingSourceId;
+      const requireKeyForEdit = isEdit ? showApiKeyEditor : true;
+      
       if (selectedPlatform === "n8n" && selectedMethod === "api") {
-        if (!apiKey.trim()) {
+        if (requireKeyForEdit && !apiKey.trim()) {
           setSaving(false);
           setErrMsg("API Key is required.");
           return;
@@ -666,7 +712,10 @@ export default function ConnectionsPage() {
         }
       }
       
-      payload.apiKey = apiKey;
+      // Include key only if required (new) or changed (edit)
+      if (requireKeyForEdit) {
+        payload.apiKey = apiKey;
+      }
 
       if (instanceUrl) payload.instanceUrl = instanceUrl;
 
@@ -728,6 +777,18 @@ export default function ConnectionsPage() {
     if (editingSourceId) {
       setEditingSourceId(null);
       await refreshCredentials();
+      
+      // If the user did change secret fields, reset the saved indicators for safety
+      if (showApiKeyEditor) {
+        setApiKeySaved(false);
+        setInstanceUrlSaved(false);
+        setShowApiKeyEditor(false);
+      }
+      if (showMcpTokenEditor) {
+        setMcpTokenSaved(false);
+        setMcpUrlSaved(false);
+        setShowMcpTokenEditor(false);
+      }
       
       // NEW: For n8n, offer to manage indexed workflows
       if (selectedPlatform === "n8n" && (selectedMethod === "api" || selectedMethod === "mcp")) {
@@ -1267,6 +1328,38 @@ export default function ConnectionsPage() {
                 Edit
               </button>
 
+              {/* Only show for n8n credentials that can have indexed workflows */}
+              {openCred.platformType === "n8n" && (openCred.method === "api" || openCred.method === "mcp") ? (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setOpenCredentialMenuId(null);
+                    setMenuPos(null);
+
+                    // Open your existing entities selection UI for this credential
+                    const sourceId = openCred.id;
+                    setCreatedSourceId(sourceId);
+                    setErrMsg(null);
+
+                    // Load inventory using your existing function
+                    await loadN8nInventory(sourceId);
+
+                    // Preselect currently indexed externalIds for this source
+                    const current = indexedEntities
+                      .filter((e) => String(e.sourceId) === String(sourceId))
+                      .map((e) => String(e.externalId));
+                    setSelectedExternalIds(new Set(current));
+
+                    setConnectOpen(true);
+                    setStep("entities");
+                  }}
+                  className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                >
+                  <Settings className="h-4 w-4" />
+                  Manage indexed workflows
+                </button>
+              ) : null}
+
               <button
                 type="button"
                 onClick={() => {
@@ -1455,23 +1548,57 @@ export default function ConnectionsPage() {
 {step === "credentials" ? (
   <div className="space-y-4">
     {selectedMethod === "api" ? (
-      <div>
-        <label className="mb-2 block text-sm font-semibold text-gray-900">API Key *</label>
-        <input
-          value={apiKey}
-          onChange={(e) => setApiKey(e.target.value)}
-          type="password"
-          className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-          placeholder="••••••••••••••"
-        />
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <label className="text-sm font-semibold text-gray-900">API Key *</label>
+          {editingSourceId && apiKeySaved ? (
+            <span className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-semibold text-gray-700">
+              Saved
+            </span>
+          ) : null}
+        </div>
+
+        {editingSourceId && !showApiKeyEditor ? (
+          <div className="flex items-center justify-between rounded-lg border bg-white px-3 py-2">
+            <div className="text-sm text-gray-600">••••••••••••••</div>
+            <button
+              type="button"
+              onClick={() => setShowApiKeyEditor(true)}
+              className="text-sm font-semibold text-blue-600 hover:underline"
+            >
+              Change key
+            </button>
+          </div>
+        ) : (
+          <input
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            type="password"
+            placeholder={editingSourceId ? "Enter a new API key to replace" : "••••••••••••••"}
+            className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        )}
+
+        {editingSourceId ? (
+          <div className="text-xs text-gray-500">
+            You can't view existing keys. Enter a new key only if you want to replace it.
+          </div>
+        ) : null}
       </div>
     ) : null}
 
     {(selectedPlatform === "n8n" || selectedPlatform === "activepieces") && selectedMethod !== "mcp" ? (
       <div>
-        <label className="mb-2 block text-sm font-semibold text-gray-900">
-          {selectedPlatform === "n8n" && selectedMethod === "api" ? "Instance URL *" : "Instance URL (optional)"}
-        </label>
+        <div className="flex items-center justify-between">
+          <label className="text-sm font-semibold text-gray-900">
+            {selectedPlatform === "n8n" && selectedMethod === "api" ? "Instance URL *" : "Instance URL (optional)"}
+          </label>
+          {editingSourceId && instanceUrlSaved ? (
+            <span className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-semibold text-gray-700">
+              Saved
+            </span>
+          ) : null}
+        </div>
         <input
           value={instanceUrl}
           onChange={(e) => setInstanceUrl(e.target.value)}
@@ -1947,6 +2074,10 @@ export default function ConnectionsPage() {
                     setSaving(false);
                     setCredentialDeleteId(null);
                     setCredentialDeleteConfirm(false);
+
+                    // Optimistically remove from UI immediately
+                    setCredentials((prev) => prev.filter((c) => c.id !== id));
+
                     await refreshCredentials();
                     await refreshIndexedEntities();
                   }}
