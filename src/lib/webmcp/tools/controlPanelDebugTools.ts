@@ -66,16 +66,12 @@ async function registerToolOrThrow(tool: {
   const mc = (navigator as any)?.modelContext;
   const registerTool = mc?.registerTool as ((tool: any) => void) | undefined;
   if (!registerTool) {
-    throw new Error("navigator.modelContext.registerTool is not available (WebMCP polyfill not ready?)");
+    throw new Error("navigator.modelContext.registerTool is not available");
   }
 
-  try {
-    registerTool(tool);
-  } catch (e) {
-    // Retry once — polyfill sometimes finishes internal init a tick later
-    await new Promise((r) => setTimeout(r, 100));
-    registerTool(tool);
-  }
+  // Per MCP-B docs, registerTool is synchronous
+  // Call it directly without retry logic
+  registerTool(tool);
 }
 
 const SAFE_PROBE_PATHS = new Set<string>([
