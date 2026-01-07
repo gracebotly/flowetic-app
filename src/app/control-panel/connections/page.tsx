@@ -457,6 +457,7 @@ export default function ConnectionsPage() {
 
   useEffect(() => {
     refreshIndexedEntities();
+    refreshCredentials(); // ADD THIS LINE
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -743,9 +744,11 @@ export default function ConnectionsPage() {
     await refreshCredentials();
 
     if (selectedPlatform === "n8n" && (selectedMethod === "api" || selectedMethod === "mcp")) {
+      setSaving(false); // Stop loading first
       await loadN8nInventory(sourceId);
+      // Ensure modal stays open and step transitions
+      setConnectOpen(true);
       setStep("entities");
-      setSaving(false);
       return;
     }
 
@@ -785,15 +788,12 @@ export default function ConnectionsPage() {
 
   async function saveEntitiesSelection() {
     if (!createdSourceId) return;
-
     if (selectedExternalIds.size === 0) {
       setErrMsg("Select at least one workflow to index.");
       return;
     }
-
     const selected = new Set(selectedExternalIds);
     const selectedRows = inventoryEntities.filter((e) => selected.has(String(e.externalId)));
-
     const entitiesPayload = selectedRows.map((e) => ({
       externalId: String(e.externalId),
       displayName: String(e.displayName ?? ""),
@@ -801,10 +801,8 @@ export default function ConnectionsPage() {
       enabledForAnalytics: true,
       enabledForActions: false,
     }));
-
     setSaving(true);
     setErrMsg(null);
-
     const res = await fetch("/api/connections/entities/select", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -813,7 +811,6 @@ export default function ConnectionsPage() {
         entities: entitiesPayload,
       }),
     });
-
     const json = await res.json().catch(() => ({}));
     if (!res.ok || !json?.ok) {
       console.error("[connections] saveEntitiesSelection failed", { status: res.status, json });
@@ -821,15 +818,22 @@ export default function ConnectionsPage() {
       setErrMsg(json?.message || "Failed to save selection.");
       return;
     }
-
-    // Refresh server-backed lists BEFORE closing/resetting modal state
+    
+    // SUCCESS: Refresh data in correct order
+    setSaving(false);
+    
+    // Refresh indexed entities first (backend just wrote them)
     await refreshIndexedEntities();
+    
+    // Refresh credentials to ensure credential row appears
     await refreshCredentials();
+    
+    // Switch to All tab to show newly indexed items
+    setFilter("all");
     setAllSearch("");
     setAllSort("created_at");
-    setFilter("all");
-    await refreshIndexedEntities();
-    setSaving(false);
+    
+    // NOW close modal after everything is ready
     closeConnect();
   }
 
@@ -978,14 +982,17 @@ export default function ConnectionsPage() {
                             onClick={(e) => {
                               e.stopPropagation();
                               const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
-                              setMenuPos({ top: rect.bottom + 8, left: Math.min(rect.left, window.innerWidth - 240) });
+                              setMenuPos({
+                                top: rect.bottom + window.scrollY + 4,
+                                left: rect.right + window.scrollX - 160, // anchor to right edge
+                              });
                               setDeleteConfirmId(null);
                               setOpenEntityMenuId(openEntityMenuId === entity.id ? null : entity.id);
                             }}
-                            className="rounded-lg p-2 hover:bg-gray-100"
-                            aria-label="Row actions"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100"
+                            aria-label="Entity actions"
                           >
-                            <MoreVertical className="h-5 w-5 text-gray-600" />
+                            <MoreVertical className="h-4 w-4" />
                           </button>
                         </div>
                       </div>
@@ -1010,8 +1017,11 @@ export default function ConnectionsPage() {
         return (
           <div className="fixed inset-0 z-50" data-entity-menu onClick={() => { setOpenEntityMenuId(null); setMenuPos(null); }}>
             <div
-              className="fixed z-[60] w-60 rounded-lg border border-gray-200 bg-white shadow-lg"
-              style={{ top: menuPos?.top ?? 80, left: menuPos?.left ?? (window.innerWidth - 260) }}
+              className="fixed z-50 w-40 rounded-lg border bg-white shadow-lg"
+              style={{
+                top: `${menuPos.top}px`,
+                left: `${menuPos.left}px`,
+              }}
               onClick={(e) => e.stopPropagation()}
             >
               <button
@@ -1166,10 +1176,13 @@ export default function ConnectionsPage() {
                             onClick={(e) => {
                               e.stopPropagation();
                               const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
-                              setMenuPos({ top: rect.bottom + 8, left: Math.min(rect.left, window.innerWidth - 240) });
+                              setMenuPos({
+                                top: rect.bottom + window.scrollY + 4,
+                                left: rect.right + window.scrollX - 160,
+                              });
                               setOpenCredentialMenuId(openCredentialMenuId === cred.id ? null : cred.id);
                             }}
-                            className="rounded-lg p-2 hover:bg-gray-100"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100"
                             aria-label="Credential actions"
                           >
                             <MoreVertical className="h-5 w-5 text-gray-600" />
@@ -1203,8 +1216,11 @@ export default function ConnectionsPage() {
             onClick={() => { setOpenCredentialMenuId(null); setMenuPos(null); }}
           >
             <div
-              className="fixed z-[60] w-60 rounded-lg border border-gray-200 bg-white shadow-lg"
-              style={{ top: menuPos?.top ?? 80, left: menuPos?.left ?? (window.innerWidth - 260) }}
+              className="fixed z-50 w-40 rounded-lg border bg-white shadow-lg"
+              style={{
+                top: `${menuPos.top}px`,
+                left: `${menuPos.left}px`,
+              }}
               onClick={(e) => e.stopPropagation()}
             >
               <button
