@@ -57,7 +57,7 @@ function patchConsoleOnce() {
   };
 }
 
-function registerToolOrThrow(tool: {
+async function registerToolOrThrow(tool: {
   name: string;
   description?: string;
   inputSchema?: any;
@@ -66,9 +66,16 @@ function registerToolOrThrow(tool: {
   const mc = (navigator as any)?.modelContext;
   const registerTool = mc?.registerTool as ((tool: any) => void) | undefined;
   if (!registerTool) {
-    throw new Error("navigator.modelContext.registerTool is not available (WebMCP polyfill not loaded?)");
+    throw new Error("navigator.modelContext.registerTool is not available (WebMCP polyfill not ready?)");
   }
-  registerTool(tool);
+
+  try {
+    registerTool(tool);
+  } catch (e) {
+    // Retry once — polyfill sometimes finishes internal init a tick later
+    await new Promise((r) => setTimeout(r, 100));
+    registerTool(tool);
+  }
 }
 
 const SAFE_PROBE_PATHS = new Set<string>([
@@ -76,14 +83,14 @@ const SAFE_PROBE_PATHS = new Set<string>([
   "/api/indexed-entities/list",
 ]);
 
-export function registerControlPanelDebugTools() {
+export async function registerControlPanelDebugTools() {
   if (process.env.NEXT_PUBLIC_ENABLE_WEBMCP !== "true") return;
   if (typeof window === "undefined") return;
 
   patchConsoleOnce();
 
   // 1) ping
-  registerToolOrThrow({
+  await registerToolOrThrow({
     name: "gf_debug_ping",
     description: "Sanity check: returns ok + timestamp + current URL.",
     inputSchema: { type: "object", properties: {} },
@@ -98,7 +105,7 @@ export function registerControlPanelDebugTools() {
   });
 
   // 2) env
-  registerToolOrThrow({
+  await registerToolOrThrow({
     name: "gf_debug_env",
     description: "Returns whether WebMCP is enabled and basic runtime environment flags.",
     inputSchema: { type: "object", properties: {} },
@@ -111,7 +118,7 @@ export function registerControlPanelDebugTools() {
   });
 
   // 3) console buffer
-  registerToolOrThrow({
+  await registerToolOrThrow({
     name: "gf_recent_console_errors",
     description: "Returns recent console.error / console.warn entries captured since page load (last 50).",
     inputSchema: { type: "object", properties: {} },
@@ -126,7 +133,7 @@ export function registerControlPanelDebugTools() {
   });
 
   // 4) safe GET probe
-  registerToolOrThrow({
+  await registerToolOrThrow({
     name: "gf_network_probe",
     description:
       "Fetches a whitelisted GET endpoint and returns status + small summary. Allowed paths: /api/credentials/list, /api/indexed-entities/list",

@@ -11,7 +11,7 @@ function toolText(obj: unknown) {
   return { content: [{ type: "text", text: JSON.stringify(obj, null, 2) }] };
 }
 
-function registerToolOrThrow(tool: {
+async function registerToolOrThrow(tool: {
   name: string;
   description?: string;
   inputSchema?: any;
@@ -20,9 +20,16 @@ function registerToolOrThrow(tool: {
   const mc = (navigator as any)?.modelContext;
   const registerTool = mc?.registerTool as ((tool: any) => void) | undefined;
   if (!registerTool) {
-    throw new Error("navigator.modelContext.registerTool is not available (WebMCP polyfill not loaded?)");
+    throw new Error("navigator.modelContext.registerTool is not available (WebMCP polyfill not ready?)");
   }
-  registerTool(tool);
+
+  try {
+    registerTool(tool);
+  } catch (e) {
+    // Retry once — polyfill sometimes finishes internal init a tick later
+    await new Promise((r) => setTimeout(r, 100));
+    registerTool(tool);
+  }
 }
 
 function textExists(t: string) {
@@ -30,12 +37,12 @@ function textExists(t: string) {
   return bodyText.includes(t);
 }
 
-export function registerConnectionsDebugTools() {
+export async function registerConnectionsDebugTools() {
   if (process.env.NEXT_PUBLIC_ENABLE_WEBMCP !== "true") return;
   if (typeof window === "undefined") return;
 
   // Snapshot (from window global written by the page)
-  registerToolOrThrow({
+  await registerToolOrThrow({
     name: "gf_connections_snapshot",
     description: "Returns the current Connections page debug state snapshot (from window.__GF_CONNECTIONS_DEBUG_STATE__).",
     inputSchema: { type: "object", properties: {} },
@@ -49,7 +56,7 @@ export function registerConnectionsDebugTools() {
   });
 
   // DOM summary
-  registerToolOrThrow({
+  await registerToolOrThrow({
     name: "gf_connections_dom_summary",
     description: "Returns a small DOM-based summary for Connections page (counts, empty states, modal presence).",
     inputSchema: { type: "object", properties: {} },
@@ -79,7 +86,7 @@ export function registerConnectionsDebugTools() {
   });
 
   // Fetch credentials list
-  registerToolOrThrow({
+  await registerToolOrThrow({
     name: "gf_connections_fetch_credentials",
     description: "Fetches GET /api/credentials/list and returns status + count + first item metadata (no secrets).",
     inputSchema: { type: "object", properties: {} },
@@ -112,7 +119,7 @@ export function registerConnectionsDebugTools() {
   });
 
   // Fetch indexed entities
-  registerToolOrThrow({
+  await registerToolOrThrow({
     name: "gf_connections_fetch_indexed_entities",
     description: "Fetches GET /api/indexed-entities/list and returns status + count + first item metadata.",
     inputSchema: { type: "object", properties: {} },
@@ -146,7 +153,7 @@ export function registerConnectionsDebugTools() {
   });
 
   // Fetch n8n inventory
-  registerToolOrThrow({
+  await registerToolOrThrow({
     name: "gf_connections_fetch_inventory_n8n",
     description:
       "Fetches GET /api/connections/inventory/n8n/list?sourceId=... and returns totals. Input requires sourceId.",
