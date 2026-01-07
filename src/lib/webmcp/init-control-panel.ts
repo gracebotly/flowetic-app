@@ -37,10 +37,7 @@ export async function initControlPanelWebMcp(): Promise<void> {
   try {
     await import("@mcp-b/global");
     await waitForModelContextReady();
-    
-    // CRITICAL FIX: Wait 500ms for polyfill internal state to fully initialize
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
+
     await registerControlPanelDebugTools();
     await registerConnectionsDebugTools();
 
