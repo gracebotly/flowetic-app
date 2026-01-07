@@ -64,7 +64,7 @@ async function registerToolOrThrow(tool: {
   execute: (args: any) => Promise<any> | any;
 }) {
   const mc = (navigator as any)?.modelContext;
-  const registerTool = mc?.registerTool as ((tool: any) => void) | undefined;
+  const registerTool = mc?.registerTool?.bind(mc) as ((tool: any) => void) | undefined;
   if (!registerTool) {
     throw new Error("navigator.modelContext.registerTool is not available");
   }
