@@ -32,24 +32,20 @@ export async function initControlPanelWebMcp(): Promise<void> {
   if (typeof window === "undefined") return;
 
   if (globalThis.__GF_WEBMCP_INIT__) return;
-
-  // Mark early to avoid double-init in React strict mode or remounts
   globalThis.__GF_WEBMCP_INIT__ = true;
 
   try {
-    // WebMCP polyfill - modelContext available immediately after this
     await import("@mcp-b/global");
-
-    // Verify polyfill loaded correctly
     await waitForModelContextReady();
-
-    // Register tools synchronously (per MCP-B docs, no async needed)
+    
+    // CRITICAL FIX: Wait 500ms for polyfill internal state to fully initialize
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
     await registerControlPanelDebugTools();
     await registerConnectionsDebugTools();
 
     console.log("[webmcp] ✅ All tools registered successfully");
   } catch (err) {
-    // If something fails, allow re-init on refresh
     globalThis.__GF_WEBMCP_INIT__ = false;
     console.error("[webmcp] init failed", err);
   }
