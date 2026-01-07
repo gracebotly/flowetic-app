@@ -32,7 +32,7 @@ function patchFetchOnce() {
   globalThis.__GF_FETCH_LOG__ = [];
 
   const origFetch = window.fetch.bind(window);
-  window.fetch = async (...args: any[]) => {
+  window.fetch = async (...args: Parameters<typeof fetch>) => {
     const start = Date.now();
     const url = typeof args[0] === "string" ? args[0] : args[0]?.url || "";
     const method = args[1]?.method || "GET";
