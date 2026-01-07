@@ -728,6 +728,34 @@ export default function ConnectionsPage() {
     if (editingSourceId) {
       setEditingSourceId(null);
       await refreshCredentials();
+      
+      // NEW: For n8n, offer to manage indexed workflows
+      if (selectedPlatform === "n8n" && (selectedMethod === "api" || selectedMethod === "mcp")) {
+        // Set sourceId to the one we just edited
+        setCreatedSourceId(editingSourceId);
+        
+        // Load inventory
+        await loadN8nInventory(editingSourceId);
+        
+        // Load already-indexed entities for this source
+        const indexedRes = await fetch("/api/indexed-entities/list");
+        const indexedJson = await indexedRes.json().catch(() => ({}));
+        if (indexedRes.ok && indexedJson?.ok) {
+          const alreadyIndexed = (indexedJson.entities || [])
+            .filter((e: any) => String(e.sourceId) === editingSourceId)
+            .map((e: any) => String(e.externalId));
+          
+          // Pre-select already indexed workflows
+          setSelectedExternalIds(new Set(alreadyIndexed));
+        }
+        
+        // Transition to entities step
+        setConnectOpen(true);
+        setStep("entities");
+        setSaving(false);
+        return;
+      }
+      
       closeConnect();
       return;
     }
@@ -803,12 +831,15 @@ export default function ConnectionsPage() {
     }));
     setSaving(true);
     setErrMsg(null);
+    // IMPORTANT: When editing, we need to REPLACE (not append) the indexed entities
+    // Backend should handle this by first unindexing all, then indexing selected ones
     const res = await fetch("/api/connections/entities/select", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         sourceId: createdSourceId,
         entities: entitiesPayload,
+        replaceExisting: true, // NEW: Tell backend to replace, not append
       }),
     });
     const json = await res.json().catch(() => ({}));
@@ -1269,7 +1300,9 @@ export default function ConnectionsPage() {
                         : step === "credentials"
                         ? `Credentials`
                         : step === "entities"
-                        ? "Select entities to index"
+                        ? editingSourceId 
+                          ? "Manage indexed workflows" 
+                          : "Select entities to index"
                         : "Connected"}
                     </div>
                     {step === "credentials" && selectedPlatform === "n8n" && selectedMethod === "mcp" ? (
@@ -1292,7 +1325,9 @@ export default function ConnectionsPage() {
                         ? "Enter the Server URL and Access token from n8n's Instance-level MCP settings."
                         : editingSourceId ? "Re-enter credentials to validate and save." : "Enter credentials to validate and connect."
                       : step === "entities"
-                      ? "Add agents/workflows you want GetFlowetic to index."
+                      ? editingSourceId
+                        ? "Update which workflows GetFlowetic should index. Unselected workflows will be removed from your All tab."
+                        : "Add agents/workflows you want GetFlowetic to index."
                       : "Success."}
                   </div>
                 </div>
