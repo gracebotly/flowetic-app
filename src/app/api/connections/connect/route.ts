@@ -8,6 +8,34 @@ export const runtime = "nodejs";
 
 type PlatformType = "n8n" | "make" | "activepieces" | "vapi" | "retell";
 
+const MAKE_REGIONS = ["us1", "eu1", "us2", "eu2"] as const;
+type MakeRegion = (typeof MAKE_REGIONS)[number];
+
+async function detectMakeRegion(apiToken: string): Promise<MakeRegion | null> {
+  for (const region of MAKE_REGIONS) {
+    try {
+      const res = await fetch(`https://${region}.make.com/api/v2/scenarios`, {
+        method: "GET",
+        headers: {
+          Authorization: `Token ${apiToken}`,
+          "Content-Type": "application/json",
+        },
+      });
+      if (res.ok) return region;
+    } catch {
+      // try next region
+    }
+  }
+  return null;
+}
+
+type MakeScenarioListResponse = {
+  scenarios?: Array<{
+    id: number | string;
+    name?: string;
+  }>;
+};
+
 export async function POST(req: Request) {
   const supabase = await createClient();
 
@@ -50,18 +78,36 @@ export async function POST(req: Request) {
   if (method === "api") {
     const apiKey = (body.apiKey as string | undefined) ?? "";
     const instanceUrl = (body.instanceUrl as string | undefined) ?? null;
+
     if (!apiKey) {
       return NextResponse.json({ ok: false, code: "MISSING_API_KEY" }, { status: 400 });
     }
-    
-    // n8n tokens are commonly sent as "X-N8N-API-KEY" (self-host) or bearer depending on setup.
-    // Store an authMode so import can try the right header.
-    const authMode =
-      platformType === "n8n"
-        ? ((body.n8nAuthMode as "header" | "bearer" | undefined) ?? "bearer")
-        : undefined;
 
-    secretJson = { ...secretJson, apiKey, instanceUrl, ...(authMode ? { authMode } : {}) };
+    if (platformType === "make") {
+      // Make.com: apiKey is actually the API token; auto-detect region
+      const region = await detectMakeRegion(apiKey);
+      if (!region) {
+        return NextResponse.json(
+          { ok: false, code: "MAKE_INVALID_TOKEN", message: "Invalid API token. Please check and try again." },
+          { status: 400 },
+        );
+      }
+
+      // Override connection name for Make to match required copy
+      const makeName = `Make (${region.toUpperCase()})`;
+      // We'll use this later when inserting the source
+      (body as any).__computedName = makeName;
+
+      secretJson = { ...secretJson, apiKey, region };
+    } else {
+      // Existing behavior for other API platforms
+      const authMode =
+        platformType === "n8n"
+          ? ((body.n8nAuthMode as "header" | "bearer" | undefined) ?? "bearer")
+          : undefined;
+
+      secretJson = { ...secretJson, apiKey, instanceUrl, ...(authMode ? { authMode } : {}) };
+    }
   }
 
   if (method === "webhook") {
@@ -141,7 +187,7 @@ export async function POST(req: Request) {
       {
         tenant_id: membership.tenant_id,
         type: platformType,
-        name: connectionName || `${platformType} Instance`,
+        name: ((body as any).__computedName as string | undefined) ?? connectionName || `${platformType} Instance`,
         status: "active",
         method: method,
         secret_hash: encryptSecret(JSON.stringify(secretJson)),
@@ -159,5 +205,38 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, code: "PERSISTENCE_FAILED", message: error.message }, { status: 400 });
   }
 
-  return NextResponse.json({ ok: true, source });
+  // Make.com: fetch scenarios for entities selection
+  let inventoryEntities: Array<{ externalId: string; displayName: string; entityKind: string }> = [];
+  if (platformType === "make" && method === "api") {
+    const region = secretJson.region as MakeRegion;
+    try {
+      const scenariosRes = await fetch(`https://${region}.make.com/api/v2/scenarios`, {
+        headers: {
+          Authorization: `Token ${secretJson.apiKey}`,
+          "Content-Type": "application/json",
+        },
+      });
+      
+      if (scenariosRes.ok) {
+        const scenariosData: MakeScenarioListResponse = await scenariosRes.json();
+        if (scenariosData.scenarios && Array.isArray(scenariosData.scenarios)) {
+          inventoryEntities = scenariosData.scenarios.map((scenario) => ({
+            externalId: String(scenario.id),
+            displayName: scenario.name || `Scenario ${scenario.id}`,
+            entityKind: "scenario",
+          }));
+        }
+      }
+    } catch (err) {
+      // Log error but don't fail connection - scenarios can be loaded later
+      console.error("Failed to fetch Make scenarios:", err);
+    }
+  }
+
+  const response: any = { ok: true, source };
+  if (inventoryEntities.length > 0) {
+    response.inventoryEntities = inventoryEntities;
+  }
+
+  return NextResponse.json(response);
 }
