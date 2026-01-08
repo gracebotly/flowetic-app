@@ -8,6 +8,34 @@ export const runtime = "nodejs";
 
 type PlatformType = "n8n" | "make" | "activepieces" | "vapi" | "retell";
 
+const MAKE_REGIONS = ["us1", "eu1", "us2", "eu2"] as const;
+type MakeRegion = (typeof MAKE_REGIONS)[number];
+
+async function detectMakeRegion(apiToken: string): Promise<MakeRegion | null> {
+  for (const region of MAKE_REGIONS) {
+    try {
+      const res = await fetch(`https://${region}.make.com/api/v2/scenarios`, {
+        method: "GET",
+        headers: {
+          Authorization: `Token ${apiToken}`,
+          "Content-Type": "application/json",
+        },
+      });
+      if (res.ok) return region;
+    } catch {
+      // try next region
+    }
+  }
+  return null;
+}
+
+type MakeScenarioListResponse = {
+  scenarios?: Array<{
+    id: number | string;
+    name?: string;
+  }>;
+};
+
 export async function POST(req: Request) {
   const supabase = await createClient();
 
@@ -50,18 +78,34 @@ export async function POST(req: Request) {
   if (method === "api") {
     const apiKey = (body.apiKey as string | undefined) ?? "";
     const instanceUrl = (body.instanceUrl as string | undefined) ?? null;
+
     if (!apiKey) {
       return NextResponse.json({ ok: false, code: "MISSING_API_KEY" }, { status: 400 });
     }
-    
-    // n8n tokens are commonly sent as "X-N8N-API-KEY" (self-host) or bearer depending on setup.
-    // Store an authMode so import can try the right header.
-    const authMode =
-      platformType === "n8n"
-        ? ((body.n8nAuthMode as "header" | "bearer" | undefined) ?? "bearer")
-        : undefined;
 
-    secretJson = { ...secretJson, apiKey, instanceUrl, ...(authMode ? { authMode } : {}) };
+    if (platformType === "make") {
+      const region = await detectMakeRegion(apiKey);
+      if (!region) {
+        return NextResponse.json(
+          { ok: false, code: "MAKE_INVALID_TOKEN", message: "Invalid API token. Please check and try again." },
+          { status: 400 },
+        );
+      }
+
+      // Store token + region in secret_json (encrypted in sources.secret_hash)
+      secretJson = { ...secretJson, apiKey, region };
+
+      // Override name to match required format
+      (body as any).__computedName = `Make (${region.toUpperCase()})`;
+    } else {
+      // Existing behavior for other API platforms (n8n, activepieces, etc.)
+      const authMode =
+        platformType === "n8n"
+          ? ((body.n8nAuthMode as "header" | "bearer" | undefined) ?? "bearer")
+          : undefined;
+
+      secretJson = { ...secretJson, apiKey, instanceUrl, ...(authMode ? { authMode } : {}) };
+    }
   }
 
   if (method === "webhook") {
@@ -141,7 +185,7 @@ export async function POST(req: Request) {
       {
         tenant_id: membership.tenant_id,
         type: platformType,
-        name: connectionName || `${platformType} Instance`,
+        name: ((((body as any).__computedName as string | undefined) ?? connectionName) || platformType),
         status: "active",
         method: method,
         secret_hash: encryptSecret(JSON.stringify(secretJson)),
@@ -157,6 +201,50 @@ export async function POST(req: Request) {
 
   if (error) {
     return NextResponse.json({ ok: false, code: "PERSISTENCE_FAILED", message: error.message }, { status: 400 });
+  }
+
+  if (platformType === "make" && method === "api") {
+    const region = (secretJson?.region as MakeRegion | undefined) ?? null;
+
+    if (!region) {
+      return NextResponse.json({ ok: true, source });
+    }
+
+    const scenariosRes = await fetch(`https://${region}.make.com/api/v2/scenarios`, {
+      method: "GET",
+      headers: {
+        Authorization: `Token ${secretJson.apiKey}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!scenariosRes.ok) {
+      const t = await scenariosRes.text().catch(() => "");
+      return NextResponse.json(
+        {
+          ok: false,
+          code: "MAKE_SCENARIOS_FAILED",
+          message: `Failed to fetch scenarios (${scenariosRes.status}). ${t}`.trim(),
+        },
+        { status: 400 },
+      );
+    }
+
+    const scenariosJson = (await scenariosRes.json().catch(() => ({}))) as MakeScenarioListResponse;
+    const scenarios = scenariosJson.scenarios ?? [];
+
+    const inventoryEntities = scenarios.map((s) => ({
+      externalId: String(s.id),
+      displayName: String(s.name ?? `Scenario ${String(s.id)}`),
+      entityKind: "scenario",
+    }));
+
+    return NextResponse.json({
+      ok: true,
+      source,
+      inventoryEntities,
+      meta: { region },
+    });
   }
 
   return NextResponse.json({ ok: true, source });

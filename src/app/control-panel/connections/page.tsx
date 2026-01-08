@@ -689,6 +689,11 @@ export default function ConnectionsPage() {
     setSaving(true);
     setErrMsg(null);
 
+    // Make.com is token-only (force API method; no webhook/mcp variants)
+    if (selectedPlatform === "make" && selectedMethod !== "api") {
+      setSelectedMethod("api");
+    }
+
     const payload: any = {
       platformType: selectedPlatform,
       method: selectedMethod,
@@ -838,6 +843,21 @@ export default function ConnectionsPage() {
       // Ensure modal stays open and step transitions
       setConnectOpen(true);
       setStep("entities");
+      return;
+    }
+
+    // Make.com: use inventoryEntities from response if available
+    if (selectedPlatform === "make" && json?.inventoryEntities) {
+      const inventoryEntities = json.inventoryEntities.map((entity: any) => ({
+        externalId: String(entity.externalId),
+        displayName: String(entity.displayName || ""),
+        entityKind: String(entity.entityKind || "scenario"),
+      }));
+      
+      setInventoryEntities(inventoryEntities);
+      setConnectOpen(true);
+      setStep("entities");
+      setSaving(false);
       return;
     }
 
@@ -1391,7 +1411,9 @@ export default function ConnectionsPage() {
                         : step === "method"
                         ? `Connect ${selectedPlatform ? (getPlatformMeta(String(selectedPlatform))?.label ?? String(selectedPlatform)) : ""}`
                         : step === "credentials"
-                        ? `Credentials`
+                        ? selectedPlatform === "make"
+                          ? "Connect Make"
+                          : "Credentials"
                         : step === "entities"
                         ? editingSourceId 
                           ? "Manage indexed workflows" 
@@ -1414,9 +1436,13 @@ export default function ConnectionsPage() {
                       : step === "method"
                       ? "Choose a connection method."
                       : step === "credentials"
-                      ? selectedPlatform === "n8n" && selectedMethod === "mcp"
-                        ? "Enter the Server URL and Access token from n8n's Instance-level MCP settings."
-                        : editingSourceId ? "Re-enter credentials to validate and save." : "Enter credentials to validate and connect."
+                      ? selectedPlatform === "make"
+                        ? "Enter your API token to import your Make scenarios."
+                        : selectedPlatform === "n8n" && selectedMethod === "mcp"
+                          ? "Enter the Server URL and Access token from n8n's Instance-level MCP settings."
+                          : editingSourceId
+                            ? "Re-enter credentials to validate and save."
+                            : "Enter credentials to validate and connect."
                       : step === "entities"
                       ? editingSourceId
                         ? "Update which workflows GetFlowetic should index. Unselected workflows will be removed from your All tab."
@@ -1456,6 +1482,14 @@ export default function ConnectionsPage() {
                           onClick={() => {
                             setSelectedPlatform(k);
                             setErrMsg(null);
+
+                            // Make.com: token-only flow (skip method selection entirely)
+                            if (String(k) === "make") {
+                              setSelectedMethod("api");
+                              setStep("credentials");
+                              return;
+                            }
+
                             setStep("method");
                           }}
                           className="w-full rounded-xl border-2 border-gray-200 p-4 text-left hover:border-blue-500 hover:bg-slate-50"
@@ -1548,42 +1582,66 @@ export default function ConnectionsPage() {
 {step === "credentials" ? (
   <div className="space-y-4">
     {selectedMethod === "api" ? (
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <label className="text-sm font-semibold text-gray-900">API Key *</label>
-          {editingSourceId && apiKeySaved ? (
-            <span className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-semibold text-gray-700">
-              Saved
-            </span>
-          ) : null}
-        </div>
-
-        {editingSourceId && !showApiKeyEditor ? (
-          <div className="flex items-center justify-between rounded-lg border bg-white px-3 py-2">
-            <div className="text-sm text-gray-600">••••••••••••••</div>
-            <button
-              type="button"
-              onClick={() => setShowApiKeyEditor(true)}
-              className="text-sm font-semibold text-blue-600 hover:underline"
-            >
-              Change key
-            </button>
-          </div>
-        ) : (
-          <input
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            type="password"
-            placeholder={editingSourceId ? "Enter a new API key to replace" : "••••••••••••••"}
-            className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        )}
-
-        {editingSourceId ? (
-          <div className="text-xs text-gray-500">
-            You can't view existing keys. Enter a new key only if you want to replace it.
+      <div className="space-y-4">
+        {selectedPlatform === "make" ? (
+          <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+            <div className="font-semibold">💡 How to get your API token:</div>
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-blue-900">
+              <li>Go to make.com → Your profile → API access</li>
+              <li>Click &quot;+ Add token&quot;</li>
+              <li>
+                Select these scopes:
+                <ul className="mt-1 list-disc space-y-1 pl-5">
+                  <li>scenarios:read</li>
+                  <li>scenarios:run</li>
+                  <li>organizations:read</li>
+                  <li>teams:read</li>
+                </ul>
+              </li>
+              <li>Click &quot;Add&quot; and copy your token</li>
+            </ul>
           </div>
         ) : null}
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-semibold text-gray-900">
+              {selectedPlatform === "make" ? "API Token *" : "API Key *"}
+            </label>
+            {editingSourceId && apiKeySaved ? (
+              <span className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-semibold text-gray-700">
+                Saved
+              </span>
+            ) : null}
+          </div>
+
+          {editingSourceId && !showApiKeyEditor ? (
+            <div className="flex items-center justify-between rounded-lg border bg-white px-3 py-2">
+              <div className="text-sm text-gray-600">••••••••••••••</div>
+              <button
+                type="button"
+                onClick={() => setShowApiKeyEditor(true)}
+                className="text-sm font-semibold text-blue-600 hover:underline"
+              >
+                Change key
+              </button>
+            </div>
+          ) : (
+            <input
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              type="password"
+              placeholder={selectedPlatform === "make" ? "Paste your Make API token here" : (editingSourceId ? "Enter a new API key to replace" : "••••••••••••••")}
+              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          )}
+
+          {editingSourceId ? (
+            <div className="text-xs text-gray-500">
+              You can't view existing keys. Enter a new key only if you want to replace it.
+            </div>
+          ) : null}
+        </div>
       </div>
     ) : null}
 
@@ -1675,7 +1733,7 @@ export default function ConnectionsPage() {
       </>
     ) : null}
 
-    {selectedPlatform !== "n8n" ? (
+    {selectedPlatform !== "n8n" && selectedPlatform !== "make" ? (
       <div>
         <label className="mb-2 block text-sm font-semibold text-gray-900">Connection name (optional)</label>
         <input
@@ -1693,8 +1751,13 @@ export default function ConnectionsPage() {
         <button
           type="button"
           onClick={() => {
-            setStep("method");
             setErrMsg(null);
+            // Make skips "method", so Back should return to platform picker
+            if (selectedPlatform === "make") {
+              setStep("platform");
+              return;
+            }
+            setStep("method");
           }}
           className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-200"
           disabled={saving}
