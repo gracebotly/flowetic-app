@@ -185,7 +185,7 @@ export async function POST(req: Request) {
       {
         tenant_id: membership.tenant_id,
         type: platformType,
-        name: ((body as any).__computedName as string | undefined) ?? connectionName || platformType,
+        name: (((body as any).__computedName as string | undefined) ?? connectionName) || platformType,
         status: "active",
         method: method,
         secret_hash: encryptSecret(JSON.stringify(secretJson)),

@@ -1747,12 +1747,17 @@ export default function ConnectionsPage() {
     ) : null}
 
     <div className="flex justify-end gap-2 pt-2">
-      {!editingSourceId && selectedPlatform !== "make" ? (
+      {!editingSourceId ? (
         <button
           type="button"
           onClick={() => {
-            setStep("method");
             setErrMsg(null);
+            // Make skips "method", so Back should return to platform picker
+            if (selectedPlatform === "make") {
+              setStep("platform");
+              return;
+            }
+            setStep("method");
           }}
           className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-200"
           disabled={saving}
