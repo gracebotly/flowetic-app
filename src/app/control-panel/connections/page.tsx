@@ -1593,17 +1593,13 @@ export default function ConnectionsPage() {
                 Select these scopes:
                 <ul className="mt-1 list-disc space-y-1 pl-5">
                   <li>scenarios:read</li>
-                  <li>scenarios:execute</li>
+                  <li>scenarios:run</li>
                   <li>organizations:read</li>
                   <li>teams:read</li>
                 </ul>
               </li>
               <li>Click &quot;Add&quot; and copy your token</li>
             </ul>
-
-            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-              ⚠️ Ignore the &quot;MCP server&quot; banner in Make - you don&apos;t need MCP scope for this connection.
-            </div>
           </div>
         ) : null}
 

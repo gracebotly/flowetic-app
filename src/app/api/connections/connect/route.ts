@@ -84,7 +84,6 @@ export async function POST(req: Request) {
     }
 
     if (platformType === "make") {
-      // Make.com: apiKey is actually the API token; auto-detect region
       const region = await detectMakeRegion(apiKey);
       if (!region) {
         return NextResponse.json(
@@ -93,14 +92,13 @@ export async function POST(req: Request) {
         );
       }
 
-      // Override connection name for Make to match required copy
-      const makeName = `Make (${region.toUpperCase()})`;
-      // We'll use this later when inserting the source
-      (body as any).__computedName = makeName;
-
+      // Store token + region in secret_json (encrypted in sources.secret_hash)
       secretJson = { ...secretJson, apiKey, region };
+
+      // Override name to match required format
+      (body as any).__computedName = `Make (${region.toUpperCase()})`;
     } else {
-      // Existing behavior for other API platforms
+      // Existing behavior for other API platforms (n8n, activepieces, etc.)
       const authMode =
         platformType === "n8n"
           ? ((body.n8nAuthMode as "header" | "bearer" | undefined) ?? "bearer")
@@ -187,7 +185,7 @@ export async function POST(req: Request) {
       {
         tenant_id: membership.tenant_id,
         type: platformType,
-        name: (((body as any).__computedName as string | undefined) ?? connectionName) || `${platformType} Instance`,
+        name: ((body as any).__computedName as string | undefined) ?? connectionName || platformType,
         status: "active",
         method: method,
         secret_hash: encryptSecret(JSON.stringify(secretJson)),
@@ -205,38 +203,49 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, code: "PERSISTENCE_FAILED", message: error.message }, { status: 400 });
   }
 
-  // Make.com: fetch scenarios for entities selection
-  let inventoryEntities: Array<{ externalId: string; displayName: string; entityKind: string }> = [];
   if (platformType === "make" && method === "api") {
-    const region = secretJson.region as MakeRegion;
-    try {
-      const scenariosRes = await fetch(`https://${region}.make.com/api/v2/scenarios`, {
-        headers: {
-          Authorization: `Token ${secretJson.apiKey}`,
-          "Content-Type": "application/json",
-        },
-      });
-      
-      if (scenariosRes.ok) {
-        const scenariosData: MakeScenarioListResponse = await scenariosRes.json();
-        if (scenariosData.scenarios && Array.isArray(scenariosData.scenarios)) {
-          inventoryEntities = scenariosData.scenarios.map((scenario) => ({
-            externalId: String(scenario.id),
-            displayName: scenario.name || `Scenario ${scenario.id}`,
-            entityKind: "scenario",
-          }));
-        }
-      }
-    } catch (err) {
-      // Log error but don't fail connection - scenarios can be loaded later
-      console.error("Failed to fetch Make scenarios:", err);
+    const region = (secretJson?.region as MakeRegion | undefined) ?? null;
+
+    if (!region) {
+      return NextResponse.json({ ok: true, source });
     }
+
+    const scenariosRes = await fetch(`https://${region}.make.com/api/v2/scenarios`, {
+      method: "GET",
+      headers: {
+        Authorization: `Token ${secretJson.apiKey}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!scenariosRes.ok) {
+      const t = await scenariosRes.text().catch(() => "");
+      return NextResponse.json(
+        {
+          ok: false,
+          code: "MAKE_SCENARIOS_FAILED",
+          message: `Failed to fetch scenarios (${scenariosRes.status}). ${t}`.trim(),
+        },
+        { status: 400 },
+      );
+    }
+
+    const scenariosJson = (await scenariosRes.json().catch(() => ({}))) as MakeScenarioListResponse;
+    const scenarios = scenariosJson.scenarios ?? [];
+
+    const inventoryEntities = scenarios.map((s) => ({
+      externalId: String(s.id),
+      displayName: String(s.name ?? `Scenario ${String(s.id)}`),
+      entityKind: "scenario",
+    }));
+
+    return NextResponse.json({
+      ok: true,
+      source,
+      inventoryEntities,
+      meta: { region },
+    });
   }
 
-  const response: any = { ok: true, source };
-  if (inventoryEntities.length > 0) {
-    response.inventoryEntities = inventoryEntities;
-  }
-
-  return NextResponse.json(response);
+  return NextResponse.json({ ok: true, source });
 }
