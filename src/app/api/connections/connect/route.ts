@@ -29,6 +29,28 @@ async function detectMakeRegion(apiToken: string): Promise<MakeRegion | null> {
   return null;
 }
 
+async function validateMakeRegion(apiToken: string, region: string): Promise<boolean> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    
+    const res = await fetch(`https://${region}.make.com/api/v2/scenarios`, {
+      method: "GET",
+      headers: {
+        Authorization: `Token ${apiToken}`,
+        "Content-Type": "application/json",
+      },
+      signal: controller.signal,
+    });
+    
+    clearTimeout(timeout);
+    return res.ok;
+  } catch (error) {
+    console.error(`[Make Region Validation] Failed for ${region}:`, error);
+    return false;
+  }
+}
+
 type MakeScenarioListResponse = {
   scenarios?: Array<{
     id: number | string;
@@ -63,6 +85,7 @@ export async function POST(req: Request) {
   const platformType = body.platformType as PlatformType | undefined;
   const connectionName = (body.name as string | undefined) ?? "";
   const method = (body.method as "api" | "webhook" | "mcp" | undefined) ?? "api";
+  const region = (body.region as string | undefined) ?? undefined;
 
   if (!platformType) {
     return NextResponse.json({ ok: false, code: "MISSING_PLATFORM_TYPE" }, { status: 400 });
@@ -84,19 +107,36 @@ export async function POST(req: Request) {
     }
 
     if (platformType === "make") {
-      const region = await detectMakeRegion(apiKey);
-      if (!region) {
-        return NextResponse.json(
-          { ok: false, code: "MAKE_INVALID_TOKEN", message: "Invalid API token. Please check and try again." },
-          { status: 400 },
-        );
+      // Use user-provided region if available, otherwise auto-detect
+      let makeRegion: string;
+      
+      if (region && ['us1', 'us2', 'eu1', 'eu2'].includes(region)) {
+        // User selected region - validate it works
+        const isValid = await validateMakeRegion(apiKey, region);
+        if (!isValid) {
+          return NextResponse.json(
+            { error: `Invalid API token for ${region.toUpperCase()} region. Please check your token and region.` },
+            { status: 400 }
+          );
+        }
+        makeRegion = region;
+      } else {
+        // Fallback to auto-detection (legacy support)
+        const detectedRegion = await detectMakeRegion(apiKey);
+        if (!detectedRegion) {
+          return NextResponse.json(
+            { error: "Could not detect Make.com region. Please select your region manually." },
+            { status: 400 }
+          );
+        }
+        makeRegion = detectedRegion;
       }
-
+      
       // Store token + region in secret_json (encrypted in sources.secret_hash)
-      secretJson = { ...secretJson, apiKey, region };
+      secretJson = { ...secretJson, apiKey, region: makeRegion };
 
       // Override name to match required format
-      (body as any).__computedName = `Make (${region.toUpperCase()})`;
+      (body as any).__computedName = `Make (${makeRegion.toUpperCase()})`;
     } else {
       // Existing behavior for other API platforms (n8n, activepieces, etc.)
       const authMode =
