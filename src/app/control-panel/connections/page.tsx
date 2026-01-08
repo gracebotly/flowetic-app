@@ -298,6 +298,23 @@ export default function ConnectionsPage() {
   const [mcpAccessToken, setMcpAccessToken] = useState("");
   const [authHeader, setAuthHeader] = useState("");
   const [connectionName, setConnectionName] = useState("");
+  
+  // Edit modal state for "Saved" indicators
+  const [editingMeta, setEditingMeta] = useState<{
+    sourceId: string;
+    platformType: string;
+    method: ConnectMethod;
+    name: string;
+  } | null>(null);
+
+  const [showApiKeyEditor, setShowApiKeyEditor] = useState(false);
+  const [apiKeySaved, setApiKeySaved] = useState(false);
+  const [instanceUrlSaved, setInstanceUrlSaved] = useState(false);
+
+  const [showMcpTokenEditor, setShowMcpTokenEditor] = useState(false);
+  const [mcpTokenSaved, setMcpTokenSaved] = useState(false);
+  const [mcpUrlSaved, setMcpUrlSaved] = useState(false);
+  
   const [createdSourceId, setCreatedSourceId] = useState<string | null>(null);
   const [connectEntities, setConnectEntities] = useState<EntityDraft[]>([]);
   const [entityKind, setEntityKind] = useState<EntityDraft["entityKind"]>("workflow");
@@ -429,21 +446,47 @@ export default function ConnectionsPage() {
   }
 
   function beginEditCredential(credential: CredentialRow) {
-    // Ensure edit uses the same platform + method context as creation
     setSelectedPlatform(credential.platformType as any);
     setSelectedMethod(credential.method);
     setConnectionName(credential.name || "");
     setEditingSourceId(credential.id);
 
+    setEditingMeta({
+      sourceId: credential.id,
+      platformType: credential.platformType,
+      method: credential.method,
+      name: credential.name || "",
+    });
+
     setErrMsg(null);
     setSaving(false);
 
-    // Never display stored secrets; force re-entry
-    setApiKey("");
-    setInstanceUrl("");
-    setMcpAccessToken("");
-    setAuthHeader("");
-    setMcpUrl("");
+    // Indicators: we know something is saved because the connection exists.
+    // We never show the secret, but we show that it's present.
+    if (credential.method === "api") {
+      setApiKeySaved(true);
+      setInstanceUrlSaved(true);
+      setShowApiKeyEditor(false);
+
+      // Keep API key empty until user clicks "Change"
+      setApiKey("");
+
+      // Allow URL editing: we cannot read it back from DB today,
+      // so require re-entry OR keep last typed value if any.
+      // Keep empty but show "Saved" pill.
+      setInstanceUrl("");
+    }
+
+    if (credential.method === "mcp") {
+      setMcpTokenSaved(true);
+      setMcpUrlSaved(true);
+      setShowMcpTokenEditor(false);
+
+      setMcpAccessToken("");
+      setInstanceUrl(""); // you use instanceUrl for n8n mcp URL input
+      setAuthHeader("");
+      setMcpUrl("");
+    }
 
     setConnectOpen(true);
     setStep("credentials");
@@ -457,6 +500,7 @@ export default function ConnectionsPage() {
 
   useEffect(() => {
     refreshIndexedEntities();
+    refreshCredentials(); // ADD THIS LINE
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -652,8 +696,11 @@ export default function ConnectionsPage() {
     };
 
     if (selectedMethod === "api") {
+      const isEdit = !!editingSourceId;
+      const requireKeyForEdit = isEdit ? showApiKeyEditor : true;
+      
       if (selectedPlatform === "n8n" && selectedMethod === "api") {
-        if (!apiKey.trim()) {
+        if (requireKeyForEdit && !apiKey.trim()) {
           setSaving(false);
           setErrMsg("API Key is required.");
           return;
@@ -665,7 +712,10 @@ export default function ConnectionsPage() {
         }
       }
       
-      payload.apiKey = apiKey;
+      // Include key only if required (new) or changed (edit)
+      if (requireKeyForEdit) {
+        payload.apiKey = apiKey;
+      }
 
       if (instanceUrl) payload.instanceUrl = instanceUrl;
 
@@ -727,6 +777,46 @@ export default function ConnectionsPage() {
     if (editingSourceId) {
       setEditingSourceId(null);
       await refreshCredentials();
+      
+      // If the user did change secret fields, reset the saved indicators for safety
+      if (showApiKeyEditor) {
+        setApiKeySaved(false);
+        setInstanceUrlSaved(false);
+        setShowApiKeyEditor(false);
+      }
+      if (showMcpTokenEditor) {
+        setMcpTokenSaved(false);
+        setMcpUrlSaved(false);
+        setShowMcpTokenEditor(false);
+      }
+      
+      // NEW: For n8n, offer to manage indexed workflows
+      if (selectedPlatform === "n8n" && (selectedMethod === "api" || selectedMethod === "mcp")) {
+        // Set sourceId to the one we just edited
+        setCreatedSourceId(editingSourceId);
+        
+        // Load inventory
+        await loadN8nInventory(editingSourceId);
+        
+        // Load already-indexed entities for this source
+        const indexedRes = await fetch("/api/indexed-entities/list");
+        const indexedJson = await indexedRes.json().catch(() => ({}));
+        if (indexedRes.ok && indexedJson?.ok) {
+          const alreadyIndexed = (indexedJson.entities || [])
+            .filter((e: any) => String(e.sourceId) === editingSourceId)
+            .map((e: any) => String(e.externalId));
+          
+          // Pre-select already indexed workflows
+          setSelectedExternalIds(new Set(alreadyIndexed));
+        }
+        
+        // Transition to entities step
+        setConnectOpen(true);
+        setStep("entities");
+        setSaving(false);
+        return;
+      }
+      
       closeConnect();
       return;
     }
@@ -743,9 +833,11 @@ export default function ConnectionsPage() {
     await refreshCredentials();
 
     if (selectedPlatform === "n8n" && (selectedMethod === "api" || selectedMethod === "mcp")) {
+      setSaving(false); // Stop loading first
       await loadN8nInventory(sourceId);
+      // Ensure modal stays open and step transitions
+      setConnectOpen(true);
       setStep("entities");
-      setSaving(false);
       return;
     }
 
@@ -785,15 +877,12 @@ export default function ConnectionsPage() {
 
   async function saveEntitiesSelection() {
     if (!createdSourceId) return;
-
     if (selectedExternalIds.size === 0) {
       setErrMsg("Select at least one workflow to index.");
       return;
     }
-
     const selected = new Set(selectedExternalIds);
     const selectedRows = inventoryEntities.filter((e) => selected.has(String(e.externalId)));
-
     const entitiesPayload = selectedRows.map((e) => ({
       externalId: String(e.externalId),
       displayName: String(e.displayName ?? ""),
@@ -801,19 +890,19 @@ export default function ConnectionsPage() {
       enabledForAnalytics: true,
       enabledForActions: false,
     }));
-
     setSaving(true);
     setErrMsg(null);
-
+    // IMPORTANT: When editing, we need to REPLACE (not append) the indexed entities
+    // Backend should handle this by first unindexing all, then indexing selected ones
     const res = await fetch("/api/connections/entities/select", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         sourceId: createdSourceId,
         entities: entitiesPayload,
+        replaceExisting: true, // NEW: Tell backend to replace, not append
       }),
     });
-
     const json = await res.json().catch(() => ({}));
     if (!res.ok || !json?.ok) {
       console.error("[connections] saveEntitiesSelection failed", { status: res.status, json });
@@ -821,15 +910,22 @@ export default function ConnectionsPage() {
       setErrMsg(json?.message || "Failed to save selection.");
       return;
     }
-
-    // Refresh server-backed lists BEFORE closing/resetting modal state
+    
+    // SUCCESS: Refresh data in correct order
+    setSaving(false);
+    
+    // Refresh indexed entities first (backend just wrote them)
     await refreshIndexedEntities();
+    
+    // Refresh credentials to ensure credential row appears
     await refreshCredentials();
+    
+    // Switch to All tab to show newly indexed items
+    setFilter("all");
     setAllSearch("");
     setAllSort("created_at");
-    setFilter("all");
-    await refreshIndexedEntities();
-    setSaving(false);
+    
+    // NOW close modal after everything is ready
     closeConnect();
   }
 
@@ -978,14 +1074,17 @@ export default function ConnectionsPage() {
                             onClick={(e) => {
                               e.stopPropagation();
                               const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
-                              setMenuPos({ top: rect.bottom + 8, left: Math.min(rect.left, window.innerWidth - 240) });
+                              setMenuPos({
+                                top: rect.bottom + window.scrollY + 4,
+                                left: rect.right + window.scrollX - 160, // anchor to right edge
+                              });
                               setDeleteConfirmId(null);
                               setOpenEntityMenuId(openEntityMenuId === entity.id ? null : entity.id);
                             }}
-                            className="rounded-lg p-2 hover:bg-gray-100"
-                            aria-label="Row actions"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100"
+                            aria-label="Entity actions"
                           >
-                            <MoreVertical className="h-5 w-5 text-gray-600" />
+                            <MoreVertical className="h-4 w-4" />
                           </button>
                         </div>
                       </div>
@@ -1010,8 +1109,11 @@ export default function ConnectionsPage() {
         return (
           <div className="fixed inset-0 z-50" data-entity-menu onClick={() => { setOpenEntityMenuId(null); setMenuPos(null); }}>
             <div
-              className="fixed z-[60] w-60 rounded-lg border border-gray-200 bg-white shadow-lg"
-              style={{ top: menuPos?.top ?? 80, left: menuPos?.left ?? (window.innerWidth - 260) }}
+              className="fixed z-50 w-40 rounded-lg border bg-white shadow-lg"
+              style={{
+                top: `${menuPos!.top}px`,
+                left: `${menuPos!.left}px`,
+              }}
               onClick={(e) => e.stopPropagation()}
             >
               <button
@@ -1166,10 +1268,13 @@ export default function ConnectionsPage() {
                             onClick={(e) => {
                               e.stopPropagation();
                               const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
-                              setMenuPos({ top: rect.bottom + 8, left: Math.min(rect.left, window.innerWidth - 240) });
+                              setMenuPos({
+                                top: rect.bottom + window.scrollY + 4,
+                                left: rect.right + window.scrollX - 160,
+                              });
                               setOpenCredentialMenuId(openCredentialMenuId === cred.id ? null : cred.id);
                             }}
-                            className="rounded-lg p-2 hover:bg-gray-100"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100"
                             aria-label="Credential actions"
                           >
                             <MoreVertical className="h-5 w-5 text-gray-600" />
@@ -1203,8 +1308,11 @@ export default function ConnectionsPage() {
             onClick={() => { setOpenCredentialMenuId(null); setMenuPos(null); }}
           >
             <div
-              className="fixed z-[60] w-60 rounded-lg border border-gray-200 bg-white shadow-lg"
-              style={{ top: menuPos?.top ?? 80, left: menuPos?.left ?? (window.innerWidth - 260) }}
+              className="fixed z-50 w-40 rounded-lg border bg-white shadow-lg"
+              style={{
+                top: `${menuPos!.top}px`,
+                left: `${menuPos!.left}px`,
+              }}
               onClick={(e) => e.stopPropagation()}
             >
               <button
@@ -1219,6 +1327,38 @@ export default function ConnectionsPage() {
                 <Edit className="h-4 w-4" />
                 Edit
               </button>
+
+              {/* Only show for n8n credentials that can have indexed workflows */}
+              {openCred.platformType === "n8n" && (openCred.method === "api" || openCred.method === "mcp") ? (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setOpenCredentialMenuId(null);
+                    setMenuPos(null);
+
+                    // Open your existing entities selection UI for this credential
+                    const sourceId = openCred.id;
+                    setCreatedSourceId(sourceId);
+                    setErrMsg(null);
+
+                    // Load inventory using your existing function
+                    await loadN8nInventory(sourceId);
+
+                    // Preselect currently indexed externalIds for this source
+                    const current = indexedEntities
+                      .filter((e) => String(e.sourceId) === String(sourceId))
+                      .map((e) => String(e.externalId));
+                    setSelectedExternalIds(new Set(current));
+
+                    setConnectOpen(true);
+                    setStep("entities");
+                  }}
+                  className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                >
+                  <Settings className="h-4 w-4" />
+                  Manage indexed workflows
+                </button>
+              ) : null}
 
               <button
                 type="button"
@@ -1253,7 +1393,9 @@ export default function ConnectionsPage() {
                         : step === "credentials"
                         ? `Credentials`
                         : step === "entities"
-                        ? "Select entities to index"
+                        ? editingSourceId 
+                          ? "Manage indexed workflows" 
+                          : "Select entities to index"
                         : "Connected"}
                     </div>
                     {step === "credentials" && selectedPlatform === "n8n" && selectedMethod === "mcp" ? (
@@ -1276,7 +1418,9 @@ export default function ConnectionsPage() {
                         ? "Enter the Server URL and Access token from n8n's Instance-level MCP settings."
                         : editingSourceId ? "Re-enter credentials to validate and save." : "Enter credentials to validate and connect."
                       : step === "entities"
-                      ? "Add agents/workflows you want GetFlowetic to index."
+                      ? editingSourceId
+                        ? "Update which workflows GetFlowetic should index. Unselected workflows will be removed from your All tab."
+                        : "Add agents/workflows you want GetFlowetic to index."
                       : "Success."}
                   </div>
                 </div>
@@ -1404,23 +1548,57 @@ export default function ConnectionsPage() {
 {step === "credentials" ? (
   <div className="space-y-4">
     {selectedMethod === "api" ? (
-      <div>
-        <label className="mb-2 block text-sm font-semibold text-gray-900">API Key *</label>
-        <input
-          value={apiKey}
-          onChange={(e) => setApiKey(e.target.value)}
-          type="password"
-          className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-          placeholder="••••••••••••••"
-        />
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <label className="text-sm font-semibold text-gray-900">API Key *</label>
+          {editingSourceId && apiKeySaved ? (
+            <span className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-semibold text-gray-700">
+              Saved
+            </span>
+          ) : null}
+        </div>
+
+        {editingSourceId && !showApiKeyEditor ? (
+          <div className="flex items-center justify-between rounded-lg border bg-white px-3 py-2">
+            <div className="text-sm text-gray-600">••••••••••••••</div>
+            <button
+              type="button"
+              onClick={() => setShowApiKeyEditor(true)}
+              className="text-sm font-semibold text-blue-600 hover:underline"
+            >
+              Change key
+            </button>
+          </div>
+        ) : (
+          <input
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            type="password"
+            placeholder={editingSourceId ? "Enter a new API key to replace" : "••••••••••••••"}
+            className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        )}
+
+        {editingSourceId ? (
+          <div className="text-xs text-gray-500">
+            You can't view existing keys. Enter a new key only if you want to replace it.
+          </div>
+        ) : null}
       </div>
     ) : null}
 
     {(selectedPlatform === "n8n" || selectedPlatform === "activepieces") && selectedMethod !== "mcp" ? (
       <div>
-        <label className="mb-2 block text-sm font-semibold text-gray-900">
-          {selectedPlatform === "n8n" && selectedMethod === "api" ? "Instance URL *" : "Instance URL (optional)"}
-        </label>
+        <div className="flex items-center justify-between">
+          <label className="text-sm font-semibold text-gray-900">
+            {selectedPlatform === "n8n" && selectedMethod === "api" ? "Instance URL *" : "Instance URL (optional)"}
+          </label>
+          {editingSourceId && instanceUrlSaved ? (
+            <span className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-semibold text-gray-700">
+              Saved
+            </span>
+          ) : null}
+        </div>
         <input
           value={instanceUrl}
           onChange={(e) => setInstanceUrl(e.target.value)}
@@ -1896,6 +2074,10 @@ export default function ConnectionsPage() {
                     setSaving(false);
                     setCredentialDeleteId(null);
                     setCredentialDeleteConfirm(false);
+
+                    // Optimistically remove from UI immediately
+                    setCredentials((prev) => prev.filter((c) => c.id !== id));
+
                     await refreshCredentials();
                     await refreshIndexedEntities();
                   }}

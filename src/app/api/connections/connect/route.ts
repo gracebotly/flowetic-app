@@ -146,7 +146,11 @@ export async function POST(req: Request) {
         method: method,
         secret_hash: encryptSecret(JSON.stringify(secretJson)),
       },
-      { onConflict: "tenant_id,type,method" },
+      { 
+        // For n8n, allow multiple connections by only conflicting on name
+        // For other platforms, continue to enforce uniqueness as before
+        onConflict: platformType === "n8n" ? "tenant_id,name" : "tenant_id,type,method" 
+      },
     )
     .select()
     .single();
