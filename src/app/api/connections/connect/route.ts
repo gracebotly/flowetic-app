@@ -86,6 +86,19 @@ export async function POST(req: Request) {
   const connectionName = (body.name as string | undefined) ?? "";
   const method = (body.method as "api" | "webhook" | "mcp" | undefined) ?? "api";
   const region = (body.region as string | undefined) ?? undefined;
+  
+  // Support both apiToken (legacy) and apiKey (new frontend) parameter names
+  const apiToken = body.apiToken || body.apiKey;
+
+  // Debug logging for troubleshooting
+  console.log('[Make Connection Debug]', {
+    platformType,
+    hasToken: !!apiToken,
+    tokenLength: apiToken?.length,
+    method,
+    region,
+    bodyKeys: Object.keys(body)
+  });
 
   if (!platformType) {
     return NextResponse.json({ ok: false, code: "MISSING_PLATFORM_TYPE" }, { status: 400 });
@@ -99,10 +112,9 @@ export async function POST(req: Request) {
   let secretJson: any = { method, platformType };
 
   if (method === "api") {
-    const apiKey = (body.apiKey as string | undefined) ?? "";
     const instanceUrl = (body.instanceUrl as string | undefined) ?? null;
 
-    if (!apiKey) {
+    if (!apiToken) {
       return NextResponse.json({ ok: false, code: "MISSING_API_KEY" }, { status: 400 });
     }
 
@@ -112,7 +124,7 @@ export async function POST(req: Request) {
       
       if (region && ['us1', 'us2', 'eu1', 'eu2'].includes(region)) {
         // User selected region - validate it works
-        const isValid = await validateMakeRegion(apiKey, region);
+        const isValid = await validateMakeRegion(apiToken, region);
         if (!isValid) {
           return NextResponse.json(
             { error: `Invalid API token for ${region.toUpperCase()} region. Please check your token and region.` },
@@ -122,7 +134,7 @@ export async function POST(req: Request) {
         makeRegion = region;
       } else {
         // Fallback to auto-detection (legacy support)
-        const detectedRegion = await detectMakeRegion(apiKey);
+        const detectedRegion = await detectMakeRegion(apiToken);
         if (!detectedRegion) {
           return NextResponse.json(
             { error: "Could not detect Make.com region. Please select your region manually." },
@@ -133,7 +145,7 @@ export async function POST(req: Request) {
       }
       
       // Store token + region in secret_json (encrypted in sources.secret_hash)
-      secretJson = { ...secretJson, apiKey, region: makeRegion };
+      secretJson = { ...secretJson, apiKey: apiToken, region: makeRegion };
 
       // Override name to match required format
       (body as any).__computedName = `Make (${makeRegion.toUpperCase()})`;
@@ -144,7 +156,7 @@ export async function POST(req: Request) {
           ? ((body.n8nAuthMode as "header" | "bearer" | undefined) ?? "bearer")
           : undefined;
 
-      secretJson = { ...secretJson, apiKey, instanceUrl, ...(authMode ? { authMode } : {}) };
+      secretJson = { ...secretJson, apiKey: apiToken, instanceUrl, ...(authMode ? { authMode } : {}) };
     }
   }
 
