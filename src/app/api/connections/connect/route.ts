@@ -381,7 +381,7 @@ export async function POST(req: Request) {
     const region = (secretJson?.region as MakeRegion | undefined) ?? null;
 
     if (!region) {
-      return NextResponse.json({ ok: true, source });
+      return NextResponse.json({ ok: true, sourceId: source.id });
     }
 
     // Get organizations to find the organization ID for scenarios call
@@ -496,7 +496,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       ok: true,
-      source,
+      sourceId: source.id,
       inventoryEntities,
       meta: { region },
     });
@@ -528,9 +528,24 @@ export async function POST(req: Request) {
     }
   }
 
+  let webhookUrl: string | null = null;
+
+  if (platformType === "make" && method === "webhook") {
+    const base =
+      process.env.NEXT_PUBLIC_APP_URL ||
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "");
+
+    if (base) {
+      webhookUrl = `${base.replace(/\/+$/, "")}/api/ingest/${membership.tenant_id}/${source.id}?key=${encodeURIComponent(
+        String(secretJson.webhookSecret),
+      )}`;
+    }
+  }
+
   return NextResponse.json({
     ok: true,
-    source,
+    sourceId: source.id,
     webhookUrl,
   });
 }

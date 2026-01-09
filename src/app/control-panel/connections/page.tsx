@@ -1536,13 +1536,13 @@ export default function ConnectionsPage() {
           API Key
         </div>
         <span className="rounded bg-emerald-600 px-2 py-1 text-xs font-bold text-white">
-          {selectedPlatform === "make" ? "PAID PLAN" : "RECOMMENDED"}
+          {selectedPlatform === "make" ? "PAID" : "RECOMMENDED"}
         </span>
       </div>
       <div className="mt-1 text-sm text-gray-700">
         {selectedPlatform === "make"
-          ? "Connect using the Make API. Requires a paid Make plan (Core or higher)."
-          : "Connect to your platform using an API key to import and index workflows."}
+          ? "Requires a paid Make plan (Core or higher)."
+          : "Connect using an API key to import and index workflows."}
       </div>
       {selectedPlatform === "make" ? (
         <div className="mt-2 text-xs text-gray-600">
@@ -1572,38 +1572,8 @@ export default function ConnectionsPage() {
         </div>
         <div className="mt-1 text-sm text-gray-700">
           {selectedPlatform === "make"
-            ? "Works with Free or Paid Make plans. You will paste a webhook URL into Make."
+            ? "Works on Free or Paid Make plans — paste one webhook URL into Make."
             : "Manual event streaming to GetFlowetic. No catalog import."}
-        </div>
-        <div className="mt-2 text-xs text-gray-600">
-          {selectedPlatform === "make"
-            ? "Best for Make Free plan users. You can upgrade later to use the API method."
-            : "Best for voice platforms if you want real-time events. Automation platforms generally rely on API polling."}
-        </div>
-      </button>
-    ) : null}
-
-    {selectedPlatform ? (
-      <button
-        type="button"
-        onClick={() => {
-          // MCP support in your current PLATFORM_META is not tracked; allow for automation platforms only
-          if (!["n8n", "make", "activepieces"].includes(String(selectedPlatform))) {
-            setErrMsg("MCP is only supported for n8n, Make, and Activepieces.");
-            return;
-          }
-          setSelectedMethod("mcp");
-          setErrMsg(null);
-          setStep("credentials");
-        }}
-        className="w-full rounded-xl border-2 border-gray-200 p-4 text-left hover:border-blue-500 hover:bg-slate-50"
-      >
-        <div className="flex items-center gap-2 text-base font-semibold text-gray-900">
-          <Bot className="h-5 w-5 text-slate-700" />
-          MCP instances
-        </div>
-        <div className="mt-1 text-sm text-gray-700">
-          Connect to n8n's built-in MCP server to discover and run workflows enabled for MCP.
         </div>
       </button>
     ) : null}
@@ -1624,10 +1594,10 @@ export default function ConnectionsPage() {
           <label className="text-sm font-semibold text-gray-900">Webhook URL</label>
           <div className="flex gap-2">
             <input
-              value={makeWebhookUrl || ""}
+              value={makeWebhookUrl}
               readOnly
               className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900"
-              placeholder="Click Connect to generate your webhook URL"
+              placeholder="Click "Generate Webhook URL""
             />
             <button
               type="button"
@@ -1641,18 +1611,15 @@ export default function ConnectionsPage() {
               Copy
             </button>
           </div>
-          <div className="text-xs text-gray-600">
-            Tip: If you regenerate this connection later, your webhook URL may change.
-          </div>
         </div>
 
         <div className="rounded-lg border border-gray-200 bg-white p-3 text-sm text-gray-800">
-          <div className="font-semibold">Make setup steps</div>
+          <div className="font-semibold">Make setup</div>
           <ol className="mt-2 list-decimal space-y-1 pl-5">
-            <li>In Make, create a new scenario.</li>
-            <li>Add a module: <span className="font-semibold">Webhooks → Custom webhook</span>.</li>
-            <li>Create the webhook, then paste the URL above.</li>
-            <li>Run the scenario once to send a test request.</li>
+            <li>Create a new scenario in Make.</li>
+            <li>Add: Webhooks → Custom webhook.</li>
+            <li>Paste the URL above.</li>
+            <li>Run once to send a test event.</li>
           </ol>
         </div>
 
@@ -1668,13 +1635,12 @@ export default function ConnectionsPage() {
           <button
             type="button"
             onClick={async () => {
-              // Generate connection (and webhook URL) if not generated yet
-              if (makeWebhookUrl) return;
+              setErrMsg(null);
               await createConnection();
             }}
             className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
           >
-            {makeWebhookUrl ? "Webhook Ready" : "Connect & Generate URL"}
+            {makeWebhookUrl ? "Regenerate URL" : "Generate Webhook URL"}
           </button>
         </div>
       </div>
@@ -1880,12 +1846,8 @@ export default function ConnectionsPage() {
           type="button"
           onClick={() => {
             setErrMsg(null);
-            // Make skips "method", so Back should return to platform picker
-            if (selectedPlatform === "make") {
-              setStep("platform");
-              return;
-            }
             setStep("method");
+            return;
           }}
           className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-200"
           disabled={saving}
