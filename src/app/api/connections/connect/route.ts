@@ -528,21 +528,6 @@ export async function POST(req: Request) {
     }
   }
 
-  let webhookUrl: string | null = null;
-
-  if (platformType === "make" && method === "webhook") {
-    const base =
-      process.env.NEXT_PUBLIC_APP_URL ||
-      process.env.NEXT_PUBLIC_SITE_URL ||
-      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "");
-
-    if (base) {
-      webhookUrl = `${base.replace(/\/+$/, "")}/api/ingest/${membership.tenant_id}/${source.id}?key=${encodeURIComponent(
-        String(secretJson.webhookSecret),
-      )}`;
-    }
-  }
-
   return NextResponse.json({
     ok: true,
     sourceId: source.id,
