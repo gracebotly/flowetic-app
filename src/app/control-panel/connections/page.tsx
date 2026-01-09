@@ -291,6 +291,7 @@ export default function ConnectionsPage() {
   // Connect form state
   const [selectedPlatform, setSelectedPlatform] = useState<keyof typeof PLATFORM_META | null>(null);
   const [selectedMethod, setSelectedMethod] = useState<"api" | "webhook" | "mcp">("api");
+  const [selectedRegion, setSelectedRegion] = useState<'us1' | 'us2' | 'eu1' | 'eu2'>('us2');
   const [n8nAuthMode, setN8nAuthMode] = useState<"header" | "bearer">("bearer");
   const [apiKey, setApiKey] = useState("");
   const [instanceUrl, setInstanceUrl] = useState("");
@@ -658,6 +659,7 @@ export default function ConnectionsPage() {
     setStep("platform");
     setSelectedPlatform(null);
     setSelectedMethod("api");
+    setSelectedRegion('us2');
     setN8nAuthMode("bearer");
     setApiKey("");
     setInstanceUrl("");
@@ -723,6 +725,11 @@ export default function ConnectionsPage() {
       }
 
       if (instanceUrl) payload.instanceUrl = instanceUrl;
+
+      // Add region for Make.com
+      if (selectedPlatform === "make") {
+        payload.region = selectedRegion;
+      }
 
       // n8n on your instance requires X-N8N-API-KEY header (no UI dropdown)
       if (selectedPlatform === "n8n") {
@@ -1481,6 +1488,7 @@ export default function ConnectionsPage() {
                           type="button"
                           onClick={() => {
                             setSelectedPlatform(k);
+                            setSelectedRegion('us2'); // Reset to default region when platform changes
                             setErrMsg(null);
 
                             // Make.com: token-only flow (skip method selection entirely)
@@ -1642,6 +1650,36 @@ export default function ConnectionsPage() {
             </div>
           ) : null}
         </div>
+
+        {/* NEW: Region Selector - Only show for Make.com */}
+        {selectedPlatform === "make" && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Select Your Region
+            </label>
+            <div className="grid grid-cols-4 gap-2">
+              {(['us1', 'us2', 'eu1', 'eu2'] as const).map((region) => (
+                <button
+                  key={region}
+                  type="button"
+                  onClick={() => setSelectedRegion(region)}
+                  className={`
+                    px-4 py-2 rounded-lg font-medium text-sm transition-all
+                    ${selectedRegion === region
+                      ? 'bg-blue-600 text-white shadow-md'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }
+                  `}
+                >
+                  {region.toUpperCase()}
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-xs text-gray-500">
+              Find your region in your Make.com URL (e.g., us2.make.com means US2)
+            </p>
+          </div>
+        )}
       </div>
     ) : null}
 

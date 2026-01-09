@@ -29,6 +29,120 @@ async function detectMakeRegion(apiToken: string): Promise<MakeRegion | null> {
   return null;
 }
 
+async function validateMakeRegion(apiToken: string, region: string): Promise<boolean> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    
+    console.log(`[Make] Testing region ${region} with API token`);
+    
+    // Make.com requires organizationId or teamId parameter
+    // First, get organizations to find the organization ID
+    const orgRes = await fetch(`https://${region}.make.com/api/v2/organizations`, {
+      method: "GET",
+      headers: {
+        Authorization: `Token ${apiToken}`,
+        "Content-Type": "application/json",
+      },
+      signal: controller.signal,
+    });
+
+    if (!orgRes.ok) {
+      const responseText = await orgRes.text().catch(() => '');
+      console.error('[Make API Error - Organizations]', {
+        status: orgRes.status,
+        statusText: orgRes.statusText,
+        headers: Object.fromEntries(orgRes.headers.entries()),
+        body: responseText,
+        region,
+        url: `https://${region}.make.com/api/v2/organizations`,
+        authHeader: `Token ${apiToken.substring(0, 8)}...`
+      });
+    }
+
+    const orgs = await orgRes.json().catch(() => ({}));
+    console.log('[Make] Organizations response:', orgs);
+
+    // Try each organization until we find one that works
+    const organizations = orgs.organizations || [];
+
+    if (organizations.length === 0) {
+      console.error('[Make] No organization found:', {
+        organizations: orgs,
+        region
+      });
+      return false;
+    }
+
+    console.log(`[Make] Found ${organizations.length} organizations, trying each...`);
+
+    let res: Response | null = null;
+    let workingOrgId: number | string | null = null;
+
+    for (const org of organizations) {
+      console.log(`[Make] Testing organization: ${org.id} (${org.name})`);
+      
+      const tryRes = await fetch(`https://${region}.make.com/api/v2/scenarios?organizationId=${org.id}`, {
+        method: "GET",
+        headers: {
+          Authorization: `Token ${apiToken}`,
+          "Content-Type": "application/json",
+        },
+        signal: controller.signal,
+      });
+
+      if (tryRes.ok) {
+        console.log(`[Make] ✓ Organization ${org.id} (${org.name}) works!`);
+        res = tryRes;
+        workingOrgId = org.id;
+        break;
+      } else if (tryRes.status === 403) {
+        console.log(`[Make] ✗ Organization ${org.id} (${org.name}) forbids token auth, trying next...`);
+        continue;
+      } else {
+        // Other error - might want to try next org
+        const errText = await tryRes.text().catch(() => '');
+        console.log(`[Make] ✗ Organization ${org.id} (${org.name}) error ${tryRes.status}: ${errText}`);
+        continue;
+      }
+    }
+
+    clearTimeout(timeout);
+
+    if (!res || !workingOrgId) {
+      console.error(`[Make] None of ${organizations.length} organizations worked`);
+      return false;
+    }
+
+    const finalRes = res; // for TypeScript
+    
+    if (!finalRes.ok) {
+      const responseText = await finalRes.text().catch(() => '');
+      console.error('[Make API Error]', {
+        status: finalRes.status,
+        statusText: finalRes.statusText,
+        headers: Object.fromEntries(finalRes.headers.entries()),
+        body: responseText,
+        region,
+        organizationId: workingOrgId,
+        url: `https://${region}.make.com/api/v2/scenarios?organizationId=${workingOrgId}`,
+        authHeader: `Token ${apiToken.substring(0, 8)}...`
+      });
+    }
+    
+    return finalRes.ok;
+  } catch (error) {
+    const err = error instanceof Error ? error : new Error(String(error));
+    console.error(`[Make Region Validation] Failed for ${region}:`, {
+      error: err.message,
+      name: err.name,
+      stack: err.stack,
+      region
+    });
+    return false;
+  }
+}
+
 type MakeScenarioListResponse = {
   scenarios?: Array<{
     id: number | string;
@@ -63,6 +177,21 @@ export async function POST(req: Request) {
   const platformType = body.platformType as PlatformType | undefined;
   const connectionName = (body.name as string | undefined) ?? "";
   const method = (body.method as "api" | "webhook" | "mcp" | undefined) ?? "api";
+  const region = (body.region as string | undefined) ?? undefined;
+  
+  // Support both apiToken (legacy) and apiKey (new frontend) parameter names
+  const apiToken = body.apiToken || body.apiKey;
+
+  // Debug logging for troubleshooting
+  console.log('[Make Connection Debug]', {
+    platformType,
+    hasToken: !!apiToken,
+    tokenLength: apiToken?.length,
+    method,
+    region,
+    bodyKeys: Object.keys(body),
+    fullBody: body
+  });
 
   if (!platformType) {
     return NextResponse.json({ ok: false, code: "MISSING_PLATFORM_TYPE" }, { status: 400 });
@@ -76,27 +205,57 @@ export async function POST(req: Request) {
   let secretJson: any = { method, platformType };
 
   if (method === "api") {
-    const apiKey = (body.apiKey as string | undefined) ?? "";
     const instanceUrl = (body.instanceUrl as string | undefined) ?? null;
 
-    if (!apiKey) {
+    if (!apiToken) {
       return NextResponse.json({ ok: false, code: "MISSING_API_KEY" }, { status: 400 });
     }
 
     if (platformType === "make") {
-      const region = await detectMakeRegion(apiKey);
-      if (!region) {
-        return NextResponse.json(
-          { ok: false, code: "MAKE_INVALID_TOKEN", message: "Invalid API token. Please check and try again." },
-          { status: 400 },
-        );
+      // Use user-provided region if available, otherwise auto-detect
+      let makeRegion: string;
+      
+      console.log('[Make Region Logic]', {
+        providedRegion: region,
+        isValidRegion: region && ['us1', 'us2', 'eu1', 'eu2'].includes(region),
+        regionType: typeof region
+      });
+      
+      if (region && ['us1', 'us2', 'eu1', 'eu2'].includes(region)) {
+        // User selected region - validate it works
+        console.log(`[Make] Validating user-provided region: ${region}`);
+        const isValid = await validateMakeRegion(apiToken, region);
+        if (!isValid) {
+          // Get the last error from logs to provide more specific error message
+          return NextResponse.json(
+            { 
+              ok: false, 
+              code: "MAKE_INVALID_TOKEN", 
+              message: `Failed to connect to ${region.toUpperCase()} region. Check your API token has scenarios:read permission and correct region selected.` 
+            },
+            { status: 400 }
+          );
+        }
+        makeRegion = region;
+      } else {
+        // Fallback to auto-detection (legacy support)
+        console.log(`[Make] No valid region provided, falling back to auto-detection`);
+        const detectedRegion = await detectMakeRegion(apiToken);
+        if (!detectedRegion) {
+          return NextResponse.json(
+            { ok: false, code: "MAKE_REGION_DETECTION_FAILED", message: "Could not detect Make.com region. Please select your region manually." },
+            { status: 400 }
+          );
+        }
+        console.log(`[Make] Auto-detected region: ${detectedRegion}`);
+        makeRegion = detectedRegion;
       }
-
+      
       // Store token + region in secret_json (encrypted in sources.secret_hash)
-      secretJson = { ...secretJson, apiKey, region };
+      secretJson = { ...secretJson, apiKey: apiToken, region: makeRegion };
 
       // Override name to match required format
-      (body as any).__computedName = `Make (${region.toUpperCase()})`;
+      (body as any).__computedName = `Make (${makeRegion.toUpperCase()})`;
     } else {
       // Existing behavior for other API platforms (n8n, activepieces, etc.)
       const authMode =
@@ -104,7 +263,7 @@ export async function POST(req: Request) {
           ? ((body.n8nAuthMode as "header" | "bearer" | undefined) ?? "bearer")
           : undefined;
 
-      secretJson = { ...secretJson, apiKey, instanceUrl, ...(authMode ? { authMode } : {}) };
+      secretJson = { ...secretJson, apiKey: apiToken, instanceUrl, ...(authMode ? { authMode } : {}) };
     }
   }
 
@@ -210,7 +369,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, source });
     }
 
-    const scenariosRes = await fetch(`https://${region}.make.com/api/v2/scenarios`, {
+    // Get organizations to find the organization ID for scenarios call
+    console.log(`[Make] Getting organizations for inventory from region ${region}`);
+    const orgRes = await fetch(`https://${region}.make.com/api/v2/organizations`, {
       method: "GET",
       headers: {
         Authorization: `Token ${secretJson.apiKey}`,
@@ -218,13 +379,92 @@ export async function POST(req: Request) {
       },
     });
 
-    if (!scenariosRes.ok) {
-      const t = await scenariosRes.text().catch(() => "");
+    if (!orgRes.ok) {
+      const t = await orgRes.text().catch(() => "");
+      console.error('[Make API Error - Organizations for Inventory]', {
+        status: orgRes.status,
+        body: t,
+        region
+      });
+      return NextResponse.json(
+        {
+          ok: false,
+          code: "MAKE_ORGANIZATIONS_FAILED",
+          message: `Failed to fetch organizations (${orgRes.status}). ${t}`.trim(),
+        },
+        { status: 400 },
+      );
+    }
+
+    const orgs = await orgRes.json().catch(() => ({}));
+    console.log('[Make] Organizations response for inventory:', orgs);
+
+    // Try each organization until we find one that works
+    const organizations = orgs.organizations || [];
+
+    if (organizations.length === 0) {
+      return NextResponse.json(
+        {
+          ok: false,
+          code: "MAKE_NO_ORGANIZATION",
+          message: `No organizations found for this token. Please make sure your token has access to an organization.`,
+        },
+        { status: 400 },
+      );
+    }
+
+    console.log(`[Make] Found ${organizations.length} organizations for inventory, trying each...`);
+
+    let scenariosRes: Response | null = null;
+    let workingOrgId: number | string | null = null;
+
+    for (const org of organizations) {
+      console.log(`[Make] Testing organization for inventory: ${org.id} (${org.name})`);
+      
+      const tryRes = await fetch(`https://${region}.make.com/api/v2/scenarios?organizationId=${org.id}`, {
+        method: "GET",
+        headers: {
+          Authorization: `Token ${secretJson.apiKey}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (tryRes.ok) {
+        console.log(`[Make] ✓ Organization ${org.id} (${org.name}) works for inventory!`);
+        scenariosRes = tryRes;
+        workingOrgId = org.id;
+        break;
+      } else if (tryRes.status === 403) {
+        console.log(`[Make] ✗ Organization ${org.id} (${org.name}) forbids token auth for inventory, trying next...`);
+        continue;
+      } else {
+        // Other error - might want to try next org
+        const errText = await tryRes.text().catch(() => '');
+        console.log(`[Make] ✗ Organization ${org.id} (${org.name}) error ${tryRes.status} for inventory: ${errText}`);
+        continue;
+      }
+    }
+
+    if (!scenariosRes || !workingOrgId) {
+      return NextResponse.json(
+        {
+          ok: false,
+          code: "MAKE_NO_VALID_ORGANIZATION",
+          message: `None of your ${organizations.length} organizations allow token authentication. Please check your token permissions or try OAuth authentication instead.`,
+        },
+        { status: 400 },
+      );
+    }
+
+    const finalScenariosRes = scenariosRes; // for TypeScript
+
+    if (!finalScenariosRes.ok) {
+      const t = await finalScenariosRes.text().catch(() => "");
       return NextResponse.json(
         {
           ok: false,
           code: "MAKE_SCENARIOS_FAILED",
-          message: `Failed to fetch scenarios (${scenariosRes.status}). ${t}`.trim(),
+          message: `Failed to fetch scenarios (${finalScenariosRes.status}). ${t}`.trim(),
         },
         { status: 400 },
       );
