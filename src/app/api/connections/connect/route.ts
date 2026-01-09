@@ -34,6 +34,8 @@ async function validateMakeRegion(apiToken: string, region: string): Promise<boo
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
     
+    console.log(`[Make] Testing region ${region} with API token`);
+    
     const res = await fetch(`https://${region}.make.com/api/v2/scenarios`, {
       method: "GET",
       headers: {
@@ -44,9 +46,28 @@ async function validateMakeRegion(apiToken: string, region: string): Promise<boo
     });
     
     clearTimeout(timeout);
+    
+    if (!res.ok) {
+      const responseText = await res.text().catch(() => '');
+      console.error('[Make API Error]', {
+        status: res.status,
+        statusText: res.statusText,
+        headers: Object.fromEntries(res.headers.entries()),
+        body: responseText,
+        region,
+        url: `https://${region}.make.com/api/v2/scenarios`,
+        authHeader: `Token ${apiToken.substring(0, 8)}...`
+      });
+    }
+    
     return res.ok;
   } catch (error) {
-    console.error(`[Make Region Validation] Failed for ${region}:`, error);
+    console.error(`[Make Region Validation] Failed for ${region}:`, {
+      error: error.message,
+      name: error.name,
+      stack: error.stack,
+      region
+    });
     return false;
   }
 }
@@ -134,8 +155,13 @@ export async function POST(req: Request) {
         console.log(`[Make] Validating user-provided region: ${region}`);
         const isValid = await validateMakeRegion(apiToken, region);
         if (!isValid) {
+          // Get the last error from logs to provide more specific error message
           return NextResponse.json(
-            { ok: false, code: "MAKE_INVALID_TOKEN", message: `Invalid API token for ${region.toUpperCase()} region. Please check your token and region.` },
+            { 
+              ok: false, 
+              code: "MAKE_INVALID_TOKEN", 
+              message: `Failed to connect to ${region.toUpperCase()} region. Check your API token has scenarios:read permission and correct region selected.` 
+            },
             { status: 400 }
           );
         }
