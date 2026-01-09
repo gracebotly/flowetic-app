@@ -1597,7 +1597,7 @@ export default function ConnectionsPage() {
               value={makeWebhookUrl}
               readOnly
               className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900"
-              placeholder="Click "Generate Webhook URL""
+              placeholder="Click Generate Webhook URL button"
             />
             <button
               type="button"
