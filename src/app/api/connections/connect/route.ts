@@ -62,10 +62,11 @@ async function validateMakeRegion(apiToken: string, region: string): Promise<boo
     
     return res.ok;
   } catch (error) {
+    const err = error instanceof Error ? error : new Error(String(error));
     console.error(`[Make Region Validation] Failed for ${region}:`, {
-      error: error.message,
-      name: error.name,
-      stack: error.stack,
+      error: err.message,
+      name: err.name,
+      stack: err.stack,
       region
     });
     return false;
