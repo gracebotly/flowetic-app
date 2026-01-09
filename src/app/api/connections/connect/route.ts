@@ -6,6 +6,12 @@ import { validateMcpServer } from "@/lib/mcp/validateMcpServer";
 
 export const runtime = "nodejs";
 
+function generateWebhookSecret(): string {
+  // Node runtime is enabled for this route
+  const crypto = require("crypto") as typeof import("crypto");
+  return crypto.randomBytes(24).toString("hex");
+}
+
 type PlatformType = "n8n" | "make" | "activepieces" | "vapi" | "retell";
 
 const MAKE_REGIONS = ["us1", "eu1", "us2", "eu2"] as const;
@@ -268,10 +274,19 @@ export async function POST(req: Request) {
   }
 
   if (method === "webhook") {
-    // webhook-only means user will configure sending events to GetFlowetic later
-    // Still store instanceUrl if provided for self-hosted platforms (n8n/activepieces)
-    const instanceUrl = (body.instanceUrl as string | undefined) ?? null;
-    secretJson = { ...secretJson, instanceUrl };
+    // For webhook-only connections, we do not validate external APIs.
+    // We generate a secret that is embedded into the webhook URL so users only paste one thing.
+    const webhookSecret = generateWebhookSecret();
+
+    secretJson = {
+      ...secretJson,
+      webhookSecret,
+    };
+
+    // Give Make a friendly connection name if not provided
+    if (platformType === "make") {
+      (body as any).__computedName = connectionName || "Make (Webhook)";
+    }
   }
 
   if (method === "mcp") {
@@ -487,5 +502,35 @@ export async function POST(req: Request) {
     });
   }
 
-  return NextResponse.json({ ok: true, source });
+  // After you have created/updated the source and have sourceId available:
+  let webhookUrl: string | null = null;
+
+  if (platformType === "make" && method === "webhook") {
+    const baseUrl =
+      process.env.NEXT_PUBLIC_APP_URL ||
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      process.env.VERCEL_URL ||
+      "";
+
+    // Normalize base URL
+    const normalizedBase =
+      baseUrl.startsWith("http://") || baseUrl.startsWith("https://")
+        ? baseUrl
+        : baseUrl
+        ? `https://${baseUrl}`
+        : "";
+
+    if (normalizedBase) {
+      // tenantId is membership.tenant_id
+      webhookUrl = `${normalizedBase}/api/ingest/${membership.tenant_id}/${source.id}?key=${encodeURIComponent(
+        secretJson.webhookSecret,
+      )}`;
+    }
+  }
+
+  return NextResponse.json({
+    ok: true,
+    source,
+    webhookUrl,
+  });
 }

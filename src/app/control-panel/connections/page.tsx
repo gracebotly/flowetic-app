@@ -299,6 +299,7 @@ export default function ConnectionsPage() {
   const [mcpAccessToken, setMcpAccessToken] = useState("");
   const [authHeader, setAuthHeader] = useState("");
   const [connectionName, setConnectionName] = useState("");
+  const [makeWebhookUrl, setMakeWebhookUrl] = useState<string>("");
   
   // Edit modal state for "Saved" indicators
   const [editingMeta, setEditingMeta] = useState<{
@@ -667,6 +668,7 @@ export default function ConnectionsPage() {
     setMcpAccessToken("");
     setAuthHeader("");
     setConnectionName("");
+    setMakeWebhookUrl("");
     setCreatedSourceId(null);
     setConnectEntities([]);
     setEntityExternalId("");
@@ -690,11 +692,6 @@ export default function ConnectionsPage() {
 
     setSaving(true);
     setErrMsg(null);
-
-    // Make.com is token-only (force API method; no webhook/mcp variants)
-    if (selectedPlatform === "make" && selectedMethod !== "api") {
-      setSelectedMethod("api");
-    }
 
     const payload: any = {
       platformType: selectedPlatform,
@@ -784,6 +781,11 @@ export default function ConnectionsPage() {
       setSaving(false);
       setErrMsg(json?.message || "Connection failed. Please check your credentials.");
       return;
+    }
+
+    // Set webhook URL for Make webhook connections
+    if (selectedPlatform === "make" && selectedMethod === "webhook" && json?.webhookUrl) {
+      setMakeWebhookUrl(String(json.webhookUrl));
     }
 
     if (editingSourceId) {
@@ -1533,11 +1535,20 @@ export default function ConnectionsPage() {
           <KeyRound className="h-5 w-5 text-emerald-700" />
           API Key
         </div>
-        <span className="rounded bg-emerald-600 px-2 py-1 text-xs font-bold text-white">RECOMMENDED</span>
+        <span className="rounded bg-emerald-600 px-2 py-1 text-xs font-bold text-white">
+          {selectedPlatform === "make" ? "PAID PLAN" : "RECOMMENDED"}
+        </span>
       </div>
       <div className="mt-1 text-sm text-gray-700">
-        Connect to your n8n instance using an API key to import and index workflows.
+        {selectedPlatform === "make"
+          ? "Connect using the Make API. Requires a paid Make plan (Core or higher)."
+          : "Connect to your platform using an API key to import and index workflows."}
       </div>
+      {selectedPlatform === "make" ? (
+        <div className="mt-2 text-xs text-gray-600">
+          If you're on the Free plan, choose <span className="font-semibold">Webhook Only</span>.
+        </div>
+      ) : null}
     </button>
 
     {selectedPlatform !== "n8n" ? (
@@ -1550,13 +1561,24 @@ export default function ConnectionsPage() {
         }}
         className="w-full rounded-xl border-2 border-gray-200 p-4 text-left hover:border-blue-500 hover:bg-slate-50"
       >
-        <div className="flex items-center gap-2 text-base font-semibold text-gray-900">
-          <WebhookIcon className="h-5 w-5 text-slate-700" />
-          Webhook Only
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-base font-semibold text-gray-900">
+            <WebhookIcon className="h-5 w-5 text-slate-700" />
+            Webhook Only
+          </div>
+          <span className="rounded bg-slate-700 px-2 py-1 text-xs font-bold text-white">
+            {selectedPlatform === "make" ? "FREE OK" : "NO API"}
+          </span>
         </div>
-        <div className="mt-1 text-sm text-gray-700">Manual event streaming to GetFlowetic. No catalog import.</div>
+        <div className="mt-1 text-sm text-gray-700">
+          {selectedPlatform === "make"
+            ? "Works with Free or Paid Make plans. You will paste a webhook URL into Make."
+            : "Manual event streaming to GetFlowetic. No catalog import."}
+        </div>
         <div className="mt-2 text-xs text-gray-600">
-          Best for voice platforms if you want real-time events. Automation platforms generally rely on API polling.
+          {selectedPlatform === "make"
+            ? "Best for Make Free plan users. You can upgrade later to use the API method."
+            : "Best for voice platforms if you want real-time events. Automation platforms generally rely on API polling."}
         </div>
       </button>
     ) : null}
@@ -1589,6 +1611,74 @@ export default function ConnectionsPage() {
 ) : null}
 {step === "credentials" ? (
   <div className="space-y-4">
+    {selectedPlatform === "make" && selectedMethod === "webhook" ? (
+      <div className="space-y-4">
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
+          <div className="font-semibold">✅ Make Webhook (Free Plan Friendly)</div>
+          <div className="mt-1">
+            Paste this URL into Make using a <span className="font-semibold">Custom Webhook</span> module.
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-sm font-semibold text-gray-900">Webhook URL</label>
+          <div className="flex gap-2">
+            <input
+              value={makeWebhookUrl || ""}
+              readOnly
+              className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900"
+              placeholder="Click Connect to generate your webhook URL"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                if (!makeWebhookUrl) return;
+                navigator.clipboard.writeText(makeWebhookUrl);
+              }}
+              className="rounded-lg bg-gray-900 px-3 py-2 text-sm font-semibold text-white hover:bg-black disabled:opacity-50"
+              disabled={!makeWebhookUrl}
+            >
+              Copy
+            </button>
+          </div>
+          <div className="text-xs text-gray-600">
+            Tip: If you regenerate this connection later, your webhook URL may change.
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-gray-200 bg-white p-3 text-sm text-gray-800">
+          <div className="font-semibold">Make setup steps</div>
+          <ol className="mt-2 list-decimal space-y-1 pl-5">
+            <li>In Make, create a new scenario.</li>
+            <li>Add a module: <span className="font-semibold">Webhooks → Custom webhook</span>.</li>
+            <li>Create the webhook, then paste the URL above.</li>
+            <li>Run the scenario once to send a test request.</li>
+          </ol>
+        </div>
+
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => closeConnect()}
+            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50"
+          >
+            Done
+          </button>
+
+          <button
+            type="button"
+            onClick={async () => {
+              // Generate connection (and webhook URL) if not generated yet
+              if (makeWebhookUrl) return;
+              await createConnection();
+            }}
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+          >
+            {makeWebhookUrl ? "Webhook Ready" : "Connect & Generate URL"}
+          </button>
+        </div>
+      </div>
+    ) : null}
     {selectedMethod === "api" ? (
       <div className="space-y-4">
         {selectedPlatform === "make" ? (
