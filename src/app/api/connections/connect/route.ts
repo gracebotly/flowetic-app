@@ -36,7 +36,48 @@ async function validateMakeRegion(apiToken: string, region: string): Promise<boo
     
     console.log(`[Make] Testing region ${region} with API token`);
     
-    const res = await fetch(`https://${region}.make.com/api/v2/scenarios`, {
+    // Make.com requires organizationId or teamId parameter
+    // First, get organizations to find the organization ID
+    const orgRes = await fetch(`https://${region}.make.com/api/v2/organizations`, {
+      method: "GET",
+      headers: {
+        Authorization: `Token ${apiToken}`,
+        "Content-Type": "application/json",
+      },
+      signal: controller.signal,
+    });
+
+    if (!orgRes.ok) {
+      const responseText = await orgRes.text().catch(() => '');
+      console.error('[Make API Error - Organizations]', {
+        status: orgRes.status,
+        statusText: orgRes.statusText,
+        headers: Object.fromEntries(orgRes.headers.entries()),
+        body: responseText,
+        region,
+        url: `https://${region}.make.com/api/v2/organizations`,
+        authHeader: `Token ${apiToken.substring(0, 8)}...`
+      });
+    }
+
+    const orgs = await orgRes.json().catch(() => ({}));
+    console.log('[Make] Organizations response:', orgs);
+
+    // Get the first organization ID
+    const organizationId = orgs.organizations?.[0]?.id || orgs[0]?.id;
+
+    if (!organizationId) {
+      console.error('[Make] No organization found:', {
+        organizations: orgs,
+        region
+      });
+      return false;
+    }
+
+    console.log('[Make] Using organizationId:', organizationId);
+
+    // Now test scenarios endpoint with organizationId
+    const res = await fetch(`https://${region}.make.com/api/v2/scenarios?organizationId=${organizationId}`, {
       method: "GET",
       headers: {
         Authorization: `Token ${apiToken}`,
@@ -55,7 +96,8 @@ async function validateMakeRegion(apiToken: string, region: string): Promise<boo
         headers: Object.fromEntries(res.headers.entries()),
         body: responseText,
         region,
-        url: `https://${region}.make.com/api/v2/scenarios`,
+        organizationId,
+        url: `https://${region}.make.com/api/v2/scenarios?organizationId=${organizationId}`,
         authHeader: `Token ${apiToken.substring(0, 8)}...`
       });
     }
@@ -299,7 +341,53 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, source });
     }
 
-    const scenariosRes = await fetch(`https://${region}.make.com/api/v2/scenarios`, {
+    // Get organizations to find the organization ID for scenarios call
+    console.log(`[Make] Getting organizations for inventory from region ${region}`);
+    const orgRes = await fetch(`https://${region}.make.com/api/v2/organizations`, {
+      method: "GET",
+      headers: {
+        Authorization: `Token ${secretJson.apiKey}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!orgRes.ok) {
+      const t = await orgRes.text().catch(() => "");
+      console.error('[Make API Error - Organizations for Inventory]', {
+        status: orgRes.status,
+        body: t,
+        region
+      });
+      return NextResponse.json(
+        {
+          ok: false,
+          code: "MAKE_ORGANIZATIONS_FAILED",
+          message: `Failed to fetch organizations (${orgRes.status}). ${t}`.trim(),
+        },
+        { status: 400 },
+      );
+    }
+
+    const orgs = await orgRes.json().catch(() => ({}));
+    console.log('[Make] Organizations response for inventory:', orgs);
+
+    // Get the first organization ID
+    const organizationId = orgs.organizations?.[0]?.id || orgs[0]?.id;
+
+    if (!organizationId) {
+      return NextResponse.json(
+        {
+          ok: false,
+          code: "MAKE_NO_ORGANIZATION",
+          message: `No organizations found for this token. Please make sure your token has access to an organization.`,
+        },
+        { status: 400 },
+      );
+    }
+
+    console.log('[Make] Using organizationId for inventory:', organizationId);
+
+    const scenariosRes = await fetch(`https://${region}.make.com/api/v2/scenarios?organizationId=${organizationId}`, {
       method: "GET",
       headers: {
         Authorization: `Token ${secretJson.apiKey}`,
