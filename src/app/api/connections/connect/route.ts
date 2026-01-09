@@ -97,7 +97,8 @@ export async function POST(req: Request) {
     tokenLength: apiToken?.length,
     method,
     region,
-    bodyKeys: Object.keys(body)
+    bodyKeys: Object.keys(body),
+    fullBody: body
   });
 
   if (!platformType) {
@@ -122,25 +123,34 @@ export async function POST(req: Request) {
       // Use user-provided region if available, otherwise auto-detect
       let makeRegion: string;
       
+      console.log('[Make Region Logic]', {
+        providedRegion: region,
+        isValidRegion: region && ['us1', 'us2', 'eu1', 'eu2'].includes(region),
+        regionType: typeof region
+      });
+      
       if (region && ['us1', 'us2', 'eu1', 'eu2'].includes(region)) {
         // User selected region - validate it works
+        console.log(`[Make] Validating user-provided region: ${region}`);
         const isValid = await validateMakeRegion(apiToken, region);
         if (!isValid) {
           return NextResponse.json(
-            { error: `Invalid API token for ${region.toUpperCase()} region. Please check your token and region.` },
+            { ok: false, code: "MAKE_INVALID_TOKEN", message: `Invalid API token for ${region.toUpperCase()} region. Please check your token and region.` },
             { status: 400 }
           );
         }
         makeRegion = region;
       } else {
         // Fallback to auto-detection (legacy support)
+        console.log(`[Make] No valid region provided, falling back to auto-detection`);
         const detectedRegion = await detectMakeRegion(apiToken);
         if (!detectedRegion) {
           return NextResponse.json(
-            { error: "Could not detect Make.com region. Please select your region manually." },
+            { ok: false, code: "MAKE_REGION_DETECTION_FAILED", message: "Could not detect Make.com region. Please select your region manually." },
             { status: 400 }
           );
         }
+        console.log(`[Make] Auto-detected region: ${detectedRegion}`);
         makeRegion = detectedRegion;
       }
       
