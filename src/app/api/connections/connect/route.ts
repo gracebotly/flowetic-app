@@ -63,10 +63,10 @@ async function validateMakeRegion(apiToken: string, region: string): Promise<boo
     const orgs = await orgRes.json().catch(() => ({}));
     console.log('[Make] Organizations response:', orgs);
 
-    // Get the first organization ID
-    const organizationId = orgs.organizations?.[0]?.id || orgs[0]?.id;
+    // Try each organization until we find one that works
+    const organizations = orgs.organizations || [];
 
-    if (!organizationId) {
+    if (organizations.length === 0) {
       console.error('[Make] No organization found:', {
         organizations: orgs,
         region
@@ -74,35 +74,63 @@ async function validateMakeRegion(apiToken: string, region: string): Promise<boo
       return false;
     }
 
-    console.log('[Make] Using organizationId:', organizationId);
+    console.log(`[Make] Found ${organizations.length} organizations, trying each...`);
 
-    // Now test scenarios endpoint with organizationId
-    const res = await fetch(`https://${region}.make.com/api/v2/scenarios?organizationId=${organizationId}`, {
-      method: "GET",
-      headers: {
-        Authorization: `Token ${apiToken}`,
-        "Content-Type": "application/json",
-      },
-      signal: controller.signal,
-    });
-    
+    let res: Response | null = null;
+    let workingOrgId: number | string | null = null;
+
+    for (const org of organizations) {
+      console.log(`[Make] Testing organization: ${org.id} (${org.name})`);
+      
+      const tryRes = await fetch(`https://${region}.make.com/api/v2/scenarios?organizationId=${org.id}`, {
+        method: "GET",
+        headers: {
+          Authorization: `Token ${apiToken}`,
+          "Content-Type": "application/json",
+        },
+        signal: controller.signal,
+      });
+
+      if (tryRes.ok) {
+        console.log(`[Make] ✓ Organization ${org.id} (${org.name}) works!`);
+        res = tryRes;
+        workingOrgId = org.id;
+        break;
+      } else if (tryRes.status === 403) {
+        console.log(`[Make] ✗ Organization ${org.id} (${org.name}) forbids token auth, trying next...`);
+        continue;
+      } else {
+        // Other error - might want to try next org
+        const errText = await tryRes.text().catch(() => '');
+        console.log(`[Make] ✗ Organization ${org.id} (${org.name}) error ${tryRes.status}: ${errText}`);
+        continue;
+      }
+    }
+
     clearTimeout(timeout);
+
+    if (!res || !workingOrgId) {
+      console.error(`[Make] None of ${organizations.length} organizations worked`);
+      return false;
+    }
+
+    const finalRes = res; // for TypeScript
     
-    if (!res.ok) {
-      const responseText = await res.text().catch(() => '');
+    if (!finalRes.ok) {
+      const responseText = await finalRes.text().catch(() => '');
       console.error('[Make API Error]', {
-        status: res.status,
-        statusText: res.statusText,
-        headers: Object.fromEntries(res.headers.entries()),
+        status: finalRes.status,
+        statusText: finalRes.statusText,
+        headers: Object.fromEntries(finalRes.headers.entries()),
         body: responseText,
         region,
-        organizationId,
-        url: `https://${region}.make.com/api/v2/scenarios?organizationId=${organizationId}`,
+        organizationId: workingOrgId,
+        url: `https://${region}.make.com/api/v2/scenarios?organizationId=${workingOrgId}`,
         authHeader: `Token ${apiToken.substring(0, 8)}...`
       });
     }
     
-    return res.ok;
+    return finalRes.ok;
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error));
     console.error(`[Make Region Validation] Failed for ${region}:`, {
@@ -371,10 +399,10 @@ export async function POST(req: Request) {
     const orgs = await orgRes.json().catch(() => ({}));
     console.log('[Make] Organizations response for inventory:', orgs);
 
-    // Get the first organization ID
-    const organizationId = orgs.organizations?.[0]?.id || orgs[0]?.id;
+    // Try each organization until we find one that works
+    const organizations = orgs.organizations || [];
 
-    if (!organizationId) {
+    if (organizations.length === 0) {
       return NextResponse.json(
         {
           ok: false,
@@ -385,23 +413,58 @@ export async function POST(req: Request) {
       );
     }
 
-    console.log('[Make] Using organizationId for inventory:', organizationId);
+    console.log(`[Make] Found ${organizations.length} organizations for inventory, trying each...`);
 
-    const scenariosRes = await fetch(`https://${region}.make.com/api/v2/scenarios?organizationId=${organizationId}`, {
-      method: "GET",
-      headers: {
-        Authorization: `Token ${secretJson.apiKey}`,
-        "Content-Type": "application/json",
-      },
-    });
+    let scenariosRes: Response | null = null;
+    let workingOrgId: number | string | null = null;
 
-    if (!scenariosRes.ok) {
-      const t = await scenariosRes.text().catch(() => "");
+    for (const org of organizations) {
+      console.log(`[Make] Testing organization for inventory: ${org.id} (${org.name})`);
+      
+      const tryRes = await fetch(`https://${region}.make.com/api/v2/scenarios?organizationId=${org.id}`, {
+        method: "GET",
+        headers: {
+          Authorization: `Token ${secretJson.apiKey}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (tryRes.ok) {
+        console.log(`[Make] ✓ Organization ${org.id} (${org.name}) works for inventory!`);
+        scenariosRes = tryRes;
+        workingOrgId = org.id;
+        break;
+      } else if (tryRes.status === 403) {
+        console.log(`[Make] ✗ Organization ${org.id} (${org.name}) forbids token auth for inventory, trying next...`);
+        continue;
+      } else {
+        // Other error - might want to try next org
+        const errText = await tryRes.text().catch(() => '');
+        console.log(`[Make] ✗ Organization ${org.id} (${org.name}) error ${tryRes.status} for inventory: ${errText}`);
+        continue;
+      }
+    }
+
+    if (!scenariosRes || !workingOrgId) {
+      return NextResponse.json(
+        {
+          ok: false,
+          code: "MAKE_NO_VALID_ORGANIZATION",
+          message: `None of your ${organizations.length} organizations allow token authentication. Please check your token permissions or try OAuth authentication instead.`,
+        },
+        { status: 400 },
+      );
+    }
+
+    const finalScenariosRes = scenariosRes; // for TypeScript
+
+    if (!finalScenariosRes.ok) {
+      const t = await finalScenariosRes.text().catch(() => "");
       return NextResponse.json(
         {
           ok: false,
           code: "MAKE_SCENARIOS_FAILED",
-          message: `Failed to fetch scenarios (${scenariosRes.status}). ${t}`.trim(),
+          message: `Failed to fetch scenarios (${finalScenariosRes.status}). ${t}`.trim(),
         },
         { status: 400 },
       );
