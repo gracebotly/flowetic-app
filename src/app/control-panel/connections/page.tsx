@@ -14,6 +14,7 @@ import {
   Search as SearchIcon,
   PlusCircle,
   X,
+  Cpu,
 } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
