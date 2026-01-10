@@ -1575,6 +1575,31 @@ export default function ConnectionsPage() {
         </div>
       </button>
     ) : null}
+
+    {selectedPlatform === "n8n" ? (
+      <button
+        type="button"
+        onClick={() => {
+          setSelectedMethod("mcp");
+          setErrMsg(null);
+          setStep("credentials");
+        }}
+        className="w-full rounded-xl border-2 border-purple-200 bg-purple-50 p-4 text-left hover:border-purple-400"
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-base font-semibold text-gray-900">
+            <Cpu className="h-5 w-5 text-purple-700" />
+            MCP Instances
+          </div>
+          <span className="rounded bg-purple-600 px-2 py-1 text-xs font-bold text-white">
+            AI DIRECT
+          </span>
+        </div>
+        <div className="mt-1 text-sm text-gray-700">
+          AI tools discover and run your enabled n8n workflows directly.
+        </div>
+      </button>
+    ) : null}
   </div>
 ) : null}
 {step === "credentials" ? (
