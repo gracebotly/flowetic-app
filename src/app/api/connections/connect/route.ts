@@ -203,6 +203,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, code: "MISSING_PLATFORM_TYPE" }, { status: 400 });
   }
 
+  // Enforce Make API-only - webhook connections are no longer supported
+  if (platformType === "make" && method !== "api") {
+    return NextResponse.json(
+      {
+        ok: false,
+        code: "MAKE_API_ONLY",
+        message: "Make connections require API method. Webhook connections are not supported.",
+      },
+      { status: 400 },
+    );
+  }
+
   const methodStatus =
     method === "webhook" ? "method:webhook" : method === "mcp" ? "method:mcp" : "method:api";
 
@@ -283,10 +295,7 @@ export async function POST(req: Request) {
       webhookSecret,
     };
 
-    // Give Make a friendly connection name if not provided
-    if (platformType === "make") {
-      (body as any).__computedName = connectionName || "Make (Webhook)";
-    }
+    
   }
 
   if (method === "mcp") {
@@ -503,34 +512,9 @@ export async function POST(req: Request) {
   }
 
   // After you have created/updated the source and have sourceId available:
-  let webhookUrl: string | null = null;
-
-  if (platformType === "make" && method === "webhook") {
-    const baseUrl =
-      process.env.NEXT_PUBLIC_APP_URL ||
-      process.env.NEXT_PUBLIC_SITE_URL ||
-      process.env.VERCEL_URL ||
-      "";
-
-    // Normalize base URL
-    const normalizedBase =
-      baseUrl.startsWith("http://") || baseUrl.startsWith("https://")
-        ? baseUrl
-        : baseUrl
-        ? `https://${baseUrl}`
-        : "";
-
-    if (normalizedBase) {
-      // tenantId is membership.tenant_id
-      webhookUrl = `${normalizedBase}/api/ingest/${membership.tenant_id}/${source.id}?key=${encodeURIComponent(
-        secretJson.webhookSecret,
-      )}`;
-    }
-  }
 
   return NextResponse.json({
     ok: true,
     sourceId: source.id,
-    webhookUrl,
   });
 }

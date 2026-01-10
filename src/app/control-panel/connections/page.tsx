@@ -299,7 +299,7 @@ export default function ConnectionsPage() {
   const [mcpAccessToken, setMcpAccessToken] = useState("");
   const [authHeader, setAuthHeader] = useState("");
   const [connectionName, setConnectionName] = useState("");
-  const [makeWebhookUrl, setMakeWebhookUrl] = useState<string>("");
+
   
   // Edit modal state for "Saved" indicators
   const [editingMeta, setEditingMeta] = useState<{
@@ -668,7 +668,7 @@ export default function ConnectionsPage() {
     setMcpAccessToken("");
     setAuthHeader("");
     setConnectionName("");
-    setMakeWebhookUrl("");
+
     setCreatedSourceId(null);
     setConnectEntities([]);
     setEntityExternalId("");
@@ -689,6 +689,11 @@ export default function ConnectionsPage() {
 
   async function createConnection() {
     if (!selectedPlatform) return;
+
+    // Safety guard: Make connections must use API method
+    if (selectedPlatform === "make" && selectedMethod !== "api") {
+      setSelectedMethod("api");
+    }
 
     setSaving(true);
     setErrMsg(null);
@@ -781,11 +786,6 @@ export default function ConnectionsPage() {
       setSaving(false);
       setErrMsg(json?.message || "Connection failed. Please check your credentials.");
       return;
-    }
-
-    // Set webhook URL for Make webhook connections
-    if (selectedPlatform === "make" && selectedMethod === "webhook" && json?.webhookUrl) {
-      setMakeWebhookUrl(String(json.webhookUrl));
     }
 
     if (editingSourceId) {
@@ -1551,7 +1551,7 @@ export default function ConnectionsPage() {
       ) : null}
     </button>
 
-    {selectedPlatform !== "n8n" ? (
+    {selectedPlatform !== "n8n" && selectedPlatform !== "make" ? (
       <button
         type="button"
         onClick={() => {
@@ -1567,13 +1567,11 @@ export default function ConnectionsPage() {
             Webhook Only
           </div>
           <span className="rounded bg-slate-700 px-2 py-1 text-xs font-bold text-white">
-            {selectedPlatform === "make" ? "FREE OK" : "NO API"}
+            NO API
           </span>
         </div>
         <div className="mt-1 text-sm text-gray-700">
-          {selectedPlatform === "make"
-            ? "Works on Free or Paid Make plans — paste one webhook URL into Make."
-            : "Manual event streaming to GetFlowetic. No catalog import."}
+          Manual event streaming to GetFlowetic. No catalog import.
         </div>
       </button>
     ) : null}
@@ -1581,90 +1579,45 @@ export default function ConnectionsPage() {
 ) : null}
 {step === "credentials" ? (
   <div className="space-y-4">
-    {selectedPlatform === "make" && selectedMethod === "webhook" ? (
-      <div className="space-y-4">
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
-          <div className="font-semibold">✅ Make Webhook (Free Plan Friendly)</div>
-          <div className="mt-1">
-            Paste this URL into Make using a <span className="font-semibold">Custom Webhook</span> module.
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-sm font-semibold text-gray-900">Webhook URL</label>
-          <div className="flex gap-2">
-            <input
-              value={makeWebhookUrl}
-              readOnly
-              className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900"
-              placeholder="Click Generate Webhook URL button"
-            />
-            <button
-              type="button"
-              onClick={() => {
-                if (!makeWebhookUrl) return;
-                navigator.clipboard.writeText(makeWebhookUrl);
-              }}
-              className="rounded-lg bg-gray-900 px-3 py-2 text-sm font-semibold text-white hover:bg-black disabled:opacity-50"
-              disabled={!makeWebhookUrl}
-            >
-              Copy
-            </button>
-          </div>
-        </div>
-
-        <div className="rounded-lg border border-gray-200 bg-white p-3 text-sm text-gray-800">
-          <div className="font-semibold">Make setup</div>
-          <ol className="mt-2 list-decimal space-y-1 pl-5">
-            <li>Create a new scenario in Make.</li>
-            <li>Add: Webhooks → Custom webhook.</li>
-            <li>Paste the URL above.</li>
-            <li>Run once to send a test event.</li>
-          </ol>
-        </div>
-
-        <div className="flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={() => closeConnect()}
-            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50"
-          >
-            Done
-          </button>
-
-          <button
-            type="button"
-            onClick={async () => {
-              setErrMsg(null);
-              await createConnection();
-            }}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-          >
-            {makeWebhookUrl ? "Regenerate URL" : "Generate Webhook URL"}
-          </button>
-        </div>
-      </div>
-    ) : null}
     {selectedMethod === "api" ? (
       <div className="space-y-4">
         {selectedPlatform === "make" ? (
-          <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
-            <div className="font-semibold">💡 How to get your API token:</div>
-            <ul className="mt-2 list-disc space-y-1 pl-5 text-blue-900">
-              <li>Go to make.com → Your profile → API access</li>
-              <li>Click &quot;+ Add token&quot;</li>
-              <li>
-                Select these scopes:
-                <ul className="mt-1 list-disc space-y-1 pl-5">
-                  <li>scenarios:read</li>
-                  <li>scenarios:run</li>
-                  <li>organizations:read</li>
-                  <li>teams:read</li>
-                </ul>
-              </li>
-              <li>Click &quot;Add&quot; and copy your token</li>
-            </ul>
-          </div>
+          <>
+            <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+              <div className="font-semibold">💡 How to get your API token:</div>
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-blue-900">
+                <li>Go to make.com → Your profile → API access</li>
+                <li>Click &quot;+ Add token&quot;</li>
+                <li>
+                  Select these scopes:
+                  <ul className="mt-1 list-disc space-y-1 pl-5">
+                    <li>scenarios:read</li>
+                    <li>scenarios:run</li>
+                    <li>organizations:read</li>
+                    <li>teams:read</li>
+                  </ul>
+                </li>
+                <li>Click &quot;Add&quot; and copy your token</li>
+              </ul>
+            </div>
+
+            <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-900">
+              <div className="font-semibold">⚠️ Requires Make Core plan or higher</div>
+              <div className="mt-1">
+                Make API access is available on paid plans. This lets Getflowetic automatically import and sync your scenarios.
+              </div>
+              <div className="mt-2">
+                <a
+                  href="https://www.make.com/en/pricing"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-semibold text-blue-700 underline"
+                >
+                  View Make pricing
+                </a>
+              </div>
+            </div>
+          </>
         ) : null}
 
         <div className="space-y-2">
@@ -1846,6 +1799,11 @@ export default function ConnectionsPage() {
           type="button"
           onClick={() => {
             setErrMsg(null);
+            // Make goes back to platform selection since it skips method step
+            if (selectedPlatform === "make") {
+              setStep("platform");
+              return;
+            }
             setStep("method");
             return;
           }}
