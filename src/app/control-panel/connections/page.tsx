@@ -727,11 +727,6 @@ export default function ConnectionsPage() {
           setErrMsg("Private API Key is required.");
           return;
         }
-        if (requireKeyForEdit && !apiKey.trim().startsWith("sk_")) {
-          setSaving(false);
-          setErrMsg("Invalid API key format. Vapi keys must start with sk_.");
-          return;
-        }
       }
       
       if (selectedPlatform === "retell" && selectedMethod === "api") {
@@ -1900,7 +1895,7 @@ export default function ConnectionsPage() {
       </>
     ) : null}
 
-    {selectedPlatform !== "n8n" && selectedPlatform !== "make" && selectedPlatform !== "vapi" ? (
+    {selectedPlatform !== "n8n" && selectedPlatform !== "make" && selectedPlatform !== "vapi" && selectedPlatform !== "retell" ? (
       <div>
         <label className="mb-2 block text-sm font-semibold text-gray-900">Connection name (optional)</label>
         <input

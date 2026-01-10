@@ -351,9 +351,6 @@ export async function POST(req: Request) {
     if (!key) {
       return NextResponse.json({ ok: false, code: "MISSING_API_KEY", message: "Vapi Private API Key is required." }, { status: 400 });
     }
-    if (!key.startsWith("sk_")) {
-      return NextResponse.json({ ok: false, code: "VAPI_INVALID_KEY_FORMAT", message: "Invalid Vapi API key format (must start with sk_)." }, { status: 400 });
-    }
 
     // Test key with a lightweight request
     const testRes = await fetch("https://api.vapi.ai/v1/assistants", {
