@@ -346,6 +346,85 @@ export async function POST(req: Request) {
     }
   }
 
+  if (platformType === "vapi" && method === "api") {
+    const key = String(secretJson?.apiKey || "").trim();
+    if (!key) {
+      return NextResponse.json({ ok: false, code: "MISSING_API_KEY", message: "Vapi Private API Key is required." }, { status: 400 });
+    }
+    if (!key.startsWith("sk_")) {
+      return NextResponse.json({ ok: false, code: "VAPI_INVALID_KEY_FORMAT", message: "Invalid Vapi API key format (must start with sk_)." }, { status: 400 });
+    }
+
+    // Test key with a lightweight request
+    const testRes = await fetch("https://api.vapi.ai/v1/assistants", {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!testRes.ok) {
+      const t = await testRes.text().catch(() => "");
+      return NextResponse.json(
+        { ok: false, code: "VAPI_AUTH_FAILED", message: `Vapi API auth failed (${testRes.status}). ${t}`.trim() },
+        { status: 400 },
+      );
+    }
+  }
+
+
+  // Best-effort pull of recent calls for Vapi
+  let callsLoaded: number | null = null;
+
+  if (platformType === "vapi" && method === "api") {
+    const key = String(secretJson?.apiKey || "").trim();
+
+    try {
+      const callsRes = await fetch("https://api.vapi.ai/v1/calls?limit=100", {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${key}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (callsRes.ok) {
+        const callsJson = await callsRes.json().catch(() => null);
+        const calls = Array.isArray(callsJson) ? callsJson : Array.isArray(callsJson?.calls) ? callsJson.calls : [];
+        callsLoaded = Array.isArray(calls) ? calls.length : 0;
+
+        // OPTIONAL: store each call payload as an event row (raw in state)
+        // Keep minimal and safe: insert only if callsLoaded > 0
+        if (callsLoaded > 0) {
+          const nowIso = new Date().toISOString();
+          const rows = calls.map((c: any) => ({
+            tenant_id: membership.tenant_id,
+            source_id: null, // fill after source insert if needed
+            interface_id: null,
+            run_id: null,
+            type: "state",
+            name: "vapi.call",
+            value: null,
+            unit: null,
+            text: null,
+            state: c,
+            labels: { platform: "vapi", kind: "call", source: "historical_import" },
+            timestamp: nowIso,
+            created_at: nowIso,
+          }));
+
+          // We'll insert after we have sourceId; store rows temporarily
+          (globalThis as any).__VAPI_CALL_ROWS__ = rows;
+        }
+      } else {
+        callsLoaded = 0;
+      }
+    } catch {
+      callsLoaded = 0;
+    }
+  }
+
 
   // IMPORTANT: sources table has NO updated_at, so never set it here.
   const { data: source, error } = await supabase
@@ -370,6 +449,16 @@ export async function POST(req: Request) {
 
   if (error) {
     return NextResponse.json({ ok: false, code: "PERSISTENCE_FAILED", message: error.message }, { status: 400 });
+  }
+
+  // After source creation, insert imported call events (if any)
+  if (platformType === "vapi" && method === "api") {
+    const rows = (globalThis as any).__VAPI_CALL_ROWS__ as any[] | undefined;
+    if (rows && Array.isArray(rows) && rows.length > 0) {
+      const withSource = rows.map((r) => ({ ...r, source_id: source.id }));
+      await supabase.from("events").insert(withSource);
+    }
+    (globalThis as any).__VAPI_CALL_ROWS__ = undefined;
   }
 
   if (platformType === "make" && method === "api") {
@@ -502,5 +591,6 @@ export async function POST(req: Request) {
   return NextResponse.json({
     ok: true,
     sourceId: source.id,
+    ...(platformType === "vapi" && method === "api" ? { callsLoaded: callsLoaded ?? 0 } : {}),
   });
 }

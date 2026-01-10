@@ -324,6 +324,7 @@ export default function ConnectionsPage() {
   const [entityExternalId, setEntityExternalId] = useState("");
   const [entityDisplayName, setEntityDisplayName] = useState("");
   const [saving, setSaving] = useState(false);
+  const [connectSummary, setConnectSummary] = useState<{ callsLoaded?: number } | null>(null);
 
   // Credentials state
   const [credentials, setCredentials] = useState<CredentialRow[]>([]);
@@ -676,6 +677,7 @@ export default function ConnectionsPage() {
     setEntityDisplayName("");
     setSaving(false);
     setErrMsg(null);
+    setConnectSummary(null);
   }
 
   function openConnect() {
@@ -708,6 +710,19 @@ export default function ConnectionsPage() {
     if (selectedMethod === "api") {
       const isEdit = !!editingSourceId;
       const requireKeyForEdit = isEdit ? showApiKeyEditor : true;
+      
+      if (selectedPlatform === "vapi") {
+        if (requireKeyForEdit && !apiKey.trim()) {
+          setSaving(false);
+          setErrMsg("Private API Key is required.");
+          return;
+        }
+        if (requireKeyForEdit && !apiKey.trim().startsWith("sk_")) {
+          setSaving(false);
+          setErrMsg("Invalid API key format. Vapi keys must start with sk_.");
+          return;
+        }
+      }
       
       if (selectedPlatform === "n8n" && selectedMethod === "api") {
         if (requireKeyForEdit && !apiKey.trim()) {
@@ -787,6 +802,10 @@ export default function ConnectionsPage() {
       setSaving(false);
       setErrMsg(json?.message || "Connection failed. Please check your credentials.");
       return;
+    }
+
+    if (selectedPlatform === "vapi") {
+      setConnectSummary({ callsLoaded: typeof json?.callsLoaded === "number" ? json.callsLoaded : undefined });
     }
 
     if (editingSourceId) {
@@ -1667,6 +1686,38 @@ export default function ConnectionsPage() {
           ) : null}
         </div>
 
+        {/* Vapi-specific credentials UI */}
+        {selectedPlatform === "vapi" ? (
+          <div className="space-y-4">
+            <div className="text-sm text-gray-800 font-medium">Connect your Vapi account</div>
+
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-gray-900">
+                Private API Key <span className="text-red-600">*</span>
+              </label>
+              <input
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                type="password"
+                className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                placeholder="sk_..."
+                autoComplete="off"
+              />
+            </div>
+
+            <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+              <div className="font-semibold">💡 Where to find this:</div>
+              <ol className="mt-2 list-decimal space-y-1 pl-5">
+                <li>Go to dashboard.vapi.ai</li>
+                <li>Click &quot;API Keys&quot; in the sidebar</li>
+                <li>
+                  Copy your &quot;Private API Key&quot; (under &quot;Server-side API access&quot;)
+                </li>
+              </ol>
+            </div>
+          </div>
+        ) : null}
+
         {/* NEW: Region Selector - Only show for Make.com */}
         {selectedPlatform === "make" && (
           <div>
@@ -1726,7 +1777,7 @@ export default function ConnectionsPage() {
       </div>
     ) : null}
 
-    {selectedMethod === "webhook" ? (
+    {selectedMethod === "webhook" && selectedPlatform !== "vapi" ? (
       <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
         Webhook-only mode will create a connection, but you'll need to send events manually.
       </div>
@@ -1787,7 +1838,7 @@ export default function ConnectionsPage() {
       </>
     ) : null}
 
-    {selectedPlatform !== "n8n" && selectedPlatform !== "make" ? (
+    {selectedPlatform !== "n8n" && selectedPlatform !== "make" && selectedPlatform !== "vapi" ? (
       <div>
         <label className="mb-2 block text-sm font-semibold text-gray-900">Connection name (optional)</label>
         <input
@@ -1919,6 +1970,11 @@ export default function ConnectionsPage() {
     <div className="text-center text-sm text-gray-700">
       Connection configuration saved successfully.
     </div>
+    {selectedPlatform === "vapi" && connectSummary?.callsLoaded !== undefined ? (
+      <div className="mt-2 text-sm text-gray-700">
+        ✅ Loaded {connectSummary.callsLoaded} recent calls
+      </div>
+    ) : null}
 
     <div className="flex justify-end gap-2 pt-2">
       <button
