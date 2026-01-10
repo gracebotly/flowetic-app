@@ -703,6 +703,11 @@ export default function ConnectionsPage() {
       setSelectedMethod("api");
     }
 
+    // Safety guard: Retell connections must use API method
+    if (selectedPlatform === "retell" && selectedMethod !== "api") {
+      setSelectedMethod("api");
+    }
+
     setSaving(true);
     setErrMsg(null);
 
@@ -725,6 +730,14 @@ export default function ConnectionsPage() {
         if (requireKeyForEdit && !apiKey.trim().startsWith("sk_")) {
           setSaving(false);
           setErrMsg("Invalid API key format. Vapi keys must start with sk_.");
+          return;
+        }
+      }
+      
+      if (selectedPlatform === "retell" && selectedMethod === "api") {
+        if (requireKeyForEdit && !apiKey.trim()) {
+          setSaving(false);
+          setErrMsg("API Key is required.");
           return;
         }
       }
@@ -1532,6 +1545,13 @@ export default function ConnectionsPage() {
                               return;
                             }
 
+                            // Retell: API-only flow (skip method selection entirely)
+                            if (String(k) === "retell") {
+                              setSelectedMethod("api");
+                              setStep("credentials");
+                              return;
+                            }
+
                             setStep("method");
                           }}
                           className="w-full rounded-xl border-2 border-gray-200 p-4 text-left hover:border-blue-500 hover:bg-slate-50"
@@ -1583,7 +1603,7 @@ export default function ConnectionsPage() {
       ) : null}
     </button>
 
-    {selectedPlatform !== "n8n" && selectedPlatform !== "make" && selectedPlatform !== "vapi" ? (
+    {selectedPlatform !== "n8n" && selectedPlatform !== "make" && selectedPlatform !== "vapi" && selectedPlatform !== "retell" ? (
       <button
         type="button"
         onClick={() => {
@@ -1658,7 +1678,7 @@ export default function ConnectionsPage() {
             <div className="mt-3 text-xs text-blue-900/80">⚠️ Requires Make paid plan</div>
           </div>
         ) : null}
-        {selectedPlatform !== "vapi" ? (
+        {selectedPlatform !== "vapi" && selectedPlatform !== "retell" ? (
           <div className="space-y-2">
           <div className="flex items-center justify-between">
             <label className="text-sm font-semibold text-gray-900">
@@ -1724,6 +1744,36 @@ export default function ConnectionsPage() {
                 <li>Click &quot;API Keys&quot; in the sidebar</li>
                 <li>
                   Copy your &quot;Private API Key&quot; (under &quot;Server-side API access&quot;)
+                </li>
+              </ol>
+            </div>
+          </div>
+        ) : null}
+
+        {/* Retell-specific credentials UI */}
+        {selectedPlatform === "retell" ? (
+          <div className="space-y-4">
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-gray-900">
+                API Key <span className="text-red-600">*</span>
+              </label>
+              <input
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                type="password"
+                className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                placeholder="Paste your Retell API Key here"
+                autoComplete="off"
+              />
+            </div>
+
+            <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+              <div className="font-semibold">💡 Where to find this:</div>
+              <ol className="mt-2 list-decimal space-y-1 pl-5">
+                <li>Go to dashboard.retellai.com</li>
+                <li>Click &quot;API Keys&quot; in the sidebar</li>
+                <li>
+                  Copy your API Key (NOT the webhook secret key)
                 </li>
               </ol>
             </div>
@@ -1869,8 +1919,8 @@ export default function ConnectionsPage() {
           type="button"
           onClick={() => {
             setErrMsg(null);
-            // Make and Vapi go back to platform selection since they skip method step
-            if (selectedPlatform === "make" || selectedPlatform === "vapi") {
+            // Make, Vapi, and Retell go back to platform selection since they skip method step
+            if (selectedPlatform === "make" || selectedPlatform === "vapi" || selectedPlatform === "retell") {
               setStep("platform");
               return;
             }

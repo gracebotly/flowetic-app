@@ -373,6 +373,30 @@ export async function POST(req: Request) {
     }
   }
 
+  if (platformType === "retell" && method === "api") {
+    const key = String(secretJson?.apiKey || "").trim();
+    if (!key) {
+      return NextResponse.json({ ok: false, code: "MISSING_API_KEY", message: "Retell API Key is required." }, { status: 400 });
+    }
+
+    // Test key with a lightweight request
+    const testRes = await fetch("https://api.retellai.com/list-agents", {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!testRes.ok) {
+      const t = await testRes.text().catch(() => "");
+      return NextResponse.json(
+        { ok: false, code: "RETELL_AUTH_FAILED", message: `Retell API auth failed (${testRes.status}). ${t}`.trim() },
+        { status: 400 },
+      );
+    }
+  }
+
 
   // Best-effort pull of recent calls for Vapi
   let callsLoaded: number | null = null;
