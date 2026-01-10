@@ -11,6 +11,29 @@ type PlatformType = "n8n" | "make" | "activepieces" | "vapi" | "retell";
 const MAKE_REGIONS = ["us1", "eu1", "us2", "eu2"] as const;
 type MakeRegion = (typeof MAKE_REGIONS)[number];
 
+type ConnectWarning = { code: string; message: string };
+type ConnectErrorDetails = {
+  platformType?: string;
+  method?: string;
+  region?: string | null;
+  providerStatus?: number;
+  providerBodySnippet?: string;
+};
+
+function safeSnippet(input: string, maxLen = 300) {
+  const s = (input || "").replace(/\s+/g, " ").trim();
+  return s.length > maxLen ? s.slice(0, maxLen) + "…" : s;
+}
+
+function errorResponse(
+  status: number,
+  code: string,
+  message: string,
+  details?: ConnectErrorDetails,
+) {
+  return NextResponse.json({ ok: false, code, message, details }, { status });
+}
+
 async function detectMakeRegion(apiToken: string): Promise<MakeRegion | null> {
   for (const region of MAKE_REGIONS) {
     try {
@@ -158,7 +181,7 @@ export async function POST(req: Request) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({ ok: false, code: "AUTH_REQUIRED" }, { status: 401 });
+    return errorResponse(401, "AUTH_REQUIRED", "Authentication required.");
   }
 
   const { data: membership } = await supabase
@@ -169,7 +192,7 @@ export async function POST(req: Request) {
     .maybeSingle();
 
   if (!membership?.tenant_id) {
-    return NextResponse.json({ ok: false, code: "TENANT_ACCESS_DENIED" }, { status: 403 });
+    return errorResponse(403, "TENANT_ACCESS_DENIED", "Tenant access denied.");
   }
 
   const body = (await req.json().catch(() => ({}))) as any;
@@ -194,23 +217,22 @@ export async function POST(req: Request) {
   });
 
   if (!platformType) {
-    return NextResponse.json({ ok: false, code: "MISSING_PLATFORM_TYPE" }, { status: 400 });
+    return errorResponse(400, "MISSING_PLATFORM_TYPE", "Platform type is required.");
   }
 
   // Enforce Make API-only - webhook connections are no longer supported
   if (platformType === "make" && method !== "api") {
-    return NextResponse.json(
-      {
-        ok: false,
-        code: "MAKE_API_ONLY",
-        message: "Make connections require API method. Webhook connections are not supported.",
-      },
-      { status: 400 },
+    return errorResponse(
+      400,
+      "MAKE_API_ONLY",
+      "Make connections require API method. Webhook connections are not supported.",
     );
   }
 
   const methodStatus =
     method === "webhook" ? "method:webhook" : method === "mcp" ? "method:mcp" : "method:api";
+
+  const warnings: ConnectWarning[] = [];
 
   // Credentials payload to encrypt into sources.secret_hash
   // NOTE: we store a JSON string inside the encrypted envelope.
@@ -220,7 +242,7 @@ export async function POST(req: Request) {
     const instanceUrl = (body.instanceUrl as string | undefined) ?? null;
 
     if (!apiToken) {
-      return NextResponse.json({ ok: false, code: "MISSING_API_KEY" }, { status: 400 });
+      return errorResponse(400, "MISSING_API_KEY", "API key is required.");
     }
 
     if (platformType === "make") {
@@ -239,13 +261,15 @@ export async function POST(req: Request) {
         const isValid = await validateMakeRegion(apiToken, region);
         if (!isValid) {
           // Get the last error from logs to provide more specific error message
-          return NextResponse.json(
-            { 
-              ok: false, 
-              code: "MAKE_INVALID_TOKEN", 
-              message: `Failed to connect to ${region.toUpperCase()} region. Check your API token has scenarios:read permission and correct region selected.` 
-            },
-            { status: 400 }
+          return errorResponse(
+            400,
+            "MAKE_INVALID_TOKEN",
+            `Failed to connect to ${region.toUpperCase()} region. Check your API token has scenarios:read permission and correct region selected.`,
+            {
+              platformType,
+              method,
+              region: region ?? null,
+            }
           );
         }
         makeRegion = region;
@@ -254,9 +278,15 @@ export async function POST(req: Request) {
         console.log(`[Make] No valid region provided, falling back to auto-detection`);
         const detectedRegion = await detectMakeRegion(apiToken);
         if (!detectedRegion) {
-          return NextResponse.json(
-            { ok: false, code: "MAKE_REGION_DETECTION_FAILED", message: "Could not detect Make.com region. Please select your region manually." },
-            { status: 400 }
+          return errorResponse(
+            400,
+            "MAKE_REGION_DETECTION_FAILED",
+            "Could not detect Make.com region. Please select your region manually.",
+            {
+              platformType,
+              method,
+              region: region ?? null,
+            }
           );
         }
         console.log(`[Make] Auto-detected region: ${detectedRegion}`);
@@ -288,7 +318,7 @@ export async function POST(req: Request) {
     const mcpUrl = (body.mcpUrl as string | undefined) ?? "";
     const authHeader = (body.authHeader as string | undefined) ?? "";
     if (!mcpUrl) {
-      return NextResponse.json({ ok: false, code: "MISSING_MCP_URL" }, { status: 400 });
+      return errorResponse(400, "MISSING_MCP_URL", "MCP URL is required.");
     }
 
     const validation = await validateMcpServer({
@@ -298,10 +328,7 @@ export async function POST(req: Request) {
     });
 
     if (!validation.ok) {
-      return NextResponse.json(
-        { ok: false, code: "MCP_VALIDATION_FAILED", message: validation.error },
-        { status: 400 },
-      );
+      return errorResponse(400, "MCP_VALIDATION_FAILED", validation.error || "MCP validation failed");
     }
 
     secretJson = {
@@ -339,10 +366,165 @@ export async function POST(req: Request) {
     const testRes = await fetch(`${baseUrl}/api/v1/workflows`, { method: "GET", headers });
     if (!testRes.ok) {
       const t = await testRes.text().catch(() => "");
-      return NextResponse.json(
-        { ok: false, code: "N8N_API_FAILED", message: `n8n API auth failed (${testRes.status}). ${t}`.trim() },
-        { status: 400 },
+      return errorResponse(
+        400,
+        "N8N_API_FAILED",
+        `n8n API auth failed (${testRes.status}). ${t}`.trim(),
+        {
+          platformType,
+          method,
+          providerStatus: testRes.status,
+          providerBodySnippet: safeSnippet(t),
+        },
       );
+    }
+  }
+
+  if (platformType === "vapi" && method === "api") {
+    const key = String(secretJson?.apiKey || "").trim();
+    if (!key) {
+      return errorResponse(400, "MISSING_API_KEY", "Vapi Private API Key is required.");
+    }
+
+    // Test key with a lightweight request
+    const testRes = await fetch("https://api.vapi.ai/v1/assistants", {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!testRes.ok) {
+      const t = await testRes.text().catch(() => "");
+      return errorResponse(
+        400,
+        "VAPI_AUTH_FAILED",
+        "Vapi rejected this API key. Please generate a new Private API Key in Vapi → API Keys and try again.",
+        {
+          platformType,
+          method,
+          providerStatus: testRes.status,
+          providerBodySnippet: safeSnippet(t),
+        },
+      );
+    }
+  }
+
+  if (platformType === "retell" && method === "api") {
+    const key = String(secretJson?.apiKey || "").trim();
+    if (!key) {
+      return errorResponse(400, "MISSING_API_KEY", "Retell API Key is required.");
+    }
+
+    // Test key with a lightweight request
+    const testRes = await fetch("https://api.retellai.com/list-agents", {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!testRes.ok) {
+      const t = await testRes.text().catch(() => "");
+      return errorResponse(
+        400,
+        "RETELL_AUTH_FAILED",
+        "Retell rejected this API key. Please generate a new API Key in Retell → API Keys and try again.",
+        {
+          platformType,
+          method,
+          providerStatus: testRes.status,
+          providerBodySnippet: safeSnippet(t),
+        },
+      );
+    }
+
+    // Pull agents count for Retell
+    try {
+      const agentsRes = await fetch("https://api.retellai.com/list-agents", {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${key}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (agentsRes.ok) {
+        const agentsJson = await agentsRes.json().catch(() => null);
+        const agents = Array.isArray(agentsJson?.agents) ? agentsJson.agents : Array.isArray(agentsJson) ? agentsJson : [];
+        if (agents.length === 0) {
+          warnings.push({
+            code: "RETELL_NO_AGENTS",
+            message:
+              "Retell account has no agents. New accounts may take up to 15 minutes after first call for agents to appear in API.",
+          });
+        }
+      }
+    } catch {
+      // Silently ignore agent loading errors; not critical for connection
+    }
+  }
+
+
+  // Best-effort pull of recent calls for Vapi
+  let callsLoaded: number | null = null;
+
+  if (platformType === "vapi" && method === "api") {
+    const key = String(secretJson?.apiKey || "").trim();
+
+    try {
+      const callsRes = await fetch("https://api.vapi.ai/v1/calls?limit=100", {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${key}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (callsRes.ok) {
+        const callsJson = await callsRes.json().catch(() => null);
+        const calls = Array.isArray(callsJson) ? callsJson : Array.isArray(callsJson?.calls) ? callsJson.calls : [];
+        callsLoaded = Array.isArray(calls) ? calls.length : 0;
+
+        // OPTIONAL: store each call payload as an event row (raw in state)
+        // Keep minimal and safe: insert only if callsLoaded > 0
+        if (callsLoaded > 0) {
+          const nowIso = new Date().toISOString();
+          const rows = calls.map((c: any) => ({
+            tenant_id: membership.tenant_id,
+            source_id: null, // fill after source insert if needed
+            interface_id: null,
+            run_id: null,
+            type: "state",
+            name: "vapi.call",
+            value: null,
+            unit: null,
+            text: null,
+            state: c,
+            labels: { platform: "vapi", kind: "call", source: "historical_import" },
+            timestamp: nowIso,
+            created_at: nowIso,
+          }));
+
+          // We'll insert after we have sourceId; store rows temporarily
+          (globalThis as any).__VAPI_CALL_ROWS__ = rows;
+        }
+      } else {
+        callsLoaded = 0;
+      }
+    } catch {
+      callsLoaded = 0;
+    }
+
+    // Warning for no historical calls
+    if (callsLoaded === 0) {
+      warnings.push({
+        code: "VAPI_NO_HISTORICAL_CALLS",
+        message:
+          "This API key appears to have no historical calls. Make sure it belongs to your production organization, not a personal dev org.",
+      });
     }
   }
 
@@ -369,7 +551,17 @@ export async function POST(req: Request) {
     .single();
 
   if (error) {
-    return NextResponse.json({ ok: false, code: "PERSISTENCE_FAILED", message: error.message }, { status: 400 });
+    return errorResponse(400, "PERSISTENCE_FAILED", error.message);
+  }
+
+  // After source creation, insert imported call events (if any)
+  if (platformType === "vapi" && method === "api") {
+    const rows = (globalThis as any).__VAPI_CALL_ROWS__ as any[] | undefined;
+    if (rows && Array.isArray(rows) && rows.length > 0) {
+      const withSource = rows.map((r) => ({ ...r, source_id: source.id }));
+      await supabase.from("events").insert(withSource);
+    }
+    (globalThis as any).__VAPI_CALL_ROWS__ = undefined;
   }
 
   if (platformType === "make" && method === "api") {
@@ -456,13 +648,15 @@ export async function POST(req: Request) {
     }
 
     if (!scenariosRes || !workingOrgId) {
-      return NextResponse.json(
+      return errorResponse(
+        400,
+        "MAKE_NO_VALID_ORGANIZATION",
+        `None of your ${organizations.length} organizations allow token authentication. Please check your token permissions or try OAuth authentication instead.`,
         {
-          ok: false,
-          code: "MAKE_NO_VALID_ORGANIZATION",
-          message: `None of your ${organizations.length} organizations allow token authentication. Please check your token permissions or try OAuth authentication instead.`,
-        },
-        { status: 400 },
+          platformType,
+          method,
+          region: region ?? null,
+        }
       );
     }
 
@@ -494,6 +688,7 @@ export async function POST(req: Request) {
       sourceId: source.id,
       inventoryEntities,
       meta: { region },
+      ...(warnings.length > 0 ? { warnings } : {}),
     });
   }
 
@@ -502,5 +697,7 @@ export async function POST(req: Request) {
   return NextResponse.json({
     ok: true,
     sourceId: source.id,
+    ...(platformType === "vapi" && method === "api" ? { callsLoaded: callsLoaded ?? 0 } : {}),
+    ...(warnings.length > 0 ? { warnings } : {}),
   });
 }
