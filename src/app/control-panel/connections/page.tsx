@@ -1607,7 +1607,6 @@ export default function ConnectionsPage() {
           </div>
         </>
         ) : null}
-
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <label className="text-sm font-semibold text-gray-900">
