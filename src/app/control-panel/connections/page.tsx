@@ -698,6 +698,11 @@ export default function ConnectionsPage() {
       setSelectedMethod("api");
     }
 
+    // Safety guard: Vapi connections must use API method
+    if (selectedPlatform === "vapi" && selectedMethod !== "api") {
+      setSelectedMethod("api");
+    }
+
     setSaving(true);
     setErrMsg(null);
 
@@ -1520,6 +1525,13 @@ export default function ConnectionsPage() {
                               return;
                             }
 
+                            // Vapi: API-only flow (skip method selection entirely)
+                            if (String(k) === "vapi") {
+                              setSelectedMethod("api");
+                              setStep("credentials");
+                              return;
+                            }
+
                             setStep("method");
                           }}
                           className="w-full rounded-xl border-2 border-gray-200 p-4 text-left hover:border-blue-500 hover:bg-slate-50"
@@ -1571,7 +1583,7 @@ export default function ConnectionsPage() {
       ) : null}
     </button>
 
-    {selectedPlatform !== "n8n" && selectedPlatform !== "make" ? (
+    {selectedPlatform !== "n8n" && selectedPlatform !== "make" && selectedPlatform !== "vapi" ? (
       <button
         type="button"
         onClick={() => {
@@ -1646,7 +1658,8 @@ export default function ConnectionsPage() {
             <div className="mt-3 text-xs text-blue-900/80">⚠️ Requires Make paid plan</div>
           </div>
         ) : null}
-        <div className="space-y-2">
+        {selectedPlatform !== "vapi" ? (
+          <div className="space-y-2">
           <div className="flex items-center justify-between">
             <label className="text-sm font-semibold text-gray-900">
               {selectedPlatform === "make" ? "API Token *" : "API Key *"}
@@ -1684,13 +1697,12 @@ export default function ConnectionsPage() {
               You can't view existing keys. Enter a new key only if you want to replace it.
             </div>
           ) : null}
-        </div>
+          </div>
+        ) : null}
 
         {/* Vapi-specific credentials UI */}
         {selectedPlatform === "vapi" ? (
           <div className="space-y-4">
-            <div className="text-sm text-gray-800 font-medium">Connect your Vapi account</div>
-
             <div>
               <label className="mb-2 block text-sm font-semibold text-gray-900">
                 Private API Key <span className="text-red-600">*</span>
@@ -1857,8 +1869,8 @@ export default function ConnectionsPage() {
           type="button"
           onClick={() => {
             setErrMsg(null);
-            // Make goes back to platform selection since it skips method step
-            if (selectedPlatform === "make") {
+            // Make and Vapi go back to platform selection since they skip method step
+            if (selectedPlatform === "make" || selectedPlatform === "vapi") {
               setStep("platform");
               return;
             }
