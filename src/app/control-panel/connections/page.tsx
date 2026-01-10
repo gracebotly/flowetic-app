@@ -1601,23 +1601,11 @@ export default function ConnectionsPage() {
               </ul>
             </div>
 
-            <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-900">
-              <div className="font-semibold">⚠️ Requires Make Core plan or higher</div>
-              <div className="mt-1">
-                Make API access is available on paid plans. This lets Getflowetic automatically import and sync your scenarios.
-              </div>
-              <div className="mt-2">
-                <a
-                  href="https://www.make.com/en/pricing"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="font-semibold text-blue-700 underline"
-                >
-                  View Make pricing
-                </a>
-              </div>
+            <div className="mt-3 text-xs text-blue-900/80">
+              ⚠️ Requires Make paid plan
             </div>
-          </>
+          </div>
+        </>
         ) : null}
 
         <div className="space-y-2">
