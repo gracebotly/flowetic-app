@@ -1582,27 +1582,24 @@ export default function ConnectionsPage() {
     {selectedMethod === "api" ? (
       <div className="space-y-4">
         {selectedPlatform === "make" ? (
-          <>
-            <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
-              <div className="font-semibold">💡 How to get your API token:</div>
-              <ul className="mt-2 list-disc space-y-1 pl-5 text-blue-900">
-                <li>Go to make.com → Your profile → API access</li>
-                <li>Click &quot;+ Add token&quot;</li>
-                <li>
-                  Select these scopes:
-                  <ul className="mt-1 list-disc space-y-1 pl-5">
-                    <li>scenarios:read</li>
-                    <li>scenarios:run</li>
-                    <li>organizations:read</li>
-                    <li>teams:read</li>
-                  </ul>
-                </li>
-                <li>Click &quot;Add&quot; and copy your token</li>
-              </ul>
-              <div className="mt-3 text-xs text-blue-900/80">⚠️ Requires Make paid plan</div>
-            </div>
-          </>
-        </>
+          <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+            <div className="font-semibold">💡 How to get your API token:</div>
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-blue-900">
+              <li>Go to make.com → Your profile → API access</li>
+              <li>Click &quot;+ Add token&quot;</li>
+              <li>
+                Select these scopes:
+                <ul className="mt-1 list-disc space-y-1 pl-5">
+                  <li>scenarios:read</li>
+                  <li>scenarios:run</li>
+                  <li>organizations:read</li>
+                  <li>teams:read</li>
+                </ul>
+              </li>
+              <li>Click &quot;Add&quot; and copy your token</li>
+            </ul>
+            <div className="mt-3 text-xs text-blue-900/80">⚠️ Requires Make paid plan</div>
+          </div>
         ) : null}
         <div className="space-y-2">
           <div className="flex items-center justify-between">

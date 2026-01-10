@@ -6,12 +6,6 @@ import { validateMcpServer } from "@/lib/mcp/validateMcpServer";
 
 export const runtime = "nodejs";
 
-function generateWebhookSecret(): string {
-  // Node runtime is enabled for this route
-  const crypto = require("crypto") as typeof import("crypto");
-  return crypto.randomBytes(24).toString("hex");
-}
-
 type PlatformType = "n8n" | "make" | "activepieces" | "vapi" | "retell";
 
 const MAKE_REGIONS = ["us1", "eu1", "us2", "eu2"] as const;
@@ -286,16 +280,8 @@ export async function POST(req: Request) {
   }
 
   if (method === "webhook") {
-    // For webhook-only connections, we do not validate external APIs.
-    // We generate a secret that is embedded into the webhook URL so users only paste one thing.
-    const webhookSecret = generateWebhookSecret();
-
-    secretJson = {
-      ...secretJson,
-      webhookSecret,
-    };
-
-    
+    const instanceUrl = (body.instanceUrl as string | undefined) ?? null;
+    secretJson = { ...secretJson, instanceUrl };
   }
 
   if (method === "mcp") {
