@@ -197,6 +197,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, code: "MISSING_PLATFORM_TYPE" }, { status: 400 });
   }
 
+  // Enforce Make API-only - webhook connections are no longer supported
+  if (platformType === "make" && method !== "api") {
+    return NextResponse.json(
+      {
+        ok: false,
+        code: "MAKE_API_ONLY",
+        message: "Make connections require API method. Webhook connections are not supported.",
+      },
+      { status: 400 },
+    );
+  }
+
   const methodStatus =
     method === "webhook" ? "method:webhook" : method === "mcp" ? "method:mcp" : "method:api";
 
@@ -268,8 +280,6 @@ export async function POST(req: Request) {
   }
 
   if (method === "webhook") {
-    // webhook-only means user will configure sending events to GetFlowetic later
-    // Still store instanceUrl if provided for self-hosted platforms (n8n/activepieces)
     const instanceUrl = (body.instanceUrl as string | undefined) ?? null;
     secretJson = { ...secretJson, instanceUrl };
   }
@@ -366,7 +376,7 @@ export async function POST(req: Request) {
     const region = (secretJson?.region as MakeRegion | undefined) ?? null;
 
     if (!region) {
-      return NextResponse.json({ ok: true, source });
+      return NextResponse.json({ ok: true, sourceId: source.id });
     }
 
     // Get organizations to find the organization ID for scenarios call
@@ -481,11 +491,16 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       ok: true,
-      source,
+      sourceId: source.id,
       inventoryEntities,
       meta: { region },
     });
   }
 
-  return NextResponse.json({ ok: true, source });
+  // After you have created/updated the source and have sourceId available:
+
+  return NextResponse.json({
+    ok: true,
+    sourceId: source.id,
+  });
 }

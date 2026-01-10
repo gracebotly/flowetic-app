@@ -14,6 +14,7 @@ import {
   Search as SearchIcon,
   PlusCircle,
   X,
+  Cpu,
 } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
@@ -299,6 +300,7 @@ export default function ConnectionsPage() {
   const [mcpAccessToken, setMcpAccessToken] = useState("");
   const [authHeader, setAuthHeader] = useState("");
   const [connectionName, setConnectionName] = useState("");
+
   
   // Edit modal state for "Saved" indicators
   const [editingMeta, setEditingMeta] = useState<{
@@ -667,6 +669,7 @@ export default function ConnectionsPage() {
     setMcpAccessToken("");
     setAuthHeader("");
     setConnectionName("");
+
     setCreatedSourceId(null);
     setConnectEntities([]);
     setEntityExternalId("");
@@ -688,13 +691,13 @@ export default function ConnectionsPage() {
   async function createConnection() {
     if (!selectedPlatform) return;
 
-    setSaving(true);
-    setErrMsg(null);
-
-    // Make.com is token-only (force API method; no webhook/mcp variants)
+    // Safety guard: Make connections must use API method
     if (selectedPlatform === "make" && selectedMethod !== "api") {
       setSelectedMethod("api");
     }
+
+    setSaving(true);
+    setErrMsg(null);
 
     const payload: any = {
       platformType: selectedPlatform,
@@ -1533,14 +1536,23 @@ export default function ConnectionsPage() {
           <KeyRound className="h-5 w-5 text-emerald-700" />
           API Key
         </div>
-        <span className="rounded bg-emerald-600 px-2 py-1 text-xs font-bold text-white">RECOMMENDED</span>
+        <span className="rounded bg-emerald-600 px-2 py-1 text-xs font-bold text-white">
+          {selectedPlatform === "make" ? "PAID" : "RECOMMENDED"}
+        </span>
       </div>
       <div className="mt-1 text-sm text-gray-700">
-        Connect to your n8n instance using an API key to import and index workflows.
+        {selectedPlatform === "make"
+          ? "Requires a paid Make plan (Core or higher)."
+          : "Connect using an API key to import and index workflows."}
       </div>
+      {selectedPlatform === "make" ? (
+        <div className="mt-2 text-xs text-gray-600">
+          If you're on the Free plan, choose <span className="font-semibold">Webhook Only</span>.
+        </div>
+      ) : null}
     </button>
 
-    {selectedPlatform !== "n8n" ? (
+    {selectedPlatform !== "n8n" && selectedPlatform !== "make" ? (
       <button
         type="button"
         onClick={() => {
@@ -1550,38 +1562,42 @@ export default function ConnectionsPage() {
         }}
         className="w-full rounded-xl border-2 border-gray-200 p-4 text-left hover:border-blue-500 hover:bg-slate-50"
       >
-        <div className="flex items-center gap-2 text-base font-semibold text-gray-900">
-          <WebhookIcon className="h-5 w-5 text-slate-700" />
-          Webhook Only
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-base font-semibold text-gray-900">
+            <WebhookIcon className="h-5 w-5 text-slate-700" />
+            Webhook Only
+          </div>
+          <span className="rounded bg-slate-700 px-2 py-1 text-xs font-bold text-white">
+            NO API
+          </span>
         </div>
-        <div className="mt-1 text-sm text-gray-700">Manual event streaming to GetFlowetic. No catalog import.</div>
-        <div className="mt-2 text-xs text-gray-600">
-          Best for voice platforms if you want real-time events. Automation platforms generally rely on API polling.
+        <div className="mt-1 text-sm text-gray-700">
+          Manual event streaming to GetFlowetic. No catalog import.
         </div>
       </button>
     ) : null}
 
-    {selectedPlatform ? (
+    {selectedPlatform === "n8n" ? (
       <button
         type="button"
         onClick={() => {
-          // MCP support in your current PLATFORM_META is not tracked; allow for automation platforms only
-          if (!["n8n", "make", "activepieces"].includes(String(selectedPlatform))) {
-            setErrMsg("MCP is only supported for n8n, Make, and Activepieces.");
-            return;
-          }
           setSelectedMethod("mcp");
           setErrMsg(null);
           setStep("credentials");
         }}
-        className="w-full rounded-xl border-2 border-gray-200 p-4 text-left hover:border-blue-500 hover:bg-slate-50"
+        className="w-full rounded-xl border-2 border-purple-200 bg-purple-50 p-4 text-left hover:border-purple-400"
       >
-        <div className="flex items-center gap-2 text-base font-semibold text-gray-900">
-          <Bot className="h-5 w-5 text-slate-700" />
-          MCP instances
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-base font-semibold text-gray-900">
+            <Cpu className="h-5 w-5 text-purple-700" />
+            MCP Instances
+          </div>
+          <span className="rounded bg-purple-600 px-2 py-1 text-xs font-bold text-white">
+            AI DIRECT
+          </span>
         </div>
         <div className="mt-1 text-sm text-gray-700">
-          Connect to n8n's built-in MCP server to discover and run workflows enabled for MCP.
+          AI tools discover and run your enabled n8n workflows directly.
         </div>
       </button>
     ) : null}
@@ -1608,9 +1624,9 @@ export default function ConnectionsPage() {
               </li>
               <li>Click &quot;Add&quot; and copy your token</li>
             </ul>
+            <div className="mt-3 text-xs text-blue-900/80">⚠️ Requires Make paid plan</div>
           </div>
         ) : null}
-
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <label className="text-sm font-semibold text-gray-900">
@@ -1790,12 +1806,13 @@ export default function ConnectionsPage() {
           type="button"
           onClick={() => {
             setErrMsg(null);
-            // Make skips "method", so Back should return to platform picker
+            // Make goes back to platform selection since it skips method step
             if (selectedPlatform === "make") {
               setStep("platform");
               return;
             }
             setStep("method");
+            return;
           }}
           className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-200"
           disabled={saving}
