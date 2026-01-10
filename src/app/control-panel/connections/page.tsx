@@ -15,6 +15,7 @@ import {
   PlusCircle,
   X,
   Cpu,
+  Copy,
 } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
@@ -271,6 +272,8 @@ function KebabMenu({
 export default function ConnectionsPage() {
   // Main data states
   const [errMsg, setErrMsg] = useState<string | null>(null);
+  const [lastError, setLastError] = useState<any | null>(null);
+  const [lastWarnings, setLastWarnings] = useState<any[] | null>(null);
 
   // Tab state (for switching between All, Credentials)
   const [filter, setFilter] = useState<string>("all");
@@ -814,7 +817,17 @@ export default function ConnectionsPage() {
     if (!res.ok || !json?.ok) {
       setSaving(false);
       setErrMsg(json?.message || "Connection failed. Please check your credentials.");
+      // Store full backend error verbatim for copy/paste
+      setLastError(json);
+      setLastWarnings(null);
       return;
+    }
+
+    // Store any warnings from successful backend response
+    if (json?.warnings && Array.isArray(json.warnings)) {
+      setLastWarnings(json.warnings);
+    } else {
+      setLastWarnings(null);
     }
 
     if (selectedPlatform === "vapi") {
@@ -1505,7 +1518,23 @@ export default function ConnectionsPage() {
             <div className="px-6 py-5">
               {errMsg ? (
                 <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-                  {errMsg}
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">{errMsg}</div>
+                    {lastError && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(
+                            JSON.stringify(lastError, null, 2)
+                          );
+                        }}
+                        className="ml-2 flex h-6 w-6 items-center justify-center rounded border border-red-300 text-red-600 hover:bg-red-100"
+                        title="Copy error details"
+                      >
+                        <Copy className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               ) : null}
 
@@ -2027,6 +2056,16 @@ export default function ConnectionsPage() {
     <div className="text-center text-sm text-gray-700">
       Connection configuration saved successfully.
     </div>
+    {lastWarnings && lastWarnings.length > 0 ? (
+      <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3">
+        <div className="text-sm font-medium text-yellow-800 mb-2">Warnings:</div>
+        {lastWarnings.map((warning: any, idx: number) => (
+          <div key={idx} className="text-sm text-yellow-700">
+            • {warning.message}
+          </div>
+        ))}
+      </div>
+    ) : null}
     {selectedPlatform === "vapi" && connectSummary?.callsLoaded !== undefined ? (
       <div className="mt-2 text-sm text-gray-700">
         ✅ Loaded {connectSummary.callsLoaded} recent calls
