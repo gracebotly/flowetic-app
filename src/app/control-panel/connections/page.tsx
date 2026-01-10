@@ -1599,12 +1599,9 @@ export default function ConnectionsPage() {
                 </li>
                 <li>Click &quot;Add&quot; and copy your token</li>
               </ul>
+              <div className="mt-3 text-xs text-blue-900/80">⚠️ Requires Make paid plan</div>
             </div>
-
-            <div className="mt-3 text-xs text-blue-900/80">
-              ⚠️ Requires Make paid plan
-            </div>
-          </div>
+          </>
         </>
         ) : null}
         <div className="space-y-2">
