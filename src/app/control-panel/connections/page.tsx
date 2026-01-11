@@ -556,51 +556,50 @@ export default function ConnectionsPage() {
   }
 
   function beginEditCredential(credential: CredentialRow) {
-    setSelectedPlatform(credential.platformType as any);
-    setSelectedMethod(credential.method);
-    setConnectionName(credential.name || "");
-    setEditingSourceId(credential.id);
+  // Make is API-only now. Legacy Make webhook credentials should still open a usable edit screen.
+  const platform = String(credential.platformType || "");
+  const savedMethod = credential.method;
 
-    setEditingMeta({
-      sourceId: credential.id,
-      platformType: credential.platformType,
-      method: credential.method,
-      name: credential.name || "",
-    });
+  const effectiveMethod =
+    platform === "make" ? "api" : savedMethod;
 
-    setErrMsg(null);
-    setSaving(false);
+  setSelectedPlatform(platform as any);
+  setSelectedMethod(effectiveMethod as any);
+  setConnectionName(credential.name || "");
+  setEditingSourceId(credential.id);
+  setEditingMeta({
+    sourceId: credential.id,
+    platformType: credential.platformType,
+    method: effectiveMethod,
+    name: credential.name || "",
+  });
+  setErrMsg(null);
+  setSaving(false);
 
-    // Indicators: we know something is saved because the connection exists.
-    // We never show the secret, but we show that it's present.
-    if (credential.method === "api") {
-      setApiKeySaved(true);
-      setInstanceUrlSaved(true);
-      setShowApiKeyEditor(false);
+  // reset editor toggles
+  setShowApiKeyEditor(false);
+  setShowMcpTokenEditor(false);
 
-      // Keep API key empty until user clicks "Change"
-      setApiKey("");
-
-      // Allow URL editing: we cannot read it back from DB today,
-      // so require re-entry OR keep last typed value if any.
-      // Keep empty but show "Saved" pill.
-      setInstanceUrl("");
-    }
-
-    if (credential.method === "mcp") {
-      setMcpTokenSaved(true);
-      setMcpUrlSaved(true);
-      setShowMcpTokenEditor(false);
-
-      setMcpAccessToken("");
-      setInstanceUrl(""); // you use instanceUrl for n8n mcp URL input
-      setAuthHeader("");
-      setMcpUrl("");
-    }
-
-    setConnectOpen(true);
-    setStep("credentials");
+  // Indicators
+  if (effectiveMethod === "api") {
+    setApiKeySaved(true);
+    setInstanceUrlSaved(platform === "n8n"); // only n8n uses instance URL meaningfully here
+    setApiKey("");
+    setInstanceUrl("");
   }
+  if (effectiveMethod === "mcp") {
+    setMcpTokenSaved(true);
+    setMcpUrlSaved(true);
+    setShowMcpTokenEditor(false);
+    setMcpAccessToken("");
+    setInstanceUrl("");
+    setAuthHeader("");
+    setMcpUrl("");
+  }
+
+  setConnectOpen(true);
+  setStep("credentials");
+}
 
   function openEditCredential(sourceId: string) {
     const cred = credentials.find((c) => c.id === sourceId);
@@ -1427,6 +1426,12 @@ export default function ConnectionsPage() {
           {credentialsErr ? (
             <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
               {credentialsErr}
+            </div>
+          ) : null}
+
+          {errMsg ? (
+            <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              {errMsg}
             </div>
           ) : null}
 
