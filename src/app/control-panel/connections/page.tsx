@@ -1771,7 +1771,7 @@ export default function ConnectionsPage() {
                 onChange={(e) => setApiKey(e.target.value)}
                 type="password"
                 className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                placeholder="cadecdb8-997e-4db7-b6a7-b0e363c5165a"
+                placeholder="ca-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
                 autoComplete="off"
               />
             </div>
