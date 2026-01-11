@@ -274,6 +274,8 @@ export default function ConnectionsPage() {
   const [errMsg, setErrMsg] = useState<string | null>(null);
   const [lastError, setLastError] = useState<any | null>(null);
   const [lastWarnings, setLastWarnings] = useState<any[] | null>(null);
+  const [lastConnectError, setLastConnectError] = useState<any | null>(null);
+  const [connectWarnings, setConnectWarnings] = useState<Array<{ code: string; message: string }>>([]);
 
   // Tab state (for switching between All, Credentials)
   const [filter, setFilter] = useState<string>("all");
@@ -681,6 +683,8 @@ export default function ConnectionsPage() {
     setSaving(false);
     setErrMsg(null);
     setConnectSummary(null);
+    setLastConnectError(null);
+    setConnectWarnings([]);
   }
 
   function openConnect() {
@@ -816,19 +820,34 @@ export default function ConnectionsPage() {
 
     if (!res.ok || !json?.ok) {
       setSaving(false);
-      setErrMsg(json?.message || "Connection failed. Please check your credentials.");
-      // Store full backend error verbatim for copy/paste
-      setLastError(json);
-      setLastWarnings(null);
+
+      const message =
+        typeof json?.message === "string" && json.message.trim()
+          ? json.message
+          : "Connection failed. Please check your credentials and try again.";
+
+      setErrMsg(message);
+
+      setLastConnectError({
+        ts: new Date().toISOString(),
+        platformType: selectedPlatform,
+        method: selectedMethod,
+        status: res.status,
+        code: json?.code,
+        message: json?.message,
+        details: json?.details,
+        userAction: json?.userAction,
+      });
       return;
     }
 
     // Store any warnings from successful backend response
-    if (json?.warnings && Array.isArray(json.warnings)) {
-      setLastWarnings(json.warnings);
-    } else {
-      setLastWarnings(null);
-    }
+    const warnings = Array.isArray(json?.warnings) ? json.warnings : [];
+    setConnectWarnings(
+      warnings
+        .filter((w: any) => w && typeof w.message === "string")
+        .map((w: any) => ({ code: String(w.code || "WARNING"), message: String(w.message) })),
+    );
 
     if (selectedPlatform === "vapi") {
       setConnectSummary({ callsLoaded: typeof json?.callsLoaded === "number" ? json.callsLoaded : undefined });
@@ -881,20 +900,28 @@ export default function ConnectionsPage() {
       return;
     }
 
-    const sourceId = json?.source?.id as string | undefined;
-    if (!sourceId) {
+    const sid = String(json?.sourceId || "");
+    if (!sid) {
       setSaving(false);
-      setErrMsg("Connection succeeded but no source ID returned.");
+      setErrMsg("Connection succeeded but no sourceId was returned by Getflowetic backend.");
       return;
     }
-
-    setCreatedSourceId(sourceId);
+    setCreatedSourceId(sid);
 
     await refreshCredentials();
 
+    // Handle Vapi inventory response
+    if (selectedPlatform === "vapi" && Array.isArray(json.inventoryEntities)) {
+      setInventoryEntities(json.inventoryEntities);
+      setConnectOpen(true);
+      setStep("entities");
+      setSaving(false);
+      return;
+    }
+
     if (selectedPlatform === "n8n" && (selectedMethod === "api" || selectedMethod === "mcp")) {
       setSaving(false); // Stop loading first
-      await loadN8nInventory(sourceId);
+      await loadN8nInventory(sid);
       // Ensure modal stays open and step transitions
       setConnectOpen(true);
       setStep("entities");
@@ -953,7 +980,15 @@ export default function ConnectionsPage() {
   async function saveEntitiesSelection() {
     if (!createdSourceId) return;
     if (selectedExternalIds.size === 0) {
-      setErrMsg("Select at least one workflow to index.");
+
+      setErrMsg(
+        selectedPlatform === "vapi"
+          ? "Select at least one assistant to index."
+          : selectedPlatform === "retell"
+          ? "Select at least one agent to index."
+          : "Select at least one workflow to index."
+      );
+
       return;
     }
     const selected = new Set(selectedExternalIds);
@@ -1471,7 +1506,7 @@ export default function ConnectionsPage() {
                           : "Credentials"
                         : step === "entities"
                         ? editingSourceId 
-                          ? "Manage indexed workflows" 
+                          ? selectedPlatform === "vapi" ? "Manage indexed assistants" : "Manage indexed workflows" 
                           : "Select entities to index"
                         : "Connected"}
                     </div>
@@ -1500,7 +1535,9 @@ export default function ConnectionsPage() {
                             : "Enter credentials to validate and connect."
                       : step === "entities"
                       ? editingSourceId
-                        ? "Update which workflows GetFlowetic should index. Unselected workflows will be removed from your All tab."
+                        ? selectedPlatform === "vapi" 
+                          ? "Update which assistants GetFlowetic should index. Unselected assistants will be removed from your All tab."
+                          : "Update which workflows GetFlowetic should index. Unselected workflows will be removed from your All tab."
                         : "Add agents/workflows you want GetFlowetic to index."
                       : "Success."}
                   </div>
@@ -1518,22 +1555,26 @@ export default function ConnectionsPage() {
             <div className="px-6 py-5">
               {errMsg ? (
                 <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">{errMsg}</div>
-                    {lastError && (
+                  <div>
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">{errMsg}</div>
                       <button
                         type="button"
                         onClick={() => {
-                          navigator.clipboard.writeText(
-                            JSON.stringify(lastError, null, 2)
-                          );
+                          if (!lastConnectError) return;
+                          navigator.clipboard.writeText(JSON.stringify(lastConnectError, null, 2));
                         }}
-                        className="ml-2 flex h-6 w-6 items-center justify-center rounded border border-red-300 text-red-600 hover:bg-red-100"
-                        title="Copy error details"
+                        className="shrink-0 rounded-md bg-white px-2 py-1 text-xs font-semibold text-red-700 border border-red-200 hover:bg-red-50 disabled:opacity-50"
+                        disabled={!lastConnectError}
                       >
-                        <Copy className="h-3 w-3" />
+                        Copy error details
                       </button>
-                    )}
+                    </div>
+                    {lastConnectError?.userAction === "contact_support" ? (
+                      <div className="mt-2 text-xs text-red-700/80">
+                        This looks like a Getflowetic issue (not something you can fix). Please contact support and click "Copy error details".
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               ) : null}
@@ -1756,7 +1797,7 @@ export default function ConnectionsPage() {
                 onChange={(e) => setApiKey(e.target.value)}
                 type="password"
                 className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                placeholder="sk_..."
+                placeholder="ca-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
                 autoComplete="off"
               />
             </div>
@@ -1976,7 +2017,9 @@ export default function ConnectionsPage() {
     ) : null}
 
     {inventoryLoading ? (
-      <div className="text-sm text-gray-600">Loading workflows…</div>
+      <div className="text-sm text-gray-600">
+        {selectedPlatform === "vapi" ? "Loading assistants…" : selectedPlatform === "retell" ? "Loading agents…" : "Loading workflows…"}
+      </div>
     ) : null}
 
     {!inventoryLoading ? (
@@ -1988,14 +2031,22 @@ export default function ConnectionsPage() {
             value={inventorySearch}
             onChange={(e) => setInventorySearch(e.target.value)}
             className="w-full rounded-lg border border-gray-300 py-2.5 pl-10 pr-4 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Search workflows..."
+            placeholder={
+              selectedPlatform === "vapi"
+                ? "Search assistants..."
+                : selectedPlatform === "retell"
+                ? "Search agents..."
+                : "Search workflows..."
+            }
           />
         </div>
       </div>
 
       <div className="max-h-[320px] overflow-auto rounded-lg border border-gray-200 bg-white">
         {displayedSelectable.length === 0 ? (
-          <div className="p-4 text-sm text-gray-600">No workflows found in this n8n instance.</div>
+          <div className="p-4 text-sm text-gray-600">
+            {selectedPlatform === "vapi" ? "No assistants found in this Vapi instance." : selectedPlatform === "retell" ? "No agents found in this Retell instance." : "No workflows found in this n8n instance."}
+          </div>
         ) : (
           <div className="divide-y divide-gray-200">
             {displayedSelectable.map((e) => {
@@ -2056,14 +2107,14 @@ export default function ConnectionsPage() {
     <div className="text-center text-sm text-gray-700">
       Connection configuration saved successfully.
     </div>
-    {lastWarnings && lastWarnings.length > 0 ? (
-      <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3">
-        <div className="text-sm font-medium text-yellow-800 mb-2">Warnings:</div>
-        {lastWarnings.map((warning: any, idx: number) => (
-          <div key={idx} className="text-sm text-yellow-700">
-            • {warning.message}
-          </div>
-        ))}
+    {connectWarnings.length ? (
+      <div className="mt-3 rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-900">
+        <div className="font-semibold">⚠️ Warnings</div>
+        <ul className="mt-2 list-disc space-y-1 pl-5">
+          {connectWarnings.map((w, idx) => (
+            <li key={`${w.code}-${idx}`}>{w.message}</li>
+          ))}
+        </ul>
       </div>
     ) : null}
     {selectedPlatform === "vapi" && connectSummary?.callsLoaded !== undefined ? (

@@ -25,13 +25,52 @@ function safeSnippet(input: string, maxLen = 300) {
   return s.length > maxLen ? s.slice(0, maxLen) + "…" : s;
 }
 
+function providerAuthMessage(args: {
+  platform: "n8n" | "make" | "vapi" | "retell";
+  status: number;
+  fallback: string;
+}): string {
+  const { platform, status, fallback } = args;
+
+  if (status === 401) {
+    if (platform === "n8n") return "n8n rejected these credentials (401). Check your API key and auth mode.";
+    if (platform === "vapi") return "Vapi rejected this API key (401). Please regenerate your Vapi Private API Key and try again.";
+    if (platform === "retell") return "Retell rejected this API key (401). Please regenerate your Retell API Key and try again.";
+    if (platform === "make") return "Make rejected this API token (401). Please regenerate your token and try again.";
+  }
+
+  if (status === 403) {
+    if (platform === "make") {
+      return "Make forbids API token authorization for this organization. You likely need a paid Make plan and/or org settings that allow token auth.";
+    }
+    return `${platform} returned Forbidden (403). Please verify your account permissions.`;
+  }
+
+  if (status === 404) {
+    return `${platform} API endpoint not found (404). This is likely a backend configuration issue.`;
+  }
+
+  if (status === 429) {
+    return `${platform} rate limited the request (429). Please wait a moment and try again.`;
+  }
+
+  if (status >= 500) {
+    return `${platform} is having issues (${status}). Please try again in a moment.`;
+  }
+
+  return fallback;
+}
+
+type UserAction = "fix_credentials" | "retry_later" | "contact_support";
+
 function errorResponse(
   status: number,
   code: string,
   message: string,
   details?: ConnectErrorDetails,
+  userAction: UserAction = "retry_later",
 ) {
-  return NextResponse.json({ ok: false, code, message, details }, { status });
+  return NextResponse.json({ ok: false, code, message, details, userAction }, { status });
 }
 
 async function detectMakeRegion(apiToken: string): Promise<MakeRegion | null> {
@@ -206,7 +245,7 @@ export async function POST(req: Request) {
   const apiToken = body.apiToken || body.apiKey;
 
   // Debug logging for troubleshooting
-  console.log('[Make Connection Debug]', {
+  console.log('[Connections Connect Debug]', {
     platformType,
     hasToken: !!apiToken,
     tokenLength: apiToken?.length,
@@ -233,6 +272,7 @@ export async function POST(req: Request) {
     method === "webhook" ? "method:webhook" : method === "mcp" ? "method:mcp" : "method:api";
 
   const warnings: ConnectWarning[] = [];
+  let inventoryEntities: Array<{ entityKind: string; externalId: string; displayName: string }> | null = null;
 
   // Credentials payload to encrypt into sources.secret_hash
   // NOTE: we store a JSON string inside the encrypted envelope.
@@ -366,10 +406,16 @@ export async function POST(req: Request) {
     const testRes = await fetch(`${baseUrl}/api/v1/workflows`, { method: "GET", headers });
     if (!testRes.ok) {
       const t = await testRes.text().catch(() => "");
+      const msg = providerAuthMessage({
+        platform: "n8n",
+        status: testRes.status,
+        fallback: `n8n API auth failed (${testRes.status}). ${t}`.trim(),
+      });
+
       return errorResponse(
         400,
         "N8N_API_FAILED",
-        `n8n API auth failed (${testRes.status}). ${t}`.trim(),
+        msg,
         {
           platformType,
           method,
@@ -386,7 +432,6 @@ export async function POST(req: Request) {
       return errorResponse(400, "MISSING_API_KEY", "Vapi Private API Key is required.");
     }
 
-    // Test key with a lightweight request
     const testRes = await fetch("https://api.vapi.ai/v1/assistants", {
       method: "GET",
       headers: {
@@ -395,12 +440,18 @@ export async function POST(req: Request) {
       },
     });
 
+    const t = await testRes.text().catch(() => "");
     if (!testRes.ok) {
-      const t = await testRes.text().catch(() => "");
+      const msg = providerAuthMessage({
+        platform: "vapi",
+        status: testRes.status,
+        fallback: "Unable to validate your Vapi API key. Please check your key and try again.",
+      });
+
       return errorResponse(
         400,
         "VAPI_AUTH_FAILED",
-        "Vapi rejected this API key. Please generate a new Private API Key in Vapi → API Keys and try again.",
+        msg,
         {
           platformType,
           method,
@@ -409,6 +460,26 @@ export async function POST(req: Request) {
         },
       );
     }
+
+    // Parse assistants for inventory list
+    let parsed: any = null;
+    try {
+      parsed = t ? JSON.parse(t) : null;
+    } catch {
+      parsed = null;
+    }
+
+    const assistants = Array.isArray(parsed)
+      ? parsed
+      : Array.isArray(parsed?.assistants)
+        ? parsed.assistants
+        : [];
+
+    inventoryEntities = assistants.map((a: any) => ({
+      entityKind: "assistant",
+      externalId: String(a?.id ?? ""),
+      displayName: String(a?.name ?? `Assistant ${String(a?.id ?? "")}`),
+    })).filter((x: any) => x.externalId);
   }
 
   if (platformType === "retell" && method === "api") {
@@ -428,10 +499,16 @@ export async function POST(req: Request) {
 
     if (!testRes.ok) {
       const t = await testRes.text().catch(() => "");
+      const msg = providerAuthMessage({
+        platform: "retell",
+        status: testRes.status,
+        fallback: "Unable to validate your Retell API key. Please check your key and try again.",
+      });
+
       return errorResponse(
         400,
         "RETELL_AUTH_FAILED",
-        "Retell rejected this API key. Please generate a new API Key in Retell → API Keys and try again.",
+        msg,
         {
           platformType,
           method,
@@ -440,6 +517,24 @@ export async function POST(req: Request) {
         },
       );
     }
+
+    // Parse agents for inventory list
+    const testText = await testRes.text().catch(() => "");
+    let parsed: any = null;
+    try {
+      parsed = testText ? JSON.parse(testText) : null;
+    } catch {
+      parsed = null;
+    }
+
+    const agents = Array.isArray(parsed?.agents) ? parsed.agents : Array.isArray(parsed) ? parsed : [];
+    inventoryEntities = agents
+      .map((a: any) => ({
+        entityKind: "agent",
+        externalId: String(a?.agent_id ?? a?.id ?? ""),
+        displayName: String(a?.agent_name ?? a?.name ?? `Agent ${String(a?.agent_id ?? a?.id ?? "")}`),
+      }))
+      .filter((x: any) => x.externalId);
 
     // Pull agents count for Retell
     try {
@@ -697,7 +792,7 @@ export async function POST(req: Request) {
   return NextResponse.json({
     ok: true,
     sourceId: source.id,
-    ...(platformType === "vapi" && method === "api" ? { callsLoaded: callsLoaded ?? 0 } : {}),
+    ...(platformType === "vapi" && method === "api" && inventoryEntities ? { inventoryEntities } : {}),
     ...(warnings.length > 0 ? { warnings } : {}),
   });
 }
