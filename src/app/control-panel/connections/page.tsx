@@ -274,6 +274,8 @@ export default function ConnectionsPage() {
   const [errMsg, setErrMsg] = useState<string | null>(null);
   const [lastError, setLastError] = useState<any | null>(null);
   const [lastWarnings, setLastWarnings] = useState<any[] | null>(null);
+  const [lastConnectError, setLastConnectError] = useState<any | null>(null);
+  const [connectWarnings, setConnectWarnings] = useState<Array<{ code: string; message: string }>>([]);
 
   // Tab state (for switching between All, Credentials)
   const [filter, setFilter] = useState<string>("all");
@@ -681,6 +683,8 @@ export default function ConnectionsPage() {
     setSaving(false);
     setErrMsg(null);
     setConnectSummary(null);
+    setLastConnectError(null);
+    setConnectWarnings([]);
   }
 
   function openConnect() {
@@ -816,19 +820,33 @@ export default function ConnectionsPage() {
 
     if (!res.ok || !json?.ok) {
       setSaving(false);
-      setErrMsg(json?.message || "Connection failed. Please check your credentials.");
-      // Store full backend error verbatim for copy/paste
-      setLastError(json);
-      setLastWarnings(null);
+
+      const message =
+        typeof json?.message === "string" && json.message.trim()
+          ? json.message
+          : "Connection failed. Please check your credentials and try again.";
+
+      setErrMsg(message);
+
+      setLastConnectError({
+        ts: new Date().toISOString(),
+        platformType: selectedPlatform,
+        method: selectedMethod,
+        status: res.status,
+        code: json?.code,
+        message: json?.message,
+        details: json?.details,
+      });
       return;
     }
 
     // Store any warnings from successful backend response
-    if (json?.warnings && Array.isArray(json.warnings)) {
-      setLastWarnings(json.warnings);
-    } else {
-      setLastWarnings(null);
-    }
+    const warnings = Array.isArray(json?.warnings) ? json.warnings : [];
+    setConnectWarnings(
+      warnings
+        .filter((w: any) => w && typeof w.message === "string")
+        .map((w: any) => ({ code: String(w.code || "WARNING"), message: String(w.message) })),
+    );
 
     if (selectedPlatform === "vapi") {
       setConnectSummary({ callsLoaded: typeof json?.callsLoaded === "number" ? json.callsLoaded : undefined });
@@ -1520,20 +1538,17 @@ export default function ConnectionsPage() {
                 <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
                   <div className="flex items-start justify-between">
                     <div className="flex-1">{errMsg}</div>
-                    {lastError && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          navigator.clipboard.writeText(
-                            JSON.stringify(lastError, null, 2)
-                          );
-                        }}
-                        className="ml-2 flex h-6 w-6 items-center justify-center rounded border border-red-300 text-red-600 hover:bg-red-100"
-                        title="Copy error details"
-                      >
-                        <Copy className="h-3 w-3" />
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!lastConnectError) return;
+                        navigator.clipboard.writeText(JSON.stringify(lastConnectError, null, 2));
+                      }}
+                      className="shrink-0 rounded-md bg-white px-2 py-1 text-xs font-semibold text-red-700 border border-red-200 hover:bg-red-50 disabled:opacity-50"
+                      disabled={!lastConnectError}
+                    >
+                      Copy error details
+                    </button>
                   </div>
                 </div>
               ) : null}
@@ -1756,7 +1771,7 @@ export default function ConnectionsPage() {
                 onChange={(e) => setApiKey(e.target.value)}
                 type="password"
                 className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                placeholder="sk_..."
+                placeholder="cadecdb8-997e-4db7-b6a7-b0e363c5165a"
                 autoComplete="off"
               />
             </div>
@@ -2056,14 +2071,14 @@ export default function ConnectionsPage() {
     <div className="text-center text-sm text-gray-700">
       Connection configuration saved successfully.
     </div>
-    {lastWarnings && lastWarnings.length > 0 ? (
-      <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3">
-        <div className="text-sm font-medium text-yellow-800 mb-2">Warnings:</div>
-        {lastWarnings.map((warning: any, idx: number) => (
-          <div key={idx} className="text-sm text-yellow-700">
-            • {warning.message}
-          </div>
-        ))}
+    {connectWarnings.length ? (
+      <div className="mt-3 rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-900">
+        <div className="font-semibold">⚠️ Warnings</div>
+        <ul className="mt-2 list-disc space-y-1 pl-5">
+          {connectWarnings.map((w, idx) => (
+            <li key={`${w.code}-${idx}`}>{w.message}</li>
+          ))}
+        </ul>
       </div>
     ) : null}
     {selectedPlatform === "vapi" && connectSummary?.callsLoaded !== undefined ? (

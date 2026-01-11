@@ -25,6 +25,42 @@ function safeSnippet(input: string, maxLen = 300) {
   return s.length > maxLen ? s.slice(0, maxLen) + "…" : s;
 }
 
+function providerAuthMessage(args: {
+  platform: "n8n" | "make" | "vapi" | "retell";
+  status: number;
+  fallback: string;
+}): string {
+  const { platform, status, fallback } = args;
+
+  if (status === 401) {
+    if (platform === "n8n") return "n8n rejected these credentials (401). Check your API key and auth mode.";
+    if (platform === "vapi") return "Vapi rejected this API key (401). Please regenerate your Vapi Private API Key and try again.";
+    if (platform === "retell") return "Retell rejected this API key (401). Please regenerate your Retell API Key and try again.";
+    if (platform === "make") return "Make rejected this API token (401). Please regenerate your token and try again.";
+  }
+
+  if (status === 403) {
+    if (platform === "make") {
+      return "Make forbids API token authorization for this organization. You likely need a paid Make plan and/or org settings that allow token auth.";
+    }
+    return `${platform} returned Forbidden (403). Please verify your account permissions.`;
+  }
+
+  if (status === 404) {
+    return `${platform} API endpoint not found (404). This is likely a backend configuration issue.`;
+  }
+
+  if (status === 429) {
+    return `${platform} rate limited the request (429). Please wait a moment and try again.`;
+  }
+
+  if (status >= 500) {
+    return `${platform} is having issues (${status}). Please try again in a moment.`;
+  }
+
+  return fallback;
+}
+
 function errorResponse(
   status: number,
   code: string,
@@ -206,7 +242,7 @@ export async function POST(req: Request) {
   const apiToken = body.apiToken || body.apiKey;
 
   // Debug logging for troubleshooting
-  console.log('[Make Connection Debug]', {
+  console.log('[Connections Connect Debug]', {
     platformType,
     hasToken: !!apiToken,
     tokenLength: apiToken?.length,
@@ -366,10 +402,16 @@ export async function POST(req: Request) {
     const testRes = await fetch(`${baseUrl}/api/v1/workflows`, { method: "GET", headers });
     if (!testRes.ok) {
       const t = await testRes.text().catch(() => "");
+      const msg = providerAuthMessage({
+        platform: "n8n",
+        status: testRes.status,
+        fallback: `n8n API auth failed (${testRes.status}). ${t}`.trim(),
+      });
+
       return errorResponse(
         400,
         "N8N_API_FAILED",
-        `n8n API auth failed (${testRes.status}). ${t}`.trim(),
+        msg,
         {
           platformType,
           method,
@@ -397,19 +439,17 @@ export async function POST(req: Request) {
 
     if (!testRes.ok) {
       const t = await testRes.text().catch(() => "");
-      const providerSnippet = safeSnippet(t);
+      const msg = providerAuthMessage({
+        platform: "vapi",
+        status: testRes.status,
+        fallback: "Unable to validate your Vapi API key. Please check your key and try again.",
+      });
 
-      // Make debugging actionable: distinguish endpoint issues from auth issues.
-      const message =
-        testRes.status === 404
-          ? "Vapi API endpoint not found (404). This usually indicates an incorrect Vapi base URL/path in our backend. Please contact support."
-          : "Vapi rejected this API key. Please generate a new Private API Key in Vapi → API Keys and try again.";
-
-      return errorResponse(400, "VAPI_AUTH_FAILED", message, {
+      return errorResponse(400, "VAPI_AUTH_FAILED", msg, {
         platformType,
         method,
         providerStatus: testRes.status,
-        providerBodySnippet: providerSnippet,
+        providerBodySnippet: safeSnippet(t),
       });
     }
   }
@@ -431,10 +471,16 @@ export async function POST(req: Request) {
 
     if (!testRes.ok) {
       const t = await testRes.text().catch(() => "");
+      const msg = providerAuthMessage({
+        platform: "retell",
+        status: testRes.status,
+        fallback: "Unable to validate your Retell API key. Please check your key and try again.",
+      });
+
       return errorResponse(
         400,
         "RETELL_AUTH_FAILED",
-        "Retell rejected this API key. Please generate a new API Key in Retell → API Keys and try again.",
+        msg,
         {
           platformType,
           method,
