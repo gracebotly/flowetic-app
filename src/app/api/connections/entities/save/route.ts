@@ -63,7 +63,16 @@ export async function POST(req: Request) {
     updated_at: now,
   }));
 
-  const { error: upErr } = await supabase.from("source_entities").upsert(rows, {
+  // Deduplicate by external_id to avoid Postgres "cannot affect row a second time" error
+  const byExternalId = new Map<string, any>();
+  for (const r of rows) {
+    const k = String(r.external_id || "").trim();
+    if (!k) continue;
+    if (!byExternalId.has(k)) byExternalId.set(k, r);
+  }
+  const dedupedRows = Array.from(byExternalId.values());
+
+  const { error: upErr } = await supabase.from("source_entities").upsert(dedupedRows, {
     onConflict: "source_id,external_id",
   });
 
@@ -71,6 +80,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, code: "PERSISTENCE_FAILED", message: upErr.message }, { status: 400 });
   }
 
-  return NextResponse.json({ ok: true, savedCount: rows.length });
+  return NextResponse.json({ ok: true, savedCount: dedupedRows.length });
 }
 
