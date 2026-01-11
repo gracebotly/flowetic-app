@@ -61,13 +61,16 @@ function providerAuthMessage(args: {
   return fallback;
 }
 
+type UserAction = "fix_credentials" | "retry_later" | "contact_support";
+
 function errorResponse(
   status: number,
   code: string,
   message: string,
   details?: ConnectErrorDetails,
+  userAction: UserAction = "retry_later",
 ) {
-  return NextResponse.json({ ok: false, code, message, details }, { status });
+  return NextResponse.json({ ok: false, code, message, details, userAction }, { status });
 }
 
 async function detectMakeRegion(apiToken: string): Promise<MakeRegion | null> {
@@ -429,15 +432,49 @@ export async function POST(req: Request) {
       return errorResponse(400, "MISSING_API_KEY", "Vapi Private API Key is required.");
     }
 
-    const testRes = await fetch("https://api.vapi.ai/v1/assistants", {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${key}`,
-        "Content-Type": "application/json",
-      },
-    });
+    const candidates = [
+      "https://api.vapi.ai/v1/assistants",
+      "https://api.vapi.ai/assistants",
+    ] as const;
 
-    const t = await testRes.text().catch(() => "");
+    let testRes: Response | null = null;
+    let respText = "";
+
+    for (const url of candidates) {
+      const r = await fetch(url, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${key}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      const t = await r.text().catch(() => "");
+      if (r.ok) {
+        testRes = r;
+        respText = t;
+        break;
+      }
+
+      // If it's a 404, try the next candidate path
+      if (r.status === 404) continue;
+
+      // For other statuses (401/403/etc), stop and use this response
+      testRes = r;
+      respText = t;
+      break;
+    }
+
+    if (!testRes) {
+      return errorResponse(
+        500,
+        "VAPI_CONNECT_INTERNAL",
+        "This is a Getflowetic configuration issue (not your fault). Please contact support and include the copied error details.",
+        { platformType, method },
+        "contact_support",
+      );
+    }
+
     if (!testRes.ok) {
       const msg = providerAuthMessage({
         platform: "vapi",
@@ -449,14 +486,14 @@ export async function POST(req: Request) {
         platformType,
         method,
         providerStatus: testRes.status,
-        providerBodySnippet: safeSnippet(t),
+        providerBodySnippet: safeSnippet(respText),
       });
     }
 
     // Parse assistants for inventory list
     let parsed: any = null;
     try {
-      parsed = t ? JSON.parse(t) : null;
+      parsed = respText ? JSON.parse(respText) : null;
     } catch {
       parsed = null;
     }

@@ -836,6 +836,7 @@ export default function ConnectionsPage() {
         code: json?.code,
         message: json?.message,
         details: json?.details,
+        userAction: json?.userAction,
       });
       return;
     }
@@ -1554,19 +1555,26 @@ export default function ConnectionsPage() {
             <div className="px-6 py-5">
               {errMsg ? (
                 <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">{errMsg}</div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!lastConnectError) return;
-                        navigator.clipboard.writeText(JSON.stringify(lastConnectError, null, 2));
-                      }}
-                      className="shrink-0 rounded-md bg-white px-2 py-1 text-xs font-semibold text-red-700 border border-red-200 hover:bg-red-50 disabled:opacity-50"
-                      disabled={!lastConnectError}
-                    >
-                      Copy error details
-                    </button>
+                  <div>
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">{errMsg}</div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!lastConnectError) return;
+                          navigator.clipboard.writeText(JSON.stringify(lastConnectError, null, 2));
+                        }}
+                        className="shrink-0 rounded-md bg-white px-2 py-1 text-xs font-semibold text-red-700 border border-red-200 hover:bg-red-50 disabled:opacity-50"
+                        disabled={!lastConnectError}
+                      >
+                        Copy error details
+                      </button>
+                    </div>
+                    {lastConnectError?.userAction === "contact_support" ? (
+                      <div className="mt-2 text-xs text-red-700/80">
+                        This looks like a Getflowetic issue (not something you can fix). Please contact support and click "Copy error details".
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               ) : null}
