@@ -899,20 +899,28 @@ export default function ConnectionsPage() {
       return;
     }
 
-    const sourceId = json?.source?.id as string | undefined;
-    if (!sourceId) {
+    const sid = String(json?.sourceId || "");
+    if (!sid) {
       setSaving(false);
-      setErrMsg("Connection succeeded but no source ID returned.");
+      setErrMsg("Connection succeeded but no sourceId was returned by Getflowetic backend.");
       return;
     }
-
-    setCreatedSourceId(sourceId);
+    setCreatedSourceId(sid);
 
     await refreshCredentials();
 
+    // Handle Vapi inventory response
+    if (selectedPlatform === "vapi" && Array.isArray(json.inventoryEntities)) {
+      setInventoryEntities(json.inventoryEntities);
+      setConnectOpen(true);
+      setStep("entities");
+      setSaving(false);
+      return;
+    }
+
     if (selectedPlatform === "n8n" && (selectedMethod === "api" || selectedMethod === "mcp")) {
       setSaving(false); // Stop loading first
-      await loadN8nInventory(sourceId);
+      await loadN8nInventory(sid);
       // Ensure modal stays open and step transitions
       setConnectOpen(true);
       setStep("entities");
@@ -971,7 +979,7 @@ export default function ConnectionsPage() {
   async function saveEntitiesSelection() {
     if (!createdSourceId) return;
     if (selectedExternalIds.size === 0) {
-      setErrMsg("Select at least one workflow to index.");
+      setErrMsg(selectedPlatform === "vapi" ? "Select at least one assistant to index." : "Select at least one workflow to index.");
       return;
     }
     const selected = new Set(selectedExternalIds);
@@ -1489,7 +1497,7 @@ export default function ConnectionsPage() {
                           : "Credentials"
                         : step === "entities"
                         ? editingSourceId 
-                          ? "Manage indexed workflows" 
+                          ? selectedPlatform === "vapi" ? "Manage indexed assistants" : "Manage indexed workflows" 
                           : "Select entities to index"
                         : "Connected"}
                     </div>
@@ -1518,7 +1526,9 @@ export default function ConnectionsPage() {
                             : "Enter credentials to validate and connect."
                       : step === "entities"
                       ? editingSourceId
-                        ? "Update which workflows GetFlowetic should index. Unselected workflows will be removed from your All tab."
+                        ? selectedPlatform === "vapi" 
+                          ? "Update which assistants GetFlowetic should index. Unselected assistants will be removed from your All tab."
+                          : "Update which workflows GetFlowetic should index. Unselected workflows will be removed from your All tab."
                         : "Add agents/workflows you want GetFlowetic to index."
                       : "Success."}
                   </div>
@@ -1991,7 +2001,7 @@ export default function ConnectionsPage() {
     ) : null}
 
     {inventoryLoading ? (
-      <div className="text-sm text-gray-600">Loading workflows…</div>
+      <div className="text-sm text-gray-600">{selectedPlatform === "vapi" ? "Loading assistants…" : "Loading workflows…"}</div>
     ) : null}
 
     {!inventoryLoading ? (
@@ -2003,14 +2013,16 @@ export default function ConnectionsPage() {
             value={inventorySearch}
             onChange={(e) => setInventorySearch(e.target.value)}
             className="w-full rounded-lg border border-gray-300 py-2.5 pl-10 pr-4 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Search workflows..."
+            placeholder={selectedPlatform === "vapi" ? "Search assistants..." : "Search workflows..."}
           />
         </div>
       </div>
 
       <div className="max-h-[320px] overflow-auto rounded-lg border border-gray-200 bg-white">
         {displayedSelectable.length === 0 ? (
-          <div className="p-4 text-sm text-gray-600">No workflows found in this n8n instance.</div>
+          <div className="p-4 text-sm text-gray-600">
+            {selectedPlatform === "vapi" ? "No assistants found in this Vapi instance." : "No workflows found in this n8n instance."}
+          </div>
         ) : (
           <div className="divide-y divide-gray-200">
             {displayedSelectable.map((e) => {

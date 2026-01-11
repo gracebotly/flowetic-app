@@ -269,6 +269,7 @@ export async function POST(req: Request) {
     method === "webhook" ? "method:webhook" : method === "mcp" ? "method:mcp" : "method:api";
 
   const warnings: ConnectWarning[] = [];
+  let inventoryEntities: Array<{ entityKind: string; externalId: string; displayName: string }> | null = null;
 
   // Credentials payload to encrypt into sources.secret_hash
   // NOTE: we store a JSON string inside the encrypted envelope.
@@ -428,8 +429,7 @@ export async function POST(req: Request) {
       return errorResponse(400, "MISSING_API_KEY", "Vapi Private API Key is required.");
     }
 
-    // Test key with a lightweight request (Vapi uses /assistant, not /v1/assistants)
-    const testRes = await fetch("https://api.vapi.ai/assistant", {
+    const testRes = await fetch("https://api.vapi.ai/v1/assistants", {
       method: "GET",
       headers: {
         Authorization: `Bearer ${key}`,
@@ -437,8 +437,8 @@ export async function POST(req: Request) {
       },
     });
 
+    const t = await testRes.text().catch(() => "");
     if (!testRes.ok) {
-      const t = await testRes.text().catch(() => "");
       const msg = providerAuthMessage({
         platform: "vapi",
         status: testRes.status,
@@ -452,6 +452,26 @@ export async function POST(req: Request) {
         providerBodySnippet: safeSnippet(t),
       });
     }
+
+    // Parse assistants for inventory list
+    let parsed: any = null;
+    try {
+      parsed = t ? JSON.parse(t) : null;
+    } catch {
+      parsed = null;
+    }
+
+    const assistants = Array.isArray(parsed)
+      ? parsed
+      : Array.isArray(parsed?.assistants)
+        ? parsed.assistants
+        : [];
+
+    inventoryEntities = assistants.map((a: any) => ({
+      entityKind: "assistant",
+      externalId: String(a?.id ?? ""),
+      displayName: String(a?.name ?? `Assistant ${String(a?.id ?? "")}`),
+    })).filter((x: any) => x.externalId);
   }
 
   if (platformType === "retell" && method === "api") {
@@ -746,6 +766,7 @@ export async function POST(req: Request) {
   return NextResponse.json({
     ok: true,
     sourceId: source.id,
+    ...(platformType === "vapi" && method === "api" && inventoryEntities ? { inventoryEntities } : {}),
     ...(platformType === "vapi" && method === "api" ? { callsLoaded: callsLoaded ?? 0 } : {}),
     ...(warnings.length > 0 ? { warnings } : {}),
   });
