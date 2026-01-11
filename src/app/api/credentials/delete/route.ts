@@ -74,11 +74,12 @@ export async function POST(req: Request) {
     );
   }
 
-  const { error: sourceErr } = await supabase
+  const { data: deleted, error: sourceErr } = await supabase
     .from("sources")
     .delete()
     .eq("tenant_id", source.tenant_id)
-    .eq("id", sourceId);
+    .eq("id", sourceId)
+    .select("id");
 
   if (sourceErr) {
     return NextResponse.json(
@@ -87,5 +88,12 @@ export async function POST(req: Request) {
     );
   }
 
-  return NextResponse.json({ ok: true });
+  if (!deleted || deleted.length === 0) {
+    return NextResponse.json(
+      { ok: false, code: "DELETE_NOOP", message: "Delete did not remove any rows. Check RLS policies for sources." },
+      { status: 409 },
+    );
+  }
+
+  return NextResponse.json({ ok: true, deletedSourceId: sourceId, deletedTenantId: source.tenant_id });
 }
