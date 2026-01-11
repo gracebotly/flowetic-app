@@ -926,8 +926,9 @@ export default function ConnectionsPage() {
         typeof json?.message === "string" && json.message.trim()
           ? json.message
           : "Connection failed. Please check your credentials and try again.";
+      const code = typeof json?.code === "string" && json.code.trim() ? ` (${json.code})` : "";
 
-      setErrMsg(message);
+      setErrMsg(`${message}${code}`);
 
       setLastConnectError({
         ts: new Date().toISOString(),
@@ -1885,17 +1886,44 @@ export default function ConnectionsPage() {
         {selectedPlatform === "vapi" ? (
           <div className="space-y-4">
             <div>
-              <label className="mb-2 block text-sm font-semibold text-gray-900">
-                Private API Key <span className="text-red-600">*</span>
-              </label>
-              <input
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                type="password"
-                className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                placeholder="ca-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                autoComplete="off"
-              />
+              <div className="flex items-center justify-between">
+                <label className="mb-2 block text-sm font-semibold text-gray-900">
+                  Private API Key <span className="text-red-600">*</span>
+                </label>
+                {editingSourceId && apiKeySaved ? (
+                  <span className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-semibold text-gray-700">
+                    Saved
+                  </span>
+                ) : null}
+              </div>
+
+              {editingSourceId && !showApiKeyEditor ? (
+                <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2">
+                  <div className="text-sm text-gray-600">•••••••••••••••••••</div>
+                  <button
+                    type="button"
+                    onClick={() => setShowApiKeyEditor(true)}
+                    className="text-sm font-semibold text-blue-600 hover:underline"
+                  >
+                    Change key
+                  </button>
+                </div>
+              ) : (
+                <input
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  type="password"
+                  className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                  placeholder={editingSourceId ? "Enter a new private API key to replace" : "ca-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"}
+                  autoComplete="off"
+                />
+              )}
+
+              {editingSourceId && !showApiKeyEditor ? (
+                <div className="text-xs text-gray-500">
+                  A key is already saved. For security, it can't be viewed. Click "Change key" to replace it.
+                </div>
+              ) : null}
             </div>
 
             <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
@@ -1915,17 +1943,44 @@ export default function ConnectionsPage() {
         {selectedPlatform === "retell" ? (
           <div className="space-y-4">
             <div>
-              <label className="mb-2 block text-sm font-semibold text-gray-900">
-                API Key <span className="text-red-600">*</span>
-              </label>
-              <input
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                type="password"
-                className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                placeholder="Paste your Retell API Key here"
-                autoComplete="off"
-              />
+              <div className="flex items-center justify-between">
+                <label className="mb-2 block text-sm font-semibold text-gray-900">
+                  API Key <span className="text-red-600">*</span>
+                </label>
+                {editingSourceId && apiKeySaved ? (
+                  <span className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-semibold text-gray-700">
+                    Saved
+                  </span>
+                ) : null}
+              </div>
+
+              {editingSourceId && !showApiKeyEditor ? (
+                <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2">
+                  <div className="text-sm text-gray-600">•••••••••••••••••••</div>
+                  <button
+                    type="button"
+                    onClick={() => setShowApiKeyEditor(true)}
+                    className="text-sm font-semibold text-blue-600 hover:underline"
+                  >
+                    Change key
+                  </button>
+                </div>
+              ) : (
+                <input
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  type="password"
+                  className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                  placeholder={editingSourceId ? "Enter a new API key to replace" : "Paste your Retell API Key here"}
+                  autoComplete="off"
+                />
+              )}
+
+              {editingSourceId && !showApiKeyEditor ? (
+                <div className="text-xs text-gray-500">
+                  A key is already saved. For security, it can't be viewed. Click "Change key" to replace it.
+                </div>
+              ) : null}
             </div>
 
             <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
