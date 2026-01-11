@@ -328,7 +328,6 @@ export default function ConnectionsPage() {
   const [credentialDeleteId, setCredentialDeleteId] = useState<string | null>(null);
   const [credentialDeleteConfirm, setCredentialDeleteConfirm] = useState(false);
   const [credentialDeletePlatformType, setCredentialDeletePlatformType] = useState<string | null>(null);
-  const [credentialDeleteSuccessMsg, setCredentialDeleteSuccessMsg] = useState<string | null>(null);
   
   // Connect form state
   const [selectedPlatform, setSelectedPlatform] = useState<keyof typeof PLATFORM_META | null>(null);
@@ -1628,7 +1627,7 @@ export default function ConnectionsPage() {
                         : selectedPlatform === "n8n" && selectedMethod === "mcp"
                           ? "Enter the Server URL and Access token from n8n's Instance-level MCP settings."
                           : editingSourceId
-                            ? "Re-enter credentials to validate and save."
+                            ? null
                             : "Enter credentials to validate and connect."
                       : step === "entities"
                       ? editingSourceId
@@ -1673,11 +1672,6 @@ export default function ConnectionsPage() {
                       </div>
                     ) : null}
                   </div>
-                </div>
-              ) : null}
-              {credentialDeleteSuccessMsg ? (
-                <div className="mt-4 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700">
-                  {credentialDeleteSuccessMsg}
                 </div>
               ) : null}
 
@@ -1825,7 +1819,7 @@ export default function ConnectionsPage() {
   <div className="space-y-4">
     {selectedMethod === "api" ? (
       <div className="space-y-4">
-        {selectedPlatform === "make" ? (
+        {selectedPlatform === "make" && !editingSourceId ? (
           <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
             <div className="font-semibold">💡 How to get your API token:</div>
             <ul className="mt-2 list-disc space-y-1 pl-5 text-blue-900">
@@ -1931,16 +1925,18 @@ export default function ConnectionsPage() {
               ) : null}
             </div>
 
-            <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
-              <div className="font-semibold">💡 Where to find this:</div>
-              <ol className="mt-2 list-decimal space-y-1 pl-5">
-                <li>Go to dashboard.vapi.ai</li>
-                <li>Click &quot;API Keys&quot; in the sidebar</li>
-                <li>
-                  Copy your &quot;Private API Key&quot; (under &quot;Server-side API access&quot;)
-                </li>
-              </ol>
-            </div>
+            {editingSourceId ? null : (
+              <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+                <div className="font-semibold">💡 Where to find this:</div>
+                <ol className="mt-2 list-decimal space-y-1 pl-5">
+                  <li>Go to dashboard.vapi.ai</li>
+                  <li>Click &quot;API Keys&quot; in the sidebar</li>
+                  <li>
+                    Copy your &quot;Private API Key&quot; (under &quot;Server-side API access&quot;)
+                  </li>
+                </ol>
+              </div>
+            )}
           </div>
         ) : null}
 
@@ -1988,21 +1984,23 @@ export default function ConnectionsPage() {
               ) : null}
             </div>
 
-            <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
-              <div className="font-semibold">💡 Where to find this:</div>
-              <ol className="mt-2 list-decimal space-y-1 pl-5">
-                <li>Go to dashboard.retellai.com</li>
-                <li>Click &quot;API Keys&quot; in the sidebar</li>
-                <li>
-                  Copy your API Key (NOT the webhook secret key)
-                </li>
-              </ol>
-            </div>
+            {editingSourceId ? null : (
+              <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+                <div className="font-semibold">💡 Where to find this:</div>
+                <ol className="mt-2 list-decimal space-y-1 pl-5">
+                  <li>Go to dashboard.retellai.com</li>
+                  <li>Click &quot;API Keys&quot; in the sidebar</li>
+                  <li>
+                    Copy your API Key (NOT the webhook secret key)
+                  </li>
+                </ol>
+              </div>
+            )}
           </div>
         ) : null}
 
         {/* NEW: Region Selector - Only show for Make.com */}
-        {selectedPlatform === "make" && (
+        {selectedPlatform === "make" && !editingSourceId && (
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Select Your Region
@@ -2547,19 +2545,17 @@ export default function ConnectionsPage() {
                     if (!res.ok || !json?.ok) {
                       setSaving(false);
                       setErrMsg(json?.message || "Failed to delete credentials.");
-                      setCredentialDeleteSuccessMsg(null);
                       return;
                     }
 
                     setSaving(false);
-                    setCredentialDeleteSuccessMsg("Credential deleted.");
                     setCredentialDeleteId(null);
-                    setCredentialDeletePlatformType(null);
                     setCredentialDeleteConfirm(false);
 
-                    // Optimistically remove from UI immediately
+                    // Remove from UI immediately
                     setCredentials((prev) => prev.filter((c) => c.id !== id));
 
+                    // Refetch to stay authoritative
                     await refreshCredentials();
                     await refreshIndexedEntities();
                   }}
