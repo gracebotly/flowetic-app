@@ -2515,6 +2515,12 @@ export default function ConnectionsPage() {
                 </label>
               </div>
 
+              {errMsg ? (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                  {errMsg}
+                </div>
+              ) : null}
+
               <div className="flex justify-end gap-2">
                 <button
                   type="button"
@@ -2548,13 +2554,30 @@ export default function ConnectionsPage() {
                     }
 
                     setSaving(false);
+
+                    // Close delete modal
                     setCredentialDeleteId(null);
                     setCredentialDeleteConfirm(false);
 
-                    // Remove from UI immediately
+                    // Also close any open menus to prevent "no buttons" UI
+                    setOpenCredentialMenuId(null);
+
+                    // If the connect modal is open for any reason, close it
+                    setConnectOpen(false);
+
+                    // Reset step back to platform to avoid stranded modal state
+                    setStep("platform");
+
+                    // Clear any inventory modal state that could still be open
+                    setInventoryEntities([]);
+                    setSelectedExternalIds(new Set());
+                    setInventoryErr(null);
+                    setInventoryLoading(false);
+
+                    // Remove card immediately
                     setCredentials((prev) => prev.filter((c) => c.id !== id));
 
-                    // Refetch to stay authoritative
+                    // Refetch authoritative state
                     await refreshCredentials();
                     await refreshIndexedEntities();
                   }}
