@@ -2559,7 +2559,7 @@ export default function ConnectionsPage() {
               </div>
 
               {errMsg ? (
-                <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                <div className="whitespace-pre-wrap select-text rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
                   {errMsg}
                 </div>
               ) : null}

@@ -40,10 +40,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, code: "SOURCE_NOT_FOUND", message: "Credential not found" }, { status: 404 });
   }
 
-  // Verify user has access to this tenant
+  // Ensure user is admin in this tenant (matches RLS policy expectations)
   const { data: membership, error: membershipErr } = await supabase
     .from("memberships")
-    .select("tenant_id")
+    .select("tenant_id, role")
     .eq("user_id", user.id)
     .eq("tenant_id", source.tenant_id)
     .limit(1)
@@ -56,8 +56,8 @@ export async function POST(req: Request) {
     );
   }
 
-  if (!membership?.tenant_id) {
-    return NextResponse.json({ ok: false, code: "TENANT_ACCESS_DENIED", message: "Access denied" }, { status: 403 });
+  if (!membership?.tenant_id || membership.role !== "admin") {
+    return NextResponse.json({ ok: false, code: "TENANT_ACCESS_DENIED" }, { status: 403 });
   }
 
   // Delete dependent rows first (prevents FK issues)
@@ -90,10 +90,16 @@ export async function POST(req: Request) {
 
   if (!deleted || deleted.length === 0) {
     return NextResponse.json(
-      { ok: false, code: "DELETE_NOOP", message: "Delete did not remove any rows. Check RLS policies for sources." },
+      {
+        ok: false,
+        code: "DELETE_NOOP",
+        message:
+          "Delete did not remove the credential. This usually means Supabase RLS blocked DELETE on sources. Add a DELETE policy for sources (admin-only) matching your UPDATE policy.",
+        debug: { sourceId, tenantId: source.tenant_id },
+      },
       { status: 409 },
     );
   }
 
-  return NextResponse.json({ ok: true, deletedSourceId: sourceId, deletedTenantId: source.tenant_id });
+  return NextResponse.json({ ok: true });
 }
