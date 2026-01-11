@@ -132,6 +132,40 @@ function getPlatformMeta(platformType: string) {
   return key ? PLATFORM_META[key] : undefined;
 }
 
+function getCredentialDeleteCopy(platformType: string) {
+  const p = String(platformType || "").toLowerCase();
+
+  const label =
+    p === "n8n"
+      ? "workflows"
+      : p === "vapi"
+        ? "assistants"
+        : p === "retell"
+          ? "agents"
+          : "resources";
+
+  const platformName =
+    p === "n8n"
+      ? "n8n"
+      : p === "vapi"
+        ? "Vapi"
+        : p === "retell"
+          ? "Retell"
+          : p === "make"
+            ? "Make"
+            : "the external platform";
+
+  return {
+    title: "Delete credentials?",
+    description: `Deleting credentials will remove GetFlowetic's access to your ${label}.`,
+    warning:
+      p === "n8n"
+        ? "This does not delete anything in n8n. It only removes this connection from GetFlowetic."
+        : `This does not delete anything in ${platformName}. It only removes this connection from GetFlowetic.`,
+    confirmLabel: `I understand this will disconnect my ${label}.`,
+  };
+}
+
 function StatusPill({ status }: { status: string | null }) {
   if (status === "active" || status === "connected") {
     return <span className="inline-flex items-center gap-1.5 rounded-full border border-green-200 bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-700">Connected</span>;
@@ -293,6 +327,8 @@ export default function ConnectionsPage() {
   const [editingSourceId, setEditingSourceId] = useState<string | null>(null);
   const [credentialDeleteId, setCredentialDeleteId] = useState<string | null>(null);
   const [credentialDeleteConfirm, setCredentialDeleteConfirm] = useState(false);
+  const [credentialDeletePlatformType, setCredentialDeletePlatformType] = useState<string | null>(null);
+  const [credentialDeleteSuccessMsg, setCredentialDeleteSuccessMsg] = useState<string | null>(null);
   
   // Connect form state
   const [selectedPlatform, setSelectedPlatform] = useState<keyof typeof PLATFORM_META | null>(null);
@@ -972,7 +1008,10 @@ export default function ConnectionsPage() {
     setConnectEntities((prev) => prev.filter((_, i) => i !== idx));
   }
 
-  function openDeleteCredential(sourceId: string) {
+  function openDeleteCredential(sourceId: string, platformType: string) {
+    setErrMsg(null);
+    setCredentialDeleteSuccessMsg(null);
+    setCredentialDeletePlatformType(String(platformType || ""));
     setCredentialDeleteId(sourceId);
     setCredentialDeleteConfirm(false);
   }
@@ -1475,7 +1514,7 @@ export default function ConnectionsPage() {
                 onClick={() => {
                   setOpenCredentialMenuId(null);
                   setMenuPos(null);
-                  openDeleteCredential(openCred.id);
+                  openDeleteCredential(openCred.id, openCred.platformType);
                 }}
                 className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50"
               >
@@ -1576,6 +1615,11 @@ export default function ConnectionsPage() {
                       </div>
                     ) : null}
                   </div>
+                </div>
+              ) : null}
+              {credentialDeleteSuccessMsg ? (
+                <div className="mt-4 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700">
+                  {credentialDeleteSuccessMsg}
                 </div>
               ) : null}
 
@@ -2326,15 +2370,16 @@ export default function ConnectionsPage() {
             <div className="border-b px-6 py-5">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <div className="text-lg font-semibold text-gray-900">Delete credentials?</div>
+                  <div className="text-lg font-semibold text-gray-900">{getCredentialDeleteCopy(credentialDeletePlatformType || "n8n").title}</div>
                   <div className="mt-1 text-sm text-gray-600">
-                    Deleting credentials will remove GetFlowetic's access to your workflows.
+                    {getCredentialDeleteCopy(credentialDeletePlatformType || "n8n").description}
                   </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => {
                     setCredentialDeleteId(null);
+                    setCredentialDeletePlatformType(null);
                     setCredentialDeleteConfirm(false);
                   }}
                   className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200"
@@ -2346,7 +2391,7 @@ export default function ConnectionsPage() {
 
             <div className="px-6 py-5 space-y-4">
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                This does not delete anything in n8n. It only removes this connection from GetFlowetic.
+                {getCredentialDeleteCopy(credentialDeletePlatformType || "n8n").warning}
               </div>
 
               <div className="flex items-center gap-2">
@@ -2357,7 +2402,7 @@ export default function ConnectionsPage() {
                   onChange={(e) => setCredentialDeleteConfirm(e.target.checked)}
                 />
                 <label htmlFor="confirmCredDelete" className="text-sm text-gray-700">
-                  I understand this will disconnect my workflows.
+                  {getCredentialDeleteCopy(credentialDeletePlatformType || "n8n").confirmLabel}
                 </label>
               </div>
 
@@ -2366,6 +2411,7 @@ export default function ConnectionsPage() {
                   type="button"
                   onClick={() => {
                     setCredentialDeleteId(null);
+                    setCredentialDeletePlatformType(null);
                     setCredentialDeleteConfirm(false);
                   }}
                   className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-200"
@@ -2389,11 +2435,14 @@ export default function ConnectionsPage() {
                     if (!res.ok || !json?.ok) {
                       setSaving(false);
                       setErrMsg(json?.message || "Failed to delete credentials.");
+                      setCredentialDeleteSuccessMsg(null);
                       return;
                     }
 
                     setSaving(false);
+                    setCredentialDeleteSuccessMsg("Credential deleted.");
                     setCredentialDeleteId(null);
+                    setCredentialDeletePlatformType(null);
                     setCredentialDeleteConfirm(false);
 
                     // Optimistically remove from UI immediately
