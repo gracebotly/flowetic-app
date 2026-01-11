@@ -27,8 +27,9 @@ export async function GET() {
 
   const { data: membership } = await supabase
     .from("memberships")
-    .select("tenant_id")
+    .select("tenant_id,created_at")
     .eq("user_id", user.id)
+    .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
 

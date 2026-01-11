@@ -1,11 +1,18 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { encryptSecret } from "@/lib/secrets";
+import { decryptSecret, encryptSecret } from "@/lib/secrets";
 
 export const runtime = "nodejs";
 
 type PlatformType = "n8n" | "make" | "activepieces" | "vapi" | "retell";
 type Method = "api" | "webhook" | "mcp";
+
+function jsonResponse(
+  status: number,
+  payload: Record<string, any>,
+) {
+  return NextResponse.json(payload, { status });
+}
 
 export async function POST(req: Request) {
   const supabase = await createClient();
@@ -13,7 +20,7 @@ export async function POST(req: Request) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) return NextResponse.json({ ok: false, code: "AUTH_REQUIRED" }, { status: 401 });
+  if (!user) return jsonResponse(401, { ok: false, code: "AUTH_REQUIRED" });
 
   const { data: membership } = await supabase
     .from("memberships")
@@ -22,55 +29,101 @@ export async function POST(req: Request) {
     .limit(1)
     .maybeSingle();
 
-  if (!membership?.tenant_id) return NextResponse.json({ ok: false, code: "TENANT_ACCESS_DENIED" }, { status: 403 });
+  if (!membership?.tenant_id) return jsonResponse(403, { ok: false, code: "TENANT_ACCESS_DENIED" });
 
   const body = (await req.json().catch(() => ({}))) as any;
-  const sourceId = (body.sourceId as string | undefined) ?? "";
-  const platformType = body.platformType as PlatformType | undefined;
-  const method = (body.method as Method | undefined) ?? "api";
 
-  if (!sourceId) return NextResponse.json({ ok: false, code: "MISSING_SOURCE_ID" }, { status: 400 });
-  if (!platformType) return NextResponse.json({ ok: false, code: "MISSING_PLATFORM_TYPE" }, { status: 400 });
+  const sourceId = String(body?.sourceId ?? "").trim();
+  const platformType = body?.platformType as PlatformType | undefined;
+  const method = (body?.method as Method | undefined) ?? "api";
 
-  // Ensure source belongs to tenant
-  const { data: source } = await supabase
+  if (!sourceId) return jsonResponse(400, { ok: false, code: "MISSING_SOURCE_ID" });
+  if (!platformType) return jsonResponse(400, { ok: false, code: "MISSING_PLATFORM_TYPE" });
+
+  const { data: source, error: sourceErr } = await supabase
     .from("sources")
-    .select("id,tenant_id,type")
+    .select("id, tenant_id, type, method, secret_hash")
     .eq("id", sourceId)
     .eq("tenant_id", membership.tenant_id)
     .maybeSingle();
 
-  if (!source) return NextResponse.json({ ok: false, code: "SOURCE_NOT_FOUND" }, { status: 404 });
+  if (sourceErr) {
+    return jsonResponse(400, { ok: false, code: "SOURCE_LOOKUP_FAILED", message: sourceErr.message });
+  }
+  if (!source) return jsonResponse(404, { ok: false, code: "SOURCE_NOT_FOUND" });
 
-  let secretJson: any = { method, platformType };
+  // Use existing secret if present to support "edit without re-entering key"
+  let existingSecret: any = null;
+  if (source.secret_hash) {
+    try {
+      existingSecret = JSON.parse(decryptSecret(String(source.secret_hash)));
+    } catch {
+      existingSecret = null;
+    }
+  }
+
+  // Merge strategy:
+  // - Always set method/platformType
+  // - Only overwrite secret fields when provided; otherwise preserve existing values
+  let secretJson: any = {
+    ...(existingSecret && typeof existingSecret === "object" ? existingSecret : {}),
+    method,
+    platformType,
+  };
 
   if (method === "api") {
-    const apiKey = (body.apiKey as string | undefined) ?? "";
-    const instanceUrl = (body.instanceUrl as string | undefined) ?? null;
-    if (!apiKey) return NextResponse.json({ ok: false, code: "MISSING_API_KEY" }, { status: 400 });
+    const apiKey = typeof body?.apiKey === "string" ? body.apiKey : "";
+    const instanceUrlRaw = typeof body?.instanceUrl === "string" ? body.instanceUrl : undefined;
+    const instanceUrl = instanceUrlRaw === undefined ? undefined : (instanceUrlRaw || null);
+
+    // Only update apiKey if provided
+    if (apiKey && apiKey.trim()) {
+      secretJson.apiKey = apiKey.trim();
+    }
+
+    // Only update instanceUrl if provided in payload
+    if (instanceUrlRaw !== undefined) {
+      secretJson.instanceUrl = instanceUrl;
+    }
 
     const authMode =
       platformType === "n8n"
-        ? ((body.n8nAuthMode as "header" | "bearer" | undefined) ?? "bearer")
+        ? ((body?.n8nAuthMode as "header" | "bearer" | undefined) ?? (secretJson?.authMode ?? "bearer"))
         : undefined;
 
-    secretJson = { ...secretJson, apiKey, instanceUrl, ...(authMode ? { authMode } : {}) };
+    if (authMode) {
+      secretJson.authMode = authMode;
+    }
+
+    // If apiKey is still missing after merge, block update (this is Option A compliant:
+    // user can save non-secret changes IF apiKey is already stored; otherwise fail.)
+    if (!String(secretJson?.apiKey ?? "").trim()) {
+      return jsonResponse(400, { ok: false, code: "MISSING_API_KEY", message: "API key is required." });
+    }
   }
 
   if (method === "mcp") {
-    const mcpUrl = (body.mcpUrl as string | undefined) ?? "";
-    const authHeader = (body.authHeader as string | undefined) ?? "";
-    if (!mcpUrl) return NextResponse.json({ ok: false, code: "MISSING_MCP_URL" }, { status: 400 });
+    const mcpUrl = typeof body?.mcpUrl === "string" ? body.mcpUrl : "";
+    const authHeader = typeof body?.authHeader === "string" ? body.authHeader : "";
 
-    secretJson = { ...secretJson, mcpUrl, authHeader: authHeader || null };
+    // Only update fields when provided
+    if (typeof body?.mcpUrl === "string") secretJson.mcpUrl = mcpUrl;
+    if (typeof body?.authHeader === "string") secretJson.authHeader = authHeader || null;
+
+    if (!String(secretJson?.mcpUrl ?? "").trim()) {
+      return jsonResponse(400, { ok: false, code: "MISSING_MCP_URL", message: "MCP URL is required." });
+    }
   }
 
   if (method === "webhook") {
-    const instanceUrl = (body.instanceUrl as string | undefined) ?? null;
-    secretJson = { ...secretJson, instanceUrl };
+    // Allow update without forcing instanceUrl if it exists already
+    const instanceUrlRaw = typeof body?.instanceUrl === "string" ? body.instanceUrl : undefined;
+    if (instanceUrlRaw !== undefined) {
+      secretJson.instanceUrl = instanceUrlRaw || null;
+    }
   }
 
-  // Validate n8n API credentials on update (same behavior as /api/connections/connect)
+  // Validate n8n api credentials on update (only if we have enough fields)
   if (platformType === "n8n" && method === "api") {
     const baseUrl = (() => {
       try {
@@ -82,38 +135,34 @@ export async function POST(req: Request) {
     })();
 
     if (!baseUrl) {
-      return NextResponse.json(
-        { ok: false, code: "MISSING_INSTANCE_URL", message: "n8n instance URL is required." },
-        { status: 400 },
-      );
+      return jsonResponse(400, { ok: false, code: "MISSING_INSTANCE_URL", message: "n8n instance URL is required." });
     }
 
     const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (secretJson.authMode === "header") {
-      headers["X-N8N-API-KEY"] = secretJson.apiKey;
-    } else {
-      headers["Authorization"] = `Bearer ${secretJson.apiKey}`;
-    }
+    if ((secretJson.authMode ?? "bearer") === "header") headers["X-N8N-API-KEY"] = String(secretJson.apiKey || "");
+    else headers["Authorization"] = `Bearer ${String(secretJson.apiKey || "")}`;
 
     const testRes = await fetch(`${baseUrl}/api/v1/workflows`, { method: "GET", headers });
     if (!testRes.ok) {
       const t = await testRes.text().catch(() => "");
-      return NextResponse.json(
-        { ok: false, code: "N8N_API_FAILED", message: `n8n API auth failed (${testRes.status}). ${t}`.trim() },
-        { status: 400 },
-      );
+      return jsonResponse(400, {
+        ok: false,
+        code: "N8N_API_FAILED",
+        message: `n8n API auth failed (${testRes.status}). ${t}`.trim(),
+      });
     }
   }
 
   const secret_hash = encryptSecret(JSON.stringify(secretJson));
-
-  const { error } = await supabase
+  const { error: persistErr } = await supabase
     .from("sources")
     .update({ secret_hash, method })
     .eq("id", sourceId)
     .eq("tenant_id", membership.tenant_id);
 
-  if (error) return NextResponse.json({ ok: false, code: "PERSISTENCE_FAILED", message: error.message }, { status: 400 });
+  if (persistErr) {
+    return jsonResponse(400, { ok: false, code: "PERSISTENCE_FAILED", message: persistErr.message });
+  }
 
   return NextResponse.json({ ok: true });
 }

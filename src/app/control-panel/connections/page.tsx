@@ -132,6 +132,40 @@ function getPlatformMeta(platformType: string) {
   return key ? PLATFORM_META[key] : undefined;
 }
 
+function getCredentialDeleteCopy(platformType: string) {
+  const p = String(platformType || "").toLowerCase();
+
+  const label =
+    p === "n8n"
+      ? "workflows"
+      : p === "vapi"
+        ? "assistants"
+        : p === "retell"
+          ? "agents"
+          : "resources";
+
+  const platformName =
+    p === "n8n"
+      ? "n8n"
+      : p === "vapi"
+        ? "Vapi"
+        : p === "retell"
+          ? "Retell"
+          : p === "make"
+            ? "Make"
+            : "the external platform";
+
+  return {
+    title: "Delete credentials?",
+    description: `Deleting credentials will remove GetFlowetic's access to your ${label}.`,
+    warning:
+      p === "n8n"
+        ? "This does not delete anything in n8n. It only removes this connection from GetFlowetic."
+        : `This does not delete anything in ${platformName}. It only removes this connection from GetFlowetic.`,
+    confirmLabel: `I understand this will disconnect my ${label}.`,
+  };
+}
+
 function StatusPill({ status }: { status: string | null }) {
   if (status === "active" || status === "connected") {
     return <span className="inline-flex items-center gap-1.5 rounded-full border border-green-200 bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-700">Connected</span>;
@@ -293,6 +327,7 @@ export default function ConnectionsPage() {
   const [editingSourceId, setEditingSourceId] = useState<string | null>(null);
   const [credentialDeleteId, setCredentialDeleteId] = useState<string | null>(null);
   const [credentialDeleteConfirm, setCredentialDeleteConfirm] = useState(false);
+  const [credentialDeletePlatformType, setCredentialDeletePlatformType] = useState<string | null>(null);
   
   // Connect form state
   const [selectedPlatform, setSelectedPlatform] = useState<keyof typeof PLATFORM_META | null>(null);
@@ -380,6 +415,49 @@ export default function ConnectionsPage() {
     setCredentialsLoading(false);
   }
 
+  async function deleteCredentialById(sourceId: string) {
+    setSaving(true);
+    setErrMsg(null);
+
+    const res = await fetch("/api/credentials/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sourceId }),
+    });
+
+    const json = await res.json().catch(() => ({}));
+
+    if (!res.ok || !json?.ok) {
+      const msg =
+        typeof json?.message === "string" && json.message.trim()
+          ? json.message
+          : "Failed to delete credential.";
+      const code =
+        typeof json?.code === "string" && json.code.trim()
+          ? ` (${json.code})`
+          : "";
+      setErrMsg(`${msg}${code}`);
+      setSaving(false);
+      return false;
+    }
+
+    // Close delete modal state
+    setCredentialDeleteId(null);
+    setCredentialDeleteConfirm(false);
+
+    // Close menus to avoid "no buttons"/stuck UI
+    setOpenCredentialMenuId(null);
+
+    // Optimistically remove from UI immediately
+    setCredentials((prev) => prev.filter((c) => c.id !== sourceId));
+
+    // Authoritative refetch (HAR shows the app already calls this; we ensure state is set from response)
+    await refreshCredentials();
+
+    setSaving(false);
+    return true;
+  }
+
   async function refreshIndexedEntities() {
     setIndexedLoading(true);
     setIndexedErr(null);
@@ -454,52 +532,116 @@ export default function ConnectionsPage() {
     setInventoryLoading(false);
   }
 
-  function beginEditCredential(credential: CredentialRow) {
-    setSelectedPlatform(credential.platformType as any);
-    setSelectedMethod(credential.method);
-    setConnectionName(credential.name || "");
-    setEditingSourceId(credential.id);
-
-    setEditingMeta({
-      sourceId: credential.id,
-      platformType: credential.platformType,
-      method: credential.method,
-      name: credential.name || "",
+  async function importInventory(platform: string, sourceId: string) {
+    const res = await fetch(`/api/connections/inventory/${encodeURIComponent(platform)}/import`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sourceId }),
     });
-
-    setErrMsg(null);
-    setSaving(false);
-
-    // Indicators: we know something is saved because the connection exists.
-    // We never show the secret, but we show that it's present.
-    if (credential.method === "api") {
-      setApiKeySaved(true);
-      setInstanceUrlSaved(true);
-      setShowApiKeyEditor(false);
-
-      // Keep API key empty until user clicks "Change"
-      setApiKey("");
-
-      // Allow URL editing: we cannot read it back from DB today,
-      // so require re-entry OR keep last typed value if any.
-      // Keep empty but show "Saved" pill.
-      setInstanceUrl("");
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || !json?.ok) {
+      throw new Error(json?.message || "Failed to import inventory.");
     }
-
-    if (credential.method === "mcp") {
-      setMcpTokenSaved(true);
-      setMcpUrlSaved(true);
-      setShowMcpTokenEditor(false);
-
-      setMcpAccessToken("");
-      setInstanceUrl(""); // you use instanceUrl for n8n mcp URL input
-      setAuthHeader("");
-      setMcpUrl("");
-    }
-
-    setConnectOpen(true);
-    setStep("credentials");
+    return json;
   }
+
+  async function listInventory(platform: string, sourceId: string) {
+    const res = await fetch(
+      `/api/connections/inventory/${encodeURIComponent(platform)}/list?sourceId=${encodeURIComponent(sourceId)}`,
+      { method: "GET" },
+    );
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || !json?.ok) {
+      throw new Error(json?.message || "Failed to load inventory.");
+    }
+    const rows = Array.isArray(json?.inventoryEntities) ? json.inventoryEntities : [];
+    return rows.map((r: any) => ({
+      externalId: String(r.externalId),
+      displayName: String(r.displayName ?? ""),
+      entityKind: String(r.entityKind ?? "resource"),
+      createdAt: r.createdAt ?? null,
+      updatedAt: r.updatedAt ?? null,
+    }));
+  }
+
+  async function openManageIndexed(platform: string, sourceId: string) {
+    setInventoryLoading(true);
+    setInventoryErr(null);
+
+    try {
+      await importInventory(platform, sourceId);
+      const rows = await listInventory(platform, sourceId);
+      setInventoryEntities(rows);
+
+      // Preselect already indexed entities for this source
+      const indexedRes = await fetch("/api/indexed-entities/list", { method: "GET" });
+      const indexedJson = await indexedRes.json().catch(() => ({}));
+      if (indexedRes.ok && indexedJson?.ok) {
+        const alreadyIndexed = (indexedJson.entities || [])
+          .filter((e: any) => String(e.sourceId) === String(sourceId))
+          .map((e: any) => String(e.externalId));
+        setSelectedExternalIds(new Set(alreadyIndexed));
+      } else {
+        setSelectedExternalIds(new Set());
+      }
+
+      setCreatedSourceId(sourceId);
+      setConnectOpen(true);
+      setStep("entities");
+    } catch (e: any) {
+      setInventoryEntities([]);
+      setSelectedExternalIds(new Set());
+      setInventoryErr(String(e?.message ?? e));
+    } finally {
+      setInventoryLoading(false);
+    }
+  }
+
+  function beginEditCredential(credential: CredentialRow) {
+  // Make is API-only now. Legacy Make webhook credentials should still open a usable edit screen.
+  const platform = String(credential.platformType || "");
+  const savedMethod = credential.method;
+
+  const effectiveMethod =
+    platform === "make" ? "api" : savedMethod;
+
+  setSelectedPlatform(platform as any);
+  setSelectedMethod(effectiveMethod as any);
+  setConnectionName(credential.name || "");
+  setEditingSourceId(credential.id);
+  setEditingMeta({
+    sourceId: credential.id,
+    platformType: credential.platformType,
+    method: effectiveMethod,
+    name: credential.name || "",
+  });
+  setErrMsg(null);
+  setSaving(false);
+
+  // reset editor toggles
+  setShowApiKeyEditor(false);
+  setShowMcpTokenEditor(false);
+
+  // Indicators
+  if (effectiveMethod === "api") {
+    setApiKeySaved(true);
+    setInstanceUrlSaved(platform === "n8n"); // only n8n uses instance URL meaningfully here
+    setApiKey("");
+    setInstanceUrl("");
+  }
+  if (effectiveMethod === "mcp") {
+    setMcpTokenSaved(true);
+    setMcpUrlSaved(true);
+    setShowMcpTokenEditor(false);
+    setMcpAccessToken("");
+    setInstanceUrl("");
+    setAuthHeader("");
+    setMcpUrl("");
+  }
+
+  setConnectOpen(true);
+  setStep("credentials");
+}
 
   function openEditCredential(sourceId: string) {
     const cred = credentials.find((c) => c.id === sourceId);
@@ -523,7 +665,7 @@ export default function ConnectionsPage() {
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       const target = event.target as Element;
-      if (!target.closest('[data-entity-menu]')) {
+      if (!target.closest('[data-entity-menu]') && !target.closest('[data-credential-menu]')) {
         setOpenEntityMenuId(null);
         setDeleteConfirmId(null);
         setOpenCredentialMenuId(null);
@@ -825,8 +967,9 @@ export default function ConnectionsPage() {
         typeof json?.message === "string" && json.message.trim()
           ? json.message
           : "Connection failed. Please check your credentials and try again.";
+      const code = typeof json?.code === "string" && json.code.trim() ? ` (${json.code})` : "";
 
-      setErrMsg(message);
+      setErrMsg(`${message}${code}`);
 
       setLastConnectError({
         ts: new Date().toISOString(),
@@ -972,7 +1115,9 @@ export default function ConnectionsPage() {
     setConnectEntities((prev) => prev.filter((_, i) => i !== idx));
   }
 
-  function openDeleteCredential(sourceId: string) {
+  function openDeleteCredential(sourceId: string, platformType: string) {
+    setErrMsg(null);
+    setCredentialDeletePlatformType(String(platformType || ""));
     setCredentialDeleteId(sourceId);
     setCredentialDeleteConfirm(false);
   }
@@ -1325,6 +1470,12 @@ export default function ConnectionsPage() {
             </div>
           ) : null}
 
+          {errMsg ? (
+            <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              {errMsg}
+            </div>
+          ) : null}
+
           {credentialsLoading ? (
             <div className="mt-8 text-sm text-gray-600">Loading credentials…</div>
           ) : null}
@@ -1372,7 +1523,7 @@ export default function ConnectionsPage() {
 
                       <div className="flex items-center gap-2">
                         <StatusPill status={cred.status} />
-                        <div data-entity-menu className="relative">
+                        <div data-credential-menu className="relative">
                           <button
                             type="button"
                             onClick={(e) => {
@@ -1438,35 +1589,24 @@ export default function ConnectionsPage() {
                 Edit
               </button>
 
-              {/* Only show for n8n credentials that can have indexed workflows */}
-              {openCred.platformType === "n8n" && (openCred.method === "api" || openCred.method === "mcp") ? (
+              {/* Show for all platforms that support inventory management */}
+              {(openCred.platformType === "n8n" && (openCred.method === "api" || openCred.method === "mcp")) ||
+               (openCred.platformType === "make") ||
+               (openCred.platformType === "vapi") ||
+               (openCred.platformType === "retell") ? (
                 <button
                   type="button"
                   onClick={async () => {
                     setOpenCredentialMenuId(null);
                     setMenuPos(null);
-
-                    // Open your existing entities selection UI for this credential
-                    const sourceId = openCred.id;
-                    setCreatedSourceId(sourceId);
-                    setErrMsg(null);
-
-                    // Load inventory using your existing function
-                    await loadN8nInventory(sourceId);
-
-                    // Preselect currently indexed externalIds for this source
-                    const current = indexedEntities
-                      .filter((e) => String(e.sourceId) === String(sourceId))
-                      .map((e) => String(e.externalId));
-                    setSelectedExternalIds(new Set(current));
-
-                    setConnectOpen(true);
-                    setStep("entities");
+                    
+                    // Use the generalized inventory management function
+                    openManageIndexed(String(openCred.platformType), String(openCred.id));
                   }}
                   className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
                 >
                   <Settings className="h-4 w-4" />
-                  Manage indexed workflows
+                  Manage Indexed
                 </button>
               ) : null}
 
@@ -1475,7 +1615,7 @@ export default function ConnectionsPage() {
                 onClick={() => {
                   setOpenCredentialMenuId(null);
                   setMenuPos(null);
-                  openDeleteCredential(openCred.id);
+                  openDeleteCredential(openCred.id, openCred.platformType);
                 }}
                 className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50"
               >
@@ -1497,13 +1637,11 @@ export default function ConnectionsPage() {
                   <div className="flex items-center gap-3">
                     <div className="text-xl font-semibold text-gray-900">
                       {step === "platform"
-                        ? "Connect Platform"
+                        ? editingSourceId ? "Edit Platform" : "Connect Platform"
                         : step === "method"
-                        ? `Connect ${selectedPlatform ? (getPlatformMeta(String(selectedPlatform))?.label ?? String(selectedPlatform)) : ""}`
+                        ? `${editingSourceId ? "Edit" : "Connect"} ${selectedPlatform ? (getPlatformMeta(String(selectedPlatform))?.label ?? String(selectedPlatform)) : ""}`
                         : step === "credentials"
-                        ? selectedPlatform === "make"
-                          ? "Connect Make"
-                          : "Credentials"
+                        ? `${editingSourceId ? "Edit " : "Connect "}${selectedPlatform ? (getPlatformMeta(String(selectedPlatform))?.label ?? String(selectedPlatform)) : ""} Credentials`
                         : step === "entities"
                         ? editingSourceId 
                           ? selectedPlatform === "vapi" ? "Manage indexed assistants" : "Manage indexed workflows" 
@@ -1531,7 +1669,7 @@ export default function ConnectionsPage() {
                         : selectedPlatform === "n8n" && selectedMethod === "mcp"
                           ? "Enter the Server URL and Access token from n8n's Instance-level MCP settings."
                           : editingSourceId
-                            ? "Re-enter credentials to validate and save."
+                            ? null
                             : "Enter credentials to validate and connect."
                       : step === "entities"
                       ? editingSourceId
@@ -1723,7 +1861,7 @@ export default function ConnectionsPage() {
   <div className="space-y-4">
     {selectedMethod === "api" ? (
       <div className="space-y-4">
-        {selectedPlatform === "make" ? (
+        {selectedPlatform === "make" && !editingSourceId ? (
           <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
             <div className="font-semibold">💡 How to get your API token:</div>
             <ul className="mt-2 list-disc space-y-1 pl-5 text-blue-900">
@@ -1789,29 +1927,58 @@ export default function ConnectionsPage() {
         {selectedPlatform === "vapi" ? (
           <div className="space-y-4">
             <div>
-              <label className="mb-2 block text-sm font-semibold text-gray-900">
-                Private API Key <span className="text-red-600">*</span>
-              </label>
-              <input
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                type="password"
-                className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                placeholder="ca-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                autoComplete="off"
-              />
+              <div className="flex items-center justify-between">
+                <label className="mb-2 block text-sm font-semibold text-gray-900">
+                  Private API Key <span className="text-red-600">*</span>
+                </label>
+                {editingSourceId && apiKeySaved ? (
+                  <span className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-semibold text-gray-700">
+                    Saved
+                  </span>
+                ) : null}
+              </div>
+
+              {editingSourceId && !showApiKeyEditor ? (
+                <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2">
+                  <div className="text-sm text-gray-600">•••••••••••••••••••</div>
+                  <button
+                    type="button"
+                    onClick={() => setShowApiKeyEditor(true)}
+                    className="text-sm font-semibold text-blue-600 hover:underline"
+                  >
+                    Change key
+                  </button>
+                </div>
+              ) : (
+                <input
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  type="password"
+                  className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                  placeholder={editingSourceId ? "Enter a new private API key to replace" : "ca-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"}
+                  autoComplete="off"
+                />
+              )}
+
+              {editingSourceId && !showApiKeyEditor ? (
+                <div className="text-xs text-gray-500">
+                  A key is already saved. For security, it can't be viewed. Click "Change key" to replace it.
+                </div>
+              ) : null}
             </div>
 
-            <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
-              <div className="font-semibold">💡 Where to find this:</div>
-              <ol className="mt-2 list-decimal space-y-1 pl-5">
-                <li>Go to dashboard.vapi.ai</li>
-                <li>Click &quot;API Keys&quot; in the sidebar</li>
-                <li>
-                  Copy your &quot;Private API Key&quot; (under &quot;Server-side API access&quot;)
-                </li>
-              </ol>
-            </div>
+            {editingSourceId ? null : (
+              <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+                <div className="font-semibold">💡 Where to find this:</div>
+                <ol className="mt-2 list-decimal space-y-1 pl-5">
+                  <li>Go to dashboard.vapi.ai</li>
+                  <li>Click &quot;API Keys&quot; in the sidebar</li>
+                  <li>
+                    Copy your &quot;Private API Key&quot; (under &quot;Server-side API access&quot;)
+                  </li>
+                </ol>
+              </div>
+            )}
           </div>
         ) : null}
 
@@ -1819,34 +1986,63 @@ export default function ConnectionsPage() {
         {selectedPlatform === "retell" ? (
           <div className="space-y-4">
             <div>
-              <label className="mb-2 block text-sm font-semibold text-gray-900">
-                API Key <span className="text-red-600">*</span>
-              </label>
-              <input
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                type="password"
-                className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                placeholder="Paste your Retell API Key here"
-                autoComplete="off"
-              />
+              <div className="flex items-center justify-between">
+                <label className="mb-2 block text-sm font-semibold text-gray-900">
+                  API Key <span className="text-red-600">*</span>
+                </label>
+                {editingSourceId && apiKeySaved ? (
+                  <span className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-semibold text-gray-700">
+                    Saved
+                  </span>
+                ) : null}
+              </div>
+
+              {editingSourceId && !showApiKeyEditor ? (
+                <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2">
+                  <div className="text-sm text-gray-600">•••••••••••••••••••</div>
+                  <button
+                    type="button"
+                    onClick={() => setShowApiKeyEditor(true)}
+                    className="text-sm font-semibold text-blue-600 hover:underline"
+                  >
+                    Change key
+                  </button>
+                </div>
+              ) : (
+                <input
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  type="password"
+                  className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                  placeholder={editingSourceId ? "Enter a new API key to replace" : "Paste your Retell API Key here"}
+                  autoComplete="off"
+                />
+              )}
+
+              {editingSourceId && !showApiKeyEditor ? (
+                <div className="text-xs text-gray-500">
+                  A key is already saved. For security, it can't be viewed. Click "Change key" to replace it.
+                </div>
+              ) : null}
             </div>
 
-            <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
-              <div className="font-semibold">💡 Where to find this:</div>
-              <ol className="mt-2 list-decimal space-y-1 pl-5">
-                <li>Go to dashboard.retellai.com</li>
-                <li>Click &quot;API Keys&quot; in the sidebar</li>
-                <li>
-                  Copy your API Key (NOT the webhook secret key)
-                </li>
-              </ol>
-            </div>
+            {editingSourceId ? null : (
+              <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+                <div className="font-semibold">💡 Where to find this:</div>
+                <ol className="mt-2 list-decimal space-y-1 pl-5">
+                  <li>Go to dashboard.retellai.com</li>
+                  <li>Click &quot;API Keys&quot; in the sidebar</li>
+                  <li>
+                    Copy your API Key (NOT the webhook secret key)
+                  </li>
+                </ol>
+              </div>
+            )}
           </div>
         ) : null}
 
         {/* NEW: Region Selector - Only show for Make.com */}
-        {selectedPlatform === "make" && (
+        {selectedPlatform === "make" && !editingSourceId && (
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Select Your Region
@@ -2004,7 +2200,7 @@ export default function ConnectionsPage() {
         disabled={saving}
         className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600 disabled:opacity-50"
       >
-        {saving ? (editingSourceId ? "Saving..." : "Connecting...") : (editingSourceId ? "Save" : "Connect")}
+        {saving ? (editingSourceId ? "Saving..." : "Connecting...") : (editingSourceId ? "Save Changes" : "Connect")}
       </button>
     </div>
   </div>
@@ -2326,15 +2522,16 @@ export default function ConnectionsPage() {
             <div className="border-b px-6 py-5">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <div className="text-lg font-semibold text-gray-900">Delete credentials?</div>
+                  <div className="text-lg font-semibold text-gray-900">{getCredentialDeleteCopy(credentialDeletePlatformType || "n8n").title}</div>
                   <div className="mt-1 text-sm text-gray-600">
-                    Deleting credentials will remove GetFlowetic's access to your workflows.
+                    {getCredentialDeleteCopy(credentialDeletePlatformType || "n8n").description}
                   </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => {
                     setCredentialDeleteId(null);
+                    setCredentialDeletePlatformType(null);
                     setCredentialDeleteConfirm(false);
                   }}
                   className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200"
@@ -2346,7 +2543,7 @@ export default function ConnectionsPage() {
 
             <div className="px-6 py-5 space-y-4">
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                This does not delete anything in n8n. It only removes this connection from GetFlowetic.
+                {getCredentialDeleteCopy(credentialDeletePlatformType || "n8n").warning}
               </div>
 
               <div className="flex items-center gap-2">
@@ -2357,15 +2554,22 @@ export default function ConnectionsPage() {
                   onChange={(e) => setCredentialDeleteConfirm(e.target.checked)}
                 />
                 <label htmlFor="confirmCredDelete" className="text-sm text-gray-700">
-                  I understand this will disconnect my workflows.
+                  {getCredentialDeleteCopy(credentialDeletePlatformType || "n8n").confirmLabel}
                 </label>
               </div>
+
+              {errMsg ? (
+                <div className="whitespace-pre-wrap select-text rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                  {errMsg}
+                </div>
+              ) : null}
 
               <div className="flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => {
                     setCredentialDeleteId(null);
+                    setCredentialDeletePlatformType(null);
                     setCredentialDeleteConfirm(false);
                   }}
                   className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-200"
@@ -2374,37 +2578,15 @@ export default function ConnectionsPage() {
                 </button>
                 <button
                   type="button"
-                  disabled={!credentialDeleteConfirm}
+                  disabled={!credentialDeleteConfirm || saving}
                   onClick={async () => {
                     const id = credentialDeleteId;
-                    setSaving(true);
-                    setErrMsg(null);
-
-                    const res = await fetch("/api/credentials/delete", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ sourceId: id }),
-                    });
-                    const json = await res.json().catch(() => ({}));
-                    if (!res.ok || !json?.ok) {
-                      setSaving(false);
-                      setErrMsg(json?.message || "Failed to delete credentials.");
-                      return;
-                    }
-
-                    setSaving(false);
-                    setCredentialDeleteId(null);
-                    setCredentialDeleteConfirm(false);
-
-                    // Optimistically remove from UI immediately
-                    setCredentials((prev) => prev.filter((c) => c.id !== id));
-
-                    await refreshCredentials();
-                    await refreshIndexedEntities();
+                    if (!id) return;
+                    await deleteCredentialById(id);
                   }}
                   className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
                 >
-                  Delete
+                  {saving ? "Deleting..." : "Delete"}
                 </button>
               </div>
             </div>
