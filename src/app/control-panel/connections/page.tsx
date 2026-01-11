@@ -490,6 +490,71 @@ export default function ConnectionsPage() {
     setInventoryLoading(false);
   }
 
+  async function importInventory(platform: string, sourceId: string) {
+    const res = await fetch(`/api/connections/inventory/${encodeURIComponent(platform)}/import`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sourceId }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || !json?.ok) {
+      throw new Error(json?.message || "Failed to import inventory.");
+    }
+    return json;
+  }
+
+  async function listInventory(platform: string, sourceId: string) {
+    const res = await fetch(
+      `/api/connections/inventory/${encodeURIComponent(platform)}/list?sourceId=${encodeURIComponent(sourceId)}`,
+      { method: "GET" },
+    );
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || !json?.ok) {
+      throw new Error(json?.message || "Failed to load inventory.");
+    }
+    const rows = Array.isArray(json?.inventoryEntities) ? json.inventoryEntities : [];
+    return rows.map((r: any) => ({
+      externalId: String(r.externalId),
+      displayName: String(r.displayName ?? ""),
+      entityKind: String(r.entityKind ?? "resource"),
+      createdAt: r.createdAt ?? null,
+      updatedAt: r.updatedAt ?? null,
+    }));
+  }
+
+  async function openManageIndexed(platform: string, sourceId: string) {
+    setInventoryLoading(true);
+    setInventoryErr(null);
+
+    try {
+      await importInventory(platform, sourceId);
+      const rows = await listInventory(platform, sourceId);
+      setInventoryEntities(rows);
+
+      // Preselect already indexed entities for this source
+      const indexedRes = await fetch("/api/indexed-entities/list", { method: "GET" });
+      const indexedJson = await indexedRes.json().catch(() => ({}));
+      if (indexedRes.ok && indexedJson?.ok) {
+        const alreadyIndexed = (indexedJson.entities || [])
+          .filter((e: any) => String(e.sourceId) === String(sourceId))
+          .map((e: any) => String(e.externalId));
+        setSelectedExternalIds(new Set(alreadyIndexed));
+      } else {
+        setSelectedExternalIds(new Set());
+      }
+
+      setCreatedSourceId(sourceId);
+      setConnectOpen(true);
+      setStep("entities");
+    } catch (e: any) {
+      setInventoryEntities([]);
+      setSelectedExternalIds(new Set());
+      setInventoryErr(String(e?.message ?? e));
+    } finally {
+      setInventoryLoading(false);
+    }
+  }
+
   function beginEditCredential(credential: CredentialRow) {
     setSelectedPlatform(credential.platformType as any);
     setSelectedMethod(credential.method);
@@ -1477,35 +1542,24 @@ export default function ConnectionsPage() {
                 Edit
               </button>
 
-              {/* Only show for n8n credentials that can have indexed workflows */}
-              {openCred.platformType === "n8n" && (openCred.method === "api" || openCred.method === "mcp") ? (
+              {/* Show for all platforms that support inventory management */}
+              {(openCred.platformType === "n8n" && (openCred.method === "api" || openCred.method === "mcp")) ||
+               (openCred.platformType === "make") ||
+               (openCred.platformType === "vapi") ||
+               (openCred.platformType === "retell") ? (
                 <button
                   type="button"
                   onClick={async () => {
                     setOpenCredentialMenuId(null);
                     setMenuPos(null);
-
-                    // Open your existing entities selection UI for this credential
-                    const sourceId = openCred.id;
-                    setCreatedSourceId(sourceId);
-                    setErrMsg(null);
-
-                    // Load inventory using your existing function
-                    await loadN8nInventory(sourceId);
-
-                    // Preselect currently indexed externalIds for this source
-                    const current = indexedEntities
-                      .filter((e) => String(e.sourceId) === String(sourceId))
-                      .map((e) => String(e.externalId));
-                    setSelectedExternalIds(new Set(current));
-
-                    setConnectOpen(true);
-                    setStep("entities");
+                    
+                    // Use the generalized inventory management function
+                    openManageIndexed(String(openCred.platformType), String(openCred.id));
                   }}
                   className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
                 >
                   <Settings className="h-4 w-4" />
-                  Manage indexed workflows
+                  Manage Indexed
                 </button>
               ) : null}
 
@@ -1536,13 +1590,11 @@ export default function ConnectionsPage() {
                   <div className="flex items-center gap-3">
                     <div className="text-xl font-semibold text-gray-900">
                       {step === "platform"
-                        ? "Connect Platform"
+                        ? editingSourceId ? "Edit Platform" : "Connect Platform"
                         : step === "method"
-                        ? `Connect ${selectedPlatform ? (getPlatformMeta(String(selectedPlatform))?.label ?? String(selectedPlatform)) : ""}`
+                        ? `${editingSourceId ? "Edit" : "Connect"} ${selectedPlatform ? (getPlatformMeta(String(selectedPlatform))?.label ?? String(selectedPlatform)) : ""}`
                         : step === "credentials"
-                        ? selectedPlatform === "make"
-                          ? "Connect Make"
-                          : "Credentials"
+                        ? `${editingSourceId ? "Edit " : "Connect "}${selectedPlatform ? (getPlatformMeta(String(selectedPlatform))?.label ?? String(selectedPlatform)) : ""} Credentials`
                         : step === "entities"
                         ? editingSourceId 
                           ? selectedPlatform === "vapi" ? "Manage indexed assistants" : "Manage indexed workflows" 
@@ -2048,7 +2100,7 @@ export default function ConnectionsPage() {
         disabled={saving}
         className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600 disabled:opacity-50"
       >
-        {saving ? (editingSourceId ? "Saving..." : "Connecting...") : (editingSourceId ? "Save" : "Connect")}
+        {saving ? (editingSourceId ? "Saving..." : "Connecting...") : (editingSourceId ? "Save Changes" : "Connect")}
       </button>
     </div>
   </div>
