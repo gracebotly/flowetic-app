@@ -432,49 +432,15 @@ export async function POST(req: Request) {
       return errorResponse(400, "MISSING_API_KEY", "Vapi Private API Key is required.");
     }
 
-    const candidates = [
-      "https://api.vapi.ai/v1/assistants",
-      "https://api.vapi.ai/assistants",
-    ] as const;
+    const testRes = await fetch("https://api.vapi.ai/v1/assistants", {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+      },
+    });
 
-    let testRes: Response | null = null;
-    let respText = "";
-
-    for (const url of candidates) {
-      const r = await fetch(url, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${key}`,
-          "Content-Type": "application/json",
-        },
-      });
-
-      const t = await r.text().catch(() => "");
-      if (r.ok) {
-        testRes = r;
-        respText = t;
-        break;
-      }
-
-      // If it's a 404, try the next candidate path
-      if (r.status === 404) continue;
-
-      // For other statuses (401/403/etc), stop and use this response
-      testRes = r;
-      respText = t;
-      break;
-    }
-
-    if (!testRes) {
-      return errorResponse(
-        500,
-        "VAPI_CONNECT_INTERNAL",
-        "This is a Getflowetic configuration issue (not your fault). Please contact support and include the copied error details.",
-        { platformType, method },
-        "contact_support",
-      );
-    }
-
+    const t = await testRes.text().catch(() => "");
     if (!testRes.ok) {
       const msg = providerAuthMessage({
         platform: "vapi",
@@ -482,18 +448,23 @@ export async function POST(req: Request) {
         fallback: "Unable to validate your Vapi API key. Please check your key and try again.",
       });
 
-      return errorResponse(400, "VAPI_AUTH_FAILED", msg, {
-        platformType,
-        method,
-        providerStatus: testRes.status,
-        providerBodySnippet: safeSnippet(respText),
-      });
+      return errorResponse(
+        400,
+        "VAPI_AUTH_FAILED",
+        msg,
+        {
+          platformType,
+          method,
+          providerStatus: testRes.status,
+          providerBodySnippet: safeSnippet(t),
+        },
+      );
     }
 
     // Parse assistants for inventory list
     let parsed: any = null;
     try {
-      parsed = respText ? JSON.parse(respText) : null;
+      parsed = t ? JSON.parse(t) : null;
     } catch {
       parsed = null;
     }
@@ -821,8 +792,7 @@ export async function POST(req: Request) {
   return NextResponse.json({
     ok: true,
     sourceId: source.id,
-    ...(inventoryEntities ? { inventoryEntities } : {}),
-    ...(platformType === "vapi" && method === "api" ? { callsLoaded: callsLoaded ?? 0 } : {}),
+    ...(platformType === "vapi" && method === "api" && inventoryEntities ? { inventoryEntities } : {}),
     ...(warnings.length > 0 ? { warnings } : {}),
   });
 }
