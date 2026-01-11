@@ -1074,7 +1074,6 @@ export default function ConnectionsPage() {
 
   function openDeleteCredential(sourceId: string, platformType: string) {
     setErrMsg(null);
-    setCredentialDeleteSuccessMsg(null);
     setCredentialDeletePlatformType(String(platformType || ""));
     setCredentialDeleteId(sourceId);
     setCredentialDeleteConfirm(false);
