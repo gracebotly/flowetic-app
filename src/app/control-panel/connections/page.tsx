@@ -979,7 +979,15 @@ export default function ConnectionsPage() {
   async function saveEntitiesSelection() {
     if (!createdSourceId) return;
     if (selectedExternalIds.size === 0) {
-      setErrMsg(selectedPlatform === "vapi" ? "Select at least one assistant to index." : "Select at least one workflow to index.");
+
+      setErrMsg(
+        selectedPlatform === "vapi"
+          ? "Select at least one assistant to index."
+          : selectedPlatform === "retell"
+          ? "Select at least one agent to index."
+          : "Select at least one workflow to index."
+      );
+
       return;
     }
     const selected = new Set(selectedExternalIds);
@@ -2001,7 +2009,9 @@ export default function ConnectionsPage() {
     ) : null}
 
     {inventoryLoading ? (
-      <div className="text-sm text-gray-600">{selectedPlatform === "vapi" ? "Loading assistants…" : "Loading workflows…"}</div>
+      <div className="text-sm text-gray-600">
+        {selectedPlatform === "vapi" ? "Loading assistants…" : selectedPlatform === "retell" ? "Loading agents…" : "Loading workflows…"}
+      </div>
     ) : null}
 
     {!inventoryLoading ? (
@@ -2013,7 +2023,13 @@ export default function ConnectionsPage() {
             value={inventorySearch}
             onChange={(e) => setInventorySearch(e.target.value)}
             className="w-full rounded-lg border border-gray-300 py-2.5 pl-10 pr-4 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder={selectedPlatform === "vapi" ? "Search assistants..." : "Search workflows..."}
+            placeholder={
+              selectedPlatform === "vapi"
+                ? "Search assistants..."
+                : selectedPlatform === "retell"
+                ? "Search agents..."
+                : "Search workflows..."
+            }
           />
         </div>
       </div>
@@ -2021,7 +2037,7 @@ export default function ConnectionsPage() {
       <div className="max-h-[320px] overflow-auto rounded-lg border border-gray-200 bg-white">
         {displayedSelectable.length === 0 ? (
           <div className="p-4 text-sm text-gray-600">
-            {selectedPlatform === "vapi" ? "No assistants found in this Vapi instance." : "No workflows found in this n8n instance."}
+            {selectedPlatform === "vapi" ? "No assistants found in this Vapi instance." : selectedPlatform === "retell" ? "No agents found in this Retell instance." : "No workflows found in this n8n instance."}
           </div>
         ) : (
           <div className="divide-y divide-gray-200">

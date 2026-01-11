@@ -510,6 +510,24 @@ export async function POST(req: Request) {
       );
     }
 
+    // Parse agents for inventory list
+    const testText = await testRes.text().catch(() => "");
+    let parsed: any = null;
+    try {
+      parsed = testText ? JSON.parse(testText) : null;
+    } catch {
+      parsed = null;
+    }
+
+    const agents = Array.isArray(parsed?.agents) ? parsed.agents : Array.isArray(parsed) ? parsed : [];
+    inventoryEntities = agents
+      .map((a: any) => ({
+        entityKind: "agent",
+        externalId: String(a?.agent_id ?? a?.id ?? ""),
+        displayName: String(a?.agent_name ?? a?.name ?? `Agent ${String(a?.agent_id ?? a?.id ?? "")}`),
+      }))
+      .filter((x: any) => x.externalId);
+
     // Pull agents count for Retell
     try {
       const agentsRes = await fetch("https://api.retellai.com/list-agents", {
@@ -766,7 +784,7 @@ export async function POST(req: Request) {
   return NextResponse.json({
     ok: true,
     sourceId: source.id,
-    ...(platformType === "vapi" && method === "api" && inventoryEntities ? { inventoryEntities } : {}),
+    ...(inventoryEntities ? { inventoryEntities } : {}),
     ...(platformType === "vapi" && method === "api" ? { callsLoaded: callsLoaded ?? 0 } : {}),
     ...(warnings.length > 0 ? { warnings } : {}),
   });
