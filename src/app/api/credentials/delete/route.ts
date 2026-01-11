@@ -11,14 +11,14 @@ export async function POST(req: Request) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({ ok: false, code: "AUTH_REQUIRED" }, { status: 401 });
+    return NextResponse.json({ ok: false, code: "AUTH_REQUIRED", message: "Authentication required" }, { status: 401 });
   }
 
   const body = (await req.json().catch(() => ({}))) as any;
   const sourceId = String(body?.sourceId ?? "").trim();
 
   if (!sourceId) {
-    return NextResponse.json({ ok: false, code: "MISSING_SOURCE_ID" }, { status: 400 });
+    return NextResponse.json({ ok: false, code: "MISSING_SOURCE_ID", message: "Source ID is required" }, { status: 400 });
   }
 
   // Look up source without tenant scoping first so we can resolve tenant deterministically.
@@ -37,7 +37,7 @@ export async function POST(req: Request) {
   }
 
   if (!source?.tenant_id) {
-    return NextResponse.json({ ok: false, code: "SOURCE_NOT_FOUND" }, { status: 404 });
+    return NextResponse.json({ ok: false, code: "SOURCE_NOT_FOUND", message: "Credential not found" }, { status: 404 });
   }
 
   // Verify user has access to this tenant
@@ -57,7 +57,7 @@ export async function POST(req: Request) {
   }
 
   if (!membership?.tenant_id) {
-    return NextResponse.json({ ok: false, code: "TENANT_ACCESS_DENIED" }, { status: 403 });
+    return NextResponse.json({ ok: false, code: "TENANT_ACCESS_DENIED", message: "Access denied" }, { status: 403 });
   }
 
   // Delete dependent rows first (prevents FK issues)

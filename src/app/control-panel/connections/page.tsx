@@ -415,6 +415,49 @@ export default function ConnectionsPage() {
     setCredentialsLoading(false);
   }
 
+  async function deleteCredentialById(sourceId: string) {
+    setSaving(true);
+    setErrMsg(null);
+
+    const res = await fetch("/api/credentials/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sourceId }),
+    });
+
+    const json = await res.json().catch(() => ({}));
+
+    if (!res.ok || !json?.ok) {
+      const msg =
+        typeof json?.message === "string" && json.message.trim()
+          ? json.message
+          : "Failed to delete credential.";
+      const code =
+        typeof json?.code === "string" && json.code.trim()
+          ? ` (${json.code})`
+          : "";
+      setErrMsg(`${msg}${code}`);
+      setSaving(false);
+      return false;
+    }
+
+    // Close delete modal state
+    setCredentialDeleteId(null);
+    setCredentialDeleteConfirm(false);
+
+    // Close menus to avoid "no buttons"/stuck UI
+    setOpenCredentialMenuId(null);
+
+    // Optimistically remove from UI immediately
+    setCredentials((prev) => prev.filter((c) => c.id !== sourceId));
+
+    // Authoritative refetch (HAR shows the app already calls this; we ensure state is set from response)
+    await refreshCredentials();
+
+    setSaving(false);
+    return true;
+  }
+
   async function refreshIndexedEntities() {
     setIndexedLoading(true);
     setIndexedErr(null);
@@ -622,7 +665,7 @@ export default function ConnectionsPage() {
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       const target = event.target as Element;
-      if (!target.closest('[data-entity-menu]')) {
+      if (!target.closest('[data-entity-menu]') && !target.closest('[data-credential-menu]')) {
         setOpenEntityMenuId(null);
         setDeleteConfirmId(null);
         setOpenCredentialMenuId(null);
@@ -1480,7 +1523,7 @@ export default function ConnectionsPage() {
 
                       <div className="flex items-center gap-2">
                         <StatusPill status={cred.status} />
-                        <div data-entity-menu className="relative">
+                        <div data-credential-menu className="relative">
                           <button
                             type="button"
                             onClick={(e) => {
@@ -2535,55 +2578,15 @@ export default function ConnectionsPage() {
                 </button>
                 <button
                   type="button"
-                  disabled={!credentialDeleteConfirm}
+                  disabled={!credentialDeleteConfirm || saving}
                   onClick={async () => {
                     const id = credentialDeleteId;
-                    setSaving(true);
-                    setErrMsg(null);
-
-                    const res = await fetch("/api/credentials/delete", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ sourceId: id }),
-                    });
-                    const json = await res.json().catch(() => ({}));
-                    if (!res.ok || !json?.ok) {
-                      setSaving(false);
-                      setErrMsg(json?.message || "Failed to delete credentials.");
-                      return;
-                    }
-
-                    setSaving(false);
-
-                    // Close delete modal
-                    setCredentialDeleteId(null);
-                    setCredentialDeleteConfirm(false);
-
-                    // Also close any open menus to prevent "no buttons" UI
-                    setOpenCredentialMenuId(null);
-
-                    // If the connect modal is open for any reason, close it
-                    setConnectOpen(false);
-
-                    // Reset step back to platform to avoid stranded modal state
-                    setStep("platform");
-
-                    // Clear any inventory modal state that could still be open
-                    setInventoryEntities([]);
-                    setSelectedExternalIds(new Set());
-                    setInventoryErr(null);
-                    setInventoryLoading(false);
-
-                    // Remove card immediately
-                    setCredentials((prev) => prev.filter((c) => c.id !== id));
-
-                    // Refetch authoritative state
-                    await refreshCredentials();
-                    await refreshIndexedEntities();
+                    if (!id) return;
+                    await deleteCredentialById(id);
                   }}
                   className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
                 >
-                  Delete
+                  {saving ? "Deleting..." : "Delete"}
                 </button>
               </div>
             </div>

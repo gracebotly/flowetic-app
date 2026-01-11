@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 export async function POST(req: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ ok: false, code: "AUTH_REQUIRED" }, { status: 401 });
+  if (!user) return NextResponse.json({ ok: false, code: "AUTH_REQUIRED", message: "Authentication required. Please log in and try again." }, { status: 401 });
 
   const { data: membership } = await supabase
     .from("memberships")
@@ -16,11 +16,11 @@ export async function POST(req: Request) {
     .eq("user_id", user.id)
     .limit(1)
     .maybeSingle();
-  if (!membership?.tenant_id) return NextResponse.json({ ok: false, code: "TENANT_ACCESS_DENIED" }, { status: 403 });
+  if (!membership?.tenant_id) return NextResponse.json({ ok: false, code: "TENANT_ACCESS_DENIED", message: "Access denied. You do not have permission to access this tenant." }, { status: 403 });
 
   const body = (await req.json().catch(() => ({}))) as any;
   const sourceId = String(body?.sourceId ?? "").trim();
-  if (!sourceId) return NextResponse.json({ ok: false, code: "MISSING_SOURCE_ID" }, { status: 400 });
+  if (!sourceId) return NextResponse.json({ ok: false, code: "MISSING_SOURCE_ID", message: "Source ID is missing. Please provide a valid source ID." }, { status: 400 });
 
   // If the saved Make credential is legacy webhook, Manage Indexed cannot work.
   // Surface a clear error to the UI so it doesn't "do nothing".
@@ -31,8 +31,8 @@ export async function POST(req: Request) {
     .eq("tenant_id", membership.tenant_id)
     .maybeSingle();
 
-  if (!source) return NextResponse.json({ ok: false, code: "SOURCE_NOT_FOUND" }, { status: 404 });
-  if (String(source.type) !== "make") return NextResponse.json({ ok: false, code: "MAKE_SOURCE_REQUIRED" }, { status: 400 });
+  if (!source) return NextResponse.json({ ok: false, code: "SOURCE_NOT_FOUND", message: "Source not found. The specified source ID does not exist or you don't have access to it." }, { status: 404 });
+  if (String(source.type) !== "make") return NextResponse.json({ ok: false, code: "MAKE_SOURCE_REQUIRED", message: "Invalid source type. This endpoint only works with Make.com sources." }, { status: 400 });
 
   if (String(source.method) === "webhook") {
     return NextResponse.json(

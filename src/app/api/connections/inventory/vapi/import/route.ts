@@ -37,7 +37,14 @@ export async function POST(req: Request) {
   const inventory = Array.isArray(listJson?.inventoryEntities) ? listJson.inventoryEntities : [];
   const now = new Date().toISOString();
 
-  const rows = inventory.map((a: any) => ({
+  const byExternalId = new Map<string, any>();
+  for (const e of inventory) {
+    const externalId = String(e?.externalId ?? "").trim();
+    if (!externalId) continue;
+    if (!byExternalId.has(externalId)) byExternalId.set(externalId, e);
+  }
+
+  const rows = Array.from(byExternalId.values()).map((a: any) => ({
     tenant_id: membership.tenant_id,
     source_id: sourceId,
     entity_kind: String(a.entityKind || "assistant"),
@@ -48,7 +55,7 @@ export async function POST(req: Request) {
     last_seen_at: null,
     created_at: now,
     updated_at: now,
-  })).filter((r: any) => r.external_id);
+  }));
 
   const { error: upErr } = await supabase.from("source_entities").upsert(rows, {
     onConflict: "source_id,external_id",
