@@ -386,8 +386,8 @@ export async function POST(req: Request) {
       return errorResponse(400, "MISSING_API_KEY", "Vapi Private API Key is required.");
     }
 
-    // Test key with a lightweight request
-    const testRes = await fetch("https://api.vapi.ai/v1/assistants", {
+    // Test key with a lightweight request (Vapi uses /assistant, not /v1/assistants)
+    const testRes = await fetch("https://api.vapi.ai/assistant", {
       method: "GET",
       headers: {
         Authorization: `Bearer ${key}`,
@@ -397,17 +397,20 @@ export async function POST(req: Request) {
 
     if (!testRes.ok) {
       const t = await testRes.text().catch(() => "");
-      return errorResponse(
-        400,
-        "VAPI_AUTH_FAILED",
-        "Vapi rejected this API key. Please generate a new Private API Key in Vapi → API Keys and try again.",
-        {
-          platformType,
-          method,
-          providerStatus: testRes.status,
-          providerBodySnippet: safeSnippet(t),
-        },
-      );
+      const providerSnippet = safeSnippet(t);
+
+      // Make debugging actionable: distinguish endpoint issues from auth issues.
+      const message =
+        testRes.status === 404
+          ? "Vapi API endpoint not found (404). This usually indicates an incorrect Vapi base URL/path in our backend. Please contact support."
+          : "Vapi rejected this API key. Please generate a new Private API Key in Vapi → API Keys and try again.";
+
+      return errorResponse(400, "VAPI_AUTH_FAILED", message, {
+        platformType,
+        method,
+        providerStatus: testRes.status,
+        providerBodySnippet: providerSnippet,
+      });
     }
   }
 
