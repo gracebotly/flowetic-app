@@ -874,6 +874,9 @@ export async function POST(req: Request) {
     });
   }
 
+  // End of Make platform handling
+}
+
   // Default return for non-Make platforms
 
   return NextResponse.json({
