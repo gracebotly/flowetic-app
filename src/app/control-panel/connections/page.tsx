@@ -1934,7 +1934,7 @@ export default function ConnectionsPage() {
           </div>
         </div>
       </button>
-    ) : selectedPlatform && selectedPlatform !== "n8n" ? (
+    ) : selectedPlatform && (selectedPlatform as string) !== "n8n" ? (
       <div className="w-full rounded-xl border border-gray-200 bg-white p-4 text-left opacity-60 cursor-not-allowed">
         <div className="flex items-start justify-between gap-3">
           <div className="grow">
