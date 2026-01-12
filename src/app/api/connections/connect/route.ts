@@ -517,6 +517,7 @@ export async function POST(req: Request) {
       }))
       .filter((x: any) => x.externalId);
   }
+  }
 
   if (platformType === "retell" && method === "api") {
     const key = String(secretJson?.apiKey || "").trim();
