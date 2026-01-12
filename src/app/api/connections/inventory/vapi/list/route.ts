@@ -91,7 +91,11 @@ export async function GET(req: Request) {
         ok: false,
         code: "VAPI_ASSISTANTS_FETCH_FAILED",
         message: `Failed to fetch Vapi assistants (${lastStatus ?? 400}).`,
-        details: { providerStatus: lastStatus ?? undefined, providerBodySnippet: lastBody.slice(0, 300) },
+        details: {
+          providerStatus: lastStatus ?? undefined,
+          providerBodySnippet: lastBody.slice(0, 300),
+          attemptedUrls: endpoints,
+        },
       },
       { status: 400 },
     );

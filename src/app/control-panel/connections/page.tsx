@@ -1109,19 +1109,40 @@ export default function ConnectionsPage() {
       return;
     }
 
-    // Make.com: use inventoryEntities from response if available
-    if (selectedPlatform === "make" && json?.inventoryEntities) {
-      const inventoryEntities = json.inventoryEntities.map((entity: any) => ({
-        externalId: String(entity.externalId),
-        displayName: String(entity.displayName || ""),
-        entityKind: String(entity.entityKind || "scenario"),
-      }));
-      
-      setInventoryEntities(inventoryEntities);
-      setConnectOpen(true);
-      setStep("entities");
-      setSaving(false);
-      return;
+    // Make.com: prefer inventoryEntities from connect response, but if empty, import+list before showing entities
+    if (selectedPlatform === "make") {
+      const invFromConnect = Array.isArray(json?.inventoryEntities) ? json.inventoryEntities : null;
+
+      const mappedFromConnect =
+        invFromConnect?.map((entity: any) => ({
+          externalId: String(entity.externalId),
+          displayName: String(entity.displayName || ""),
+          entityKind: String(entity.entityKind || "scenario"),
+        })) ?? [];
+
+      // If connect returned real inventory, use it directly
+      if (mappedFromConnect.length > 0) {
+        setInventoryEntities(mappedFromConnect);
+        setConnectOpen(true);
+        setStep("entities");
+        setSaving(false);
+        return;
+      }
+
+      // Otherwise: import inventory then list it (so user doesn't see a blank modal)
+      try {
+        await importInventory("make", sid);
+        const rows = await listInventory("make", sid);
+        setInventoryEntities(rows);
+        setConnectOpen(true);
+        setStep("entities");
+        setSaving(false);
+        return;
+      } catch (e: any) {
+        setSaving(false);
+        setErrMsg(e?.message || "Failed to load Make scenarios.");
+        return;
+      }
     }
 
     setStep("success");
@@ -1179,7 +1200,16 @@ export default function ConnectionsPage() {
     const entitiesPayload = selectedRows.map((e) => ({
       externalId: String(e.externalId),
       displayName: String(e.displayName ?? ""),
-      entityKind: String(e.entityKind ?? "workflow"),
+      entityKind: String(
+        e.entityKind ??
+          (selectedPlatform === "make"
+            ? "scenario"
+            : selectedPlatform === "retell"
+            ? "agent"
+            : selectedPlatform === "vapi"
+            ? "assistant"
+            : "workflow"),
+      ),
       enabledForAnalytics: true,
       enabledForActions: false,
     }));
@@ -1682,8 +1712,11 @@ export default function ConnectionsPage() {
                         ? `${editingSourceId ? "Edit " : "Connect "}${selectedPlatform ? (getPlatformMeta(String(selectedPlatform))?.label ?? String(selectedPlatform)) : ""} Credentials`
                         : step === "entities"
                         ? editingSourceId 
-                          ? selectedPlatform === "vapi" ? "Manage indexed assistants" : "Manage indexed workflows" 
-                          : "Select entities to index"
+                          ? selectedPlatform === "vapi" ? "Manage indexed assistants" 
+                            : selectedPlatform === "make" ? "Manage indexed scenarios"
+                            : "Manage indexed workflows" 
+                          : selectedPlatform === "make" ? "Select scenarios to index"
+                            : "Select entities to index"
                         : "Connected"}
                     </div>
                     {step === "credentials" && selectedPlatform === "n8n" && selectedMethod === "mcp" ? (
@@ -1713,8 +1746,12 @@ export default function ConnectionsPage() {
                       ? editingSourceId
                         ? selectedPlatform === "vapi" 
                           ? "Update which assistants GetFlowetic should index. Unselected assistants will be removed from your All tab."
+                          : selectedPlatform === "make"
+                          ? "Update which scenarios GetFlowetic should index. Unselected scenarios will be removed from your All tab."
                           : "Update which workflows GetFlowetic should index. Unselected workflows will be removed from your All tab."
-                        : "Add agents/workflows you want GetFlowetic to index."
+                        : selectedPlatform === "make"
+                          ? "Add scenarios you want GetFlowetic to index."
+                          : "Add agents/workflows you want GetFlowetic to index."
                       : "Success."}
                   </div>
                 </div>
@@ -1821,14 +1858,22 @@ export default function ConnectionsPage() {
         setErrMsg(null);
         setStep("credentials");
       }}
-      className="w-full rounded-xl border border-gray-200 bg-white p-4 text-left transition hover:border-gray-300 hover:bg-gray-50"
+      className="w-full rounded-xl border-2 border-gray-200 bg-white p-4 text-left transition hover:border-blue-500 hover:bg-slate-50"
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-sm font-semibold text-gray-900">API Key</div>
+          <div className="text-base font-semibold text-gray-900">API Key</div>
           <div className="mt-1 text-sm text-gray-600">
             Connect using an API key to import and index workflows.
           </div>
+        </div>
+        <div className="flex gap-2">
+          <span className="shrink-0 rounded-full border-2 border-gray-200 bg-white px-2 py-1 text-xs font-bold text-gray-700">
+            Enhanced
+          </span>
+          <span className="shrink-0 rounded-full border-2 border-gray-200 bg-white px-2 py-1 text-xs font-bold text-gray-700">
+            Protected
+          </span>
         </div>
       </div>
     </button>
@@ -1859,20 +1904,33 @@ export default function ConnectionsPage() {
     ) : null}
 
     {selectedPlatform === "n8n" ? (
-      <div className="w-full rounded-xl border border-gray-200 bg-white p-4 text-left opacity-60 cursor-not-allowed">
+      <button
+        type="button"
+        onClick={() => {
+          setSelectedMethod("mcp");
+          setErrMsg(null);
+          setStep("credentials");
+        }}
+        className="w-full rounded-xl border-2 border-gray-200 bg-white p-4 text-left transition hover:border-blue-500 hover:bg-slate-50"
+      >
         <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="text-sm font-semibold text-gray-900">MCP Instances</div>
+          <div className="grow">
+            <div className="text-base font-semibold text-gray-900">MCP Instances</div>
             <div className="mt-1 text-sm text-gray-600">
-              AI tools will be able to discover and run enabled n8n workflows directly.
+              Workflow triggers for AI tooling. Live bi‑directional with AI agents via the Model Context
+              Protocol. Includes secure, read‑only credential tunneling.
             </div>
           </div>
-
-          <span className="shrink-0 rounded-full border border-gray-200 bg-gray-50 px-2 py-1 text-xs font-semibold text-gray-700">
-            Coming Soon
-          </span>
+          <div className="flex gap-2">
+            <span className="shrink-0 rounded-full border-2 border-green-200 bg-green-50 px-2 py-1 text-xs font-bold text-green-700">
+              Live
+            </span>
+            <span className="shrink-0 rounded-full border-2 border-blue-200 bg-blue-50 px-2 py-1 text-xs font-bold text-blue-700">
+              Secure
+            </span>
+          </div>
         </div>
-      </div>
+      </button>
     ) : null}
     
     <div className="flex justify-end gap-2 pt-4">

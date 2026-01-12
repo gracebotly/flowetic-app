@@ -466,38 +466,50 @@ export async function POST(req: Request) {
     }
 
     if (!okText) {
-      const msg = providerAuthMessage({
-        platform: "vapi",
-        status: lastStatus ?? 400,
-        fallback: "Unable to validate your Vapi API key. Please check your key and try again.",
-      });
-      return errorResponse(
-        400,
-        "VAPI_AUTH_FAILED",
-        msg,
-        {
-          platformType,
-          method,
-          providerStatus: lastStatus ?? undefined,
-          providerBodySnippet: safeSnippet(lastBody),
-        },
-      );
+      // If endpoint moved (404), don't block connecting; allow credential save and let user manage indexing later.
+      if (lastStatus === 404) {
+        warnings.push({
+          code: "VAPI_INVENTORY_UNAVAILABLE",
+          message:
+            "Connected, but Vapi assistants inventory endpoint is unavailable (404). You can manage indexed assistants after connecting.",
+        });
+        inventoryEntities = [];
+      } else {
+        const msg = providerAuthMessage({
+          platform: "vapi",
+          status: lastStatus ?? 400,
+          fallback: "Unable to validate your Vapi API key. Please check your key and try again.",
+        });
+        return errorResponse(
+          400,
+          "VAPI_AUTH_FAILED",
+          msg,
+          {
+            platformType,
+            method,
+            providerStatus: lastStatus ?? undefined,
+            providerBodySnippet: safeSnippet(lastBody),
+          },
+        );
+      }
     }
 
-    let parsed: any = null;
-    try {
-      parsed = okText ? JSON.parse(okText) : null;
-    } catch {
-      parsed = null;
-    }
+    if (okText) {
+      // Parse assistants for inventory list
+      let parsed: any = null;
+      try {
+        parsed = okText ? JSON.parse(okText) : null;
+      } catch {
+        parsed = null;
+      }
 
-    const assistants = Array.isArray(parsed)
-      ? parsed
-      : Array.isArray(parsed?.assistants)
-        ? parsed.assistants
-        : [];
+      const assistants = Array.isArray(parsed)
+        ? parsed
+        : Array.isArray(parsed?.assistants)
+          ? parsed.assistants
+          : [];
 
-    inventoryEntities = assistants
+      inventoryEntities = assistants
       .map((a: any) => ({
         entityKind: "assistant",
         externalId: String(a?.id ?? ""),
