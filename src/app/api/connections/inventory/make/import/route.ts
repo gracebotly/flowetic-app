@@ -95,6 +95,14 @@ export async function POST(req: Request) {
   const { error: upErr } = await supabase.from("source_entities").upsert(rows, { onConflict: "source_id,external_id" });
   if (upErr) return NextResponse.json({ ok: false, code: "PERSISTENCE_FAILED", message: upErr.message }, { status: 400 });
 
+  if (rows.length === 0) {
+    return NextResponse.json({
+      ok: true,
+      importedCount: 0,
+      warning: "No Make scenarios returned. Confirm your token has scenarios:read and the selected region is correct.",
+    });
+  }
+
   return NextResponse.json({ ok: true, importedCount: rows.length });
 }
 

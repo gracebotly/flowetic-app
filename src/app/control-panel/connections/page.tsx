@@ -180,6 +180,13 @@ function StatusPill({ status }: { status: string | null }) {
   return <span className="inline-flex items-center gap-1.5 rounded-full border border-yellow-200 bg-yellow-50 px-2.5 py-1 text-xs font-semibold text-yellow-700">Attention</span>;
 }
 
+function entityNoun(platform: string) {
+  if (platform === "make") return "scenarios";
+  if (platform === "retell") return "agents";
+  if (platform === "vapi") return "assistants";
+  return "workflows";
+}
+
 function CredentialsDropdownMenu({   
   sourceId,
   onClose,
@@ -324,6 +331,7 @@ export default function ConnectionsPage() {
   const [connectOpen, setConnectOpen] = useState(false);
   const [step, setStep] = useState<"platform" | "method" | "credentials" | "entities" | "success">("platform");
   const [mcpHelpOpen, setMcpHelpOpen] = useState(false);
+  const [isPostConnectSelection, setIsPostConnectSelection] = useState(false);
   
   const [editingSourceId, setEditingSourceId] = useState<string | null>(null);
   const [credentialDeleteId, setCredentialDeleteId] = useState<string | null>(null);
@@ -592,6 +600,7 @@ export default function ConnectionsPage() {
 
       const indexedSet = await getIndexedExternalIdsForSource(sourceId);
       setSelectedExternalIds(indexedSet);
+      setIsPostConnectSelection(false);
 
       setCreatedSourceId(sourceId);
       setConnectOpen(true);
@@ -836,6 +845,7 @@ export default function ConnectionsPage() {
     setConnectEntities([]);
     setEntityExternalId("");
     setEntityDisplayName("");
+    setIsPostConnectSelection(false);
     setSaving(false);
     setErrMsg(null);
     setConnectSummary(null);
@@ -1079,6 +1089,7 @@ export default function ConnectionsPage() {
 
     // Handle Vapi inventory response
     if (selectedPlatform === "vapi" && Array.isArray(json.inventoryEntities)) {
+      setIsPostConnectSelection(true);
       setInventoryEntities(json.inventoryEntities);
       setConnectOpen(true);
       setStep("entities");
@@ -1093,6 +1104,7 @@ export default function ConnectionsPage() {
         displayName: String(entity.displayName || ""),
         entityKind: String(entity.entityKind || "agent"),
       }));
+      setIsPostConnectSelection(true);
       setInventoryEntities(inventoryEntities);
       setConnectOpen(true);
       setStep("entities");
@@ -1101,6 +1113,7 @@ export default function ConnectionsPage() {
     }
 
     if (selectedPlatform === "n8n" && (selectedMethod === "api" || selectedMethod === "mcp")) {
+      setIsPostConnectSelection(true);
       setSaving(false); // Stop loading first
       await loadN8nInventory(sid);
       // Ensure modal stays open and step transitions
@@ -1109,7 +1122,6 @@ export default function ConnectionsPage() {
       return;
     }
 
-    // Make.com: prefer inventoryEntities from connect response, but if empty, import+list before showing entities
     if (selectedPlatform === "make") {
       const invFromConnect = Array.isArray(json?.inventoryEntities) ? json.inventoryEntities : null;
 
@@ -1120,7 +1132,8 @@ export default function ConnectionsPage() {
           entityKind: String(entity.entityKind || "scenario"),
         })) ?? [];
 
-      // If connect returned real inventory, use it directly
+      setIsPostConnectSelection(true);
+
       if (mappedFromConnect.length > 0) {
         setInventoryEntities(mappedFromConnect);
         setConnectOpen(true);
@@ -1129,7 +1142,6 @@ export default function ConnectionsPage() {
         return;
       }
 
-      // Otherwise: import inventory then list it (so user doesn't see a blank modal)
       try {
         await importInventory("make", sid);
         const rows = await listInventory("make", sid);
@@ -1712,11 +1724,8 @@ export default function ConnectionsPage() {
                         ? `${editingSourceId ? "Edit " : "Connect "}${selectedPlatform ? (getPlatformMeta(String(selectedPlatform))?.label ?? String(selectedPlatform)) : ""} Credentials`
                         : step === "entities"
                         ? editingSourceId 
-                          ? selectedPlatform === "vapi" ? "Manage indexed assistants" 
-                            : selectedPlatform === "make" ? "Manage indexed scenarios"
-                            : "Manage indexed workflows" 
-                          : selectedPlatform === "make" ? "Select scenarios to index"
-                            : "Select entities to index"
+                          ? `Manage indexed ${entityNoun(String(selectedPlatform))}`
+                          : `Select ${entityNoun(String(selectedPlatform))} to index`
                         : "Connected"}
                     </div>
                     {step === "credentials" && selectedPlatform === "n8n" && selectedMethod === "mcp" ? (
@@ -1744,14 +1753,8 @@ export default function ConnectionsPage() {
                             : "Enter credentials to validate and connect."
                       : step === "entities"
                       ? editingSourceId
-                        ? selectedPlatform === "vapi" 
-                          ? "Update which assistants GetFlowetic should index. Unselected assistants will be removed from your All tab."
-                          : selectedPlatform === "make"
-                          ? "Update which scenarios GetFlowetic should index. Unselected scenarios will be removed from your All tab."
-                          : "Update which workflows GetFlowetic should index. Unselected workflows will be removed from your All tab."
-                        : selectedPlatform === "make"
-                          ? "Add scenarios you want GetFlowetic to index."
-                          : "Add agents/workflows you want GetFlowetic to index."
+                        ? `Update which ${entityNoun(String(selectedPlatform))} GetFlowetic should index. Unselected ${entityNoun(String(selectedPlatform))} will be removed from your All tab.`
+                        : `Add ${entityNoun(String(selectedPlatform))} you want GetFlowetic to index.`
                       : "Success."}
                   </div>
                 </div>
@@ -1858,7 +1861,7 @@ export default function ConnectionsPage() {
         setErrMsg(null);
         setStep("credentials");
       }}
-      className="w-full rounded-xl border-2 border-gray-200 bg-white p-4 text-left transition hover:border-blue-500 hover:bg-slate-50"
+      className="w-full rounded-xl border border-gray-300 bg-white p-4 text-left shadow-sm transition hover:border-gray-400 hover:shadow"
     >
       <div className="flex items-start justify-between gap-3">
         <div>
@@ -1911,7 +1914,7 @@ export default function ConnectionsPage() {
           setErrMsg(null);
           setStep("credentials");
         }}
-        className="w-full rounded-xl border-2 border-gray-200 bg-white p-4 text-left transition hover:border-blue-500 hover:bg-slate-50"
+        className="w-full rounded-xl border border-gray-300 bg-white p-4 text-left shadow-sm transition hover:border-gray-400 hover:shadow"
       >
         <div className="flex items-start justify-between gap-3">
           <div className="grow">
@@ -1931,6 +1934,22 @@ export default function ConnectionsPage() {
           </div>
         </div>
       </button>
+    ) : selectedPlatform && selectedPlatform !== "n8n" ? (
+      <div className="w-full rounded-xl border border-gray-200 bg-white p-4 text-left opacity-60 cursor-not-allowed">
+        <div className="flex items-start justify-between gap-3">
+          <div className="grow">
+            <div className="text-base font-semibold text-gray-900">MCP Instances</div>
+            <div className="mt-1 text-sm text-gray-600">
+              Workflow triggers for AI tooling. Coming soon for this platform.
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <span className="shrink-0 rounded-full border border-indigo-200 bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-700">
+              Coming Soon
+            </span>
+          </div>
+        </div>
+      </div>
     ) : null}
     
     <div className="flex justify-end gap-2 pt-4">
@@ -2328,7 +2347,13 @@ export default function ConnectionsPage() {
       <div className="max-h-[320px] overflow-auto rounded-lg border border-gray-200 bg-white">
         {displayedSelectable.length === 0 ? (
           <div className="p-4 text-sm text-gray-600">
-            {selectedPlatform === "vapi" ? "No assistants found in this Vapi instance." : selectedPlatform === "retell" ? "No agents found in this Retell instance." : "No workflows found in this n8n instance."}
+            {selectedPlatform === "make"
+              ? "No scenarios found in this Make account."
+              : selectedPlatform === "vapi"
+              ? "No assistants found in this Vapi account."
+              : selectedPlatform === "retell"
+              ? "No agents found in this Retell account."
+              : "No workflows found in this n8n instance."}
           </div>
         ) : (
           <div className="divide-y divide-gray-200">
