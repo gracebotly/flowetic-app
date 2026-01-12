@@ -1,6 +1,7 @@
 
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { decryptSecret } from "@/lib/secrets";
 
 export const runtime = "nodejs";
 
@@ -52,14 +53,17 @@ export async function GET() {
     let instanceUrl: string | undefined;
     
     // For n8n API method credentials, decrypt and extract instanceUrl
-    if (String(s.type) === "n8n" && safeMethod((s as any).method) === "api" && s.secret_hash) {
+    if (
+      String(s.type) === "n8n" &&
+      safeMethod((s as any).method) === "api" &&
+      s.secret_hash
+    ) {
       try {
-        const decrypted = JSON.parse(atob(s.secret_hash));
-        if (decrypted.instanceUrl) {
-          instanceUrl = String(decrypted.instanceUrl);
-        }
-      } catch (e) {
-        // If decryption fails, just leave instanceUrl undefined
+        const decrypted = decryptSecret(String(s.secret_hash));
+        const secret = decrypted ? JSON.parse(decrypted) : null;
+        if (secret?.instanceUrl) instanceUrl = String(secret.instanceUrl);
+      } catch {
+        instanceUrl = undefined;
       }
     }
     

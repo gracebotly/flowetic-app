@@ -540,9 +540,12 @@ export default function ConnectionsPage() {
     );
 
     // Load indexed entities for this source to preselect them
-    const indexedSet = await getIndexedExternalIdsForSource(sourceId);
-    setSelectedExternalIds(indexedSet);
-
+    try {
+      const indexedSet = await getIndexedExternalIdsForSource(sourceId);
+      setSelectedExternalIds(indexedSet);
+    } catch {
+      // leave selection as-is; do not affect inventoryEntities
+    }
     setInventoryLoading(false);
   }
 
@@ -915,7 +918,7 @@ export default function ConnectionsPage() {
         payload.apiKey = apiKey;
       }
 
-      if (instanceUrl) payload.instanceUrl = instanceUrl;
+      if (instanceUrl) payload.instanceUrl = instanceUrl.trim();
 
       // Add region for Make.com
       if (selectedPlatform === "make") {
@@ -926,10 +929,20 @@ export default function ConnectionsPage() {
       if (selectedPlatform === "n8n") {
         payload.n8nAuthMode = "header";
       }
+      
+      // For n8n API, normalize instanceUrl to base origin only
+      if (selectedPlatform === "n8n" && instanceUrl.trim()) {
+        try {
+          const u = new URL(instanceUrl.trim());
+          payload.instanceUrl = `${u.origin}/`;
+        } catch {
+          payload.instanceUrl = instanceUrl.trim();
+        }
+      }
     }
 
     if (selectedMethod === "webhook") {
-      if (instanceUrl) payload.instanceUrl = instanceUrl;
+      if (instanceUrl) payload.instanceUrl = instanceUrl.trim();
     }
 
     if (selectedMethod === "mcp") {

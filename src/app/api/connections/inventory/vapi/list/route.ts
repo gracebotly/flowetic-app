@@ -58,6 +58,7 @@ export async function GET(req: Request) {
     "https://api.vapi.ai/assistants",
     "https://api.vapi.ai/api/v1/assistants",
     "https://api.vapi.ai/api/assistants",
+    "https://api.vapi.ai/v1/assistant", // defensive (some APIs use singular list route differently)
   ];
 
   let lastStatus: number | null = null;
