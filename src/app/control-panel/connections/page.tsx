@@ -181,9 +181,9 @@ function StatusPill({ status }: { status: string | null }) {
 }
 
 function entityNoun(platform: string) {
+  if (platform === "vapi") return vapiInventoryKind === "squad" ? "squads" : "assistants";
   if (platform === "make") return "scenarios";
   if (platform === "retell") return "agents";
-  if (platform === "vapi") return "assistants";
   return "workflows";
 }
 
@@ -332,6 +332,7 @@ export default function ConnectionsPage() {
   const [step, setStep] = useState<"platform" | "method" | "credentials" | "entities" | "success">("platform");
   const [mcpHelpOpen, setMcpHelpOpen] = useState(false);
   const [isPostConnectSelection, setIsPostConnectSelection] = useState(false);
+  const [vapiInventoryKind, setVapiInventoryKind] = useState<"assistant" | "squad">("assistant");
   
   const [editingSourceId, setEditingSourceId] = useState<string | null>(null);
   const [credentialDeleteId, setCredentialDeleteId] = useState<string | null>(null);
@@ -594,9 +595,21 @@ export default function ConnectionsPage() {
     setInventoryErr(null);
 
     try {
-      await importInventory(platform, sourceId);
-      const rows = await listInventory(platform, sourceId);
-      setInventoryEntities(rows);
+      if (platform === "vapi") {
+        if (vapiInventoryKind === "assistant") {
+          await importInventory("vapi", sourceId);
+          const rows = await listInventory("vapi", sourceId);
+          setInventoryEntities(rows);
+        } else {
+          await importInventory("vapi-squads", sourceId);
+          const rows = await listInventory("vapi-squads", sourceId);
+          setInventoryEntities(rows);
+        }
+      } else {
+        await importInventory(platform, sourceId);
+        const rows = await listInventory(platform, sourceId);
+        setInventoryEntities(rows);
+      }
 
       const indexedSet = await getIndexedExternalIdsForSource(sourceId);
       setSelectedExternalIds(indexedSet);
@@ -846,6 +859,7 @@ export default function ConnectionsPage() {
     setEntityExternalId("");
     setEntityDisplayName("");
     setIsPostConnectSelection(false);
+    setVapiInventoryKind("assistant");
     setSaving(false);
     setErrMsg(null);
     setConnectSummary(null);
@@ -1199,7 +1213,7 @@ export default function ConnectionsPage() {
 
       setErrMsg(
         selectedPlatform === "vapi"
-          ? "Select at least one assistant to index."
+          ? (vapiInventoryKind === "squad" ? "Select at least one squad to index." : "Select at least one assistant to index.")
           : selectedPlatform === "retell"
           ? "Select at least one agent to index."
           : "Select at least one workflow to index."
@@ -1214,12 +1228,12 @@ export default function ConnectionsPage() {
       displayName: String(e.displayName ?? ""),
       entityKind: String(
         e.entityKind ??
-          (selectedPlatform === "make"
+          (selectedPlatform === "vapi"
+            ? (vapiInventoryKind === "squad" ? "squad" : "assistant")
+            : selectedPlatform === "make"
             ? "scenario"
             : selectedPlatform === "retell"
             ? "agent"
-            : selectedPlatform === "vapi"
-            ? "assistant"
             : "workflow"),
       ),
       enabledForAnalytics: true,
@@ -2320,12 +2334,38 @@ export default function ConnectionsPage() {
 
     {inventoryLoading ? (
       <div className="text-sm text-gray-600">
-        {selectedPlatform === "vapi" ? "Loading assistants…" : selectedPlatform === "retell" ? "Loading agents…" : "Loading workflows…"}
+        {selectedPlatform === "vapi" ? (vapiInventoryKind === "squad" ? "Loading squads…" : "Loading assistants…") : selectedPlatform === "retell" ? "Loading agents…" : "Loading workflows…"}
       </div>
     ) : null}
 
     {!inventoryLoading ? (
       <>
+      {selectedPlatform === "vapi" ? (
+        <div className="mb-3 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setVapiInventoryKind("assistant")}
+            className={`rounded-lg px-3 py-1.5 text-sm font-semibold border ${
+              vapiInventoryKind === "assistant"
+                ? "border-blue-600 bg-blue-50 text-blue-700"
+                : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+            }`}
+          >
+            Assistants
+          </button>
+          <button
+            type="button"
+            onClick={() => setVapiInventoryKind("squad")}
+            className={`rounded-lg px-3 py-1.5 text-sm font-semibold border ${
+              vapiInventoryKind === "squad"
+                ? "border-blue-600 bg-blue-50 text-blue-700"
+                : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+            }`}
+          >
+            Squads
+          </button>
+        </div>
+      ) : null}
       <div className="flex items-center justify-between gap-3">
         <div className="relative w-[420px]">
           <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
@@ -2335,7 +2375,7 @@ export default function ConnectionsPage() {
             className="w-full rounded-lg border border-gray-300 py-2.5 pl-10 pr-4 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
             placeholder={
               selectedPlatform === "vapi"
-                ? "Search assistants..."
+                ? vapiInventoryKind === "squad" ? "Search squads..." : "Search assistants..."
                 : selectedPlatform === "retell"
                 ? "Search agents..."
                 : "Search workflows..."
@@ -2350,7 +2390,7 @@ export default function ConnectionsPage() {
             {selectedPlatform === "make"
               ? "No scenarios found in this Make account."
               : selectedPlatform === "vapi"
-              ? "No assistants found in this Vapi account."
+              ? (vapiInventoryKind === "squad" ? "No squads found in this Vapi account." : "No assistants found in this Vapi account.")
               : selectedPlatform === "retell"
               ? "No agents found in this Retell account."
               : "No workflows found in this n8n instance."}
