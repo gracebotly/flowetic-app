@@ -432,54 +432,91 @@ export async function POST(req: Request) {
       return errorResponse(400, "MISSING_API_KEY", "Vapi Private API Key is required.");
     }
 
-    const testRes = await fetch("https://api.vapi.ai/v1/assistants", {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${key}`,
-        "Content-Type": "application/json",
-      },
-    });
+    const endpoints = [
+      "https://api.vapi.ai/v1/assistants",
+      "https://api.vapi.ai/assistants",
+      "https://api.vapi.ai/api/v1/assistants",
+      "https://api.vapi.ai/api/assistants",
+      "https://api.vapi.ai/v1/assistant", // defensive (some APIs use singular list route differently)
+    ];
 
-    const t = await testRes.text().catch(() => "");
-    if (!testRes.ok) {
-      const msg = providerAuthMessage({
-        platform: "vapi",
-        status: testRes.status,
-        fallback: "Unable to validate your Vapi API key. Please check your key and try again.",
-      });
+    let lastStatus: number | null = null;
+    let lastBody = "";
+    let okText: string | null = null;
 
-      return errorResponse(
-        400,
-        "VAPI_AUTH_FAILED",
-        msg,
-        {
-          platformType,
-          method,
-          providerStatus: testRes.status,
-          providerBodySnippet: safeSnippet(t),
+    for (const url of endpoints) {
+      const res = await fetch(url, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${key}`,
+          "Content-Type": "application/json",
         },
-      );
+      });
+      const text = await res.text().catch(() => "");
+      lastStatus = res.status;
+      lastBody = text;
+
+      if (res.ok) {
+        okText = text;
+        break;
+      }
+
+      // Only fallback on 404 (endpoint moved). For other statuses (401/403/etc) fail immediately.
+      if (res.status !== 404) break;
     }
 
-    // Parse assistants for inventory list
-    let parsed: any = null;
-    try {
-      parsed = t ? JSON.parse(t) : null;
-    } catch {
-      parsed = null;
+    if (!okText) {
+      // If endpoint moved (404), don't block connecting; allow credential save and let user manage indexing later.
+      if (lastStatus === 404) {
+        warnings.push({
+          code: "VAPI_INVENTORY_UNAVAILABLE",
+          message:
+            "Connected, but Vapi assistants inventory endpoint is unavailable (404). You can manage indexed assistants after connecting.",
+        });
+        inventoryEntities = [];
+      } else {
+        const msg = providerAuthMessage({
+          platform: "vapi",
+          status: lastStatus ?? 400,
+          fallback: "Unable to validate your Vapi API key. Please check your key and try again.",
+        });
+        return errorResponse(
+          400,
+          "VAPI_AUTH_FAILED",
+          msg,
+          {
+            platformType,
+            method,
+            providerStatus: lastStatus ?? undefined,
+            providerBodySnippet: safeSnippet(lastBody),
+          },
+        );
+      }
     }
 
-    const assistants = Array.isArray(parsed)
-      ? parsed
-      : Array.isArray(parsed?.assistants)
-        ? parsed.assistants
-        : [];
+    if (okText) {
+      // Parse assistants for inventory list
+      let parsed: any = null;
+      try {
+        parsed = okText ? JSON.parse(okText) : null;
+      } catch {
+        parsed = null;
+      }
 
-    inventoryEntities = assistants.map((a: any) => ({
-      entityKind: "assistant",
-      externalId: String(a?.id ?? ""),
-      displayName: String(a?.name ?? `Assistant ${String(a?.id ?? "")}`),
-    })).filter((x: any) => x.externalId);
+      const assistants = Array.isArray(parsed)
+        ? parsed
+        : Array.isArray(parsed?.assistants)
+          ? parsed.assistants
+          : [];
+
+      inventoryEntities = assistants
+      .map((a: any) => ({
+        entityKind: "assistant",
+        externalId: String(a?.id ?? ""),
+        displayName: String(a?.name ?? `Assistant ${String(a?.id ?? "")}`),
+      }))
+      .filter((x: any) => x.externalId);
+  }
   }
 
   if (platformType === "retell" && method === "api") {
@@ -625,28 +662,79 @@ export async function POST(req: Request) {
 
 
   // IMPORTANT: sources table has NO updated_at, so never set it here.
-  const { data: source, error } = await supabase
-    .from("sources")
-    .upsert(
-      {
+  let source: any = null;
+
+  if (platformType === "n8n") {
+    const { data, error } = await supabase
+      .from("sources")
+      .upsert(
+        {
+          tenant_id: membership.tenant_id,
+          type: platformType,
+          name: ((((body as any).__computedName as string | undefined) ?? connectionName) || platformType),
+          status: "active",
+          method: method,
+          secret_hash: encryptSecret(JSON.stringify(secretJson)),
+        },
+        {
+          onConflict: "tenant_id,type,method",
+        },
+      )
+      .select()
+      .single();
+
+    if (error) return errorResponse(400, "PERSISTENCE_FAILED", error.message);
+    source = data;
+  } else {
+    const { data, error } = await supabase
+      .from("sources")
+      .insert({
         tenant_id: membership.tenant_id,
         type: platformType,
         name: ((((body as any).__computedName as string | undefined) ?? connectionName) || platformType),
         status: "active",
         method: method,
         secret_hash: encryptSecret(JSON.stringify(secretJson)),
-      },
-      { 
-        // For n8n, allow multiple connections by only conflicting on name
-        // For other platforms, continue to enforce uniqueness as before
-        onConflict: platformType === "n8n" ? "tenant_id,name" : "tenant_id,type,method" 
-      },
-    )
-    .select()
-    .single();
+      })
+      .select()
+      .single();
 
-  if (error) {
-    return errorResponse(400, "PERSISTENCE_FAILED", error.message);
+    if (error) return errorResponse(400, "PERSISTENCE_FAILED", error.message);
+    source = data;
+  }
+
+  // If connect-time inventoryEntities were fetched, persist them into source_entities as disabled by default.
+  // This enables the post-connect "select what to index" journey without requiring the user to manually run import later.
+  if (inventoryEntities && Array.isArray(inventoryEntities) && inventoryEntities.length > 0) {
+    const now = new Date().toISOString();
+
+    const byExternalId = new Map<string, any>();
+    for (const e of inventoryEntities) {
+      const externalId = String(e?.externalId ?? "").trim();
+      if (!externalId) continue;
+      if (!byExternalId.has(externalId)) byExternalId.set(externalId, e);
+    }
+
+    const rows = Array.from(byExternalId.values()).map((e: any) => ({
+      tenant_id: membership.tenant_id,
+      source_id: source.id,
+      entity_kind: String(e.entityKind || "agent"),
+      external_id: String(e.externalId),
+      display_name: String(e.displayName || ""),
+      enabled_for_analytics: false,
+      enabled_for_actions: false,
+      last_seen_at: null,
+      created_at: now,
+      updated_at: now,
+    }));
+
+    const { error: invPersistErr } = await supabase
+      .from("source_entities")
+      .upsert(rows, { onConflict: "source_id,external_id" });
+
+    if (invPersistErr) {
+      return errorResponse(400, "PERSISTENCE_FAILED", invPersistErr.message);
+    }
   }
 
   // After source creation, insert imported call events (if any)
@@ -787,12 +875,12 @@ export async function POST(req: Request) {
     });
   }
 
-  // After you have created/updated the source and have sourceId available:
+  // Default return for non-Make platforms
 
   return NextResponse.json({
     ok: true,
     sourceId: source.id,
-    ...(platformType === "vapi" && method === "api" && inventoryEntities ? { inventoryEntities } : {}),
-    ...(warnings.length > 0 ? { warnings } : {}),
+    inventoryEntities: inventoryEntities ?? null,
+    warnings,
   });
 }

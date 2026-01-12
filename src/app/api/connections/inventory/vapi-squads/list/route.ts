@@ -5,11 +5,6 @@ import { decryptSecret } from "@/lib/secrets";
 
 export const runtime = "nodejs";
 
-type VapiAssistant = {
-  id: string;
-  name?: string | null;
-};
-
 export async function GET(req: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -22,15 +17,12 @@ export async function GET(req: Request) {
     .limit(1)
     .maybeSingle();
 
-  if (!membership?.tenant_id) {
-    return NextResponse.json({ ok: false, code: "TENANT_ACCESS_DENIED" }, { status: 403 });
-  }
+  if (!membership?.tenant_id) return NextResponse.json({ ok: false, code: "TENANT_ACCESS_DENIED" }, { status: 403 });
 
   const { searchParams } = new URL(req.url);
   const sourceId = String(searchParams.get("sourceId") || "").trim();
   if (!sourceId) return NextResponse.json({ ok: false, code: "MISSING_SOURCE_ID" }, { status: 400 });
 
-  // Verify source belongs to tenant
   const { data: source, error: sErr } = await supabase
     .from("sources")
     .select("id, tenant_id, type, secret_hash, method")
@@ -44,21 +36,15 @@ export async function GET(req: Request) {
 
   const decrypted = source.secret_hash ? decryptSecret(String(source.secret_hash)) : "";
   let secretJson: any = null;
-  try {
-    secretJson = decrypted ? JSON.parse(decrypted) : null;
-  } catch {
-    secretJson = null;
-  }
+  try { secretJson = decrypted ? JSON.parse(decrypted) : null; } catch { secretJson = null; }
 
   const apiKey = String(secretJson?.apiKey || "").trim();
   if (!apiKey) return NextResponse.json({ ok: false, code: "MISSING_API_KEY" }, { status: 400 });
 
+  // NOTE: endpoint may vary; start with documented-ish pattern and surface failures clearly.
   const endpoints = [
-    "https://api.vapi.ai/v1/assistants",
-    "https://api.vapi.ai/assistants",
-    "https://api.vapi.ai/api/v1/assistants",
-    "https://api.vapi.ai/api/assistants",
-    "https://api.vapi.ai/v1/assistant", // defensive (some APIs use singular list route differently)
+    "https://api.vapi.ai/v1/squads",
+    "https://api.vapi.ai/squads",
   ];
 
   let lastStatus: number | null = null;
@@ -68,20 +54,12 @@ export async function GET(req: Request) {
   for (const url of endpoints) {
     const res = await fetch(url, {
       method: "GET",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     });
     const text = await res.text().catch(() => "");
     lastStatus = res.status;
     lastBody = text;
-
-    if (res.ok) {
-      okText = text;
-      break;
-    }
-
+    if (res.ok) { okText = text; break; }
     if (res.status !== 404) break;
   }
 
@@ -89,42 +67,33 @@ export async function GET(req: Request) {
     return NextResponse.json(
       {
         ok: false,
-        code: "VAPI_ASSISTANTS_FETCH_FAILED",
-        message: `Failed to fetch Vapi assistants (${lastStatus ?? 400}).`,
+        code: "VAPI_SQUADS_FETCH_FAILED",
+        message: `Failed to fetch Vapi squads (${lastStatus ?? 400}).`,
         details: { providerStatus: lastStatus ?? undefined, providerBodySnippet: lastBody.slice(0, 300), attemptedUrls: endpoints },
       },
       { status: 400 },
     );
   }
 
-  const text = okText;
-
   let parsed: any = null;
-  try {
-    parsed = text ? JSON.parse(text) : null;
-  } catch {
-    parsed = null;
-  }
+  try { parsed = okText ? JSON.parse(okText) : null; } catch { parsed = null; }
 
-  const assistantsRaw =
-  Array.isArray(parsed)
-    ? parsed
-    : Array.isArray(parsed?.assistants)
-      ? parsed.assistants
-      : Array.isArray(parsed?.data)
-        ? parsed.data
-        : [];
+  const squadsRaw =
+    Array.isArray(parsed)
+      ? parsed
+      : Array.isArray(parsed?.squads)
+        ? parsed.squads
+        : Array.isArray(parsed?.data)
+          ? parsed.data
+          : [];
 
-const inventoryEntities = assistantsRaw
-  .map((a: any) => ({
-    entityKind: "assistant",
-    externalId: String(a?.id ?? a?.assistant_id ?? "").trim(),
-    displayName: String(a?.name ?? a?.displayName ?? "").trim() || `Assistant ${String(a?.id ?? a?.assistant_id ?? "")}`,
-  }))
-  .filter((x: any) => x.externalId);
+  const inventoryEntities = squadsRaw
+    .map((s: any) => ({
+      entityKind: "squad",
+      externalId: String(s?.id ?? s?.squad_id ?? "").trim(),
+      displayName: String(s?.name ?? s?.displayName ?? "").trim() || `Squad ${String(s?.id ?? s?.squad_id ?? "")}`,
+    }))
+    .filter((x: any) => x.externalId);
 
-  return NextResponse.json({
-    ok: true,
-    inventoryEntities,
-  });
+  return NextResponse.json({ ok: true, inventoryEntities });
 }

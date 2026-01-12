@@ -69,6 +69,7 @@ type CredentialRow = {
   method: ConnectMethod;
   created_at: string; // ISO string from Supabase
   updated_at: string; // ISO string from Supabase
+  instanceUrl?: string;
 };
 
 type CredentialSort = "last_updated" | "last_created" | "name_az";
@@ -323,6 +324,8 @@ export default function ConnectionsPage() {
   const [connectOpen, setConnectOpen] = useState(false);
   const [step, setStep] = useState<"platform" | "method" | "credentials" | "entities" | "success">("platform");
   const [mcpHelpOpen, setMcpHelpOpen] = useState(false);
+  const [isPostConnectSelection, setIsPostConnectSelection] = useState(false);
+  const [vapiInventoryKind, setVapiInventoryKind] = useState<"assistant" | "squad">("assistant");
   
   const [editingSourceId, setEditingSourceId] = useState<string | null>(null);
   const [credentialDeleteId, setCredentialDeleteId] = useState<string | null>(null);
@@ -396,6 +399,13 @@ export default function ConnectionsPage() {
   const [selectedExternalIds, setSelectedExternalIds] = useState<Set<string>>(new Set());
 
   
+
+  function entityNoun(platform: string) {
+    if (platform === "vapi") return vapiInventoryKind === "squad" ? "squads" : "assistants";
+    if (platform === "make") return "scenarios";
+    if (platform === "retell") return "agents";
+    return "workflows";
+  }
 
   async function refreshCredentials() {
     setCredentialsLoading(true);
@@ -476,6 +486,18 @@ export default function ConnectionsPage() {
     setIndexedLoading(false);
   }
 
+  async function getIndexedExternalIdsForSource(sourceId: string) {
+    const res = await fetch("/api/indexed-entities/list", { method: "GET" });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || !json?.ok) return new Set<string>();
+
+    const ids = ((json.entities as any[]) ?? [])
+      .filter((e: any) => String(e.sourceId) === String(sourceId))
+      .map((e: any) => String(e.externalId));
+
+    return new Set<string>(ids);
+  }
+
   async function loadN8nInventory(sourceId: string) {
     setInventoryLoading(true);
     setInventoryErr(null);
@@ -526,9 +548,13 @@ export default function ConnectionsPage() {
       })),
     );
 
-    // Always start with nothing selected (authoritative user choice)
-    setSelectedExternalIds(new Set());
-
+    // Load indexed entities for this source to preselect them
+    try {
+      const indexedSet = await getIndexedExternalIdsForSource(sourceId);
+      setSelectedExternalIds(indexedSet);
+    } catch {
+      // leave selection as-is; do not affect inventoryEntities
+    }
     setInventoryLoading(false);
   }
 
@@ -569,21 +595,25 @@ export default function ConnectionsPage() {
     setInventoryErr(null);
 
     try {
-      await importInventory(platform, sourceId);
-      const rows = await listInventory(platform, sourceId);
-      setInventoryEntities(rows);
-
-      // Preselect already indexed entities for this source
-      const indexedRes = await fetch("/api/indexed-entities/list", { method: "GET" });
-      const indexedJson = await indexedRes.json().catch(() => ({}));
-      if (indexedRes.ok && indexedJson?.ok) {
-        const alreadyIndexed = (indexedJson.entities || [])
-          .filter((e: any) => String(e.sourceId) === String(sourceId))
-          .map((e: any) => String(e.externalId));
-        setSelectedExternalIds(new Set(alreadyIndexed));
+      if (platform === "vapi") {
+        if (vapiInventoryKind === "assistant") {
+          await importInventory("vapi", sourceId);
+          const rows = await listInventory("vapi", sourceId);
+          setInventoryEntities(rows);
+        } else {
+          await importInventory("vapi-squads", sourceId);
+          const rows = await listInventory("vapi-squads", sourceId);
+          setInventoryEntities(rows);
+        }
       } else {
-        setSelectedExternalIds(new Set());
+        await importInventory(platform, sourceId);
+        const rows = await listInventory(platform, sourceId);
+        setInventoryEntities(rows);
       }
+
+      const indexedSet = await getIndexedExternalIdsForSource(sourceId);
+      setSelectedExternalIds(indexedSet);
+      setIsPostConnectSelection(false);
 
       setCreatedSourceId(sourceId);
       setConnectOpen(true);
@@ -627,7 +657,13 @@ export default function ConnectionsPage() {
     setApiKeySaved(true);
     setInstanceUrlSaved(platform === "n8n"); // only n8n uses instance URL meaningfully here
     setApiKey("");
-    setInstanceUrl("");
+    
+    // Set instanceUrl from credential for n8n
+    if (platform === "n8n" && credential.instanceUrl) {
+      setInstanceUrl(String(credential.instanceUrl));
+    } else {
+      setInstanceUrl("");
+    }
   }
   if (effectiveMethod === "mcp") {
     setMcpTokenSaved(true);
@@ -822,6 +858,8 @@ export default function ConnectionsPage() {
     setConnectEntities([]);
     setEntityExternalId("");
     setEntityDisplayName("");
+    setIsPostConnectSelection(false);
+    setVapiInventoryKind("assistant");
     setSaving(false);
     setErrMsg(null);
     setConnectSummary(null);
@@ -904,7 +942,7 @@ export default function ConnectionsPage() {
         payload.apiKey = apiKey;
       }
 
-      if (instanceUrl) payload.instanceUrl = instanceUrl;
+      if (instanceUrl) payload.instanceUrl = instanceUrl.trim();
 
       // Add region for Make.com
       if (selectedPlatform === "make") {
@@ -915,10 +953,20 @@ export default function ConnectionsPage() {
       if (selectedPlatform === "n8n") {
         payload.n8nAuthMode = "header";
       }
+      
+      // For n8n API, normalize instanceUrl to base origin only
+      if (selectedPlatform === "n8n" && instanceUrl.trim()) {
+        try {
+          const u = new URL(instanceUrl.trim());
+          payload.instanceUrl = `${u.origin}/`;
+        } catch {
+          payload.instanceUrl = instanceUrl.trim();
+        }
+      }
     }
 
     if (selectedMethod === "webhook") {
-      if (instanceUrl) payload.instanceUrl = instanceUrl;
+      if (instanceUrl) payload.instanceUrl = instanceUrl.trim();
     }
 
     if (selectedMethod === "mcp") {
@@ -1055,6 +1103,7 @@ export default function ConnectionsPage() {
 
     // Handle Vapi inventory response
     if (selectedPlatform === "vapi" && Array.isArray(json.inventoryEntities)) {
+      setIsPostConnectSelection(true);
       setInventoryEntities(json.inventoryEntities);
       setConnectOpen(true);
       setStep("entities");
@@ -1062,7 +1111,23 @@ export default function ConnectionsPage() {
       return;
     }
 
+    // Handle Retell inventory response
+    if (selectedPlatform === "retell" && Array.isArray(json.inventoryEntities)) {
+      const inventoryEntities = json.inventoryEntities.map((entity: any) => ({
+        externalId: String(entity.externalId),
+        displayName: String(entity.displayName || ""),
+        entityKind: String(entity.entityKind || "agent"),
+      }));
+      setIsPostConnectSelection(true);
+      setInventoryEntities(inventoryEntities);
+      setConnectOpen(true);
+      setStep("entities");
+      setSaving(false);
+      return;
+    }
+
     if (selectedPlatform === "n8n" && (selectedMethod === "api" || selectedMethod === "mcp")) {
+      setIsPostConnectSelection(true);
       setSaving(false); // Stop loading first
       await loadN8nInventory(sid);
       // Ensure modal stays open and step transitions
@@ -1071,19 +1136,39 @@ export default function ConnectionsPage() {
       return;
     }
 
-    // Make.com: use inventoryEntities from response if available
-    if (selectedPlatform === "make" && json?.inventoryEntities) {
-      const inventoryEntities = json.inventoryEntities.map((entity: any) => ({
-        externalId: String(entity.externalId),
-        displayName: String(entity.displayName || ""),
-        entityKind: String(entity.entityKind || "scenario"),
-      }));
-      
-      setInventoryEntities(inventoryEntities);
-      setConnectOpen(true);
-      setStep("entities");
-      setSaving(false);
-      return;
+    if (selectedPlatform === "make") {
+      const invFromConnect = Array.isArray(json?.inventoryEntities) ? json.inventoryEntities : null;
+
+      const mappedFromConnect =
+        invFromConnect?.map((entity: any) => ({
+          externalId: String(entity.externalId),
+          displayName: String(entity.displayName || ""),
+          entityKind: String(entity.entityKind || "scenario"),
+        })) ?? [];
+
+      setIsPostConnectSelection(true);
+
+      if (mappedFromConnect.length > 0) {
+        setInventoryEntities(mappedFromConnect);
+        setConnectOpen(true);
+        setStep("entities");
+        setSaving(false);
+        return;
+      }
+
+      try {
+        await importInventory("make", sid);
+        const rows = await listInventory("make", sid);
+        setInventoryEntities(rows);
+        setConnectOpen(true);
+        setStep("entities");
+        setSaving(false);
+        return;
+      } catch (e: any) {
+        setSaving(false);
+        setErrMsg(e?.message || "Failed to load Make scenarios.");
+        return;
+      }
     }
 
     setStep("success");
@@ -1128,7 +1213,7 @@ export default function ConnectionsPage() {
 
       setErrMsg(
         selectedPlatform === "vapi"
-          ? "Select at least one assistant to index."
+          ? (vapiInventoryKind === "squad" ? "Select at least one squad to index." : "Select at least one assistant to index.")
           : selectedPlatform === "retell"
           ? "Select at least one agent to index."
           : "Select at least one workflow to index."
@@ -1141,7 +1226,16 @@ export default function ConnectionsPage() {
     const entitiesPayload = selectedRows.map((e) => ({
       externalId: String(e.externalId),
       displayName: String(e.displayName ?? ""),
-      entityKind: String(e.entityKind ?? "workflow"),
+      entityKind: String(
+        e.entityKind ??
+          (selectedPlatform === "vapi"
+            ? (vapiInventoryKind === "squad" ? "squad" : "assistant")
+            : selectedPlatform === "make"
+            ? "scenario"
+            : selectedPlatform === "retell"
+            ? "agent"
+            : "workflow"),
+      ),
       enabledForAnalytics: true,
       enabledForActions: false,
     }));
@@ -1644,8 +1738,8 @@ export default function ConnectionsPage() {
                         ? `${editingSourceId ? "Edit " : "Connect "}${selectedPlatform ? (getPlatformMeta(String(selectedPlatform))?.label ?? String(selectedPlatform)) : ""} Credentials`
                         : step === "entities"
                         ? editingSourceId 
-                          ? selectedPlatform === "vapi" ? "Manage indexed assistants" : "Manage indexed workflows" 
-                          : "Select entities to index"
+                          ? `Manage indexed ${entityNoun(String(selectedPlatform))}`
+                          : `Select ${entityNoun(String(selectedPlatform))} to index`
                         : "Connected"}
                     </div>
                     {step === "credentials" && selectedPlatform === "n8n" && selectedMethod === "mcp" ? (
@@ -1673,10 +1767,8 @@ export default function ConnectionsPage() {
                             : "Enter credentials to validate and connect."
                       : step === "entities"
                       ? editingSourceId
-                        ? selectedPlatform === "vapi" 
-                          ? "Update which assistants GetFlowetic should index. Unselected assistants will be removed from your All tab."
-                          : "Update which workflows GetFlowetic should index. Unselected workflows will be removed from your All tab."
-                        : "Add agents/workflows you want GetFlowetic to index."
+                        ? `Update which ${entityNoun(String(selectedPlatform))} GetFlowetic should index. Unselected ${entityNoun(String(selectedPlatform))} will be removed from your All tab.`
+                        : `Add ${entityNoun(String(selectedPlatform))} you want GetFlowetic to index.`
                       : "Success."}
                   </div>
                 </div>
@@ -1783,27 +1875,24 @@ export default function ConnectionsPage() {
         setErrMsg(null);
         setStep("credentials");
       }}
-      className="w-full rounded-xl border-2 border-emerald-200 bg-emerald-50 p-4 text-left hover:border-emerald-400"
+      className="w-full rounded-xl border border-gray-300 bg-white p-4 text-left shadow-sm transition hover:border-gray-400 hover:shadow"
     >
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-base font-semibold text-gray-900">
-          <KeyRound className="h-5 w-5 text-emerald-700" />
-          API Key
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-base font-semibold text-gray-900">API Key</div>
+          <div className="mt-1 text-sm text-gray-600">
+            Connect using an API key to import and index workflows.
+          </div>
         </div>
-        <span className="rounded bg-emerald-600 px-2 py-1 text-xs font-bold text-white">
-          {selectedPlatform === "make" ? "PAID" : "RECOMMENDED"}
-        </span>
-      </div>
-      <div className="mt-1 text-sm text-gray-700">
-        {selectedPlatform === "make"
-          ? "Requires a paid Make plan (Core or higher)."
-          : "Connect using an API key to import and index workflows."}
-      </div>
-      {selectedPlatform === "make" ? (
-        <div className="mt-2 text-xs text-gray-600">
-          If you're on the Free plan, choose <span className="font-semibold">Webhook Only</span>.
+        <div className="flex gap-2">
+          <span className="shrink-0 rounded-full border-2 border-gray-200 bg-white px-2 py-1 text-xs font-bold text-gray-700">
+            Enhanced
+          </span>
+          <span className="shrink-0 rounded-full border-2 border-gray-200 bg-white px-2 py-1 text-xs font-bold text-gray-700">
+            Protected
+          </span>
         </div>
-      ) : null}
+      </div>
     </button>
 
     {selectedPlatform !== "n8n" && selectedPlatform !== "make" && selectedPlatform !== "vapi" && selectedPlatform !== "retell" ? (
@@ -1839,22 +1928,53 @@ export default function ConnectionsPage() {
           setErrMsg(null);
           setStep("credentials");
         }}
-        className="w-full rounded-xl border-2 border-purple-200 bg-purple-50 p-4 text-left hover:border-purple-400"
+        className="w-full rounded-xl border border-gray-300 bg-white p-4 text-left shadow-sm transition hover:border-gray-400 hover:shadow"
       >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-base font-semibold text-gray-900">
-            <Cpu className="h-5 w-5 text-purple-700" />
-            MCP Instances
+        <div className="flex items-start justify-between gap-3">
+          <div className="grow">
+            <div className="text-base font-semibold text-gray-900">MCP Instances</div>
+            <div className="mt-1 text-sm text-gray-600">
+              Workflow triggers for AI tooling. Live bi‑directional with AI agents via the Model Context
+              Protocol. Includes secure, read‑only credential tunneling.
+            </div>
           </div>
-          <span className="rounded bg-purple-600 px-2 py-1 text-xs font-bold text-white">
-            AI DIRECT
-          </span>
-        </div>
-        <div className="mt-1 text-sm text-gray-700">
-          AI tools discover and run your enabled n8n workflows directly.
+          <div className="flex gap-2">
+            <span className="shrink-0 rounded-full border-2 border-green-200 bg-green-50 px-2 py-1 text-xs font-bold text-green-700">
+              Live
+            </span>
+            <span className="shrink-0 rounded-full border-2 border-blue-200 bg-blue-50 px-2 py-1 text-xs font-bold text-blue-700">
+              Secure
+            </span>
+          </div>
         </div>
       </button>
+    ) : selectedPlatform && (selectedPlatform as string) !== "n8n" ? (
+      <div className="w-full rounded-xl border border-gray-200 bg-white p-4 text-left opacity-60 cursor-not-allowed">
+        <div className="flex items-start justify-between gap-3">
+          <div className="grow">
+            <div className="text-base font-semibold text-gray-900">MCP Instances</div>
+            <div className="mt-1 text-sm text-gray-600">
+              Workflow triggers for AI tooling. Coming soon for this platform.
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <span className="shrink-0 rounded-full border border-indigo-200 bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-700">
+              Coming Soon
+            </span>
+          </div>
+        </div>
+      </div>
     ) : null}
+    
+    <div className="flex justify-end gap-2 pt-4">
+      <button
+        type="button"
+        onClick={() => setStep("platform")}
+        className="inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+      >
+        Back
+      </button>
+    </div>
   </div>
 ) : null}
 {step === "credentials" ? (
@@ -2214,12 +2334,38 @@ export default function ConnectionsPage() {
 
     {inventoryLoading ? (
       <div className="text-sm text-gray-600">
-        {selectedPlatform === "vapi" ? "Loading assistants…" : selectedPlatform === "retell" ? "Loading agents…" : "Loading workflows…"}
+        {selectedPlatform === "vapi" ? (vapiInventoryKind === "squad" ? "Loading squads…" : "Loading assistants…") : selectedPlatform === "retell" ? "Loading agents…" : "Loading workflows…"}
       </div>
     ) : null}
 
     {!inventoryLoading ? (
       <>
+      {selectedPlatform === "vapi" ? (
+        <div className="mb-3 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setVapiInventoryKind("assistant")}
+            className={`rounded-lg px-3 py-1.5 text-sm font-semibold border ${
+              vapiInventoryKind === "assistant"
+                ? "border-blue-600 bg-blue-50 text-blue-700"
+                : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+            }`}
+          >
+            Assistants
+          </button>
+          <button
+            type="button"
+            onClick={() => setVapiInventoryKind("squad")}
+            className={`rounded-lg px-3 py-1.5 text-sm font-semibold border ${
+              vapiInventoryKind === "squad"
+                ? "border-blue-600 bg-blue-50 text-blue-700"
+                : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+            }`}
+          >
+            Squads
+          </button>
+        </div>
+      ) : null}
       <div className="flex items-center justify-between gap-3">
         <div className="relative w-[420px]">
           <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
@@ -2229,7 +2375,7 @@ export default function ConnectionsPage() {
             className="w-full rounded-lg border border-gray-300 py-2.5 pl-10 pr-4 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
             placeholder={
               selectedPlatform === "vapi"
-                ? "Search assistants..."
+                ? vapiInventoryKind === "squad" ? "Search squads..." : "Search assistants..."
                 : selectedPlatform === "retell"
                 ? "Search agents..."
                 : "Search workflows..."
@@ -2241,7 +2387,13 @@ export default function ConnectionsPage() {
       <div className="max-h-[320px] overflow-auto rounded-lg border border-gray-200 bg-white">
         {displayedSelectable.length === 0 ? (
           <div className="p-4 text-sm text-gray-600">
-            {selectedPlatform === "vapi" ? "No assistants found in this Vapi instance." : selectedPlatform === "retell" ? "No agents found in this Retell instance." : "No workflows found in this n8n instance."}
+            {selectedPlatform === "make"
+              ? "No scenarios found in this Make account."
+              : selectedPlatform === "vapi"
+              ? (vapiInventoryKind === "squad" ? "No squads found in this Vapi account." : "No assistants found in this Vapi account.")
+              : selectedPlatform === "retell"
+              ? "No agents found in this Retell account."
+              : "No workflows found in this n8n instance."}
           </div>
         ) : (
           <div className="divide-y divide-gray-200">

@@ -1,6 +1,7 @@
 
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { decryptSecret } from "@/lib/secrets";
 
 export const runtime = "nodejs";
 
@@ -14,6 +15,7 @@ type CredentialRow = {
   method: ConnectMethod;
   created_at: string;
   updated_at: string;
+  instanceUrl?: string;
 };
 
 function safeMethod(v: unknown): ConnectMethod {
@@ -39,7 +41,7 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from("sources")
-    .select("id,type,name,status,created_at,method")
+    .select("id,type,name,status,created_at,method,secret_hash")
     .eq("tenant_id", membership.tenant_id)
     .order("created_at", { ascending: false });
 
@@ -48,14 +50,32 @@ export async function GET() {
   }
 
   const rows: CredentialRow[] = (data ?? []).map((s: any) => {
+    let instanceUrl: string | undefined;
+    
+    // For n8n API method credentials, decrypt and extract instanceUrl
+    if (
+      String(s.type) === "n8n" &&
+      safeMethod((s as any).method) === "api" &&
+      s.secret_hash
+    ) {
+      try {
+        const decrypted = decryptSecret(String(s.secret_hash));
+        const secret = decrypted ? JSON.parse(decrypted) : null;
+        if (secret?.instanceUrl) instanceUrl = String(secret.instanceUrl);
+      } catch {
+        instanceUrl = undefined;
+      }
+    }
+    
     return {
       id: String(s.id),
       platformType: String(s.type),
       name: String(s.name ?? ""),
       status: (s.status ?? null) as string | null,
-      method: safeMethod((s as any).method), // ✅ Just read from column
+      method: safeMethod((s as any).method),
       created_at: String(s.created_at ?? ""),
       updated_at: String((s as any).updated_at ?? s.created_at ?? ""),
+      instanceUrl,
     };
   });
 

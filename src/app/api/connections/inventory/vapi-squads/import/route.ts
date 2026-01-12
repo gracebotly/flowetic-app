@@ -1,4 +1,5 @@
 
+
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
@@ -15,15 +16,16 @@ export async function POST(req: Request) {
     .eq("user_id", user.id)
     .limit(1)
     .maybeSingle();
+
   if (!membership?.tenant_id) return NextResponse.json({ ok: false, code: "TENANT_ACCESS_DENIED" }, { status: 403 });
 
   const body = (await req.json().catch(() => ({}))) as any;
   const sourceId = String(body?.sourceId ?? "").trim();
   if (!sourceId) return NextResponse.json({ ok: false, code: "MISSING_SOURCE_ID" }, { status: 400 });
 
-  // Pull inventory from list endpoint (single source of truth)
+  const origin = new URL(req.url).origin;
   const listRes = await fetch(
-    `${new URL(req.url).origin}/api/connections/inventory/vapi/list?sourceId=${encodeURIComponent(sourceId)}`,
+    `${origin}/api/connections/inventory/vapi-squads/list?sourceId=${encodeURIComponent(sourceId)}`,
     { method: "GET", headers: { cookie: req.headers.get("cookie") ?? "" } as any },
   );
 
@@ -35,8 +37,8 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         ok: false,
-        code: listJson?.code || "VAPI_LIST_FAILED",
-        message: listJson?.message || "Failed to list Vapi assistants.",
+        code: listJson?.code || "VAPI_SQUADS_LIST_FAILED",
+        message: listJson?.message || "Failed to load Vapi squads inventory.",
         details: { upstreamStatus: listRes.status, upstreamBodySnippet: listText.slice(0, 300) },
       },
       { status: 400 },
@@ -53,12 +55,12 @@ export async function POST(req: Request) {
     if (!byExternalId.has(externalId)) byExternalId.set(externalId, e);
   }
 
-  const rows = Array.from(byExternalId.values()).map((a: any) => ({
+  const rows = Array.from(byExternalId.values()).map((e: any) => ({
     tenant_id: membership.tenant_id,
     source_id: sourceId,
-    entity_kind: String(a.entityKind || "assistant"),
-    external_id: String(a.externalId),
-    display_name: String(a.displayName || ""),
+    entity_kind: String(e.entityKind || "squad"),
+    external_id: String(e.externalId),
+    display_name: String(e.displayName || ""),
     enabled_for_analytics: false,
     enabled_for_actions: false,
     last_seen_at: null,
@@ -66,9 +68,9 @@ export async function POST(req: Request) {
     updated_at: now,
   }));
 
-  const { error: upErr } = await supabase.from("source_entities").upsert(rows, {
-    onConflict: "source_id,external_id",
-  });
+  const { error: upErr } = await supabase
+    .from("source_entities")
+    .upsert(rows, { onConflict: "source_id,external_id" });
 
   if (upErr) {
     return NextResponse.json({ ok: false, code: "PERSISTENCE_FAILED", message: upErr.message }, { status: 400 });
@@ -76,3 +78,4 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ ok: true, importedCount: rows.length });
 }
+
