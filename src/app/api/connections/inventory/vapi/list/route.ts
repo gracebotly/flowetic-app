@@ -53,27 +53,48 @@ export async function GET(req: Request) {
   const apiKey = String(secretJson?.apiKey || "").trim();
   if (!apiKey) return NextResponse.json({ ok: false, code: "MISSING_API_KEY" }, { status: 400 });
 
-  // Fetch assistants from Vapi
-  const res = await fetch("https://api.vapi.ai/v1/assistants", {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-  });
+  const endpoints = [
+    "https://api.vapi.ai/v1/assistants",
+    "https://api.vapi.ai/assistants",
+  ];
 
-  const text = await res.text().catch(() => "");
-  if (!res.ok) {
+  let lastStatus: number | null = null;
+  let lastBody = "";
+  let okText: string | null = null;
+
+  for (const url of endpoints) {
+    const res = await fetch(url, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+    });
+    const text = await res.text().catch(() => "");
+    lastStatus = res.status;
+    lastBody = text;
+
+    if (res.ok) {
+      okText = text;
+      break;
+    }
+
+    if (res.status !== 404) break;
+  }
+
+  if (!okText) {
     return NextResponse.json(
       {
         ok: false,
         code: "VAPI_ASSISTANTS_FETCH_FAILED",
-        message: `Failed to fetch Vapi assistants (${res.status}).`,
-        details: { providerStatus: res.status, providerBodySnippet: text.slice(0, 300) },
+        message: `Failed to fetch Vapi assistants (${lastStatus ?? 400}).`,
+        details: { providerStatus: lastStatus, providerBodySnippet: lastBody.slice(0, 300) },
       },
       { status: 400 },
     );
   }
+
+  const text = okText;
 
   let parsed: any = null;
   try {
