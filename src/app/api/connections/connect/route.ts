@@ -874,7 +874,7 @@ export async function POST(req: Request) {
     });
   }
 
-  // After you have created/updated the source and have sourceId available:
+  // Default return for non-Make platforms
 
   return NextResponse.json({
     ok: true,
