@@ -1062,6 +1062,20 @@ export default function ConnectionsPage() {
       return;
     }
 
+    // Handle Retell inventory response
+    if (selectedPlatform === "retell" && Array.isArray(json.inventoryEntities)) {
+      const inventoryEntities = json.inventoryEntities.map((entity: any) => ({
+        externalId: String(entity.externalId),
+        displayName: String(entity.displayName || ""),
+        entityKind: String(entity.entityKind || "agent"),
+      }));
+      setInventoryEntities(inventoryEntities);
+      setConnectOpen(true);
+      setStep("entities");
+      setSaving(false);
+      return;
+    }
+
     if (selectedPlatform === "n8n" && (selectedMethod === "api" || selectedMethod === "mcp")) {
       setSaving(false); // Stop loading first
       await loadN8nInventory(sid);
