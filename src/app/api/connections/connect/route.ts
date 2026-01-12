@@ -475,7 +475,7 @@ export async function POST(req: Request) {
         {
           platformType,
           method,
-          providerStatus: lastStatus,
+          providerStatus: lastStatus ?? undefined,
           providerBodySnippet: safeSnippet(lastBody),
         },
       );
