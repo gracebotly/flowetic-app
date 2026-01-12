@@ -14,6 +14,7 @@ type CredentialRow = {
   method: ConnectMethod;
   created_at: string;
   updated_at: string;
+  instanceUrl?: string;
 };
 
 function safeMethod(v: unknown): ConnectMethod {
@@ -39,7 +40,7 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from("sources")
-    .select("id,type,name,status,created_at,method")
+    .select("id,type,name,status,created_at,method,secret_hash")
     .eq("tenant_id", membership.tenant_id)
     .order("created_at", { ascending: false });
 
@@ -48,14 +49,29 @@ export async function GET() {
   }
 
   const rows: CredentialRow[] = (data ?? []).map((s: any) => {
+    let instanceUrl: string | undefined;
+    
+    // For n8n API method credentials, decrypt and extract instanceUrl
+    if (String(s.type) === "n8n" && safeMethod((s as any).method) === "api" && s.secret_hash) {
+      try {
+        const decrypted = JSON.parse(atob(s.secret_hash));
+        if (decrypted.instanceUrl) {
+          instanceUrl = String(decrypted.instanceUrl);
+        }
+      } catch (e) {
+        // If decryption fails, just leave instanceUrl undefined
+      }
+    }
+    
     return {
       id: String(s.id),
       platformType: String(s.type),
       name: String(s.name ?? ""),
       status: (s.status ?? null) as string | null,
-      method: safeMethod((s as any).method), // ✅ Just read from column
+      method: safeMethod((s as any).method),
       created_at: String(s.created_at ?? ""),
       updated_at: String((s as any).updated_at ?? s.created_at ?? ""),
+      instanceUrl,
     };
   });
 

@@ -69,6 +69,7 @@ type CredentialRow = {
   method: ConnectMethod;
   created_at: string; // ISO string from Supabase
   updated_at: string; // ISO string from Supabase
+  instanceUrl?: string;
 };
 
 type CredentialSort = "last_updated" | "last_created" | "name_az";
@@ -476,6 +477,18 @@ export default function ConnectionsPage() {
     setIndexedLoading(false);
   }
 
+  async function getIndexedExternalIdsForSource(sourceId: string) {
+    const res = await fetch("/api/indexed-entities/list", { method: "GET" });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || !json?.ok) return new Set<string>();
+
+    const ids = ((json.entities as any[]) ?? [])
+      .filter((e: any) => String(e.sourceId) === String(sourceId))
+      .map((e: any) => String(e.externalId));
+
+    return new Set<string>(ids);
+  }
+
   async function loadN8nInventory(sourceId: string) {
     setInventoryLoading(true);
     setInventoryErr(null);
@@ -526,8 +539,9 @@ export default function ConnectionsPage() {
       })),
     );
 
-    // Always start with nothing selected (authoritative user choice)
-    setSelectedExternalIds(new Set());
+    // Load indexed entities for this source to preselect them
+    const indexedSet = await getIndexedExternalIdsForSource(sourceId);
+    setSelectedExternalIds(indexedSet);
 
     setInventoryLoading(false);
   }
@@ -573,17 +587,8 @@ export default function ConnectionsPage() {
       const rows = await listInventory(platform, sourceId);
       setInventoryEntities(rows);
 
-      // Preselect already indexed entities for this source
-      const indexedRes = await fetch("/api/indexed-entities/list", { method: "GET" });
-      const indexedJson = await indexedRes.json().catch(() => ({}));
-      if (indexedRes.ok && indexedJson?.ok) {
-        const alreadyIndexed = (indexedJson.entities || [])
-          .filter((e: any) => String(e.sourceId) === String(sourceId))
-          .map((e: any) => String(e.externalId));
-        setSelectedExternalIds(new Set(alreadyIndexed));
-      } else {
-        setSelectedExternalIds(new Set());
-      }
+      const indexedSet = await getIndexedExternalIdsForSource(sourceId);
+      setSelectedExternalIds(indexedSet);
 
       setCreatedSourceId(sourceId);
       setConnectOpen(true);
@@ -627,7 +632,13 @@ export default function ConnectionsPage() {
     setApiKeySaved(true);
     setInstanceUrlSaved(platform === "n8n"); // only n8n uses instance URL meaningfully here
     setApiKey("");
-    setInstanceUrl("");
+    
+    // Set instanceUrl from credential for n8n
+    if (platform === "n8n" && credential.instanceUrl) {
+      setInstanceUrl(String(credential.instanceUrl));
+    } else {
+      setInstanceUrl("");
+    }
   }
   if (effectiveMethod === "mcp") {
     setMcpTokenSaved(true);
@@ -1797,27 +1808,16 @@ export default function ConnectionsPage() {
         setErrMsg(null);
         setStep("credentials");
       }}
-      className="w-full rounded-xl border-2 border-emerald-200 bg-emerald-50 p-4 text-left hover:border-emerald-400"
+      className="w-full rounded-xl border border-gray-200 bg-white p-4 text-left transition hover:border-gray-300 hover:bg-gray-50"
     >
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-base font-semibold text-gray-900">
-          <KeyRound className="h-5 w-5 text-emerald-700" />
-          API Key
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-sm font-semibold text-gray-900">API Key</div>
+          <div className="mt-1 text-sm text-gray-600">
+            Connect using an API key to import and index workflows.
+          </div>
         </div>
-        <span className="rounded bg-emerald-600 px-2 py-1 text-xs font-bold text-white">
-          {selectedPlatform === "make" ? "PAID" : "RECOMMENDED"}
-        </span>
       </div>
-      <div className="mt-1 text-sm text-gray-700">
-        {selectedPlatform === "make"
-          ? "Requires a paid Make plan (Core or higher)."
-          : "Connect using an API key to import and index workflows."}
-      </div>
-      {selectedPlatform === "make" ? (
-        <div className="mt-2 text-xs text-gray-600">
-          If you're on the Free plan, choose <span className="font-semibold">Webhook Only</span>.
-        </div>
-      ) : null}
     </button>
 
     {selectedPlatform !== "n8n" && selectedPlatform !== "make" && selectedPlatform !== "vapi" && selectedPlatform !== "retell" ? (
@@ -1846,29 +1846,31 @@ export default function ConnectionsPage() {
     ) : null}
 
     {selectedPlatform === "n8n" ? (
-      <button
-        type="button"
-        onClick={() => {
-          setSelectedMethod("mcp");
-          setErrMsg(null);
-          setStep("credentials");
-        }}
-        className="w-full rounded-xl border-2 border-purple-200 bg-purple-50 p-4 text-left hover:border-purple-400"
-      >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-base font-semibold text-gray-900">
-            <Cpu className="h-5 w-5 text-purple-700" />
-            MCP Instances
+      <div className="w-full rounded-xl border border-gray-200 bg-white p-4 text-left opacity-60 cursor-not-allowed">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="text-sm font-semibold text-gray-900">MCP Instances</div>
+            <div className="mt-1 text-sm text-gray-600">
+              AI tools will be able to discover and run enabled n8n workflows directly.
+            </div>
           </div>
-          <span className="rounded bg-purple-600 px-2 py-1 text-xs font-bold text-white">
-            AI DIRECT
+
+          <span className="shrink-0 rounded-full border border-gray-200 bg-gray-50 px-2 py-1 text-xs font-semibold text-gray-700">
+            Coming Soon
           </span>
         </div>
-        <div className="mt-1 text-sm text-gray-700">
-          AI tools discover and run your enabled n8n workflows directly.
-        </div>
-      </button>
+      </div>
     ) : null}
+    
+    <div className="flex justify-end gap-2 pt-4">
+      <button
+        type="button"
+        onClick={() => setStep("platform")}
+        className="inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+      >
+        Back
+      </button>
+    </div>
   </div>
 ) : null}
 {step === "credentials" ? (

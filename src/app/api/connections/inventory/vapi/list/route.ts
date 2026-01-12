@@ -56,6 +56,8 @@ export async function GET(req: Request) {
   const endpoints = [
     "https://api.vapi.ai/v1/assistants",
     "https://api.vapi.ai/assistants",
+    "https://api.vapi.ai/api/v1/assistants",
+    "https://api.vapi.ai/api/assistants",
   ];
 
   let lastStatus: number | null = null;
