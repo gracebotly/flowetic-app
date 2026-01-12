@@ -180,13 +180,6 @@ function StatusPill({ status }: { status: string | null }) {
   return <span className="inline-flex items-center gap-1.5 rounded-full border border-yellow-200 bg-yellow-50 px-2.5 py-1 text-xs font-semibold text-yellow-700">Attention</span>;
 }
 
-function entityNoun(platform: string) {
-  if (platform === "vapi") return vapiInventoryKind === "squad" ? "squads" : "assistants";
-  if (platform === "make") return "scenarios";
-  if (platform === "retell") return "agents";
-  return "workflows";
-}
-
 function CredentialsDropdownMenu({   
   sourceId,
   onClose,
@@ -406,6 +399,13 @@ export default function ConnectionsPage() {
   const [selectedExternalIds, setSelectedExternalIds] = useState<Set<string>>(new Set());
 
   
+
+  function entityNoun(platform: string) {
+    if (platform === "vapi") return vapiInventoryKind === "squad" ? "squads" : "assistants";
+    if (platform === "make") return "scenarios";
+    if (platform === "retell") return "agents";
+    return "workflows";
+  }
 
   async function refreshCredentials() {
     setCredentialsLoading(true);
