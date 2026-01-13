@@ -663,21 +663,25 @@ export async function POST(req: Request) {
     if (error) return errorResponse(400, "PERSISTENCE_FAILED", error.message);
     source = data;
   } else {
-    const { data, error } = await supabase
+    const { data: source, error } = await supabase
       .from("sources")
-      .insert({
-        tenant_id: membership.tenant_id,
-        type: platformType,
-        name: ((((body as any).__computedName as string | undefined) ?? connectionName) || platformType),
-        status: "active",
-        method: method,
-        secret_hash: encryptSecret(JSON.stringify(secretJson)),
-      })
+      .upsert(
+        {
+          tenant_id: membership.tenant_id,
+          type: platformType,
+          name: ((((body as any).__computedName as string | undefined) ?? connectionName) || platformType),
+          status: "active",
+          method: method,
+          secret_hash: encryptSecret(JSON.stringify(secretJson)),
+        },
+        { onConflict: "tenant_id,type,method" },
+      )
       .select()
       .single();
 
-    if (error) return errorResponse(400, "PERSISTENCE_FAILED", error.message);
-    source = data;
+    if (error) {
+      return errorResponse(400, "PERSISTENCE_FAILED", error.message);
+    }
   }
 
   // If connect-time inventoryEntities were fetched, persist them into source_entities as disabled by default.

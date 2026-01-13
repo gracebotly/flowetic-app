@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { AlertTriangle, CheckCircle2, ArrowLeft } from "lucide-react";
 
 type PlatformType = "vapi" | "retell" | "n8n" | "make";
-type Step = "platform" | "workflows" | "no_credentials";
+type Step = "platform" | "workflows" | "no_credentials" | "nothing_indexed";
 
 type VibeConnection = {
   sourceId: string;
@@ -152,7 +152,12 @@ export default function ControlPanelChatWizardPage() {
       return;
     }
 
-    // If they have credentials but no indexed entities, still go to workflows step
+    // If they have credentials but no indexed entities, show "nothing indexed yet" 
+    if (status?.indexedCount === 0) {
+      setStep("nothing_indexed");
+      return;
+    }
+
     setStep("workflows");
   }
 
@@ -250,6 +255,16 @@ export default function ControlPanelChatWizardPage() {
               <div className="mt-1 text-sm text-gray-600">Try the app without adding credentials.</div>
             </button>
           </div>
+
+          <div className="mt-4 text-center">
+            <button
+              type="button"
+              onClick={loadContext}
+              className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+            >
+              Refresh
+            </button>
+          </div>
         </div>
       ) : null}
 
@@ -292,6 +307,45 @@ export default function ControlPanelChatWizardPage() {
               className="mt-5 rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600"
             >
               Add {platformLabel(selectedPlatform)} Credentials →
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {!loading && step === "nothing_indexed" && selectedPlatform ? (
+        <div className="rounded-xl border border-gray-200 bg-white p-6">
+          <div className="mb-4 flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => {
+                setStep("platform");
+                setSelectedPlatform(null);
+              }}
+              className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back
+            </button>
+
+            <div className="text-sm font-semibold text-gray-900">{platformLabel(selectedPlatform)}</div>
+          </div>
+
+          <div className="rounded-lg border border-gray-200 bg-gray-50 p-6 text-center">
+            <div className="mx-auto mb-3 h-10 w-10 rounded-full bg-white text-amber-600 flex items-center justify-center">
+              <AlertTriangle className="h-5 w-5" />
+            </div>
+
+            <div className="text-base font-semibold text-gray-900">Nothing indexed yet</div>
+            <div className="mt-2 text-sm text-gray-600">
+              Go to Connections and select what to index.
+            </div>
+
+            <button
+              type="button"
+              onClick={goToConnectionsSetup}
+              className="mt-5 rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600"
+            >
+              Select {platformEntityNoun(selectedPlatform)} to Index →
             </button>
           </div>
         </div>
@@ -371,6 +425,16 @@ export default function ControlPanelChatWizardPage() {
                 })}
               </div>
             )}
+
+            <div className="mt-4 text-center">
+              <button
+                type="button"
+                onClick={loadContext}
+                className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+              >
+                Refresh
+              </button>
+            </div>
           </div>
         </div>
       ) : null}
