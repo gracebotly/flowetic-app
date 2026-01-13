@@ -5,7 +5,7 @@ import { decryptSecret, encryptSecret } from "@/lib/secrets";
 export const runtime = "nodejs";
 
 type PlatformType = "n8n" | "make" | "activepieces" | "vapi" | "retell";
-type Method = "api" | "webhook" | "mcp";
+type Method = "api" | "webhook";
 
 function jsonResponse(
   status: number,
@@ -102,18 +102,6 @@ export async function POST(req: Request) {
     }
   }
 
-  if (method === "mcp") {
-    const mcpUrl = typeof body?.mcpUrl === "string" ? body.mcpUrl : "";
-    const authHeader = typeof body?.authHeader === "string" ? body.authHeader : "";
-
-    // Only update fields when provided
-    if (typeof body?.mcpUrl === "string") secretJson.mcpUrl = mcpUrl;
-    if (typeof body?.authHeader === "string") secretJson.authHeader = authHeader || null;
-
-    if (!String(secretJson?.mcpUrl ?? "").trim()) {
-      return jsonResponse(400, { ok: false, code: "MISSING_MCP_URL", message: "MCP URL is required." });
-    }
-  }
 
   if (method === "webhook") {
     // Allow update without forcing instanceUrl if it exists already

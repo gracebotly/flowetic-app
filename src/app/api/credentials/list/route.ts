@@ -5,7 +5,7 @@ import { decryptSecret } from "@/lib/secrets";
 
 export const runtime = "nodejs";
 
-type ConnectMethod = "api" | "webhook" | "mcp";
+type ConnectMethod = "api" | "webhook";
 
 type CredentialRow = {
   id: string;
@@ -19,7 +19,7 @@ type CredentialRow = {
 };
 
 function safeMethod(v: unknown): ConnectMethod {
-  return v === "api" || v === "webhook" || v === "mcp" ? v : "api";
+  return v === "api" || v === "webhook" ? v : "api";
 }
 
 export async function GET() {

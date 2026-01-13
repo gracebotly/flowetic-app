@@ -1,0 +1,41 @@
+
+
+import { NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
+
+export const runtime = "nodejs";
+
+export async function POST() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ ok: false, code: "AUTH_REQUIRED" }, { status: 401 });
+
+  const { data: membership } = await supabase
+    .from("memberships")
+    .select("tenant_id")
+    .eq("user_id", user.id)
+    .limit(1)
+    .maybeSingle();
+
+  if (!membership?.tenant_id) return NextResponse.json({ ok: false, code: "TENANT_ACCESS_DENIED" }, { status: 403 });
+
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from("projects")
+    .insert({
+      tenant_id: membership.tenant_id,
+      name: "Untitled Project",
+      type: "analytics",
+      status: "draft",
+      public_enabled: false,
+      created_at: now,
+      updated_at: now,
+    })
+    .select("id")
+    .single();
+
+  if (error) return NextResponse.json({ ok: false, code: "PERSISTENCE_FAILED", message: error.message }, { status: 400 });
+
+  return NextResponse.json({ ok: true, id: data?.id });
+}
+

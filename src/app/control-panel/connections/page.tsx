@@ -43,7 +43,7 @@ type IndexedEntity = {
 
 type SortKey = "created_at" | "last_updated" | "name";
 
-type ConnectMethod = "api" | "webhook" | "mcp";
+type ConnectMethod = "api" | "webhook";
 
 type IndexedEntityRow = {
   id: string;
@@ -119,11 +119,7 @@ const PLATFORM_META = {
 
 type PlatformKey = keyof typeof PLATFORM_META;
 
-declare global {
-  interface Window {
-    __GF_CONNECTIONS_DEBUG_STATE__?: any;
-  }
-}
+
 
 const PLATFORM_KEYS = Object.keys(PLATFORM_META) as PlatformKey[];
 
@@ -323,9 +319,8 @@ export default function ConnectionsPage() {
   // Connect modal state
   const [connectOpen, setConnectOpen] = useState(false);
   const [step, setStep] = useState<"platform" | "method" | "credentials" | "entities" | "success">("platform");
-  const [mcpHelpOpen, setMcpHelpOpen] = useState(false);
   const [isPostConnectSelection, setIsPostConnectSelection] = useState(false);
-  const [vapiInventoryKind, setVapiInventoryKind] = useState<"assistant" | "squad">("assistant");
+  
   
   const [editingSourceId, setEditingSourceId] = useState<string | null>(null);
   const [credentialDeleteId, setCredentialDeleteId] = useState<string | null>(null);
@@ -334,13 +329,11 @@ export default function ConnectionsPage() {
   
   // Connect form state
   const [selectedPlatform, setSelectedPlatform] = useState<keyof typeof PLATFORM_META | null>(null);
-  const [selectedMethod, setSelectedMethod] = useState<"api" | "webhook" | "mcp">("api");
+  const [selectedMethod, setSelectedMethod] = useState<"api" | "webhook">("api");
   const [selectedRegion, setSelectedRegion] = useState<'us1' | 'us2' | 'eu1' | 'eu2'>('us2');
   const [n8nAuthMode, setN8nAuthMode] = useState<"header" | "bearer">("bearer");
   const [apiKey, setApiKey] = useState("");
   const [instanceUrl, setInstanceUrl] = useState("");
-  const [mcpUrl, setMcpUrl] = useState("");
-  const [mcpAccessToken, setMcpAccessToken] = useState("");
   const [authHeader, setAuthHeader] = useState("");
   const [connectionName, setConnectionName] = useState("");
 
@@ -356,10 +349,6 @@ export default function ConnectionsPage() {
   const [showApiKeyEditor, setShowApiKeyEditor] = useState(false);
   const [apiKeySaved, setApiKeySaved] = useState(false);
   const [instanceUrlSaved, setInstanceUrlSaved] = useState(false);
-
-  const [showMcpTokenEditor, setShowMcpTokenEditor] = useState(false);
-  const [mcpTokenSaved, setMcpTokenSaved] = useState(false);
-  const [mcpUrlSaved, setMcpUrlSaved] = useState(false);
   
   const [createdSourceId, setCreatedSourceId] = useState<string | null>(null);
   const [connectEntities, setConnectEntities] = useState<EntityDraft[]>([]);
@@ -401,7 +390,7 @@ export default function ConnectionsPage() {
   
 
   function entityNoun(platform: string) {
-    if (platform === "vapi") return vapiInventoryKind === "squad" ? "squads" : "assistants";
+    if (platform === "vapi") return "assistants";
     if (platform === "make") return "scenarios";
     if (platform === "retell") return "agents";
     return "workflows";
@@ -591,31 +580,25 @@ export default function ConnectionsPage() {
   }
 
   async function openManageIndexed(platform: string, sourceId: string) {
-    setInventoryLoading(true);
+    setErrMsg(null);
     setInventoryErr(null);
+    setInventoryEntities([]);
+    setSelectedExternalIds(new Set());
+    setSelectedPlatform(platform as any);
+    setSelectedMethod("api");
+    setCreatedSourceId(sourceId);
+    setIsPostConnectSelection(false);
+
+    setInventoryLoading(true);
 
     try {
-      if (platform === "vapi") {
-        if (vapiInventoryKind === "assistant") {
-          await importInventory("vapi", sourceId);
-          const rows = await listInventory("vapi", sourceId);
-          setInventoryEntities(rows);
-        } else {
-          await importInventory("vapi-squads", sourceId);
-          const rows = await listInventory("vapi-squads", sourceId);
-          setInventoryEntities(rows);
-        }
-      } else {
-        await importInventory(platform, sourceId);
-        const rows = await listInventory(platform, sourceId);
-        setInventoryEntities(rows);
-      }
+      await importInventory(platform, sourceId);
+      const rows = await listInventory(platform, sourceId);
+      setInventoryEntities(rows);
 
       const indexedSet = await getIndexedExternalIdsForSource(sourceId);
       setSelectedExternalIds(indexedSet);
-      setIsPostConnectSelection(false);
 
-      setCreatedSourceId(sourceId);
       setConnectOpen(true);
       setStep("entities");
     } catch (e: any) {
@@ -650,7 +633,6 @@ export default function ConnectionsPage() {
 
   // reset editor toggles
   setShowApiKeyEditor(false);
-  setShowMcpTokenEditor(false);
 
   // Indicators
   if (effectiveMethod === "api") {
@@ -665,15 +647,7 @@ export default function ConnectionsPage() {
       setInstanceUrl("");
     }
   }
-  if (effectiveMethod === "mcp") {
-    setMcpTokenSaved(true);
-    setMcpUrlSaved(true);
-    setShowMcpTokenEditor(false);
-    setMcpAccessToken("");
-    setInstanceUrl("");
-    setAuthHeader("");
-    setMcpUrl("");
-  }
+  
 
   setConnectOpen(true);
   setStep("credentials");
@@ -724,57 +698,6 @@ export default function ConnectionsPage() {
       return () => window.removeEventListener("keydown", onKeyDown);
     }
   }, [detailsOpen]);
-
-  useEffect(() => {
-    if (process.env.NEXT_PUBLIC_ENABLE_WEBMCP !== "true") return;
-    if (typeof window === "undefined") return;
-
-    window.__GF_CONNECTIONS_DEBUG_STATE__ = {
-      ts: new Date().toISOString(),
-      pathname: window.location.pathname,
-
-      // core UI state
-      filter,
-      connectOpen,
-      step,
-      selectedPlatform,
-      selectedMethod,
-      createdSourceId,
-
-      // counts only (no sensitive payloads)
-      credentialsCount: credentials.length,
-      indexedEntitiesCount: indexedEntities.length,
-      inventoryCount: inventoryEntities.length,
-
-      // menus / modal state
-      openCredentialMenuId,
-      openEntityMenuId,
-      detailsOpen,
-
-      // errors
-      errMsg,
-      credentialsErr,
-      indexedErr,
-      inventoryErr,
-    };
-  }, [
-    filter,
-    connectOpen,
-    step,
-    selectedPlatform,
-    selectedMethod,
-    createdSourceId,
-    credentials.length,
-    indexedEntities.length,
-    inventoryEntities.length,
-    openCredentialMenuId,
-    openEntityMenuId,
-    detailsOpen,
-    errMsg,
-    credentialsErr,
-    indexedErr,
-    inventoryErr,
-  ]);
 
   useEffect(() => {
     if (connectOpen && step === "entities" && selectedPlatform === "n8n" && createdSourceId) {
@@ -849,8 +772,6 @@ export default function ConnectionsPage() {
     setN8nAuthMode("bearer");
     setApiKey("");
     setInstanceUrl("");
-    setMcpUrl("");
-    setMcpAccessToken("");
     setAuthHeader("");
     setConnectionName("");
 
@@ -859,7 +780,6 @@ export default function ConnectionsPage() {
     setEntityExternalId("");
     setEntityDisplayName("");
     setIsPostConnectSelection(false);
-    setVapiInventoryKind("assistant");
     setSaving(false);
     setErrMsg(null);
     setConnectSummary(null);
@@ -969,30 +889,7 @@ export default function ConnectionsPage() {
       if (instanceUrl) payload.instanceUrl = instanceUrl.trim();
     }
 
-    if (selectedMethod === "mcp") {
-      if (selectedPlatform === "n8n" && selectedMethod === "mcp") {
-        if (!instanceUrl.trim()) {
-          setSaving(false);
-          setErrMsg("Server URL is required for n8n MCP connections.");
-          return;
-        }
-        if (!mcpAccessToken.trim()) {
-          setSaving(false);
-          setErrMsg("Access token is required.");
-          return;
-        }
-      }
-      
-      if (selectedPlatform === "n8n") {
-        // Use instanceUrl and mcpAccessToken from n8n MCP form
-        payload.mcpUrl = instanceUrl.trim();
-        payload.authHeader = `Bearer ${mcpAccessToken.trim()}`;
-      } else {
-        // Use mcpUrl and authHeader for other platforms
-        payload.mcpUrl = mcpUrl;
-        if (authHeader) payload.authHeader = authHeader;
-      }
-    }
+    
 
     const url = editingSourceId ? "/api/credentials/update" : "/api/connections/connect";
 
@@ -1054,14 +951,10 @@ export default function ConnectionsPage() {
         setInstanceUrlSaved(false);
         setShowApiKeyEditor(false);
       }
-      if (showMcpTokenEditor) {
-        setMcpTokenSaved(false);
-        setMcpUrlSaved(false);
-        setShowMcpTokenEditor(false);
-      }
+      
       
       // NEW: For n8n, offer to manage indexed workflows
-      if (selectedPlatform === "n8n" && (selectedMethod === "api" || selectedMethod === "mcp")) {
+      if (selectedPlatform === "n8n" && selectedMethod === "api") {
         // Set sourceId to the one we just edited
         setCreatedSourceId(editingSourceId);
         
@@ -1126,7 +1019,7 @@ export default function ConnectionsPage() {
       return;
     }
 
-    if (selectedPlatform === "n8n" && (selectedMethod === "api" || selectedMethod === "mcp")) {
+    if (selectedPlatform === "n8n" && selectedMethod === "api") {
       setIsPostConnectSelection(true);
       setSaving(false); // Stop loading first
       await loadN8nInventory(sid);
@@ -1188,7 +1081,7 @@ export default function ConnectionsPage() {
         displayName: name,
         entityKind,
         enabledForAnalytics: true,
-        enabledForActions: selectedMethod === "mcp",
+        enabledForActions: false,
       },
     ]);
 
@@ -1213,7 +1106,7 @@ export default function ConnectionsPage() {
 
       setErrMsg(
         selectedPlatform === "vapi"
-          ? (vapiInventoryKind === "squad" ? "Select at least one squad to index." : "Select at least one assistant to index.")
+          ? "Select at least one assistant to index."
           : selectedPlatform === "retell"
           ? "Select at least one agent to index."
           : "Select at least one workflow to index."
@@ -1223,13 +1116,19 @@ export default function ConnectionsPage() {
     }
     const selected = new Set(selectedExternalIds);
     const selectedRows = inventoryEntities.filter((e) => selected.has(String(e.externalId)));
+    
+    if (selectedRows.length === 0) {
+      setErrMsg("Your selection could not be saved because no matching entities were loaded. Please refresh inventory and try again.");
+      return;
+    }
+    
     const entitiesPayload = selectedRows.map((e) => ({
       externalId: String(e.externalId),
       displayName: String(e.displayName ?? ""),
       entityKind: String(
         e.entityKind ??
           (selectedPlatform === "vapi"
-            ? (vapiInventoryKind === "squad" ? "squad" : "assistant")
+            ? "assistant"
             : selectedPlatform === "make"
             ? "scenario"
             : selectedPlatform === "retell"
@@ -1256,7 +1155,18 @@ export default function ConnectionsPage() {
     if (!res.ok || !json?.ok) {
       console.error("[connections] saveEntitiesSelection failed", { status: res.status, json });
       setSaving(false);
-      setErrMsg(json?.message || "Failed to save selection.");
+      
+      const msg =
+        typeof json?.message === "string" && json.message.trim()
+          ? json.message
+          : "Failed to save selection.";
+
+      const code =
+        typeof json?.code === "string" && json.code.trim()
+          ? ` (${json.code})`
+          : "";
+
+      setErrMsg(`${msg}${code}`);
       return;
     }
     
@@ -1580,7 +1490,7 @@ export default function ConnectionsPage() {
                 const meta = getPlatformMeta(String(cred.platformType));
                 const Icon = meta?.Icon;
 
-                const methodLabel = cred.method === "api" ? "API" : cred.method === "webhook" ? "Webhook" : "MCP";
+                const methodLabel = cred.method === "api" ? "API" : "Webhook";
                 const methodIcon =
                   cred.method === "api" ? (
                     <KeyRound className="h-3.5 w-3.5" />
@@ -1684,7 +1594,7 @@ export default function ConnectionsPage() {
               </button>
 
               {/* Show for all platforms that support inventory management */}
-              {(openCred.platformType === "n8n" && (openCred.method === "api" || openCred.method === "mcp")) ||
+              {(openCred.platformType === "n8n" && openCred.method === "api") ||
                (openCred.platformType === "make") ||
                (openCred.platformType === "vapi") ||
                (openCred.platformType === "retell") ? (
@@ -1742,15 +1652,7 @@ export default function ConnectionsPage() {
                           : `Select ${entityNoun(String(selectedPlatform))} to index`
                         : "Connected"}
                     </div>
-                    {step === "credentials" && selectedPlatform === "n8n" && selectedMethod === "mcp" ? (
-                      <button
-                        type="button"
-                        onClick={() => setMcpHelpOpen(true)}
-                        className="text-sm font-medium text-blue-600 hover:underline"
-                      >
-                        What is this?
-                      </button>
-                    ) : null}
+                    
                   </div>
                   <div className="mt-1 text-sm text-gray-600">
                     {step === "platform"
@@ -1760,11 +1662,9 @@ export default function ConnectionsPage() {
                       : step === "credentials"
                       ? selectedPlatform === "make"
                         ? "Enter your API token to import your Make scenarios."
-                        : selectedPlatform === "n8n" && selectedMethod === "mcp"
-                          ? "Enter the Server URL and Access token from n8n's Instance-level MCP settings."
-                          : editingSourceId
-                            ? null
-                            : "Enter credentials to validate and connect."
+                        : editingSourceId
+                          ? null
+                          : "Enter credentials to validate and connect."
                       : step === "entities"
                       ? editingSourceId
                         ? `Update which ${entityNoun(String(selectedPlatform))} GetFlowetic should index. Unselected ${entityNoun(String(selectedPlatform))} will be removed from your All tab.`
@@ -1920,51 +1820,8 @@ export default function ConnectionsPage() {
       </button>
     ) : null}
 
-    {selectedPlatform === "n8n" ? (
-      <button
-        type="button"
-        onClick={() => {
-          setSelectedMethod("mcp");
-          setErrMsg(null);
-          setStep("credentials");
-        }}
-        className="w-full rounded-xl border border-gray-300 bg-white p-4 text-left shadow-sm transition hover:border-gray-400 hover:shadow"
-      >
-        <div className="flex items-start justify-between gap-3">
-          <div className="grow">
-            <div className="text-base font-semibold text-gray-900">MCP Instances</div>
-            <div className="mt-1 text-sm text-gray-600">
-              Workflow triggers for AI tooling. Live bi‑directional with AI agents via the Model Context
-              Protocol. Includes secure, read‑only credential tunneling.
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <span className="shrink-0 rounded-full border-2 border-green-200 bg-green-50 px-2 py-1 text-xs font-bold text-green-700">
-              Live
-            </span>
-            <span className="shrink-0 rounded-full border-2 border-blue-200 bg-blue-50 px-2 py-1 text-xs font-bold text-blue-700">
-              Secure
-            </span>
-          </div>
-        </div>
-      </button>
-    ) : selectedPlatform && (selectedPlatform as string) !== "n8n" ? (
-      <div className="w-full rounded-xl border border-gray-200 bg-white p-4 text-left opacity-60 cursor-not-allowed">
-        <div className="flex items-start justify-between gap-3">
-          <div className="grow">
-            <div className="text-base font-semibold text-gray-900">MCP Instances</div>
-            <div className="mt-1 text-sm text-gray-600">
-              Workflow triggers for AI tooling. Coming soon for this platform.
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <span className="shrink-0 rounded-full border border-indigo-200 bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-700">
-              Coming Soon
-            </span>
-          </div>
-        </div>
-      </div>
-    ) : null}
+
+
     
     <div className="flex justify-end gap-2 pt-4">
       <button
@@ -2193,7 +2050,7 @@ export default function ConnectionsPage() {
       </div>
     ) : null}
 
-    {(selectedPlatform === "n8n" || selectedPlatform === "activepieces") && selectedMethod !== "mcp" ? (
+    {(selectedPlatform === "n8n" || selectedPlatform === "activepieces") ? (
       <div>
         <div className="flex items-center justify-between">
           <label className="text-sm font-semibold text-gray-900">
@@ -2226,60 +2083,7 @@ export default function ConnectionsPage() {
       </div>
     ) : null}
 
-    {selectedMethod === "mcp" ? (
-      <>
-        {selectedPlatform === "n8n" ? (
-          <>
-            <div>
-              <label className="mb-2 block text-sm font-semibold text-gray-900">Server URL *</label>
-              <input
-                value={instanceUrl}
-                onChange={(e) => setInstanceUrl(e.target.value)}
-                type="url"
-                className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                placeholder="https://your-instance..."
-              />
-            </div>
-            <div>
-              <label className="mb-2 block text-sm font-semibold text-gray-900">Access token *</label>
-              <input
-                value={mcpAccessToken}
-                onChange={(e) => setMcpAccessToken(e.target.value)}
-                type="password"
-                className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                placeholder="••••••••••••••"
-              />
-              <div className="mt-1 text-xs text-gray-600">
-                From n8n: Instance-level MCP &rarr; Access token.
-              </div>
-            </div>
-          </>
-        ) : (
-          <>
-            <div>
-              <label className="mb-2 block text-sm font-semibold text-gray-900">MCP Server URL *</label>
-              <input
-                value={mcpUrl}
-                onChange={(e) => setMcpUrl(e.target.value)}
-                type="url"
-                className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                placeholder="https://..."
-              />
-            </div>
-            <div>
-              <label className="mb-2 block text-sm font-semibold text-gray-900">Authorization header (optional)</label>
-              <input
-                value={authHeader}
-                onChange={(e) => setAuthHeader(e.target.value)}
-                type="text"
-                className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                placeholder="Bearer ..."
-              />
-            </div>
-          </>
-        )}
-      </>
-    ) : null}
+    
 
     {selectedPlatform !== "n8n" && selectedPlatform !== "make" && selectedPlatform !== "vapi" && selectedPlatform !== "retell" ? (
       <div>
@@ -2334,38 +2138,12 @@ export default function ConnectionsPage() {
 
     {inventoryLoading ? (
       <div className="text-sm text-gray-600">
-        {selectedPlatform === "vapi" ? (vapiInventoryKind === "squad" ? "Loading squads…" : "Loading assistants…") : selectedPlatform === "retell" ? "Loading agents…" : "Loading workflows…"}
+        {selectedPlatform === "vapi" ? "Loading assistants…" : selectedPlatform === "retell" ? "Loading agents…" : "Loading workflows…"}
       </div>
     ) : null}
 
     {!inventoryLoading ? (
       <>
-      {selectedPlatform === "vapi" ? (
-        <div className="mb-3 flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setVapiInventoryKind("assistant")}
-            className={`rounded-lg px-3 py-1.5 text-sm font-semibold border ${
-              vapiInventoryKind === "assistant"
-                ? "border-blue-600 bg-blue-50 text-blue-700"
-                : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
-            }`}
-          >
-            Assistants
-          </button>
-          <button
-            type="button"
-            onClick={() => setVapiInventoryKind("squad")}
-            className={`rounded-lg px-3 py-1.5 text-sm font-semibold border ${
-              vapiInventoryKind === "squad"
-                ? "border-blue-600 bg-blue-50 text-blue-700"
-                : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
-            }`}
-          >
-            Squads
-          </button>
-        </div>
-      ) : null}
       <div className="flex items-center justify-between gap-3">
         <div className="relative w-[420px]">
           <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
@@ -2375,7 +2153,7 @@ export default function ConnectionsPage() {
             className="w-full rounded-lg border border-gray-300 py-2.5 pl-10 pr-4 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
             placeholder={
               selectedPlatform === "vapi"
-                ? vapiInventoryKind === "squad" ? "Search squads..." : "Search assistants..."
+                ? "Search assistants..."
                 : selectedPlatform === "retell"
                 ? "Search agents..."
                 : "Search workflows..."
@@ -2385,12 +2163,12 @@ export default function ConnectionsPage() {
       </div>
 
       <div className="max-h-[320px] overflow-auto rounded-lg border border-gray-200 bg-white">
-        {displayedSelectable.length === 0 ? (
+        {!inventoryErr && displayedSelectable.length === 0 ? (
           <div className="p-4 text-sm text-gray-600">
             {selectedPlatform === "make"
               ? "No scenarios found in this Make account."
               : selectedPlatform === "vapi"
-              ? (vapiInventoryKind === "squad" ? "No squads found in this Vapi account." : "No assistants found in this Vapi account.")
+              ? "No assistants found in this Vapi account."
               : selectedPlatform === "retell"
               ? "No agents found in this Retell account."
               : "No workflows found in this n8n instance."}
@@ -2611,62 +2389,7 @@ export default function ConnectionsPage() {
         </div>
       ) : null}
 
-      {/* MCP Help Modal */}
-      {mcpHelpOpen ? (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-xl overflow-hidden rounded-2xl bg-white shadow-2xl">
-            <div className="border-b px-6 py-5">
-              <div className="flex items-start justify-between gap-4">
-                <div className="text-lg font-semibold text-gray-900">About n8n MCP instances</div>
-                <button
-                  type="button"
-                  onClick={() => setMcpHelpOpen(false)}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200"
-                >
-                  ×
-                </button>
-              </div>
-            </div>
-
-            <div className="px-6 py-6 space-y-4 text-sm text-gray-700">
-              <p>
-                MCP lets AI tools discover and run workflows you explicitly enable in your n8n instance.
-              </p>
-
-              <ul className="list-disc pl-5 space-y-2">
-                <li>Workflows are created and edited in n8n — MCP cannot author workflows.</li>
-                <li>No workflows are exposed by default. You must enable MCP per workflow.</li>
-                <li>MCP access is instance-wide. All connected MCP clients see enabled workflows.</li>
-                <li>Only published workflows with supported triggers are eligible.</li>
-                <li>MCP-triggered workflows run normally and appear in n8n executions.</li>
-              </ul>
-
-              <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">
-                For full setup steps, limits, and revoking access, read{" "}
-                <a
-                  href="https://docs.n8n.io/advanced-ai/accessing-n8n-mcp-server/"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="font-semibold text-blue-700 underline decoration-blue-300 underline-offset-2 hover:decoration-blue-600"
-                >
-                  n8n's official MCP server guide
-                </a>
-                .
-              </div>
-
-              <div className="flex justify-end pt-2">
-                <button
-                  type="button"
-                  onClick={() => setMcpHelpOpen(false)}
-                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-                >
-                  Got it
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      
 
       {credentialDeleteId ? (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4">

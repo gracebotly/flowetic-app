@@ -21,10 +21,10 @@ import * as Popover from "@radix-ui/react-popover"
 type NavItem = { href: string; label: string; icon: React.ComponentType<{ size?: number; className?: string }> }
 
 const NAV: NavItem[] = [
-  { href: "/control-panel/chat", label: "Chat", icon: MessageSquare },
-  { href: "/control-panel/clients", label: "Clients", icon: Users },
-  { href: "/control-panel/dashboards", label: "Dashboards", icon: LayoutDashboard },
   { href: "/control-panel/connections", label: "Connections", icon: Zap },
+  { href: "/control-panel/chat", label: "Chat", icon: MessageSquare },
+  { href: "/control-panel/projects", label: "Projects", icon: LayoutDashboard },
+  { href: "/control-panel/clients", label: "Clients", icon: Users },
   { href: "/control-panel/activity", label: "Activity", icon: ClipboardList },
   { href: "/control-panel/settings", label: "Settings", icon: SettingsIcon },
 ]

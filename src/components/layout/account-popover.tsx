@@ -1,6 +1,6 @@
 "use client"
 
-import { Copy, ExternalLink, HelpCircle, Key, CreditCard, BookOpen, Mail, Download, Building2, Settings, ShieldCheck, Globe } from "lucide-react"
+import { Copy, ExternalLink, HelpCircle, Key, CreditCard, BookOpen, Mail, Download, Building2, Settings, ShieldCheck, Globe, BarChart3 } from "lucide-react"
 import { useState } from "react"
 
 function RowButton({
@@ -91,16 +91,18 @@ export function AccountCardPanel({
 
       {/* Actions */}
       <div className="space-y-2 p-3">
-        <RowButton icon={<Building2 size={16} />} label="Manage Workspace" onClick={() => window.location.assign("/control-panel/settings")} />
+        <RowButton icon={<ShieldCheck size={16} />} label="Upgrade Plan" onClick={() => window.location.assign("/control-panel/settings")} />
         <RowButton icon={<CreditCard size={16} />} label="Billing" onClick={() => window.location.assign("/control-panel/settings")} />
-        <RowButton icon={<Key size={16} />} label="API Keys" onClick={() => window.location.assign("/control-panel/settings")} />
-        <RowButton icon={<Settings size={16} />} label="Preferences" onClick={() => window.location.assign("/control-panel/settings")} />
+        <RowButton icon={<BarChart3 size={16} />} label="Usage" onClick={() => window.location.assign("/control-panel/settings")} />
 
         <div className="mt-3 grid grid-cols-2 gap-2">
-          <RowButton icon={<BookOpen size={16} />} label="Docs & Help" onClick={() => window.open(docsUrl, "_blank")} />
+          <RowButton icon={<BookOpen size={16} />} label="Documentation" onClick={() => window.open(docsUrl, "_blank")} />
           <RowButton icon={<HelpCircle size={16} />} label="Contact Support" onClick={() => (window.location.href = `mailto:${supportEmail}`)} right={<Mail size={16} />} />
-          <RowButton icon={<Globe size={16} />} label="Status" onClick={() => window.open(statusUrl, "_blank")} />
-          <RowButton icon={<Download size={16} />} label="Download app" onClick={() => window.open("#", "_blank")} />
+          <RowButton icon={<Globe size={16} />} label="System Status" onClick={() => window.open(statusUrl, "_blank")} />
+        </div>
+
+        <div className="mt-3 space-y-2">
+          <RowButton icon={<Settings size={16} />} label="Settings" onClick={() => window.location.assign("/control-panel/settings")} />
         </div>
       </div>
 

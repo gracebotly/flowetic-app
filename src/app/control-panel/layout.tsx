@@ -1,6 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
 import { ControlPanelSidebar } from "@/components/layout/cp-sidebar";
-import { ControlPanelWebMcp } from "@/components/webmcp/control-panel-webmcp";
 
 export default async function ControlPanelLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -14,7 +13,6 @@ export default async function ControlPanelLayout({ children }: { children: React
     <div className="flex min-h-screen">
       <ControlPanelSidebar userEmail={email} plan={plan} />
       <main className="flex-1 bg-[hsl(var(--main-bg))]">
-        <ControlPanelWebMcp />
         {children}
       </main>
     </div>
