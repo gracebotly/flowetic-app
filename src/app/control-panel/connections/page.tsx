@@ -325,7 +325,7 @@ export default function ConnectionsPage() {
   const [step, setStep] = useState<"platform" | "method" | "credentials" | "entities" | "success">("platform");
   const [mcpHelpOpen, setMcpHelpOpen] = useState(false);
   const [isPostConnectSelection, setIsPostConnectSelection] = useState(false);
-  const [vapiInventoryKind, setVapiInventoryKind] = useState<"assistant" | "squad">("assistant");
+  
   
   const [editingSourceId, setEditingSourceId] = useState<string | null>(null);
   const [credentialDeleteId, setCredentialDeleteId] = useState<string | null>(null);
@@ -401,7 +401,7 @@ export default function ConnectionsPage() {
   
 
   function entityNoun(platform: string) {
-    if (platform === "vapi") return vapiInventoryKind === "squad" ? "squads" : "assistants";
+    if (platform === "vapi") return "assistants";
     if (platform === "make") return "scenarios";
     if (platform === "retell") return "agents";
     return "workflows";
@@ -591,31 +591,25 @@ export default function ConnectionsPage() {
   }
 
   async function openManageIndexed(platform: string, sourceId: string) {
-    setInventoryLoading(true);
+    setErrMsg(null);
     setInventoryErr(null);
+    setInventoryEntities([]);
+    setSelectedExternalIds(new Set());
+    setSelectedPlatform(platform as any);
+    setSelectedMethod("api");
+    setCreatedSourceId(sourceId);
+    setIsPostConnectSelection(false);
+
+    setInventoryLoading(true);
 
     try {
-      if (platform === "vapi") {
-        if (vapiInventoryKind === "assistant") {
-          await importInventory("vapi", sourceId);
-          const rows = await listInventory("vapi", sourceId);
-          setInventoryEntities(rows);
-        } else {
-          await importInventory("vapi-squads", sourceId);
-          const rows = await listInventory("vapi-squads", sourceId);
-          setInventoryEntities(rows);
-        }
-      } else {
-        await importInventory(platform, sourceId);
-        const rows = await listInventory(platform, sourceId);
-        setInventoryEntities(rows);
-      }
+      await importInventory(platform, sourceId);
+      const rows = await listInventory(platform, sourceId);
+      setInventoryEntities(rows);
 
       const indexedSet = await getIndexedExternalIdsForSource(sourceId);
       setSelectedExternalIds(indexedSet);
-      setIsPostConnectSelection(false);
 
-      setCreatedSourceId(sourceId);
       setConnectOpen(true);
       setStep("entities");
     } catch (e: any) {
@@ -1213,7 +1207,7 @@ export default function ConnectionsPage() {
 
       setErrMsg(
         selectedPlatform === "vapi"
-          ? (vapiInventoryKind === "squad" ? "Select at least one squad to index." : "Select at least one assistant to index.")
+          ? "Select at least one assistant to index."
           : selectedPlatform === "retell"
           ? "Select at least one agent to index."
           : "Select at least one workflow to index."
@@ -1223,13 +1217,19 @@ export default function ConnectionsPage() {
     }
     const selected = new Set(selectedExternalIds);
     const selectedRows = inventoryEntities.filter((e) => selected.has(String(e.externalId)));
+    
+    if (selectedRows.length === 0) {
+      setErrMsg("Your selection could not be saved because no matching entities were loaded. Please refresh inventory and try again.");
+      return;
+    }
+    
     const entitiesPayload = selectedRows.map((e) => ({
       externalId: String(e.externalId),
       displayName: String(e.displayName ?? ""),
       entityKind: String(
         e.entityKind ??
           (selectedPlatform === "vapi"
-            ? (vapiInventoryKind === "squad" ? "squad" : "assistant")
+            ? "assistant"
             : selectedPlatform === "make"
             ? "scenario"
             : selectedPlatform === "retell"
@@ -1256,7 +1256,18 @@ export default function ConnectionsPage() {
     if (!res.ok || !json?.ok) {
       console.error("[connections] saveEntitiesSelection failed", { status: res.status, json });
       setSaving(false);
-      setErrMsg(json?.message || "Failed to save selection.");
+      
+      const msg =
+        typeof json?.message === "string" && json.message.trim()
+          ? json.message
+          : "Failed to save selection.";
+
+      const code =
+        typeof json?.code === "string" && json.code.trim()
+          ? ` (${json.code})`
+          : "";
+
+      setErrMsg(`${msg}${code}`);
       return;
     }
     
@@ -2334,38 +2345,12 @@ export default function ConnectionsPage() {
 
     {inventoryLoading ? (
       <div className="text-sm text-gray-600">
-        {selectedPlatform === "vapi" ? (vapiInventoryKind === "squad" ? "Loading squads…" : "Loading assistants…") : selectedPlatform === "retell" ? "Loading agents…" : "Loading workflows…"}
+        {selectedPlatform === "vapi" ? "Loading assistants…" : selectedPlatform === "retell" ? "Loading agents…" : "Loading workflows…"}
       </div>
     ) : null}
 
     {!inventoryLoading ? (
       <>
-      {selectedPlatform === "vapi" ? (
-        <div className="mb-3 flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setVapiInventoryKind("assistant")}
-            className={`rounded-lg px-3 py-1.5 text-sm font-semibold border ${
-              vapiInventoryKind === "assistant"
-                ? "border-blue-600 bg-blue-50 text-blue-700"
-                : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
-            }`}
-          >
-            Assistants
-          </button>
-          <button
-            type="button"
-            onClick={() => setVapiInventoryKind("squad")}
-            className={`rounded-lg px-3 py-1.5 text-sm font-semibold border ${
-              vapiInventoryKind === "squad"
-                ? "border-blue-600 bg-blue-50 text-blue-700"
-                : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
-            }`}
-          >
-            Squads
-          </button>
-        </div>
-      ) : null}
       <div className="flex items-center justify-between gap-3">
         <div className="relative w-[420px]">
           <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
@@ -2375,7 +2360,7 @@ export default function ConnectionsPage() {
             className="w-full rounded-lg border border-gray-300 py-2.5 pl-10 pr-4 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
             placeholder={
               selectedPlatform === "vapi"
-                ? vapiInventoryKind === "squad" ? "Search squads..." : "Search assistants..."
+                ? "Search assistants..."
                 : selectedPlatform === "retell"
                 ? "Search agents..."
                 : "Search workflows..."
@@ -2385,12 +2370,12 @@ export default function ConnectionsPage() {
       </div>
 
       <div className="max-h-[320px] overflow-auto rounded-lg border border-gray-200 bg-white">
-        {displayedSelectable.length === 0 ? (
+        {!inventoryErr && displayedSelectable.length === 0 ? (
           <div className="p-4 text-sm text-gray-600">
             {selectedPlatform === "make"
               ? "No scenarios found in this Make account."
               : selectedPlatform === "vapi"
-              ? (vapiInventoryKind === "squad" ? "No squads found in this Vapi account." : "No assistants found in this Vapi account.")
+              ? "No assistants found in this Vapi account."
               : selectedPlatform === "retell"
               ? "No agents found in this Retell account."
               : "No workflows found in this n8n instance."}
