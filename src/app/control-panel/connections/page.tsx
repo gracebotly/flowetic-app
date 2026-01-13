@@ -1795,6 +1795,22 @@ export default function ConnectionsPage() {
       </div>
     </button>
 
+    {selectedPlatform === "n8n" && (
+      <div className="w-full rounded-xl border border-gray-200 bg-white p-4 text-left opacity-60 cursor-not-allowed">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="text-sm font-semibold text-gray-900">MCP Instances</div>
+            <div className="mt-1 text-sm text-gray-600">
+              AI tools will be able to discover and run enabled n8n workflows directly.
+            </div>
+          </div>
+          <span className="shrink-0 rounded-full border border-indigo-200 bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-700">
+            Coming Soon
+          </span>
+        </div>
+      </div>
+    )}
+
     {selectedPlatform !== "n8n" && selectedPlatform !== "make" && selectedPlatform !== "vapi" && selectedPlatform !== "retell" ? (
       <button
         type="button"

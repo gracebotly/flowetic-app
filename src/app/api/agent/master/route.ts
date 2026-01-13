@@ -1,4 +1,4 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { RuntimeContext } from "@mastra/core/runtime-context";
 import { mastra } from "@/mastra";
 import { createClient } from "@/lib/supabase/server";
@@ -35,12 +35,28 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({} as any));
 
+    const action = String(body?.action || "message");
+
     // Message can come from either shape
     const message =
       (body.message as string | undefined) ??
       (body.lastMessage as string | undefined) ??
       (body.messages?.[body.messages.length - 1]?.content as string | undefined) ??
       "";
+
+    // Handle initialize action
+    if (action === "initialize") {
+      const ctx = body?.context || {};
+      const displayName = String(ctx?.displayName || "");
+      const platformType = String(ctx?.platformType || "");
+
+      return NextResponse.json({
+        type: "success",
+        message: displayName
+          ? `I see you selected "${displayName}" on ${platformType}. What would you like to build—an analytics dashboard, a tool, or a form?`
+          : `What would you like to build—an analytics dashboard, a tool, or a form?`,
+      });
+    }
 
     // 1) Resolve authenticated userId
     const {
