@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { CopyButton } from "@/components/chat/copy-button";
 import {
   Terminal as TerminalIcon,
@@ -27,11 +28,24 @@ type Msg = { id: string; role: Role; content: string };
 type LogType = "info" | "success" | "error" | "running";
 type TerminalLog = { id: string; type: LogType; text: string; detail?: string };
 
+type VibeContext = {
+  platformType: "vapi" | "retell" | "n8n" | "make";
+  sourceId: string;
+  entityId?: string;
+  externalId?: string;
+  displayName?: string;
+  entityKind?: string;
+  skillMD?: string;
+  lastIndexed?: string | null;
+  eventCount?: number | null;
+};
+
 interface ChatWorkspaceProps {
   showEnterVibeButton?: boolean;
 }
 
 export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProps) {
+  const router = useRouter();
   const [view, setView] = useState<ViewMode>("terminal");
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -51,6 +65,14 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
   }>({ userId: null, tenantId: null });
 
   const [vibeContextSnapshot, setVibeContextSnapshot] = useState<any>(null);
+  const [vibeContext, setVibeContext] = useState<VibeContext | null>(null);
+  const [vibeInitDone, setVibeInitDone] = useState(false);
+
+  async function loadSkillMD(skillKey: string | undefined) {
+    // SkillMD not implemented yet; return empty string but keep contract.
+    // Later: fetch(`/skills/${skillKey}/Skill.md`) or similar.
+    return "";
+  }
 
   useEffect(() => {
     async function loadAuthContext() {
@@ -94,6 +116,74 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
     loadVibeContext();
   }, []);
 
+  useEffect(() => {
+    async function initFromSession() {
+      if (!authContext.userId || !authContext.tenantId) return;
+      if (vibeInitDone) return;
+
+      const raw = sessionStorage.getItem("vibeContext");
+      if (!raw) {
+        setVibeInitDone(true);
+        return;
+      }
+
+      let ctx: VibeContext | null = null;
+      try {
+        ctx = JSON.parse(raw);
+      } catch {
+        ctx = null;
+      }
+
+      if (!ctx?.platformType || !ctx?.sourceId) {
+        setVibeInitDone(true);
+        return;
+      }
+
+      setVibeContext(ctx);
+
+      const skillText = await loadSkillMD(ctx.skillMD);
+
+      // Initialize agent (first assistant message)
+      try {
+        const resp = await fetch("/api/agent/master", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "initialize",
+            tenantId: authContext.tenantId,
+            userId: authContext.userId,
+            context: { ...ctx, skillMD: skillText },
+          }),
+        });
+
+        const data = await resp.json().catch(() => ({}));
+
+        if (!resp.ok || data?.type === "error") {
+          addLog("error", "Agent init failed", data?.message || "Failed to initialize agent.");
+          setVibeInitDone(true);
+          return;
+        }
+
+        // Expecting { message } or { text }
+        const first = String(data?.message || data?.text || "").trim();
+        if (first) {
+          setMessages((prev) => [
+            ...prev,
+            { id: `a-init-${Date.now()}`, role: "assistant", content: first },
+          ]);
+        }
+
+        setVibeInitDone(true);
+      } catch (e: any) {
+        addLog("error", "Agent init failed", e?.message || "Failed to initialize agent.");
+        setVibeInitDone(true);
+      }
+    }
+
+    initFromSession();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authContext.userId, authContext.tenantId]);
+
   const [logs, setLogs] = useState<TerminalLog[]>([
     {
       id: "l1",
@@ -127,6 +217,13 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
 
   function addLog(type: LogType, text: string, detail?: string) {
     setLogs((prev) => [...prev, { id: crypto.randomUUID(), type, text, detail }]);
+  }
+
+  function backToWizard() {
+    try {
+      sessionStorage.removeItem("vibeContext");
+    } catch {}
+    router.push("/control-panel/chat");
   }
 
   useCopilotAction({
@@ -206,10 +303,8 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
         return;
       }
 
-      const interfaceId = "00000000-0000-0000-0000-000000000001";
-      const sourceId = "00000000-0000-0000-0000-000000000002";
-      const threadId = `demo-thread-${userId}`;
-      const platformType = "vapi" as const;
+      const sourceId = vibeContext?.sourceId || "00000000-0000-0000-0000-000000000002";
+      const platformType = (vibeContext?.platformType || "vapi") as any;
 
       addLog("running", "Sending message to agent...", text);
 
@@ -217,11 +312,13 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          action: "message",
           tenantId,
           userId,
           sourceId,
           platformType,
           message: text,
+          context: vibeContext,
         }),
       });
 
@@ -443,19 +540,29 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
                 </>
               )}
             </div>
-            <div className="inline-flex items-center gap-1 rounded-lg bg-gray-100 p-1">
-              <button
-                type="button"
-                title="Terminal"
-                onClick={() => setView("terminal")}
-                className={
-                  view === "terminal"
-                    ? "inline-flex h-9 w-9 items-center justify-center rounded-md bg-blue-500 text-white"
-                    : "inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-white"
-                }
-              >
-                <TerminalIcon size={18} />
-              </button>
+            <div className="flex items-center gap-2">
+              {!showEnterVibeButton && (
+                <button
+                  type="button"
+                  onClick={backToWizard}
+                  className="rounded-md border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  ← Back
+                </button>
+              )}
+              <div className="inline-flex items-center gap-1 rounded-lg bg-gray-100 p-1">
+                <button
+                  type="button"
+                  title="Terminal"
+                  onClick={() => setView("terminal")}
+                  className={
+                    view === "terminal"
+                      ? "inline-flex h-9 w-9 items-center justify-center rounded-md bg-blue-500 text-white"
+                      : "inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-white"
+                  }
+                >
+                  <TerminalIcon size={18} />
+                </button>
               <button
                 type="button"
                 title="Preview"
@@ -482,6 +589,7 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
               </button>
             </div>
           </div>
+        </div>
 
           {/* Terminal View */}
           {view === "terminal" ? (
