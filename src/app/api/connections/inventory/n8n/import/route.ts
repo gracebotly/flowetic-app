@@ -63,7 +63,7 @@ export async function POST(req: Request) {
   if (!source.secret_hash) return NextResponse.json({ ok: false, code: "MISSING_SECRET" }, { status: 400 });
 
   const secret = JSON.parse(decryptSecret(source.secret_hash)) as {
-    method: "api" | "webhook" | "mcp";
+    method: "api" | "webhook";
     apiKey?: string;
     instanceUrl?: string | null;
     authMode?: "header" | "bearer";

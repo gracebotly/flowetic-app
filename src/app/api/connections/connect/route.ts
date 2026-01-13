@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { encryptSecret } from "@/lib/secrets";
-import { validateMcpServer } from "@/lib/mcp/validateMcpServer";
+
 
 export const runtime = "nodejs";
 
@@ -238,7 +238,7 @@ export async function POST(req: Request) {
 
   const platformType = body.platformType as PlatformType | undefined;
   const connectionName = (body.name as string | undefined) ?? "";
-  const method = (body.method as "api" | "webhook" | "mcp" | undefined) ?? "api";
+  const method = (body.method as "api" | "webhook" | undefined) ?? "api";
   const region = (body.region as string | undefined) ?? undefined;
   
   // Support both apiToken (legacy) and apiKey (new frontend) parameter names
@@ -269,7 +269,7 @@ export async function POST(req: Request) {
   }
 
   const methodStatus =
-    method === "webhook" ? "method:webhook" : method === "mcp" ? "method:mcp" : "method:api";
+    method === "webhook" ? "method:webhook" : "method:api";
 
   const warnings: ConnectWarning[] = [];
   let inventoryEntities: Array<{ entityKind: string; externalId: string; displayName: string }> | null = null;
@@ -354,30 +354,7 @@ export async function POST(req: Request) {
     secretJson = { ...secretJson, instanceUrl };
   }
 
-  if (method === "mcp") {
-    const mcpUrl = (body.mcpUrl as string | undefined) ?? "";
-    const authHeader = (body.authHeader as string | undefined) ?? "";
-    if (!mcpUrl) {
-      return errorResponse(400, "MISSING_MCP_URL", "MCP URL is required.");
-    }
-
-    const validation = await validateMcpServer({
-      serverId: `${platformType}-mcp`,
-      url: mcpUrl,
-      headers: authHeader ? { Authorization: authHeader } : undefined,
-    });
-
-    if (!validation.ok) {
-      return errorResponse(400, "MCP_VALIDATION_FAILED", validation.error || "MCP validation failed");
-    }
-
-    secretJson = {
-      ...secretJson,
-      mcpUrl,
-      authHeader: authHeader || null,
-      toolCount: validation.toolCount ?? 0,
-    };
-  }
+  
   
   if (platformType === "n8n" && method === "api") {
     const baseUrl = (() => {
