@@ -853,7 +853,6 @@ export default function ConnectionsPage() {
     setEntityExternalId("");
     setEntityDisplayName("");
     setIsPostConnectSelection(false);
-    setVapiInventoryKind("assistant");
     setSaving(false);
     setErrMsg(null);
     setConnectSummary(null);
