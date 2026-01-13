@@ -772,8 +772,6 @@ export default function ConnectionsPage() {
     setN8nAuthMode("bearer");
     setApiKey("");
     setInstanceUrl("");
-    setMcpUrl("");
-    setMcpAccessToken("");
     setAuthHeader("");
     setConnectionName("");
 
