@@ -21,7 +21,7 @@ export async function GET(req: Request) {
 
   const { data: membership } = await supabase
     .from("memberships")
-    .select("tenant_id")
+    .select("tenant_id, role")
     .eq("user_id", user.id)
     .limit(1)
     .maybeSingle();
@@ -46,18 +46,36 @@ export async function GET(req: Request) {
   if (pub === "public") query = query.eq("public_enabled", true);
   if (pub === "private") query = query.eq("public_enabled", false);
 
-  const { data, error } = await query;
-  if (error) return NextResponse.json({ ok: false, code: "UNKNOWN_ERROR", message: error.message }, { status: 500 });
+  const { data: projects, error: pErr } = await query;
+  if (pErr) return NextResponse.json({ ok: false, code: "UNKNOWN_ERROR", message: pErr.message }, { status: 500 });
 
-  const projects = (data ?? []).map((p: any) => ({
+  const projectIds = (projects ?? []).map((p: any) => String(p.id));
+  const countsByProjectId = new Map<string, number>();
+
+  if (projectIds.length > 0) {
+    const { data: accessRows, error: aErr } = await supabase
+      .from("project_access")
+      .select("project_id, client_id")
+      .eq("tenant_id", membership.tenant_id)
+      .in("project_id", projectIds);
+
+    if (!aErr && accessRows) {
+      for (const r of accessRows as any[]) {
+        const pid = String(r.project_id);
+        countsByProjectId.set(pid, (countsByProjectId.get(pid) || 0) + 1);
+      }
+    }
+  }
+
+  const out = (projects ?? []).map((p: any) => ({
     id: String(p.id),
     name: String(p.name ?? ""),
     type: String(p.type ?? "analytics"),
     status: String(p.status ?? "draft"),
     publicEnabled: Boolean(p.public_enabled),
-    clientCount: 0,
+    clientCount: countsByProjectId.get(String(p.id)) || 0,
     updatedAt: String(p.updated_at ?? ""),
   }));
 
-  return NextResponse.json({ ok: true, projects });
+  return NextResponse.json({ ok: true, projects: out });
 }
