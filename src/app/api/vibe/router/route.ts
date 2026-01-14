@@ -341,6 +341,7 @@ export async function POST(req: NextRequest) {
           palettes,
           density: journey?.densityPreset ?? "comfortable",
         },
+        interfaceId,
         previewUrl: vibeContext?.previewUrl ?? null,
         previewVersionId: vibeContext?.previewVersionId ?? null,
       });

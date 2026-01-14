@@ -22,6 +22,8 @@ import { useCopilotAction } from "@copilotkit/react-core";
 import { StyleBundleCards } from "@/components/vibe/tool-renderers/style-bundle-cards";
 import { TodoPanel } from "@/components/vibe/tool-renderers/todo-panel";
 import { InteractiveEditPanel } from "@/components/vibe/tool-renderers/interactive-edit-panel";
+import { PreviewInspector } from "@/components/vibe/preview/preview-inspector";
+import { WidgetPropertiesDrawer } from "@/components/vibe/preview/widget-properties-drawer";
 
 type ViewMode = "terminal" | "preview" | "publish";
 
@@ -91,6 +93,9 @@ type VibeContext = {
   skillMD?: string;
   lastIndexed?: string | null;
   eventCount?: number | null;
+  interfaceId?: string;
+  previewUrl?: string;
+  previewVersionId?: string;
 };
 
 interface ChatWorkspaceProps {
@@ -129,11 +134,32 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
   const [paletteOverrideId, setPaletteOverrideId] = useState<string | null>(null);
 
   const [toolUi, setToolUi] = useState<ToolUiPayload | null>(null);
+  const [currentSpec, setCurrentSpec] = useState<any | null>(null);
+  const [selectedComponentId, setSelectedComponentId] = useState<string | null>(null);
+  const [propertiesOpen, setPropertiesOpen] = useState(false);
 
   async function loadSkillMD(skillKey: string | undefined) {
     // SkillMD not implemented yet; return empty string but keep contract.
     // Later: fetch(`/skills/${skillKey}/Skill.md`) or similar.
     return "";
+  }
+
+  async function refreshCurrentSpec() {
+    if (!authContext.userId || !authContext.tenantId) return;
+    if (!vibeContext?.interfaceId) return;
+
+    const res = await fetch("/api/vibe/spec", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId: authContext.userId,
+        tenantId: authContext.tenantId,
+        interfaceId: vibeContext.interfaceId,
+      }),
+    });
+
+    const data = await res.json();
+    if (res.ok) setCurrentSpec(data?.spec_json ?? null);
   }
 
   useEffect(() => {
@@ -335,6 +361,7 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
           setPreviewVersionId(result.versionId);
           addLog("success", "Preview generated successfully!", `View at: ${result.previewUrl}`);
           setView("preview");
+          await refreshCurrentSpec();
         } else {
           addLog("error", "Preview generation failed", result.message);
         }
@@ -394,10 +421,18 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
 
       setToolUi(data?.toolUi ?? null);
 
+      if (data?.interfaceId) {
+        setVibeContext((prev: any) => (prev ? { ...prev, interfaceId: data.interfaceId } : prev));
+      }
       if (data?.previewUrl) {
+        setVibeContext((prev: any) => (prev ? { ...prev, previewUrl: data.previewUrl } : prev));
         setView("preview");
         // If your preview renderer uses previewVersionId:
-        if (data?.previewVersionId) setPreviewVersionId(data.previewVersionId);
+        if (data?.previewVersionId) {
+          setPreviewVersionId(data.previewVersionId);
+          setVibeContext((prev: any) => (prev ? { ...prev, previewVersionId: data.previewVersionId } : prev));
+        }
+        await refreshCurrentSpec();
       }
 
       setMessages((prev) => [
@@ -760,34 +795,101 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
 
           {/* Preview View */}
           {view === "preview" ? (
-            <div className="flex flex-1 flex-col bg-white min-h-0 overflow-hidden">
-              <div className="flex flex-1 overflow-auto bg-white pt-4 pl-4 pb-4 pr-2 thin-scrollbar">
-                <div
-                  className="rounded-xl border border-gray-300 bg-white shadow-sm overflow-auto"
-                  style={{
-                    width:
-                      previewDevice === "desktop"
-                        ? "100%"
-                        : previewDevice === "tablet"
-                        ? 820
-                        : 390,
-                    height:
-                      previewDevice === "desktop"
-                        ? "100%"
-                        : "auto",
-                    maxWidth: "100%",
-                    maxHeight: "100%",
-                  }}
-                >
-                  <iframe
-                    key={`${previewVersionId}-${previewRefreshKey}`}
-                    src={`/preview/${previewDashboardId}/${previewVersionId}`}
-                    className="h-full w-full border-0"
-                    sandbox="allow-scripts allow-same-origin"
-                    title="Dashboard Preview"
-                  />
+            <div className="relative flex h-full min-h-0 w-full">
+              <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+                <div className="flex flex-1 overflow-auto bg-white pt-4 pl-4 pb-4 pr-2 thin-scrollbar">
+                  <div
+                    className="rounded-xl border border-gray-300 bg-white shadow-sm overflow-auto"
+                    style={{
+                      width:
+                        previewDevice === "desktop"
+                          ? "100%"
+                          : previewDevice === "tablet"
+                          ? 820
+                          : 390,
+                      height:
+                        previewDevice === "desktop"
+                          ? "100%"
+                          : "auto",
+                      maxWidth: "100%",
+                      maxHeight: "100%",
+                    }}
+                  >
+                    <iframe
+                      key={`${previewVersionId}-${previewRefreshKey}`}
+                      src={`/preview/${previewDashboardId}/${previewVersionId}`}
+                      className="h-full w-full border-0"
+                      sandbox="allow-scripts allow-same-origin"
+                      title="Dashboard Preview"
+                    />
+                  </div>
                 </div>
               </div>
+
+              {/* Inspector column */}
+              <div className="w-[360px] flex-shrink-0 border-l border-gray-200 bg-[#f9fafb] p-3">
+                <PreviewInspector
+                  components={(currentSpec?.components ?? []) as any[]}
+                  selectedId={selectedComponentId}
+                  onSelect={(id) => {
+                    setSelectedComponentId(id);
+                    setPropertiesOpen(true);
+                  }}
+                />
+              </div>
+
+              {/* Properties Drawer */}
+              <WidgetPropertiesDrawer
+                open={propertiesOpen}
+                onClose={() => setPropertiesOpen(false)}
+                component={
+                  selectedComponentId
+                    ? ((currentSpec?.components ?? []).find((c: any) => c?.id === selectedComponentId) ?? null)
+                    : null
+                }
+                onApply={async (actions) => {
+                  setIsLoading(true);
+                  try {
+                    const res = await fetch("/api/vibe/router", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        userId: authContext.userId,
+                        tenantId: authContext.tenantId,
+                        vibeContext,
+                        journey: {
+                          mode: journeyMode,
+                          selectedOutcome,
+                          selectedStoryboard,
+                          selectedStyleBundleId,
+                          densityPreset,
+                          paletteOverrideId,
+                        },
+                        userMessage: `__ACTION__:interactive_edit:${JSON.stringify({
+                          interfaceId: vibeContext?.interfaceId,
+                          actions,
+                        })}`,
+                      }),
+                    });
+
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data?.error || "INTERACTIVE_EDIT_FAILED");
+
+                    setMessages((prev) => [
+                      ...prev,
+                      { id: `a-${Date.now()}`, role: "assistant", content: data.text || "Updated." },
+                    ]);
+
+                    // Refresh spec so inspector + drawer reflect changes immediately
+                    await refreshCurrentSpec();
+
+                    // If you display previewUrl via iframe keying, bump refreshKey
+                    setPreviewRefreshKey((k) => k + 1);
+                  } finally {
+                    setIsLoading(false);
+                  }
+                }}
+              />
             </div>
           ) : null}
 
