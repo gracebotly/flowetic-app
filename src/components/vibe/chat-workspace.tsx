@@ -19,8 +19,43 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from '@/lib/supabase/client';
 import { useCopilotAction } from "@copilotkit/react-core";
+import { StyleBundleCards } from "@/components/vibe/tool-renderers/style-bundle-cards";
+import { TodoPanel } from "@/components/vibe/tool-renderers/todo-panel";
 
 type ViewMode = "terminal" | "preview" | "publish";
+
+type JourneyMode =
+  | "select_entity"
+  | "recommend"
+  | "align"
+  | "style"
+  | "build_preview"
+  | "interactive_edit"
+  | "deploy";
+
+type ToolUiPayload =
+  | {
+      type: "style_bundles";
+      title: string;
+      bundles: Array<{
+        id: string;
+        name: string;
+        description: string;
+        previewImageUrl: string;
+        palette: { name: string; swatches: Array<{ name: string; hex: string }> };
+        tags: string[];
+      }>;
+    }
+  | {
+      type: "todos";
+      title: string;
+      items: Array<{
+        id: string;
+        title: string;
+        status: "pending" | "in_progress" | "completed";
+        priority: "low" | "medium" | "high";
+      }>;
+    };
 
 type Role = "user" | "assistant" | "system";
 type Msg = { id: string; role: Role; content: string };
@@ -67,6 +102,15 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
   const [vibeContextSnapshot, setVibeContextSnapshot] = useState<any>(null);
   const [vibeContext, setVibeContext] = useState<VibeContext | null>(null);
   const [vibeInitDone, setVibeInitDone] = useState(false);
+
+  const [journeyMode, setJourneyMode] = useState<JourneyMode>("select_entity");
+  const [selectedOutcome, setSelectedOutcome] = useState<"dashboard" | "product" | null>(null);
+  const [selectedStoryboard, setSelectedStoryboard] = useState<string | null>(null);
+  const [selectedStyleBundleId, setSelectedStyleBundleId] = useState<string | null>(null);
+  const [densityPreset, setDensityPreset] = useState<"compact" | "comfortable" | "spacious">("comfortable");
+  const [paletteOverrideId, setPaletteOverrideId] = useState<string | null>(null);
+
+  const [toolUi, setToolUi] = useState<ToolUiPayload | null>(null);
 
   async function loadSkillMD(skillKey: string | undefined) {
     // SkillMD not implemented yet; return empty string but keep contract.
@@ -284,65 +328,64 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
   });
 
   const send = async () => {
-    const text = input.trim();
-    if (!text || isLoading) return;
-
-    setIsLoading(true);
+    if (!input.trim() || isLoading) return;
+    const userText = input.trim();
     setInput("");
 
-    const userMsg: Msg = { id: `u-${Date.now()}`, role: "user", content: text };
-    setMessages((prev) => [...prev, userMsg]);
+    setMessages((prev) => [
+      ...prev,
+      { id: `u-${Date.now()}`, role: "user", content: userText },
+    ]);
 
+    setIsLoading(true);
     try {
-      const tenantId = authContext.tenantId;
-      const userId = authContext.userId;
-
-      if (!tenantId || !userId) {
-        addLog("error", "Not authenticated", "Please log in and try again.");
-        setIsLoading(false);
-        return;
-      }
-
-      const sourceId = vibeContext?.sourceId || "00000000-0000-0000-0000-000000000002";
-      const platformType = (vibeContext?.platformType || "vapi") as any;
-
-      addLog("running", "Sending message to agent...", text);
-
-      const resp = await fetch("/api/agent/master", {
+      const res = await fetch("/api/vibe/router", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "message",
-          tenantId,
-          userId,
-          sourceId,
-          platformType,
-          message: text,
-          context: vibeContext,
+          userId: authContext.userId,
+          tenantId: authContext.tenantId,
+          vibeContext,
+          journey: {
+            mode: journeyMode,
+            selectedOutcome,
+            selectedStoryboard,
+            selectedStyleBundleId,
+            densityPreset,
+            paletteOverrideId,
+          },
+          userMessage: userText,
         }),
       });
 
-      const data = await resp.json();
+      const data = await res.json();
 
-      if (!resp.ok || data.type === "error") {
-        addLog("error", "Agent error", data.message || "Unknown agent error");
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `a-${Date.now()}`,
-            role: "assistant",
-            content: data.message || "Something went wrong.",
-          },
-        ]);
-        return;
+      if (!res.ok) throw new Error(data?.error || "ROUTER_REQUEST_FAILED");
+
+      if (data?.journey?.mode) setJourneyMode(data.journey.mode);
+      if (typeof data?.journey?.selectedOutcome !== "undefined")
+        setSelectedOutcome(data.journey.selectedOutcome);
+      if (typeof data?.journey?.selectedStoryboard !== "undefined")
+        setSelectedStoryboard(data.journey.selectedStoryboard);
+      if (typeof data?.journey?.selectedStyleBundleId !== "undefined")
+        setSelectedStyleBundleId(data.journey.selectedStyleBundleId);
+      if (typeof data?.journey?.densityPreset !== "undefined")
+        setDensityPreset(data.journey.densityPreset);
+      if (typeof data?.journey?.paletteOverrideId !== "undefined")
+        setPaletteOverrideId(data.journey.paletteOverrideId);
+
+      setToolUi(data?.toolUi ?? null);
+
+      if (data?.previewUrl) {
+        setView("preview");
+        // If your preview renderer uses previewVersionId:
+        if (data?.previewVersionId) setPreviewVersionId(data.previewVersionId);
       }
 
       setMessages((prev) => [
         ...prev,
         { id: `a-${Date.now()}`, role: "assistant", content: data.text || "" },
       ]);
-
-      addLog("success", "Agent responded");
     } catch (e: any) {
       addLog("error", "Request failed", e?.message ?? "Unknown error");
       setMessages((prev) => [
@@ -411,6 +454,59 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
                       {m.content}
                     </div>
                   </div>
+                  {!isUser && toolUi ? (
+                    <div className="mt-3">
+                      {toolUi.type === "style_bundles" ? (
+                        <StyleBundleCards
+                          title={toolUi.title}
+                          bundles={toolUi.bundles}
+                          onSelect={async (bundleId) => {
+                            setSelectedStyleBundleId(bundleId);
+                            setToolUi(null);
+                            setIsLoading(true);
+                            try {
+                              const res = await fetch("/api/vibe/router", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  userId: authContext.userId,
+                                  tenantId: authContext.tenantId,
+                                  vibeContext,
+                                  journey: {
+                                    mode: journeyMode,
+                                    selectedOutcome,
+                                    selectedStoryboard,
+                                    selectedStyleBundleId: bundleId,
+                                    densityPreset,
+                                    paletteOverrideId,
+                                  },
+                                  userMessage: "__ACTION__:select_style_bundle",
+                                }),
+                              });
+                              const data = await res.json();
+                              if (!res.ok) throw new Error(data?.error || "ROUTER_ACTION_FAILED");
+                              if (data?.journey?.mode) setJourneyMode(data.journey.mode);
+                              setMessages((prev) => [
+                                ...prev,
+                                { id: `a-${Date.now()}`, role: "assistant", content: data.text || "" },
+                              ]);
+                              setToolUi(data?.toolUi ?? null);
+                              if (data?.previewUrl) {
+                                setView("preview");
+                                if (data?.previewVersionId) setPreviewVersionId(data.previewVersionId);
+                              }
+                            } catch (err: any) {
+                              addLog("error", "Action failed", err?.message ?? "Unknown error");
+                            } finally {
+                              setIsLoading(false);
+                            }
+                          }}
+                        />
+                      ) : toolUi.type === "todos" ? (
+                        <TodoPanel title={toolUi.title} items={toolUi.items} />
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               );
             })}

@@ -15,6 +15,9 @@ This follows the common "skills folder + SKILL/Skill.md" convention used by univ
 ## Who consumes Skill.md
 Flowetic does not show these files to end users. Instead, the Copilot-connected master agent loads exactly one platform skill at runtime based on `platformType` and injects it into the agent's system instructions.
 
+## Todo plugin
+Flowetic also includes a `skills/todo/Skill.md` that instructs agents to use the todo toolset for planning and progress tracking.
+
 ## Design principle
 Keep `Skill.md` concise and journey-focused. Put deep technical reference material in `references/` so it is only loaded when needed.
 

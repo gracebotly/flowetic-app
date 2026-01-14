@@ -12,6 +12,7 @@ import {
   saveMapping,
   runGeneratePreviewWorkflow,
 } from "../tools/platformMapping";
+import { todoAdd, todoList, todoUpdate, todoComplete } from "../tools/todo";
 
 export const platformMappingMaster: Agent = new Agent({
   name: "platformMappingMaster",
@@ -49,5 +50,9 @@ export const platformMappingMaster: Agent = new Agent({
     proposeMapping,
     saveMapping,
     runGeneratePreviewWorkflow,
+    todoAdd,
+    todoList,
+    todoUpdate,
+    todoComplete,
   },
 });

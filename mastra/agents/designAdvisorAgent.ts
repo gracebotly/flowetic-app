@@ -11,6 +11,7 @@ import {
   savePreviewVersion,
 } from "../tools/specEditor";
 import { validateSpec } from "../tools/validateSpec";
+import { todoAdd, todoList, todoUpdate, todoComplete } from "../tools/todo";
 
 export const designAdvisorAgent: Agent = new Agent({
   name: "designAdvisorAgent",
@@ -64,5 +65,9 @@ export const designAdvisorAgent: Agent = new Agent({
     applySpecPatch,
     validateSpec,
     savePreviewVersion,
+    todoAdd,
+    todoList,
+    todoUpdate,
+    todoComplete,
   },
 });

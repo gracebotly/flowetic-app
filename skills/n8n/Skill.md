@@ -17,6 +17,8 @@ Your job is to get the agency user from **Connected n8n → Live preview dashboa
 4) Show preview with real data
 5) Offer optional "Turn a workflow into a product" next
 
+For MVP, always start by selecting exactly one workflow that already has executions/events so the preview can be generated from real data immediately.
+
 Never ask for UUIDs or show raw payloads unless user explicitly requests "raw".
 
 ---

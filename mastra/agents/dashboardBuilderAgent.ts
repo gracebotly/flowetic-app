@@ -7,6 +7,7 @@ import {
   savePreviewVersion,
 } from "../tools/specEditor";
 import { validateSpec } from "../tools/validateSpec";
+import { todoAdd, todoList, todoUpdate, todoComplete } from "../tools/todo";
 
 export const dashboardBuilderAgent: Agent = new Agent({
   name: "dashboardBuilderAgent",
@@ -55,5 +56,9 @@ export const dashboardBuilderAgent: Agent = new Agent({
     applySpecPatch,
     validateSpec,
     savePreviewVersion,
+    todoAdd,
+    todoList,
+    todoUpdate,
+    todoComplete,
   },
 });
