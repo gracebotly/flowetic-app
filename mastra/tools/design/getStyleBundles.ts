@@ -227,25 +227,24 @@ export const getStyleBundles = createTool({
     let relevantText = "";
     const sources: Array<{ kind: string; note: string }> = [];
 
-    try {
-      if (!searchDesignKB) {
-        return { bundles: fallbackBundles(), sources: [{ kind: "local", note: "Vector search unavailable, using fallback" }] };
-      }
-      
-      const rag = await searchDesignKB.execute({
-        context: {
-          query: queryText,
-          topK: 8,
-          filter: {},
-        } as any,
-        runtimeContext,
-      } as any);
+    const kb = searchDesignKB;
+    if (kb) {
+      try {
+        const rag = await kb.execute({
+          context: {
+            query: queryText,
+            topK: 8,
+            filter: {},
+          } as any,
+          runtimeContext,
+        } as any);
 
-      // createVectorQueryTool output shape depends on Mastra version; keep conservative:
-      relevantText = JSON.stringify(rag).slice(0, 12000);
-      sources.push({ kind: "vector", note: "searchDesignKB" });
-    } catch {
-      // ignore and fallback
+        // createVectorQueryTool output shape depends on Mastra version; keep conservative:
+        relevantText = JSON.stringify(rag).slice(0, 12000);
+        sources.push({ kind: "vector", note: "searchDesignKB" });
+      } catch {
+        // ignore and fallback
+      }
     }
 
     if (!relevantText) {
