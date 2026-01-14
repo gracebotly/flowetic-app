@@ -227,21 +227,12 @@ export const getStyleBundles = createTool({
     let relevantText = "";
     const sources: Array<{ kind: string; note: string }> = [];
 
-    if (!searchDesignKB) {
-      return {
-        bundles: [],
-        sources: [],
-        reason: "Design knowledge base not available",
-      };
-    }
-
     try {
-      const kb = searchDesignKB;
-      if (!kb) {
-        return { bundles: fallbackBundles(), sources: [] };
+      if (!searchDesignKB) {
+        return { bundles: fallbackBundles(), sources: [{ kind: "local", note: "Vector search unavailable, using fallback" }] };
       }
       
-      const rag = await kb.execute({
+      const rag = await searchDesignKB.execute({
         context: {
           query: queryText,
           topK: 8,
