@@ -236,7 +236,12 @@ export const getStyleBundles = createTool({
     }
 
     try {
-      const rag = await searchDesignKB!.execute({
+      const kb = searchDesignKB;
+      if (!kb) {
+        return { bundles: fallbackBundles(), sources: [] };
+      }
+      
+      const rag = await kb.execute({
         context: {
           query: queryText,
           topK: 8,
