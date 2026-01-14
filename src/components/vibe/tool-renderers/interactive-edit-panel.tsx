@@ -144,10 +144,13 @@ export function InteractiveEditPanel({
 
                 <select
                   className="rounded-md border border-gray-200 bg-white px-2 py-1 text-sm"
-                  defaultValue={w.kind === "chart" ? "line" : ""}
+                  value={w.kind === "chart" ? (w.chartType ?? "line") : ""}
                   onChange={(e) => {
+                    const v = e.target.value;
+                    if (v !== "line" && v !== "area" && v !== "bar") return;
+
                     const next = localWidgets.map((x) =>
-                      x.id === w.id ? { ...x, chartType: e.target.value } : x
+                      x.id === w.id ? { ...x, chartType: v } : x
                     );
                     setLocalWidgets(next);
                   }}
