@@ -227,6 +227,13 @@ export const getStyleBundles = createTool({
     let relevantText = "";
     const sources: Array<{ kind: string; note: string }> = [];
 
+    if (!searchDesignKB) {
+      return {
+        bundles: [],
+        reason: "Design knowledge base not available",
+      };
+    }
+
     try {
       const rag = await searchDesignKB.execute({
         context: {
