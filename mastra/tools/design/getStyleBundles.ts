@@ -228,9 +228,11 @@ export const getStyleBundles = createTool({
     const sources: Array<{ kind: string; note: string }> = [];
 
     const kb = searchDesignKB;
-    if (kb) {
+    const exec = kb?.execute;
+
+    if (exec) {
       try {
-        const rag = await kb.execute({
+        const rag = await exec({
           context: {
             query: queryText,
             topK: 8,
