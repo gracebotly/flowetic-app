@@ -21,6 +21,7 @@ import { createClient } from '@/lib/supabase/client';
 import { useCopilotAction } from "@copilotkit/react-core";
 import { StyleBundleCards } from "@/components/vibe/tool-renderers/style-bundle-cards";
 import { TodoPanel } from "@/components/vibe/tool-renderers/todo-panel";
+import { InteractiveEditPanel } from "@/components/vibe/tool-renderers/interactive-edit-panel";
 
 type ViewMode = "terminal" | "preview" | "publish";
 
@@ -55,6 +56,23 @@ type ToolUiPayload =
         status: "pending" | "in_progress" | "completed";
         priority: "low" | "medium" | "high";
       }>;
+    }
+  | {
+      type: "interactive_edit_panel";
+      title: string;
+      interfaceId: string;
+      widgets: Array<{
+        id: string;
+        title: string;
+        kind: "metric" | "chart" | "table" | "other";
+        enabled: boolean;
+      }>;
+      palettes: Array<{
+        id: string;
+        name: string;
+        swatches: Array<{ name: string; hex: string }>;
+      }>;
+      density: "compact" | "comfortable" | "spacious";
     };
 
 type Role = "user" | "assistant" | "system";
@@ -504,6 +522,19 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
                         />
                       ) : toolUi.type === "todos" ? (
                         <TodoPanel title={toolUi.title} items={toolUi.items} />
+                      ) : toolUi.type === "interactive_edit_panel" ? (
+                        <InteractiveEditPanel
+                          title={toolUi.title}
+                          interfaceId={toolUi.interfaceId}
+                          widgets={toolUi.widgets}
+                          palettes={toolUi.palettes}
+                          density={toolUi.density}
+                          onApply={async (payload) => {
+                            await send("__ACTION__:interactive_edit:" + JSON.stringify(payload));
+                            setToolUi(null);
+                            // Optional: poll for updated toolUi to show refreshed panel
+                          }}
+                        />
                       ) : null}
                     </div>
                   ) : null}

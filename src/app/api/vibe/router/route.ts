@@ -4,12 +4,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { RuntimeContext } from "@mastra/core/runtime-context";
 import { createClient } from "@/lib/supabase/server";
 import { loadSkill } from "@/mastra/skills/loadSkill";
+import { z } from "zod";
 
 import { designAdvisorAgent } from "@/mastra/agents/designAdvisorAgent";
 import { platformMappingMaster } from "@/mastra/agents/platformMappingMaster";
 import { dashboardBuilderAgent } from "@/mastra/agents/dashboardBuilderAgent";
 
 import { todoAdd, todoList } from "@/mastra/tools/todo";
+import { getStyleBundles } from "@/mastra/tools/design/getStyleBundles";
+import { applyInteractiveEdits } from "@/mastra/tools/interactiveEdit";
 
 type JourneyMode =
   | "select_entity"
@@ -84,9 +87,31 @@ export async function POST(req: NextRequest) {
     // ACTION: style bundle selected
     // ------------------------------------------------------------------
     if (userMessage === "__ACTION__:select_style_bundle") {
-      // Move to build_preview
+      const selectedId = journey?.selectedStyleBundleId;
+      if (!selectedId) {
+        return NextResponse.json({ error: "MISSING_STYLE_BUNDLE_ID" }, { status: 400 });
+      }
+
+      // Get bundle list again, pick chosen bundle
+      const bundlesResult = await getStyleBundles.execute({
+        context: {
+          platformType,
+          outcome: journey?.selectedOutcome ?? "dashboard",
+          audience: "client",
+          dashboardKind: "workflow-activity",
+          notes: "User selected a bundle; return the same set for token extraction.",
+        },
+        runtimeContext,
+      } as any);
+
+      const bundle = bundlesResult.bundles.find((b) => b.id === selectedId);
+      if (!bundle) {
+        return NextResponse.json({ error: "STYLE_BUNDLE_NOT_FOUND" }, { status: 400 });
+      }
+
+      // Store selected bundle in journey and proceed
       return NextResponse.json({
-        text: "Perfect. I'll apply that style and generate your preview now.",
+        text: `Locked in: **${bundle.name}** (${bundle.palette.name}). Generating your preview now...`,
         journey: { ...journey, mode: "build_preview" },
         toolUi: null,
       });
@@ -193,94 +218,33 @@ export async function POST(req: NextRequest) {
     // Phase: style (RAG -> 4 bundles)
     // ------------------------------------------------------------------
     if (mode === "style") {
-      // Delegate to designAdvisorAgent to produce 4 bundles.
-      // For MVP, we return a static shape; you will later replace with real RAG-to-bundles transformation.
-      const result = await designAdvisorAgent.generate(
-        "Return 4 style+palette bundles appropriate for a workflow activity dashboard. Include a previewImageUrl, 5 swatches, and tags. Keep it client-facing premium.",
-        { runtimeContext }
-      );
-
-      // MVP placeholder bundles (replace with RAG-driven parsing)
-      const bundles = [
-        {
-          id: "agency-premium-glass",
-          name: "Agency Premium (Glass)",
-          description: "High-end, client-ready, soft depth and clean charts",
-          previewImageUrl: "/style-previews/glassmorphism.png",
-          palette: {
-            name: "Premium Neutral",
-            swatches: [
-              { name: "Primary", hex: "#2563EB" },
-              { name: "Accent", hex: "#22C55E" },
-              { name: "Background", hex: "#F8FAFC" },
-              { name: "Surface", hex: "#FFFFFF" },
-              { name: "Text", hex: "#0F172A" },
-            ],
-          },
-          tags: ["Client-facing", "Premium", "Clean"],
+      const bundlesResult = await getStyleBundles.execute({
+        context: {
+          platformType,
+          outcome: journey?.selectedOutcome ?? "dashboard",
+          audience: "client",
+          dashboardKind: "workflow-activity",
+          notes: "Return premium style+palette bundles appropriate for agency white-label client delivery.",
         },
-        {
-          id: "modern-dark-saas",
-          name: "Modern SaaS (Dark)",
-          description: "Sleek, high contrast, great for ops + reliability",
-          previewImageUrl: "/style-previews/dark-mode.png",
-          palette: {
-            name: "Dark SaaS",
-            swatches: [
-              { name: "Primary", hex: "#60A5FA" },
-              { name: "Accent", hex: "#F472B6" },
-              { name: "Background", hex: "#0B1220" },
-              { name: "Surface", hex: "#111827" },
-              { name: "Text", hex: "#E5E7EB" },
-            ],
-          },
-          tags: ["Ops", "Modern", "High contrast"],
-        },
-        {
-          id: "minimal-report",
-          name: "Minimal Report",
-          description: "Executive report feel, low noise, strong hierarchy",
-          previewImageUrl: "/style-previews/minimalism.png",
-          palette: {
-            name: "Slate Minimal",
-            swatches: [
-              { name: "Primary", hex: "#334155" },
-              { name: "Accent", hex: "#0EA5E9" },
-              { name: "Background", hex: "#F9FAFB" },
-              { name: "Surface", hex: "#FFFFFF" },
-              { name: "Text", hex: "#111827" },
-            ],
-          },
-          tags: ["Client-facing", "Report", "Minimal"],
-        },
-        {
-          id: "bold-startup",
-          name: "Bold Startup",
-          description: "Punchy, high energy, looks like a real SaaS product",
-          previewImageUrl: "/style-previews/brutalism.png",
-          palette: {
-            name: "Startup Bold",
-            swatches: [
-              { name: "Primary", hex: "#F97316" },
-              { name: "Accent", hex: "#A78BFA" },
-              { name: "Background", hex: "#0B0F19" },
-              { name: "Surface", hex: "#111827" },
-              { name: "Text", hex: "#F9FAFB" },
-            ],
-          },
-          tags: ["SaaS", "Bold", "High energy"],
-        },
-      ];
+        runtimeContext,
+      } as any);
 
       return NextResponse.json({
-        text: "Choose a style bundle (required). This sets the look and palette so your dashboard feels sellable immediately.",
+        text: "Choose a style bundle (required). This sets the look + palette so the preview feels sellable immediately.",
         journey: { ...journey, mode: "style" },
         toolUi: {
           type: "style_bundles",
           title: "Choose your dashboard style",
-          bundles,
+          bundles: bundlesResult.bundles.map((b) => ({
+            id: b.id,
+            name: b.name,
+            description: b.description,
+            previewImageUrl: b.previewImageUrl,
+            palette: b.palette,
+            tags: b.tags,
+          })),
         },
-        debug: { designAdvisorText: result.text },
+        debug: { sources: bundlesResult.sources },
       });
     }
 
@@ -293,13 +257,76 @@ export async function POST(req: NextRequest) {
         { runtimeContext }
       );
 
+      const previewUrl = ""; // until PreviewService is wired
+      const interfaceId = journey?.entityId as string | undefined;
+
+      const toolUiPayload = interfaceId
+        ? {
+            type: "interactive_edit_panel" as const,
+            title: "Interactive edits (widgets, style, density, palette)",
+            interfaceId,
+            widgets: [
+              { id: "chart-1", title: "Workflow runs", kind: "chart" as const, enabled: true },
+              { id: "metric-1", title: "Success rate", kind: "metric" as const, enabled: true },
+              { id: "table-1", title: "Recent runs", kind: "table" as const, enabled: true },
+            ],
+            palettes: [
+              {
+                id: "bright",
+                name: "Bright",
+                swatches: [{ name: "Primary", hex: "#F97316" }, { name: "Accent", hex: "#10B981" }, { name: "Background", hex: "#F9FAFB" }, { name: "Surface", hex: "#FFFFFF" }, { name: "Text", hex: "#111827" }],
+              },
+              {
+                id: "ocean",
+                name: "Ocean",
+                swatches: [{ name: "Primary", hex: "#0EA5E9" }, { name: "Accent", hex: "#06B6D4" }, { name: "Background", hex: "#F0F9FF" }, { name: "Surface", hex: "#FFFFFF" }, { name: "Text", hex: "#0C4A6E" }],
+              },
+              { id: "dark", name: "Dark", swatches: [{ name: "Primary", hex: "#60A5FA" }, { name: "Accent", hex: "#F472B6" }, { name: "Background", hex: "#0B1220" }, { name: "Surface", hex: "#111827" }, { name: "Text", hex: "#E5E7EB" }] },
+            ],
+            density: "comfortable" as const,
+          }
+        : null;
+
       return NextResponse.json({
         text: result.text || "Preview generated.",
         journey: { ...journey, mode: "interactive_edit" },
-        toolUi: null,
-        // Set these when you wire actual preview workflow response:
-        previewUrl: null,
+        toolUi: toolUiPayload,
+        previewUrl: previewUrl || null,
         previewVersionId: null,
+      });
+    }
+
+    // ------------------------------------------------------------------
+    // ACTION: interactive edit
+    // ------------------------------------------------------------------
+    if (isAction(userMessage) && userMessage.startsWith("__ACTION__:interactive_edit:")) {
+      const raw = userMessage.replace("__ACTION__:interactive_edit:", "");
+      const parsed = JSON.parse(raw);
+
+      const EditActionSchema = z.object({
+        actions: z.array(z.any()).min(1),
+        interfaceId: z.string().uuid(),
+      });
+
+      const payload = EditActionSchema.parse(parsed);
+
+      const result = await applyInteractiveEdits.execute({
+        context: {
+          tenantId,
+          userId,
+          interfaceId: payload.interfaceId,
+          platformType,
+          actions: payload.actions,
+        },
+        runtimeContext,
+      } as any);
+
+      return NextResponse.json({
+        text: "Done. I updated your preview with those edits.",
+        journey: { ...journey, mode: "interactive_edit" },
+        toolUi: null,
+        previewUrl: result.previewUrl,
+        previewVersionId: result.previewVersionId,
       });
     }
 
