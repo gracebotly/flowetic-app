@@ -93,6 +93,9 @@ type VibeContext = {
   skillMD?: string;
   lastIndexed?: string | null;
   eventCount?: number | null;
+};
+
+type VibeContextExtended = VibeContext & {
   interfaceId?: string;
   previewUrl?: string;
   previewVersionId?: string;
@@ -123,7 +126,7 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
   }>({ userId: null, tenantId: null });
 
   const [vibeContextSnapshot, setVibeContextSnapshot] = useState<any>(null);
-  const [vibeContext, setVibeContext] = useState<VibeContext | null>(null);
+  const [vibeContext, setVibeContext] = useState<VibeContextExtended | null>(null);
   const [vibeInitDone, setVibeInitDone] = useState(false);
 
   const [journeyMode, setJourneyMode] = useState<JourneyMode>("select_entity");
@@ -372,14 +375,13 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
     },
   });
 
-  const send = async () => {
-    if (!input.trim() || isLoading) return;
-    const userText = input.trim();
-    setInput("");
+  const sendMessage = async (userText: string) => {
+    const text = String(userText ?? "").trim();
+    if (!text || isLoading) return;
 
     setMessages((prev) => [
       ...prev,
-      { id: `u-${Date.now()}`, role: "user", content: userText },
+      { id: `u-${Date.now()}`, role: "user", content: text },
     ]);
 
     setIsLoading(true);
@@ -399,7 +401,7 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
             densityPreset,
             paletteOverrideId,
           },
-          userMessage: userText,
+          userMessage: text,
         }),
       });
 
@@ -427,7 +429,6 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
       if (data?.previewUrl) {
         setVibeContext((prev: any) => (prev ? { ...prev, previewUrl: data.previewUrl } : prev));
         setView("preview");
-        // If your preview renderer uses previewVersionId:
         if (data?.previewVersionId) {
           setPreviewVersionId(data.previewVersionId);
           setVibeContext((prev: any) => (prev ? { ...prev, previewVersionId: data.previewVersionId } : prev));
@@ -448,6 +449,13 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const sendFromInput = async () => {
+    const userText = input.trim();
+    if (!userText || isLoading) return;
+    setInput("");
+    await sendMessage(userText);
   };
 
   if (!authContext.userId || !authContext.tenantId) {
@@ -565,7 +573,7 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
                           palettes={toolUi.palettes}
                           density={toolUi.density}
                           onApply={async (payload) => {
-                            await send("__ACTION__:interactive_edit:" + JSON.stringify(payload));
+                            await sendMessage("__ACTION__:interactive_edit:" + JSON.stringify(payload));
                             setToolUi(null);
                             // Optional: poll for updated toolUi to show refreshed panel
                           }}
@@ -643,7 +651,7 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
 
               <button
                 type="button"
-                onClick={send}
+                onClick={sendFromInput}
                 disabled={isLoading || !input.trim()}
                 className="inline-flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
               >
