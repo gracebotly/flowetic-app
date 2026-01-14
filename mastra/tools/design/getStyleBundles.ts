@@ -230,6 +230,7 @@ export const getStyleBundles = createTool({
     if (!searchDesignKB) {
       return {
         bundles: [],
+        sources: [],
         reason: "Design knowledge base not available",
       };
     }
