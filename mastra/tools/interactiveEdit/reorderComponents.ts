@@ -35,7 +35,7 @@ function deepClone<T>(v: T): T {
 export const reorderComponents = createTool({
   id: "interactive.reorderComponents",
   description:
-    "Reorder spec_json.components deterministically according to orderedIds. Missing ids are appended at the end in original order. Unknown ids are ignored.",
+    "Deterministically reorder spec_json.components according to orderedIds. Missing ids appended in original order. Unknown ids ignored.",
   inputSchema: z.object({
     spec_json: z.record(z.any()),
     orderedIds: z.array(z.string()).min(1).max(200),
@@ -61,8 +61,6 @@ export const reorderComponents = createTool({
       seen.add(id);
       reordered.push(c);
     }
-
-    // Append any remaining components in their original order
     for (const c of components) {
       if (seen.has(c.id)) continue;
       reordered.push(c);

@@ -13,7 +13,6 @@
     "@ag-ui/mastra": "^0.2.0",
     "@ai-sdk/openai": "^1.0.0",
     "@assistant-ui/react": "^0.0.1",
-    "@assistant-ui/tool-ui": "^0.0.1",
     "@copilotkit/react-core": "^1.50.1",
     "@copilotkit/react-ui": "^1.50.1",
     "@copilotkit/runtime": "^1.50.1",
