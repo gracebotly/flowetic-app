@@ -10,6 +10,7 @@ type Widget = {
   title: string;
   kind: "metric" | "chart" | "table" | "other";
   enabled: boolean;
+  chartType?: "line" | "area" | "bar";
 };
 
 type PaletteOption = {
@@ -145,7 +146,10 @@ export function InteractiveEditPanel({
                   className="rounded-md border border-gray-200 bg-white px-2 py-1 text-sm"
                   defaultValue={w.kind === "chart" ? "line" : ""}
                   onChange={(e) => {
-                    // handled on apply
+                    const next = localWidgets.map((x) =>
+                      x.id === w.id ? { ...x, chartType: e.target.value } : x
+                    );
+                    setLocalWidgets(next);
                   }}
                   disabled={w.kind !== "chart"}
                   title={w.kind === "chart" ? "Chart type" : "Not a chart"}
@@ -182,10 +186,13 @@ export function InteractiveEditPanel({
             // reorder
             actions.push({ type: "reorder_widgets", orderedIds });
 
-            // toggle + rename
+            // toggle + rename + chart type
             for (const w of localWidgets) {
               actions.push({ type: "toggle_widget", widgetId: w.id, enabled: w.enabled });
               actions.push({ type: "rename_widget", widgetId: w.id, title: w.title });
+              if (w.kind === "chart" && w.chartType) {
+                actions.push({ type: "switch_chart_type", widgetId: w.id, chartType: w.chartType });
+              }
             }
 
             // density

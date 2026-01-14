@@ -13,6 +13,7 @@ import { dashboardBuilderAgent } from "@/mastra/agents/dashboardBuilderAgent";
 import { todoAdd, todoList } from "@/mastra/tools/todo";
 import { getStyleBundles } from "@/mastra/tools/design/getStyleBundles";
 import { applyInteractiveEdits } from "@/mastra/tools/interactiveEdit";
+import { getCurrentSpec, applySpecPatch } from "@/mastra/tools/specEditor";
 
 type JourneyMode =
   | "select_entity"
@@ -252,47 +253,96 @@ export async function POST(req: NextRequest) {
     // Phase: build_preview (delegate to platformMappingMaster for real preview)
     // ------------------------------------------------------------------
     if (mode === "build_preview") {
-      const result = await platformMappingMaster.generate(
-        "Generate a preview dashboard now using the workflow activity dashboard template and the connected platform events.",
-        { runtimeContext }
+      // IMPORTANT: platformMappingMaster must have created/persisted a preview interface/version by now.
+      // If your current preview workflow returns interfaceId/versionId, store them into vibeContext and/or journey.
+      const interfaceId = vibeContext?.interfaceId as string | undefined;
+      if (!interfaceId) {
+        return NextResponse.json(
+          {
+            error:
+              "MISSING_INTERFACE_ID_FOR_PREVIEW. Wire preview workflow to return interfaceId and set vibeContext.interfaceId.",
+          },
+          { status: 400 }
+        );
+      }
+
+      // Load the actual current spec to extract real component IDs for interactive edit.
+      const current = await getCurrentSpec.execute(
+        { context: { tenantId, interfaceId }, runtimeContext } as any
       );
 
-      const previewUrl = ""; // until PreviewService is wired
-      const interfaceId = journey?.entityId as string | undefined;
+      const spec = current.spec_json as any;
+      const components = Array.isArray(spec?.components) ? spec.components : [];
 
-      const toolUiPayload = interfaceId
-        ? {
-            type: "interactive_edit_panel" as const,
-            title: "Interactive edits (widgets, style, density, palette)",
-            interfaceId,
-            widgets: [
-              { id: "chart-1", title: "Workflow runs", kind: "chart" as const, enabled: true },
-              { id: "metric-1", title: "Success rate", kind: "metric" as const, enabled: true },
-              { id: "table-1", title: "Recent runs", kind: "table" as const, enabled: true },
-            ],
-            palettes: [
-              {
-                id: "bright",
-                name: "Bright",
-                swatches: [{ name: "Primary", hex: "#F97316" }, { name: "Accent", hex: "#10B981" }, { name: "Background", hex: "#F9FAFB" }, { name: "Surface", hex: "#FFFFFF" }, { name: "Text", hex: "#111827" }],
-              },
-              {
-                id: "ocean",
-                name: "Ocean",
-                swatches: [{ name: "Primary", hex: "#0EA5E9" }, { name: "Accent", hex: "#06B6D4" }, { name: "Background", hex: "#F0F9FF" }, { name: "Surface", hex: "#FFFFFF" }, { name: "Text", hex: "#0C4A6E" }],
-              },
-              { id: "dark", name: "Dark", swatches: [{ name: "Primary", hex: "#60A5FA" }, { name: "Accent", hex: "#F472B6" }, { name: "Background", hex: "#0B1220" }, { name: "Surface", hex: "#111827" }, { name: "Text", hex: "#E5E7EB" }] },
-            ],
-            density: "comfortable" as const,
-          }
-        : null;
+      const widgets = components.map((c: any) => {
+        const type = String(c?.type ?? "other");
+        const kind =
+          type.toLowerCase().includes("chart")
+            ? "chart"
+            : type.toLowerCase().includes("table")
+            ? "table"
+            : type.toLowerCase().includes("metric")
+            ? "metric"
+            : "other";
 
+        const title = String(c?.props?.title ?? c?.id ?? "Widget");
+        const enabled = !(c?.props?.hidden === true);
+
+        return { id: String(c.id), title, kind, enabled };
+      });
+
+      // Palette options shown in interactive editing (simple MVP set).
+      const palettes = [
+        {
+          id: "premium-neutral",
+          name: "Premium Neutral",
+          swatches: [
+            { name: "Primary", hex: "#2563EB" },
+            { name: "Accent", hex: "#22C55E" },
+            { name: "Background", hex: "#F8FAFC" },
+            { name: "Surface", hex: "#FFFFFF" },
+            { name: "Text", hex: "#0F172A" },
+          ],
+        },
+        {
+          id: "dark-saas",
+          name: "Dark SaaS",
+          swatches: [
+            { name: "Primary", hex: "#60A5FA" },
+            { name: "Accent", hex: "#F472B6" },
+            { name: "Background", hex: "#0B1220" },
+            { name: "Surface", hex: "#111827" },
+            { name: "Text", hex: "#E5E7EB" },
+          ],
+        },
+        {
+          id: "slate-minimal",
+          name: "Slate Minimal",
+          swatches: [
+            { name: "Primary", hex: "#334155" },
+            { name: "Accent", hex: "#0EA5E9" },
+            { name: "Background", hex: "#F9FAFB" },
+            { name: "Surface", hex: "#FFFFFF" },
+            { name: "Text", hex: "#111827" },
+          ],
+        },
+      ];
+
+      // At this point you should have a previewUrl from your preview workflow; return it if available.
+      // If not yet wired, keep previewUrl null and the UI will still show the editor panel.
       return NextResponse.json({
-        text: result.text || "Preview generated.",
+        text: "Preview is ready. Use the controls below to refine it before deploying.",
         journey: { ...journey, mode: "interactive_edit" },
-        toolUi: toolUiPayload,
-        previewUrl: previewUrl || null,
-        previewVersionId: null,
+        toolUi: {
+          type: "interactive_edit",
+          title: "Refine your dashboard",
+          interfaceId,
+          widgets,
+          palettes,
+          density: journey?.densityPreset ?? "comfortable",
+        },
+        previewUrl: vibeContext?.previewUrl ?? null,
+        previewVersionId: vibeContext?.previewVersionId ?? null,
       });
     }
 
@@ -303,12 +353,71 @@ export async function POST(req: NextRequest) {
       const raw = userMessage.replace("__ACTION__:interactive_edit:", "");
       const parsed = JSON.parse(raw);
 
-      const EditActionSchema = z.object({
-        actions: z.array(z.any()).min(1),
+      const PayloadSchema = z.object({
         interfaceId: z.string().uuid(),
+        actions: z.array(z.any()).min(1),
       });
 
-      const payload = EditActionSchema.parse(parsed);
+      const payload = PayloadSchema.parse(parsed);
+
+      // Translate paletteId selection into token ops BEFORE calling interactive tool.
+      // Keep deterministic: a paletteId maps to a fixed token set.
+      const paletteMap: Record<string, Record<string, string>> = {
+        "premium-neutral": {
+          primary: "#2563EB",
+          accent: "#22C55E",
+          background: "#F8FAFC",
+          surface: "#FFFFFF",
+          text: "#0F172A",
+        },
+        "dark-saas": {
+          primary: "#60A5FA",
+          accent: "#F472B6",
+          background: "#0B1220",
+          surface: "#111827",
+          text: "#E5E7EB",
+        },
+        "slate-minimal": {
+          primary: "#334155",
+          accent: "#0EA5E9",
+          background: "#F9FAFB",
+          surface: "#FFFFFF",
+          text: "#111827",
+        },
+      };
+
+      const actions = payload.actions as any[];
+
+      const paletteAction = actions.find((a) => a?.type === "set_palette") as
+        | { type: "set_palette"; paletteId: string }
+        | undefined;
+
+      if (paletteAction) {
+        const p = paletteMap[paletteAction.paletteId];
+        if (p) {
+          // Apply palette tokens immediately using applySpecPatch so the interactive edit tool stays simple.
+          await applySpecPatch.execute(
+            {
+              context: {
+                spec_json: (await getCurrentSpec.execute(
+                  { context: { tenantId, interfaceId: payload.interfaceId }, runtimeContext } as any
+                )).spec_json,
+                design_tokens: (await getCurrentSpec.execute(
+                  { context: { tenantId, interfaceId: payload.interfaceId }, runtimeContext } as any
+                )).design_tokens,
+                operations: [
+                  { op: "setDesignToken", tokenPath: "theme.color.primary", tokenValue: p.primary },
+                  { op: "setDesignToken", tokenPath: "theme.color.accent", tokenValue: p.accent },
+                  { op: "setDesignToken", tokenPath: "theme.color.background", tokenValue: p.background },
+                  { op: "setDesignToken", tokenPath: "theme.color.surface", tokenValue: p.surface },
+                  { op: "setDesignToken", tokenPath: "theme.color.text", tokenValue: p.text },
+                ],
+              },
+              runtimeContext,
+            } as any
+          );
+        }
+      }
 
       const result = await applyInteractiveEdits.execute({
         context: {
@@ -316,13 +425,13 @@ export async function POST(req: NextRequest) {
           userId,
           interfaceId: payload.interfaceId,
           platformType,
-          actions: payload.actions,
+          actions: actions,
         },
         runtimeContext,
       } as any);
 
       return NextResponse.json({
-        text: "Done. I updated your preview with those edits.",
+        text: "Done — your preview has been updated.",
         journey: { ...journey, mode: "interactive_edit" },
         toolUi: null,
         previewUrl: result.previewUrl,

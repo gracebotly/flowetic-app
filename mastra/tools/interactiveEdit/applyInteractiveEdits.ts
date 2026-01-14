@@ -4,7 +4,8 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { getCurrentSpec, applySpecPatch, savePreviewVersion } from "@/mastra/tools/specEditor";
 import { validateSpec } from "@/mastra/tools/validateSpec";
-import { EditAction, DensityPreset } from "./types";
+import { EditAction, DensityPreset, ChartType } from "./types";
+import { reorderComponents } from "./reorderComponents";
 
 function densityToSpacingBase(d: z.infer<typeof DensityPreset>) {
   if (d === "compact") return 8;
@@ -12,86 +13,136 @@ function densityToSpacingBase(d: z.infer<typeof DensityPreset>) {
   return 10;
 }
 
+function chartTypeToPropsPatch(chartType: z.infer<typeof ChartType>) {
+  // Map to your registry renderer chart variants:
+  // - TimeseriesChart uses AreaChart in renderer.tsx
+  // - BarChart uses TremorBar
+  // For MVP, store a generic prop `chartType` on chart components.
+  // The renderer/spec should interpret it later.
+  return { chartType };
+}
+
 export const applyInteractiveEdits = createTool({
   id: "interactive.applyEdits",
   description:
-    "Apply interactive edit actions (toggle/reorder/rename/switch chart type + palette + density) to the current preview spec, validate, and persist a new preview version.",
+    "Apply interactive edit actions (toggle/rename/switch chart type + density + palette) to the current preview spec, validate, and persist a new preview version. Reorder is handled by a dedicated tool.",
   inputSchema: z.object({
     tenantId: z.string().uuid(),
     userId: z.string().uuid(),
     interfaceId: z.string().uuid(),
     platformType: z.string().min(1),
-    actions: z.array(z.any()).min(1).max(30),
+    actions: z.array(EditAction).min(1).max(30),
   }),
   outputSchema: z.object({
     previewUrl: z.string().url(),
     previewVersionId: z.string().uuid().optional(),
   }),
   execute: async ({ context, runtimeContext }) => {
+    // Load current spec
     const current = await getCurrentSpec.execute(
       { context: { tenantId: context.tenantId, interfaceId: context.interfaceId }, runtimeContext } as any
     );
 
-    // Patch model: we assume spec_json has a top-level `components` array with `id` per component.
-    // If your spec schema differs, adjust applySpecPatch operations accordingly.
-    const ops: Array<any> = [];
+    const spec_json = current.spec_json ?? {};
+    const design_tokens = current.design_tokens ?? {};
+
+    // Handle reorder separately (applySpecPatch does NOT support reorder)
+    const reorderAction = context.actions.find((a) => a.type === "reorder_widgets") as
+      | Extract<z.infer<typeof EditAction>, { type: "reorder_widgets" }>
+      | undefined;
+
+    let nextSpec = spec_json;
+    let nextTokens = design_tokens;
+
+    if (reorderAction) {
+      const reordered = await reorderComponents.execute(
+        {
+          context: {
+            spec_json: nextSpec,
+            orderedIds: reorderAction.orderedIds,
+          },
+          runtimeContext,
+        } as any
+      );
+
+      nextSpec = reordered.spec_json;
+    }
+
+    // Build patch ops for applySpecPatch
+    const ops: Array<{
+      op: "setDesignToken" | "updateComponentProps";
+      componentId?: string;
+      propsPatch?: Record<string, any>;
+      tokenPath?: string;
+      tokenValue?: any;
+    }> = [];
 
     for (const a of context.actions) {
       if (a.type === "toggle_widget") {
         ops.push({
-          op: "setComponentProp",
+          op: "updateComponentProps",
           componentId: a.widgetId,
-          key: "hidden",
-          value: !a.enabled,
+          propsPatch: { hidden: !a.enabled },
         });
+        continue;
       }
 
       if (a.type === "rename_widget") {
         ops.push({
-          op: "setComponentProp",
+          op: "updateComponentProps",
           componentId: a.widgetId,
-          key: "title",
-          value: a.title,
+          propsPatch: { title: a.title },
         });
-      }
-
-      if (a.type === "reorder_widgets") {
-        ops.push({
-          op: "reorderComponents",
-          orderedIds: a.orderedIds,
-        });
+        continue;
       }
 
       if (a.type === "switch_chart_type") {
         ops.push({
-          op: "setComponentProp",
+          op: "updateComponentProps",
           componentId: a.widgetId,
-          key: "variant",
-          value: a.chartType,
+          propsPatch: chartTypeToPropsPatch(a.chartType),
         });
+        continue;
       }
 
       if (a.type === "set_density") {
         ops.push({
           op: "setDesignToken",
-          path: "theme.spacing.base",
-          value: densityToSpacingBase(a.density),
+          tokenPath: "theme.spacing.base",
+          tokenValue: densityToSpacingBase(a.density),
         });
+        continue;
       }
 
+      // Palette is translated to setDesignToken ops by the router (keeps this tool deterministic).
       if (a.type === "set_palette") {
-        // Palette ids map to token presets on the frontend for MVP.
-        // Router will translate paletteId -> actual token values and call setDesignToken.
-        // This tool expects the router to convert palette selection to token ops.
+        continue;
+      }
+
+      if (a.type === "reorder_widgets") {
+        continue;
       }
     }
 
-    const patched = await applySpecPatch.execute(
-      { context: { tenantId: context.tenantId, interfaceId: context.interfaceId, operations: ops }, runtimeContext } as any
-    );
+    // Apply patch ops if present
+    if (ops.length > 0) {
+      const patched = await applySpecPatch.execute(
+        {
+          context: {
+            spec_json: nextSpec,
+            design_tokens: nextTokens,
+            operations: ops as any,
+          },
+          runtimeContext,
+        } as any
+      );
+
+      nextSpec = patched.spec_json;
+      nextTokens = patched.design_tokens;
+    }
 
     const validation = await validateSpec.execute(
-      { context: { spec_json: patched.spec_json }, runtimeContext } as any
+      { context: { spec_json: nextSpec }, runtimeContext } as any
     );
 
     if (!validation.valid || validation.score < 0.8) {
@@ -104,8 +155,8 @@ export const applyInteractiveEdits = createTool({
           tenantId: context.tenantId,
           userId: context.userId,
           interfaceId: context.interfaceId,
-          spec_json: patched.spec_json,
-          design_tokens: patched.design_tokens,
+          spec_json: nextSpec,
+          design_tokens: nextTokens,
           platformType: context.platformType,
         },
         runtimeContext,
