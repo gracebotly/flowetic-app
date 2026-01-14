@@ -236,7 +236,7 @@ export const getStyleBundles = createTool({
     }
 
     try {
-      const rag = await searchDesignKB.execute({
+      const rag = await searchDesignKB!.execute({
         context: {
           query: queryText,
           topK: 8,
