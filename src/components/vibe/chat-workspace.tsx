@@ -115,26 +115,6 @@ function isToolUiPayload(value: unknown): value is ToolUiPayload {
   );
 }
 
-function buildCtxEnvelope(message: string) {
-  return (
-    "__FLOWETIC_CTX__:" +
-    JSON.stringify({
-      userId: authContext.userId,
-      tenantId: authContext.tenantId,
-      vibeContext,
-      journey: {
-        mode: journeyMode,
-        selectedOutcome,
-        selectedStoryboard,
-        selectedStyleBundleId,
-        densityPreset,
-        paletteOverrideId,
-      },
-    }) +
-    "\n" +
-    message
-  );
-}
 
 export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProps) {
   const router = useRouter();
@@ -168,6 +148,27 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
   const [selectedStyleBundleId, setSelectedStyleBundleId] = useState<string | null>(null);
   const [densityPreset, setDensityPreset] = useState<"compact" | "comfortable" | "spacious">("comfortable");
   const [paletteOverrideId, setPaletteOverrideId] = useState<string | null>(null);
+
+  function buildCtxEnvelope(message: string) {
+    return (
+      "__FLOWETIC_CTX__:" +
+      JSON.stringify({
+        userId: authContext.userId,
+        tenantId: authContext.tenantId,
+        vibeContext,
+        journey: {
+          mode: journeyMode,
+          selectedOutcome,
+          selectedStoryboard,
+          selectedStyleBundleId,
+          densityPreset,
+          paletteOverrideId,
+        },
+      }) +
+      "\n" +
+      message
+    );
+  }
 
   const [toolUi, setToolUi] = useState<ToolUiPayload | null>(null);
   const [currentSpec, setCurrentSpec] = useState<any | null>(null);
