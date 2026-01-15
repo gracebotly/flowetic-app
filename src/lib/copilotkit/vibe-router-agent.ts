@@ -1,6 +1,6 @@
 
 import { AbstractAgent } from "@ag-ui/client";
-import type { AgentInput } from "@copilotkit/runtime";
+
 import { RuntimeContext } from "@mastra/core/runtime-context";
 import { runVibeRouter } from "@/app/api/vibe/router/runner";
 import { Observable } from "rxjs";
