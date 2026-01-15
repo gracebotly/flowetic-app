@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from '@/lib/supabase/client';
-import { useCopilotAction, useAgent } from "@copilotkit/react-core";
+import { useCopilotAction, useCoAgent } from "@copilotkit/react-core";
 import { CopilotKit } from "@copilotkit/react-core";
 import { CopilotChat } from "@copilotkit/react-ui";
 import { StyleBundleCards } from "@/components/vibe/tool-renderers/style-bundle-cards";
@@ -153,7 +153,7 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
   const [selectedComponentId, setSelectedComponentId] = useState<string | null>(null);
   const [propertiesOpen, setPropertiesOpen] = useState(false);
 
-  const agent = useAgent({
+  const agent = useCoAgent({
     name: "vibe",
     context: {
       userId: authContext.userId,
