@@ -812,7 +812,7 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
                 <div className="mb-4 rounded-lg bg-gray-50 border-l-4 border-gray-200 pl-4 py-2">
                   <div className="text-xs font-medium text-gray-600 mb-1">assistant</div>
                   <div className="text-sm text-gray-400 animate-pulse">
-                    {loadingTypingIndicator}
+                    Thinking…
                   </div>
                 </div>
               )}
