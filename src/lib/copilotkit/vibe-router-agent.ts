@@ -60,33 +60,39 @@ class VibeRouterAgent extends AbstractAgent {
 
     this.events$.next({ type: "RUN_STARTED" });
 
-    // Validate journey phase gating (COPKIT-004)
-    const currentMode = ctx.journey?.mode || "select_entity";
-    const invalidTransitions: Record<string, string[]> = {
-      select_entity: ["configure_style", "generate_dashboard", "publish_review"],
-      select_outcome: ["generate_dashboard", "publish_review"],
-      select_storyboard: ["publish_review"],
-      configure_style: ["select_entity"],
-      generate_dashboard: ["select_entity", "select_outcome", "select_storyboard", "configure_style"],
-    };
+    // Phase gating: keep adapter minimal and aligned with real Flowetic phases.
+    // Source of truth still lives in /api/vibe/router (Master Router Agent).
+    const currentMode = (ctx.journey?.mode ?? "select_entity") as
+      | "select_entity"
+      | "recommend"
+      | "align"
+      | "style"
+      | "build_preview"
+      | "interactive_edit"
+      | "deploy";
 
     if (userMessage.startsWith("__ACTION__:")) {
-      const action = userMessage.split(":", 2)[1]?.split(":")[0];
-      const requiredMode: Record<string, string> = {
-        select_style_bundle: "configure_style",
-        interactive_edit: "configure_style",
-        generate_dashboard: "generate_dashboard",
-        publish: "publish_review",
+      // Format examples:
+      // "__ACTION__:select_style_bundle:<bundleId>"
+      // "__ACTION__:interactive_edit:{...json...}"
+      const parts = userMessage.split(":");
+      const action = parts[1] || "";
+
+      const requiredModeByAction: Record<string, typeof currentMode> = {
+        select_style_bundle: "style",
+        interactive_edit: "interactive_edit",
+        publish: "deploy",
       };
 
-      const required = requiredMode[action];
+      const required = requiredModeByAction[action];
       if (required && currentMode !== required) {
-        const msg = `Cannot perform action "${action}" from current phase "${currentMode}". Required phase: "${required}".`;
-        this.events$.next({ type: "RUN_STARTED" });
+        const msg = `That action isn't available yet. Current phase: "${currentMode}". Required phase: "${required}".`;
+
         this.events$.next({ type: "TEXT_MESSAGE_START", payload: {} });
         this.events$.next({ type: "TEXT_MESSAGE_CONTENT", delta: msg });
         this.events$.next({ type: "TEXT_MESSAGE_END" });
         this.events$.next({ type: "RUN_FINISHED" });
+
         return { result: msg, newMessages: [] };
       }
     }

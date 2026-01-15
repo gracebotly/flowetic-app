@@ -61,3 +61,67 @@
 .thin-scrollbar {
   scrollbar-width: thin;
 }
+
+/* --- CopilotKit Premium-ish Styling Overrides (Built-in UI) --- */
+:root {
+  /* You can tweak these quickly without refactoring components */
+  --ck-bg: #0b1220;
+  --ck-panel: rgba(255, 255, 255, 0.06);
+  --ck-border: rgba(255, 255, 255, 0.10);
+  --ck-text: rgba(255, 255, 255, 0.92);
+  --ck-muted: rgba(255, 255, 255, 0.65);
+  --ck-user: #2563eb; /* blue-600 */
+  --ck-assistant: rgba(255, 255, 255, 0.08);
+}
+
+.copilotKitChat,
+.copilotKitWindow {
+  height: 100%;
+}
+
+.copilotKitMessages {
+  padding: 14px;
+  gap: 12px;
+}
+
+.copilotKitInput {
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  padding: 12px;
+  background: white;
+}
+
+.copilotKitInput textarea,
+.copilotKitInput input {
+  border-radius: 12px !important;
+}
+
+.copilotKitUserMessage {
+  background: var(--ck-user) !important;
+  color: white !important;
+  border-radius: 14px !important;
+  padding: 10px 12px !important;
+  box-shadow: 0 6px 18px rgba(37, 99, 235, 0.25);
+}
+
+.copilotKitAssistantMessage {
+  background: var(--ck-assistant) !important;
+  color: #0f172a !important;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 14px !important;
+  padding: 10px 12px !important;
+}
+
+.copilotKitInput button {
+  border-radius: 12px !important;
+}
+
+/* Optional: subtle scrollbars */
+.copilotKitMessages::-webkit-scrollbar {
+  width: 10px;
+}
+.copilotKitMessages::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.35);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
