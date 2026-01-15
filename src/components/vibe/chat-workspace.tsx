@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from '@/lib/supabase/client';
-import { useCopilotAction, useCoAgent } from "@copilotkit/react-core";
+import { useCopilotAction } from "@copilotkit/react-core";
 import { CopilotKit } from "@copilotkit/react-core";
 import { CopilotChat } from "@copilotkit/react-ui";
 import { StyleBundleCards } from "@/components/vibe/tool-renderers/style-bundle-cards";
@@ -153,22 +153,7 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
   const [selectedComponentId, setSelectedComponentId] = useState<string | null>(null);
   const [propertiesOpen, setPropertiesOpen] = useState(false);
 
-  const agent = useCoAgent({
-    name: "vibe",
-    context: {
-      userId: authContext.userId,
-      tenantId: authContext.tenantId,
-      vibeContext: vibeContext,
-      journey: {
-        mode: journeyMode,
-        selectedOutcome,
-        selectedStoryboard,
-        selectedStyleBundleId,
-        densityPreset,
-        paletteOverrideId,
-      },
-    },
-  });
+  
 
   async function loadSkillMD(skillKey: string | undefined) {
     // SkillMD not implemented yet; return empty string but keep contract.
@@ -557,6 +542,19 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
         <CopilotKit 
           runtimeUrl="/api/copilotkit" 
           agent="vibe"
+          context={{
+            userId: authContext.userId,
+            tenantId: authContext.tenantId,
+            vibeContext: vibeContext,
+            journey: {
+              mode: journeyMode,
+              selectedOutcome,
+              selectedStoryboard,
+              selectedStyleBundleId,
+              densityPreset,
+              paletteOverrideId,
+            },
+          }}
         >
           <div className="flex w-[35%] min-w-[360px] flex-col border-r border-gray-300 bg-[#f9fafb] overflow-hidden">
             {backendWarning ? (
