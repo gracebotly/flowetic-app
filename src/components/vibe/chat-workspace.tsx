@@ -802,7 +802,7 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
                         className="ml-2 p-1 rounded hover:bg-gray-200"
                         title="Copy message"
                       >
-                        <CopyButton content={msg.content} />
+                        <CopyButton text={msg.content} />
                       </button>
                     )}
                   </div>
