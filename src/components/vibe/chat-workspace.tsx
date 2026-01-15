@@ -19,8 +19,63 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from '@/lib/supabase/client';
 import { useCopilotAction } from "@copilotkit/react-core";
+import { StyleBundleCards } from "@/components/vibe/tool-renderers/style-bundle-cards";
+import { TodoPanel } from "@/components/vibe/tool-renderers/todo-panel";
+import { InteractiveEditPanel } from "@/components/vibe/tool-renderers/interactive-edit-panel";
+import { PreviewInspector } from "@/components/vibe/preview/preview-inspector";
+import { WidgetPropertiesDrawer } from "@/components/vibe/preview/widget-properties-drawer";
 
 type ViewMode = "terminal" | "preview" | "publish";
+
+type JourneyMode =
+  | "select_entity"
+  | "recommend"
+  | "align"
+  | "style"
+  | "build_preview"
+  | "interactive_edit"
+  | "deploy";
+
+type ToolUiPayload =
+  | {
+      type: "style_bundles";
+      title: string;
+      bundles: Array<{
+        id: string;
+        name: string;
+        description: string;
+        previewImageUrl: string;
+        palette: { name: string; swatches: Array<{ name: string; hex: string }> };
+        tags: string[];
+      }>;
+    }
+  | {
+      type: "todos";
+      title: string;
+      items: Array<{
+        id: string;
+        title: string;
+        status: "pending" | "in_progress" | "completed";
+        priority: "low" | "medium" | "high";
+      }>;
+    }
+  | {
+      type: "interactive_edit_panel";
+      title: string;
+      interfaceId: string;
+      widgets: Array<{
+        id: string;
+        title: string;
+        kind: "metric" | "chart" | "table" | "other";
+        enabled: boolean;
+      }>;
+      palettes: Array<{
+        id: string;
+        name: string;
+        swatches: Array<{ name: string; hex: string }>;
+      }>;
+      density: "compact" | "comfortable" | "spacious";
+    };
 
 type Role = "user" | "assistant" | "system";
 type Msg = { id: string; role: Role; content: string };
@@ -38,6 +93,12 @@ type VibeContext = {
   skillMD?: string;
   lastIndexed?: string | null;
   eventCount?: number | null;
+};
+
+type VibeContextExtended = VibeContext & {
+  interfaceId?: string;
+  previewUrl?: string;
+  previewVersionId?: string;
 };
 
 interface ChatWorkspaceProps {
@@ -65,13 +126,43 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
   }>({ userId: null, tenantId: null });
 
   const [vibeContextSnapshot, setVibeContextSnapshot] = useState<any>(null);
-  const [vibeContext, setVibeContext] = useState<VibeContext | null>(null);
+  const [vibeContext, setVibeContext] = useState<VibeContextExtended | null>(null);
   const [vibeInitDone, setVibeInitDone] = useState(false);
+
+  const [journeyMode, setJourneyMode] = useState<JourneyMode>("select_entity");
+  const [selectedOutcome, setSelectedOutcome] = useState<"dashboard" | "product" | null>(null);
+  const [selectedStoryboard, setSelectedStoryboard] = useState<string | null>(null);
+  const [selectedStyleBundleId, setSelectedStyleBundleId] = useState<string | null>(null);
+  const [densityPreset, setDensityPreset] = useState<"compact" | "comfortable" | "spacious">("comfortable");
+  const [paletteOverrideId, setPaletteOverrideId] = useState<string | null>(null);
+
+  const [toolUi, setToolUi] = useState<ToolUiPayload | null>(null);
+  const [currentSpec, setCurrentSpec] = useState<any | null>(null);
+  const [selectedComponentId, setSelectedComponentId] = useState<string | null>(null);
+  const [propertiesOpen, setPropertiesOpen] = useState(false);
 
   async function loadSkillMD(skillKey: string | undefined) {
     // SkillMD not implemented yet; return empty string but keep contract.
     // Later: fetch(`/skills/${skillKey}/Skill.md`) or similar.
     return "";
+  }
+
+  async function refreshCurrentSpec() {
+    if (!authContext.userId || !authContext.tenantId) return;
+    if (!vibeContext?.interfaceId) return;
+
+    const res = await fetch("/api/vibe/spec", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId: authContext.userId,
+        tenantId: authContext.tenantId,
+        interfaceId: vibeContext.interfaceId,
+      }),
+    });
+
+    const data = await res.json();
+    if (res.ok) setCurrentSpec(data?.spec_json ?? null);
   }
 
   useEffect(() => {
@@ -273,6 +364,7 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
           setPreviewVersionId(result.versionId);
           addLog("success", "Preview generated successfully!", `View at: ${result.previewUrl}`);
           setView("preview");
+          await refreshCurrentSpec();
         } else {
           addLog("error", "Preview generation failed", result.message);
         }
@@ -283,66 +375,71 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
     },
   });
 
-  const send = async () => {
-    const text = input.trim();
+  const sendMessage = async (userText: string) => {
+    const text = String(userText ?? "").trim();
     if (!text || isLoading) return;
 
+    setMessages((prev) => [
+      ...prev,
+      { id: `u-${Date.now()}`, role: "user", content: text },
+    ]);
+
     setIsLoading(true);
-    setInput("");
-
-    const userMsg: Msg = { id: `u-${Date.now()}`, role: "user", content: text };
-    setMessages((prev) => [...prev, userMsg]);
-
     try {
-      const tenantId = authContext.tenantId;
-      const userId = authContext.userId;
-
-      if (!tenantId || !userId) {
-        addLog("error", "Not authenticated", "Please log in and try again.");
-        setIsLoading(false);
-        return;
-      }
-
-      const sourceId = vibeContext?.sourceId || "00000000-0000-0000-0000-000000000002";
-      const platformType = (vibeContext?.platformType || "vapi") as any;
-
-      addLog("running", "Sending message to agent...", text);
-
-      const resp = await fetch("/api/agent/master", {
+      const res = await fetch("/api/vibe/router", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "message",
-          tenantId,
-          userId,
-          sourceId,
-          platformType,
-          message: text,
-          context: vibeContext,
+          userId: authContext.userId,
+          tenantId: authContext.tenantId,
+          vibeContext,
+          journey: {
+            mode: journeyMode,
+            selectedOutcome,
+            selectedStoryboard,
+            selectedStyleBundleId,
+            densityPreset,
+            paletteOverrideId,
+          },
+          userMessage: text,
         }),
       });
 
-      const data = await resp.json();
+      const data = await res.json();
 
-      if (!resp.ok || data.type === "error") {
-        addLog("error", "Agent error", data.message || "Unknown agent error");
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `a-${Date.now()}`,
-            role: "assistant",
-            content: data.message || "Something went wrong.",
-          },
-        ]);
-        return;
+      if (!res.ok) throw new Error(data?.error || "ROUTER_REQUEST_FAILED");
+
+      if (data?.journey?.mode) setJourneyMode(data.journey.mode);
+      if (typeof data?.journey?.selectedOutcome !== "undefined")
+        setSelectedOutcome(data.journey.selectedOutcome);
+      if (typeof data?.journey?.selectedStoryboard !== "undefined")
+        setSelectedStoryboard(data.journey.selectedStoryboard);
+      if (typeof data?.journey?.selectedStyleBundleId !== "undefined")
+        setSelectedStyleBundleId(data.journey.selectedStyleBundleId);
+      if (typeof data?.journey?.densityPreset !== "undefined")
+        setDensityPreset(data.journey.densityPreset);
+      if (typeof data?.journey?.paletteOverrideId !== "undefined")
+        setPaletteOverrideId(data.journey.paletteOverrideId);
+
+      setToolUi(data?.toolUi ?? null);
+
+      if (data?.interfaceId) {
+        setVibeContext((prev: any) => (prev ? { ...prev, interfaceId: data.interfaceId } : prev));
+      }
+      if (data?.previewUrl) {
+        setVibeContext((prev: any) => (prev ? { ...prev, previewUrl: data.previewUrl } : prev));
+        setView("preview");
+        if (data?.previewVersionId) {
+          setPreviewVersionId(data.previewVersionId);
+          setVibeContext((prev: any) => (prev ? { ...prev, previewVersionId: data.previewVersionId } : prev));
+        }
+        await refreshCurrentSpec();
       }
 
       setMessages((prev) => [
         ...prev,
         { id: `a-${Date.now()}`, role: "assistant", content: data.text || "" },
       ]);
-
-      addLog("success", "Agent responded");
     } catch (e: any) {
       addLog("error", "Request failed", e?.message ?? "Unknown error");
       setMessages((prev) => [
@@ -352,6 +449,13 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const sendFromInput = async () => {
+    const userText = input.trim();
+    if (!userText || isLoading) return;
+    setInput("");
+    await sendMessage(userText);
   };
 
   if (!authContext.userId || !authContext.tenantId) {
@@ -411,6 +515,72 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
                       {m.content}
                     </div>
                   </div>
+                  {!isUser && toolUi ? (
+                    <div className="mt-3">
+                      {toolUi.type === "style_bundles" ? (
+                        <StyleBundleCards
+                          title={toolUi.title}
+                          bundles={toolUi.bundles}
+                          onSelect={async (bundleId) => {
+                            setSelectedStyleBundleId(bundleId);
+                            setToolUi(null);
+                            setIsLoading(true);
+                            try {
+                              const res = await fetch("/api/vibe/router", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  userId: authContext.userId,
+                                  tenantId: authContext.tenantId,
+                                  vibeContext,
+                                  journey: {
+                                    mode: journeyMode,
+                                    selectedOutcome,
+                                    selectedStoryboard,
+                                    selectedStyleBundleId: bundleId,
+                                    densityPreset,
+                                    paletteOverrideId,
+                                  },
+                                  userMessage: "__ACTION__:select_style_bundle",
+                                }),
+                              });
+                              const data = await res.json();
+                              if (!res.ok) throw new Error(data?.error || "ROUTER_ACTION_FAILED");
+                              if (data?.journey?.mode) setJourneyMode(data.journey.mode);
+                              setMessages((prev) => [
+                                ...prev,
+                                { id: `a-${Date.now()}`, role: "assistant", content: data.text || "" },
+                              ]);
+                              setToolUi(data?.toolUi ?? null);
+                              if (data?.previewUrl) {
+                                setView("preview");
+                                if (data?.previewVersionId) setPreviewVersionId(data.previewVersionId);
+                              }
+                            } catch (err: any) {
+                              addLog("error", "Action failed", err?.message ?? "Unknown error");
+                            } finally {
+                              setIsLoading(false);
+                            }
+                          }}
+                        />
+                      ) : toolUi.type === "todos" ? (
+                        <TodoPanel title={toolUi.title} items={toolUi.items} />
+                      ) : toolUi.type === "interactive_edit_panel" ? (
+                        <InteractiveEditPanel
+                          title={toolUi.title}
+                          interfaceId={toolUi.interfaceId}
+                          widgets={toolUi.widgets}
+                          palettes={toolUi.palettes}
+                          density={toolUi.density}
+                          onApply={async (payload) => {
+                            await sendMessage("__ACTION__:interactive_edit:" + JSON.stringify(payload));
+                            setToolUi(null);
+                            // Optional: poll for updated toolUi to show refreshed panel
+                          }}
+                        />
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               );
             })}
@@ -481,7 +651,7 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
 
               <button
                 type="button"
-                onClick={send}
+                onClick={sendFromInput}
                 disabled={isLoading || !input.trim()}
                 className="inline-flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -633,34 +803,101 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
 
           {/* Preview View */}
           {view === "preview" ? (
-            <div className="flex flex-1 flex-col bg-white min-h-0 overflow-hidden">
-              <div className="flex flex-1 overflow-auto bg-white pt-4 pl-4 pb-4 pr-2 thin-scrollbar">
-                <div
-                  className="rounded-xl border border-gray-300 bg-white shadow-sm overflow-auto"
-                  style={{
-                    width:
-                      previewDevice === "desktop"
-                        ? "100%"
-                        : previewDevice === "tablet"
-                        ? 820
-                        : 390,
-                    height:
-                      previewDevice === "desktop"
-                        ? "100%"
-                        : "auto",
-                    maxWidth: "100%",
-                    maxHeight: "100%",
-                  }}
-                >
-                  <iframe
-                    key={`${previewVersionId}-${previewRefreshKey}`}
-                    src={`/preview/${previewDashboardId}/${previewVersionId}`}
-                    className="h-full w-full border-0"
-                    sandbox="allow-scripts allow-same-origin"
-                    title="Dashboard Preview"
-                  />
+            <div className="relative flex h-full min-h-0 w-full">
+              <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+                <div className="flex flex-1 overflow-auto bg-white pt-4 pl-4 pb-4 pr-2 thin-scrollbar">
+                  <div
+                    className="rounded-xl border border-gray-300 bg-white shadow-sm overflow-auto"
+                    style={{
+                      width:
+                        previewDevice === "desktop"
+                          ? "100%"
+                          : previewDevice === "tablet"
+                          ? 820
+                          : 390,
+                      height:
+                        previewDevice === "desktop"
+                          ? "100%"
+                          : "auto",
+                      maxWidth: "100%",
+                      maxHeight: "100%",
+                    }}
+                  >
+                    <iframe
+                      key={`${previewVersionId}-${previewRefreshKey}`}
+                      src={`/preview/${previewDashboardId}/${previewVersionId}`}
+                      className="h-full w-full border-0"
+                      sandbox="allow-scripts allow-same-origin"
+                      title="Dashboard Preview"
+                    />
+                  </div>
                 </div>
               </div>
+
+              {/* Inspector column */}
+              <div className="w-[360px] flex-shrink-0 border-l border-gray-200 bg-[#f9fafb] p-3">
+                <PreviewInspector
+                  components={(currentSpec?.components ?? []) as any[]}
+                  selectedId={selectedComponentId}
+                  onSelect={(id) => {
+                    setSelectedComponentId(id);
+                    setPropertiesOpen(true);
+                  }}
+                />
+              </div>
+
+              {/* Properties Drawer */}
+              <WidgetPropertiesDrawer
+                open={propertiesOpen}
+                onClose={() => setPropertiesOpen(false)}
+                component={
+                  selectedComponentId
+                    ? ((currentSpec?.components ?? []).find((c: any) => c?.id === selectedComponentId) ?? null)
+                    : null
+                }
+                onApply={async (actions) => {
+                  setIsLoading(true);
+                  try {
+                    const res = await fetch("/api/vibe/router", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        userId: authContext.userId,
+                        tenantId: authContext.tenantId,
+                        vibeContext,
+                        journey: {
+                          mode: journeyMode,
+                          selectedOutcome,
+                          selectedStoryboard,
+                          selectedStyleBundleId,
+                          densityPreset,
+                          paletteOverrideId,
+                        },
+                        userMessage: `__ACTION__:interactive_edit:${JSON.stringify({
+                          interfaceId: vibeContext?.interfaceId,
+                          actions,
+                        })}`,
+                      }),
+                    });
+
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data?.error || "INTERACTIVE_EDIT_FAILED");
+
+                    setMessages((prev) => [
+                      ...prev,
+                      { id: `a-${Date.now()}`, role: "assistant", content: data.text || "Updated." },
+                    ]);
+
+                    // Refresh spec so inspector + drawer reflect changes immediately
+                    await refreshCurrentSpec();
+
+                    // If you display previewUrl via iframe keying, bump refreshKey
+                    setPreviewRefreshKey((k) => k + 1);
+                  } finally {
+                    setIsLoading(false);
+                  }
+                }}
+              />
             </div>
           ) : null}
 

@@ -11,6 +11,8 @@ import {
   savePreviewVersion,
 } from "../tools/specEditor";
 import { validateSpec } from "../tools/validateSpec";
+import { todoAdd, todoList, todoUpdate, todoComplete } from "../tools/todo";
+import { getStyleBundles } from "../tools/design";
 
 export const designAdvisorAgent: Agent = new Agent({
   name: "designAdvisorAgent",
@@ -60,9 +62,14 @@ export const designAdvisorAgent: Agent = new Agent({
   tools: {
     searchDesignKB: searchDesignKB as unknown as ToolAction,
     searchDesignKBLocal,
+    getStyleBundles,
     getCurrentSpec,
     applySpecPatch,
     validateSpec,
     savePreviewVersion,
+    todoAdd,
+    todoList,
+    todoUpdate,
+    todoComplete,
   },
 });
