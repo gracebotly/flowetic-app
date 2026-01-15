@@ -92,7 +92,7 @@ const selectTemplateStep = createStep({
     if (!analyzeResult) {
       throw new Error('TEMPLATE_NOT_FOUND');
     }
-    const platformType = (runtimeContext?.get('platformType') || 'other') as SelectTemplatePlatformType;
+    const platformType = (runtimeContext?.get('platformType') || 'make') as SelectTemplatePlatformType;
     const result = await selectTemplate.execute({
       context: {
         platformType,
@@ -122,7 +122,7 @@ const generateMappingStep = createStep({
     }
     const fields = analyzeResult.fields;
     const templateId = templateResult.templateId;
-    const platformType = (runtimeContext?.get('platformType') || 'other') as SelectTemplatePlatformType;
+    const platformType = (runtimeContext?.get('platformType') || 'make') as SelectTemplatePlatformType;
     const result = await generateMapping.execute({
       context: {
         templateId,
@@ -203,7 +203,7 @@ const generateUISpecStep = createStep({
     
     const templateId = templateResult.templateId;
     const mappings = mappingResult.mappings;
-    const platformType = (runtimeContext?.get('platformType') || 'other') as SelectTemplatePlatformType;
+    const platformType = (runtimeContext?.get('platformType') || 'make') as SelectTemplatePlatformType;
     
     const result = await generateUISpec.execute({
       context: {
@@ -261,7 +261,7 @@ const persistPreviewVersionStep = createStep({
     const tenantId = initData.tenantId;
     const userId = initData.userId;
     const interfaceId = initData.interfaceId;
-    const platformType = (runtimeContext?.get('platformType') || 'other') as SelectTemplatePlatformType;
+    const platformType = (runtimeContext?.get('platformType') || 'make') as SelectTemplatePlatformType;
     const result = await persistPreviewVersion.execute({
       context: {
         tenantId,

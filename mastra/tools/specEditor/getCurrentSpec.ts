@@ -49,7 +49,7 @@ export const getCurrentSpec = createTool({
         spec_json: {
           version: "1.0",
           templateId: "general-analytics",
-          platformType: (runtimeContext?.get("platformType") as string | undefined) ?? "other",
+          platformType: (runtimeContext?.get("platformType") as string | undefined) ?? "make",
           layout: { type: "grid", columns: 12, gap: 4 },
           components: [],
         },
@@ -73,7 +73,7 @@ export const getCurrentSpec = createTool({
       spec_json: (version?.spec_json as Record<string, any>) ?? {
         version: "1.0",
         templateId: "general-analytics",
-        platformType: (runtimeContext?.get("platformType") as string | undefined) ?? "other",
+        platformType: (runtimeContext?.get("platformType") as string | undefined) ?? "make",
         layout: { type: "grid", columns: 12, gap: 4 },
         components: [],
       },

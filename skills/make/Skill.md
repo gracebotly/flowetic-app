@@ -5,14 +5,14 @@
 
 
 ---
-name: other-skill
+name: make-skill
 version: 1.0.0
-platformType: other
+platformType: make
 description: Fallback mapping guidance when platform is unknown.
 lastUpdated: 2025-12-30
 ---
 
-# Other Skill
+# Make Skill
 ## Templates
 - general-analytics
 

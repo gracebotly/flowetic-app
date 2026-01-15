@@ -12,17 +12,17 @@ export type PlatformType =
   | "n8n"
   | "mastra"
   | "crewai"
-  | "pydantic_ai"
-  | "other";
+  | "activepieces"
+  | "make";
 
 export async function loadSkill(platformType: PlatformType): Promise<string> {
-  const safePlatform: PlatformType = platformType || "other";
+  const safePlatform: PlatformType = platformType || "make";
   const skillPath = path.join(process.cwd(), "skills", safePlatform, "Skill.md");
 
   try {
     return await fs.readFile(skillPath, "utf8");
   } catch {
-    const fallbackPath = path.join(process.cwd(), "skills", "other", "Skill.md");
+    const fallbackPath = path.join(process.cwd(), "skills", "make", "Skill.md");
     return await fs.readFile(fallbackPath, "utf8");
   }
 }

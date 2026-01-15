@@ -11,7 +11,7 @@ export const proposeMapping = createTool({
   description:
     "Propose a mapping from observed schema fields to template-required keys. Returns missing required fields and confidence.",
   inputSchema: z.object({
-    platformType: z.enum(["vapi", "retell", "n8n", "mastra", "crewai", "pydantic_ai", "other"]),
+    platformType: z.enum(["vapi", "retell", "n8n", "mastra", "crewai", "activepieces", "make"]),
     templateId: z.string(),
     schemaFields: z.array(z.object({ name: z.string(), type: z.string(), nullable: z.boolean() })),
   }),
