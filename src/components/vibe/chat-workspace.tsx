@@ -115,6 +115,11 @@ function isToolUiPayload(value: unknown): value is ToolUiPayload {
   );
 }
 
+function getRightTabForToolUi(next: ToolUiPayload): ViewMode {
+  if (next.type === "interactive_edit_panel") return "preview";
+  // style bundles and todos are "planning/decision" items
+  return "terminal";
+}
 
 export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProps) {
   const router = useRouter();
@@ -378,6 +383,7 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
     handler: ({ toolUi }: { toolUi: object }) => {
       if (isToolUiPayload(toolUi)) {
         setToolUi(toolUi);
+        setView(getRightTabForToolUi(toolUi));
       } else {
         setToolUi(null);
       }
@@ -679,8 +685,9 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
           {/* Terminal View */}
           {view === "terminal" ? (
             <div className="flex flex-1 flex-col bg-[#1e1e1e] min-h-0 overflow-hidden">
-              {toolUi ? (
-                <div className="mb-3 rounded-lg border border-gray-700 bg-gray-900 p-3 text-gray-100">
+              
+              {toolUi && (toolUi.type === "style_bundles" || toolUi.type === "todos") ? (
+                <div className="mb-3 rounded-xl border border-gray-700 bg-gray-900 p-3 text-gray-100">
                   {toolUi.type === "style_bundles" ? (
                     <StyleBundleCards
                       title={toolUi.title}
@@ -691,21 +698,9 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
                         await sendMessage(buildCtxEnvelope("__ACTION__:select_style_bundle:" + bundleId));
                       }}
                     />
-                  ) : toolUi.type === "todos" ? (
+                  ) : (
                     <TodoPanel title={toolUi.title} items={toolUi.items} />
-                  ) : toolUi.type === "interactive_edit_panel" ? (
-                    <InteractiveEditPanel
-                      title={toolUi.title}
-                      interfaceId={toolUi.interfaceId}
-                      widgets={toolUi.widgets}
-                      palettes={toolUi.palettes}
-                      density={toolUi.density}
-                      onApply={async (payload) => {
-                        await sendMessage(buildCtxEnvelope("__ACTION__:interactive_edit:" + JSON.stringify(payload)));
-                        setToolUi(null);
-                      }}
-                    />
-                  ) : null}
+                  )}
                 </div>
               ) : null}
               <div className="flex-1 overflow-y-auto pl-4 pr-2 py-4 font-mono text-[13px] leading-6 text-[#d4d4d4] thin-scrollbar">
@@ -749,6 +744,21 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
           {view === "preview" ? (
             <div className="relative flex h-full min-h-0 w-full">
               <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+                {toolUi && toolUi.type === "interactive_edit_panel" ? (
+                  <div className="mb-3 rounded-xl border border-gray-200 bg-white p-3">
+                    <InteractiveEditPanel
+                      title={toolUi.title}
+                      interfaceId={toolUi.interfaceId}
+                      widgets={toolUi.widgets}
+                      palettes={toolUi.palettes}
+                      density={toolUi.density}
+                      onApply={async (payload) => {
+                        await sendMessage(buildCtxEnvelope("__ACTION__:interactive_edit:" + JSON.stringify(payload)));
+                        setToolUi(null);
+                      }}
+                    />
+                  </div>
+                ) : null}
                 <div className="flex flex-1 overflow-auto bg-white pt-4 pl-4 pb-4 pr-2 thin-scrollbar">
                   <div
                     className="rounded-xl border border-gray-300 bg-white shadow-sm overflow-auto"
