@@ -125,6 +125,8 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
     tenantId: string | null;
   }>({ userId: null, tenantId: null });
 
+  const [backendWarning, setBackendWarning] = useState<string | null>(null);
+
   const [vibeContextSnapshot, setVibeContextSnapshot] = useState<any>(null);
   const [vibeContext, setVibeContext] = useState<VibeContextExtended | null>(null);
   const [vibeInitDone, setVibeInitDone] = useState(false);
@@ -206,6 +208,33 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
     }
     loadVibeContext();
   }, []);
+
+  useEffect(() => {
+    async function checkBackend() {
+      if (!authContext.userId || !authContext.tenantId) return;
+
+      try {
+        const res = await fetch("/api/projects/list", { method: "GET" });
+        const json = await res.json().catch(() => ({}));
+
+        if (!res.ok) {
+          setBackendWarning(json?.message || "Backend error loading projects.");
+          return;
+        }
+
+        if (json?.warning === "PROJECTS_TABLE_MISSING") {
+          setBackendWarning("Projects DB tables are missing in this environment. Control Panel features may be limited until migrations are applied.");
+          return;
+        }
+
+        setBackendWarning(null);
+      } catch (e: any) {
+        setBackendWarning(e?.message || "Backend connectivity error.");
+      }
+    }
+
+    checkBackend();
+  }, [authContext.userId, authContext.tenantId]);
 
   useEffect(() => {
     async function initFromSession() {
@@ -484,6 +513,11 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
       <div className="flex h-full min-h-0 w-full overflow-hidden rounded-xl border border-gray-300 bg-white">
         {/* LEFT: chat (35%) - FIXED VERSION */}
         <div className="flex w-[35%] min-w-[360px] flex-col border-r border-gray-300 bg-[#f9fafb] overflow-hidden">
+          {backendWarning ? (
+            <div className="border-b border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              {backendWarning}
+            </div>
+          ) : null}
           {/* messages - enforced flex-1 with overflow containment */}
           <div className="flex-1 overflow-y-auto p-3 min-h-0">
             {renderedMessages.map((m) => {
