@@ -85,9 +85,10 @@
 }
 
 .copilotKitInput {
-  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  border-top: 1px solid var(--ck-border);
   padding: 12px;
-  background: white;
+  background: var(--ck-panel);
+  color: var(--ck-text);
 }
 
 .copilotKitInput textarea,
@@ -105,14 +106,26 @@
 
 .copilotKitAssistantMessage {
   background: var(--ck-assistant) !important;
-  color: #0f172a !important;
-  border: 1px solid rgba(15, 23, 42, 0.08);
+  color: var(--ck-text) !important;
+  border: 1px solid var(--ck-border);
   border-radius: 14px !important;
   padding: 10px 12px !important;
 }
 
 .copilotKitInput button {
   border-radius: 12px !important;
+}
+
+/* Hide CopilotKit built-in branding footer */
+.copilotKitFooter,
+.copilotKitFooter * {
+  display: none !important;
+}
+
+/* Some versions render the branding as plain text inside the chat container */
+.copilotKitChat::after,
+.copilotKitWindow::after {
+  content: none !important;
 }
 
 /* Optional: subtle scrollbars */
