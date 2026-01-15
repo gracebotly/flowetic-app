@@ -937,8 +937,8 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
                     tabIndex={0}
                     className="relative group cursor-pointer rounded-lg border border-gray-400/60 bg-gray-800/80 p-3 text-center transition-all hover:bg-[#3366cc] hover:border-[#3366cc]/50 focus:outline-none focus:ring-2 focus:ring-[#3366cc]/50"
                     onClick={() => {
-                      addLog("info", `User selected Dashboard. Update journey mode to dashboard.`);
-                      setJourneyMode("dashboard");
+                      addLog("info", `User selected Dashboard outcome.`);
+                      setSelectedOutcome("dashboard");
                       setView("terminal");
                       setToolUi(null);
                     }}
