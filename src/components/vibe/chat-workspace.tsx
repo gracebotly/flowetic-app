@@ -337,24 +337,14 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
     logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [logs.length]);
 
+  // CopilotKit tool UI integration
   useCopilotAction({
-    name: "syncVibeMeta",
-    parameters: [{ name: "meta", type: "object", description: "Vibe router meta" }],
-    handler: ({ meta }) => {
-      const m = meta as any;
-      if (m?.toolUi) setToolUi(m.toolUi);
-      if (m?.journey?.mode) setJourneyMode(m.journey.mode);
-      if (typeof m?.journey?.selectedOutcome !== "undefined") setSelectedOutcome(m.journey.selectedOutcome);
-      if (typeof m?.journey?.selectedStoryboard !== "undefined") setSelectedStoryboard(m.journey.selectedStoryboard);
-      if (typeof m?.journey?.selectedStyleBundleId !== "undefined") setSelectedStyleBundleId(m.journey.selectedStyleBundleId);
-      if (typeof m?.journey?.densityPreset !== "undefined") setDensityPreset(m.journey.densityPreset);
-      if (typeof m?.journey?.paletteOverrideId !== "undefined") setPaletteOverrideId(m.journey.paletteOverrideId);
-
-      if (m?.previewUrl) {
-        setView("preview");
-        if (m?.previewVersionId) setPreviewVersionId(m.previewVersionId);
-        refreshCurrentSpec();
-      }
+    name: "displayToolUI",
+    parameters: [
+      { name: "toolUi", type: "object", description: "Tool UI from vibe router" },
+    ],
+    handler: ({ toolUi }) => {
+      setToolUi(toolUi);
     },
   });
 
