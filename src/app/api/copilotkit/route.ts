@@ -1,28 +1,14 @@
-import { NextRequest } from "next/server";
-import {
-  CopilotRuntime,
-  ExperimentalEmptyAdapter,
-  copilotRuntimeNextJSAppRouterEndpoint,
-} from "@copilotkit/runtime";
-import { MastraAgent } from "@ag-ui/mastra";
-import { mastra } from "@/mastra";
+import { CopilotRuntime } from "@copilotkit/runtime";
+import { copilotRuntimeHandler } from "@copilotkit/runtime/nextjs";
+
+import { vibeRouterAgent } from "@/lib/copilotkit/vibe-router-agent";
 
 export const runtime = "nodejs";
 
-export const POST = async (req: NextRequest) => {
-  const mastraAgents = MastraAgent.getLocalAgents({
-    mastra,
-  });
+const copilotRuntime = new CopilotRuntime({
+  agents: {
+    vibe: vibeRouterAgent,
+  },
+});
 
-  const copilotRuntime = new CopilotRuntime({
-    agents: mastraAgents,
-  });
-
-  const { handleRequest } = copilotRuntimeNextJSAppRouterEndpoint({
-    runtime: copilotRuntime,
-    serviceAdapter: new ExperimentalEmptyAdapter(),
-    endpoint: "/api/copilotkit",
-  });
-
-  return handleRequest(req);
-};
+export const { GET, POST } = copilotRuntimeHandler(copilotRuntime);
