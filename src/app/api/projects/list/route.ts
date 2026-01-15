@@ -47,7 +47,25 @@ export async function GET(req: Request) {
   if (pub === "private") query = query.eq("public_enabled", false);
 
   const { data: projects, error: pErr } = await query;
-  if (pErr) return NextResponse.json({ ok: false, code: "UNKNOWN_ERROR", message: pErr.message }, { status: 500 });
+
+  if (pErr) {
+    const msg = String(pErr.message || "");
+
+    // Graceful-degrade when migrations/tables are not present in the current Supabase project.
+    if (msg.toLowerCase().includes("could not find the table") || msg.toLowerCase().includes("schema cache")) {
+      return NextResponse.json(
+        {
+          ok: true,
+          projects: [],
+          warning: "PROJECTS_TABLE_MISSING",
+          message: msg,
+        },
+        { status: 200 }
+      );
+    }
+
+    return NextResponse.json({ ok: false, code: "UNKNOWN_ERROR", message: msg }, { status: 500 });
+  }
 
   const projectIds = (projects ?? []).map((p: any) => String(p.id));
   const countsByProjectId = new Map<string, number>();
@@ -59,7 +77,13 @@ export async function GET(req: Request) {
       .eq("tenant_id", membership.tenant_id)
       .in("project_id", projectIds);
 
-    if (!aErr && accessRows) {
+    if (aErr) {
+      const msg = String(aErr.message || "");
+      if (!(msg.toLowerCase().includes("could not find the table") || msg.toLowerCase().includes("schema cache"))) {
+        // For non-missing-table errors, keep silent failure behavior conservative.
+        // (Do not crash listing if counts fail.)
+      }
+    } else if (accessRows) {
       for (const r of accessRows as any[]) {
         const pid = String(r.project_id);
         countsByProjectId.set(pid, (countsByProjectId.get(pid) || 0) + 1);

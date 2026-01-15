@@ -19,6 +19,8 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from '@/lib/supabase/client';
 import { useCopilotAction } from "@copilotkit/react-core";
+import { CopilotKit } from "@copilotkit/react-core";
+import { CopilotChat } from "@copilotkit/react-ui";
 import { StyleBundleCards } from "@/components/vibe/tool-renderers/style-bundle-cards";
 import { TodoPanel } from "@/components/vibe/tool-renderers/todo-panel";
 import { InteractiveEditPanel } from "@/components/vibe/tool-renderers/interactive-edit-panel";
@@ -105,6 +107,15 @@ interface ChatWorkspaceProps {
   showEnterVibeButton?: boolean;
 }
 
+function isToolUiPayload(value: unknown): value is ToolUiPayload {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "type" in value
+  );
+}
+
+
 export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProps) {
   const router = useRouter();
   const [view, setView] = useState<ViewMode>("terminal");
@@ -125,6 +136,8 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
     tenantId: string | null;
   }>({ userId: null, tenantId: null });
 
+  const [backendWarning, setBackendWarning] = useState<string | null>(null);
+
   const [vibeContextSnapshot, setVibeContextSnapshot] = useState<any>(null);
   const [vibeContext, setVibeContext] = useState<VibeContextExtended | null>(null);
   const [vibeInitDone, setVibeInitDone] = useState(false);
@@ -136,10 +149,33 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
   const [densityPreset, setDensityPreset] = useState<"compact" | "comfortable" | "spacious">("comfortable");
   const [paletteOverrideId, setPaletteOverrideId] = useState<string | null>(null);
 
+  function buildCtxEnvelope(message: string) {
+    return (
+      "__FLOWETIC_CTX__:" +
+      JSON.stringify({
+        userId: authContext.userId,
+        tenantId: authContext.tenantId,
+        vibeContext,
+        journey: {
+          mode: journeyMode,
+          selectedOutcome,
+          selectedStoryboard,
+          selectedStyleBundleId,
+          densityPreset,
+          paletteOverrideId,
+        },
+      }) +
+      "\n" +
+      message
+    );
+  }
+
   const [toolUi, setToolUi] = useState<ToolUiPayload | null>(null);
   const [currentSpec, setCurrentSpec] = useState<any | null>(null);
   const [selectedComponentId, setSelectedComponentId] = useState<string | null>(null);
   const [propertiesOpen, setPropertiesOpen] = useState(false);
+
+  
 
   async function loadSkillMD(skillKey: string | undefined) {
     // SkillMD not implemented yet; return empty string but keep contract.
@@ -206,6 +242,33 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
     }
     loadVibeContext();
   }, []);
+
+  useEffect(() => {
+    async function checkBackend() {
+      if (!authContext.userId || !authContext.tenantId) return;
+
+      try {
+        const res = await fetch("/api/projects/list", { method: "GET" });
+        const json = await res.json().catch(() => ({}));
+
+        if (!res.ok) {
+          setBackendWarning(json?.message || "Backend error loading projects.");
+          return;
+        }
+
+        if (json?.warning === "PROJECTS_TABLE_MISSING") {
+          setBackendWarning("Projects DB tables are missing in this environment. Control Panel features may be limited until migrations are applied.");
+          return;
+        }
+
+        setBackendWarning(null);
+      } catch (e: any) {
+        setBackendWarning(e?.message || "Backend connectivity error.");
+      }
+    }
+
+    checkBackend();
+  }, [authContext.userId, authContext.tenantId]);
 
   useEffect(() => {
     async function initFromSession() {
@@ -305,6 +368,21 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
   useEffect(() => {
     logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [logs.length]);
+
+  // CopilotKit tool UI integration
+  useCopilotAction({
+    name: "displayToolUI",
+    parameters: [
+      { name: "toolUi", type: "object", description: "Tool UI from vibe router" },
+    ],
+    handler: ({ toolUi }: { toolUi: object }) => {
+      if (isToolUiPayload(toolUi)) {
+        setToolUi(toolUi);
+      } else {
+        setToolUi(null);
+      }
+    },
+  });
 
   function addLog(type: LogType, text: string, detail?: string) {
     setLogs((prev) => [...prev, { id: crypto.randomUUID(), type, text, detail }]);
@@ -483,193 +561,60 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
 
       <div className="flex h-full min-h-0 w-full overflow-hidden rounded-xl border border-gray-300 bg-white">
         {/* LEFT: chat (35%) - FIXED VERSION */}
-        <div className="flex w-[35%] min-w-[360px] flex-col border-r border-gray-300 bg-[#f9fafb] overflow-hidden">
-          {/* messages - enforced flex-1 with overflow containment */}
-          <div className="flex-1 overflow-y-auto p-3 min-h-0">
-            {renderedMessages.map((m) => {
-              if (m.role === "system") {
-                return (
-                  <div
-                    key={m.id}
-                    className="mx-auto my-3 w-fit rounded-md bg-gray-100 px-3 py-2 text-center text-[13px] text-gray-500"
-                  >
-                    {m.content}
-                  </div>
-                );
-              }
-
-              const isUser = m.role === "user";
-              return (
-                <div
-                  key={m.id}
-                  className={`mb-4 flex ${isUser ? "justify-end" : "justify-start"}`}
-                >
-                  <div
-                    className={`max-w-[80%] rounded-lg px-4 py-3 ${
-                      isUser
-                        ? "bg-blue-500 text-white"
-                        : "bg-white border border-gray-300 text-gray-900"
-                    }`}
-                  >
-                    <div className="whitespace-pre-wrap text-[14px] leading-6">
-                      {m.content}
-                    </div>
-                  </div>
-                  {!isUser && toolUi ? (
-                    <div className="mt-3">
-                      {toolUi.type === "style_bundles" ? (
-                        <StyleBundleCards
-                          title={toolUi.title}
-                          bundles={toolUi.bundles}
-                          onSelect={async (bundleId) => {
-                            setSelectedStyleBundleId(bundleId);
-                            setToolUi(null);
-                            setIsLoading(true);
-                            try {
-                              const res = await fetch("/api/vibe/router", {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({
-                                  userId: authContext.userId,
-                                  tenantId: authContext.tenantId,
-                                  vibeContext,
-                                  journey: {
-                                    mode: journeyMode,
-                                    selectedOutcome,
-                                    selectedStoryboard,
-                                    selectedStyleBundleId: bundleId,
-                                    densityPreset,
-                                    paletteOverrideId,
-                                  },
-                                  userMessage: "__ACTION__:select_style_bundle",
-                                }),
-                              });
-                              const data = await res.json();
-                              if (!res.ok) throw new Error(data?.error || "ROUTER_ACTION_FAILED");
-                              if (data?.journey?.mode) setJourneyMode(data.journey.mode);
-                              setMessages((prev) => [
-                                ...prev,
-                                { id: `a-${Date.now()}`, role: "assistant", content: data.text || "" },
-                              ]);
-                              setToolUi(data?.toolUi ?? null);
-                              if (data?.previewUrl) {
-                                setView("preview");
-                                if (data?.previewVersionId) setPreviewVersionId(data.previewVersionId);
-                              }
-                            } catch (err: any) {
-                              addLog("error", "Action failed", err?.message ?? "Unknown error");
-                            } finally {
-                              setIsLoading(false);
-                            }
-                          }}
-                        />
-                      ) : toolUi.type === "todos" ? (
-                        <TodoPanel title={toolUi.title} items={toolUi.items} />
-                      ) : toolUi.type === "interactive_edit_panel" ? (
-                        <InteractiveEditPanel
-                          title={toolUi.title}
-                          interfaceId={toolUi.interfaceId}
-                          widgets={toolUi.widgets}
-                          palettes={toolUi.palettes}
-                          density={toolUi.density}
-                          onApply={async (payload) => {
-                            await sendMessage("__ACTION__:interactive_edit:" + JSON.stringify(payload));
-                            setToolUi(null);
-                            // Optional: poll for updated toolUi to show refreshed panel
-                          }}
-                        />
-                      ) : null}
-                    </div>
-                  ) : null}
-                </div>
-              );
-            })}
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* input - explicitly prevent shrinking */}
-          <div className="flex-shrink-0 border-t border-gray-300 bg-white p-3">
-            <textarea
-              className="w-full resize-none rounded-lg border border-gray-300 px-3 py-2 text-[14px] leading-6 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              rows={3}
-              style={{ minHeight: 44, maxHeight: 120 }}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Type your message..."
-            />
-            <div className="mt-2 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  className="hidden"
-                  multiple
-                  onChange={(e) => {
-                    const count = e.target.files?.length ?? 0;
-                    if (count > 0) addLog("info", `Attached ${count} file(s) (upload wiring next).`);
-                  }}
-                />
-
-                <button
-                  type="button"
-                  title="Attach files"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-white"
-                >
-                  <Paperclip size={18} />
-                </button>
-
-                {chatMode === "chat" ? (
-                  <button
-                    type="button"
-                    title="Voice chat"
-                    onClick={() => {
-                      setChatMode("voice");
-                      addLog("info", "Voice mode activated (wiring next).");
-                    }}
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-white"
-                  >
-                    <Mic size={18} />
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    title="Stop voice / Switch to text"
-                    onClick={() => {
-                      setChatMode("chat");
-                      setIsListening(false);
-                      addLog("info", "Switched back to text mode.");
-                    }}
-                    className={`inline-flex h-9 w-9 items-center justify-center rounded-md ${
-                      isListening ? "bg-red-500 text-white" : "text-gray-600"
-                    }`}
-                  >
-                    {isListening ? <MessageCircle size={18} /> : <Mic size={18} />}
-                  </button>
-                )}
+        <CopilotKit 
+          runtimeUrl="/api/copilotkit" 
+          agent="vibe"
+        >
+          <div className="flex w-[35%] min-w-[360px] flex-col border-r border-gray-300 bg-[#f9fafb] overflow-hidden">
+            {backendWarning ? (
+              <div className="border-b border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                {backendWarning}
               </div>
-
-              <button
-                type="button"
-                onClick={sendFromInput}
-                disabled={isLoading || !input.trim()}
-                className="inline-flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {isLoading ? (
-                  <>
-                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                    Sending...
-                  </>
-                ) : (
-                  <>
-                    <Send size={16} />
-                    Send
-                  </>
-                )}
-              </button>
+            ) : null}
+            {/* CopilotChat contains built-in message list and input */}
+            <div className="flex-1 min-h-0 overflow-hidden">
+              <CopilotChat
+                labels={{
+                  title: "VibeChat",
+                  initial: "Loading your journey…",
+                  placeholder: "Type your message…",
+                }}
+                className="h-full"
+                instructions={/* optional custom instructions */ undefined}
+              />
             </div>
+            {/* Tool UI renderer - displayed below CopilotChat */}
+            {toolUi ? (
+              <div className="border-t border-gray-200 bg-white p-3">
+                {toolUi.type === "style_bundles" ? (
+                  <StyleBundleCards
+                    title={toolUi.title}
+                    bundles={toolUi.bundles}
+                    onSelect={async (bundleId) => {
+                      setSelectedStyleBundleId(bundleId);
+                      setToolUi(null);
+                      await sendMessage(buildCtxEnvelope("__ACTION__:select_style_bundle:" + bundleId));
+                    }}
+                  />
+                ) : toolUi.type === "todos" ? (
+                  <TodoPanel title={toolUi.title} items={toolUi.items} />
+                ) : toolUi.type === "interactive_edit_panel" ? (
+                  <InteractiveEditPanel
+                    title={toolUi.title}
+                    interfaceId={toolUi.interfaceId}
+                    widgets={toolUi.widgets}
+                    palettes={toolUi.palettes}
+                    density={toolUi.density}
+                    onApply={async (payload) => {
+                      await sendMessage(buildCtxEnvelope("__ACTION__:interactive_edit:" + JSON.stringify(payload)));
+                      setToolUi(null);
+                    }}
+                  />
+                ) : null}
+              </div>
+            ) : null}
           </div>
-        </div>
+        </CopilotKit>
 
         {/* RIGHT: split view */}
         <div className="flex flex-1 flex-col min-w-0">
