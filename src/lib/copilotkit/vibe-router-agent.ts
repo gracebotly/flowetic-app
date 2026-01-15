@@ -105,15 +105,15 @@ class VibeRouterAgent extends AbstractAgent {
   public run(input: any): Observable<any> {
     return new Observable((subscriber) => {
       (async () => {
+        const base = {
+          threadId: getOrCreateThreadId(input),
+          runId: getOrCreateRunId(input),
+        };
+
         try {
           const parsed = parseCtxEnvelope(input);
           const ctx = parsed.ctx ?? getContextFromInput(input);
           const userMessage = parsed.message;
-
-          const base = {
-            threadId: getOrCreateThreadId(input),
-            runId: getOrCreateRunId(input),
-          };
 
           // RUN_STARTED
           emit(subscriber, base, { type: "RUN_STARTED" });
