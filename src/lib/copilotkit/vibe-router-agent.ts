@@ -159,7 +159,7 @@ class VibeRouterAgent extends AbstractAgent {
     });
   }
 
-  protected detachActiveRun(): void {
+  public detachActiveRun(): void {
     // no-op
   }
 }
