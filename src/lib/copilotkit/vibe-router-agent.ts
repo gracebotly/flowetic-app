@@ -3,6 +3,7 @@ import { AbstractAgent } from "@ag-ui/client";
 import type { AgentInput } from "@copilotkit/runtime";
 import { RuntimeContext } from "@mastra/core/runtime-context";
 import { runVibeRouter } from "@/app/api/vibe/router/runner";
+import { Observable } from "rxjs";
 
 type VibeAgentContext = {
   userId: string;
@@ -47,83 +48,115 @@ class VibeRouterAgent extends AbstractAgent {
     });
   }
 
-  // IMPORTANT: public run() (not protected) to satisfy CopilotKit Agent typing
-  public async run(input: AgentInput): Promise<any> {
-    const ctx = getContextFromInput(input);
-    const userMessage = getLastUserMessage(input);
+  // IMPORTANT: run() returns Observable (not Promise) to satisfy CopilotKit Agent typing
+  public run(input: any): Observable<any> {
+    return new Observable((subscriber) => {
+      (async () => {
+        try {
+          const ctx = getContextFromInput(input);
+          const userMessage = getLastUserMessage(input);
 
-    if (!ctx.userId || !ctx.tenantId) {
-      const msg = "Missing userId/tenantId in CopilotKit context.";
-      this.events$.next({ type: "RUN_STARTED" });
-      this.events$.next({ type: "TEXT_MESSAGE_START", payload: {} });
-      this.events$.next({ type: "TEXT_MESSAGE_CONTENT", delta: msg });
-      this.events$.next({ type: "TEXT_MESSAGE_END" });
-      this.events$.next({ type: "RUN_FINISHED" });
-      return { result: msg, newMessages: [] };
-    }
+          // RUN_STARTED
+          subscriber.next({ type: "RUN_STARTED", timestamp: Date.now() });
 
-    this.events$.next({ type: "RUN_STARTED" });
+          if (!ctx.userId || !ctx.tenantId) {
+            const msg = "Missing userId/tenantId in CopilotKit context.";
 
-    // Phase gating aligned with real Flowetic phases; keep adapter minimal.
-    const currentMode = (ctx.journey?.mode ?? "select_entity") as FloweticJourneyMode;
+            subscriber.next({ type: "TEXT_MESSAGE_START", payload: {}, timestamp: Date.now() });
+            subscriber.next({ type: "TEXT_MESSAGE_CONTENT", delta: msg, timestamp: Date.now() });
+            subscriber.next({ type: "TEXT_MESSAGE_END", timestamp: Date.now() });
+            subscriber.next({ type: "RUN_FINISHED", timestamp: Date.now() });
 
-    if (userMessage.startsWith("__ACTION__:")) {
-      const parts = userMessage.split(":");
-      const action = parts[1] || "";
+            subscriber.complete();
+            return;
+          }
 
-      const requiredModeByAction: Record<string, FloweticJourneyMode> = {
-        select_style_bundle: "style",
-        interactive_edit: "interactive_edit",
-        publish: "deploy",
+          // Phase gating aligned to Flowetic real phases
+          const currentMode = (ctx.journey?.mode ?? "select_entity") as
+            | "select_entity"
+            | "recommend"
+            | "align"
+            | "style"
+            | "build_preview"
+            | "interactive_edit"
+            | "deploy";
+
+          if (userMessage.startsWith("__ACTION__:")) {
+            const parts = userMessage.split(":");
+            const action = parts[1] || "";
+
+            const requiredModeByAction: Record<string, typeof currentMode> = {
+              select_style_bundle: "style",
+              interactive_edit: "interactive_edit",
+              publish: "deploy",
+            };
+
+            const required = requiredModeByAction[action];
+            if (required && currentMode !== required) {
+              const msg = `That action isn't available yet. Current phase: "${currentMode}". Required phase: "${required}".`;
+
+              subscriber.next({ type: "TEXT_MESSAGE_START", payload: {}, timestamp: Date.now() });
+              subscriber.next({ type: "TEXT_MESSAGE_CONTENT", delta: msg, timestamp: Date.now() });
+              subscriber.next({ type: "TEXT_MESSAGE_END", timestamp: Date.now() });
+              subscriber.next({ type: "RUN_FINISHED", timestamp: Date.now() });
+
+              subscriber.complete();
+              return;
+            }
+          }
+
+          const runtimeContext = new RuntimeContext();
+          runtimeContext.set("userId", ctx.userId);
+          runtimeContext.set("tenantId", ctx.tenantId);
+          if (ctx.vibeContext?.platformType) {
+            runtimeContext.set("platformType", ctx.vibeContext.platformType);
+          }
+
+          const result = await runVibeRouter({
+            userId: ctx.userId,
+            tenantId: ctx.tenantId,
+            vibeContext: ctx.vibeContext,
+            journey: ctx.journey,
+            userMessage,
+            runtimeContext,
+          });
+
+          const text = String(result?.text || "").trim() || "OK.";
+
+          // Message events
+          subscriber.next({ type: "TEXT_MESSAGE_START", payload: {}, timestamp: Date.now() });
+          subscriber.next({ type: "TEXT_MESSAGE_CONTENT", delta: text, timestamp: Date.now() });
+          subscriber.next({ type: "TEXT_MESSAGE_END", timestamp: Date.now() });
+
+          // If toolUi exists, emit an action/tool event that the frontend can render.
+          // We keep tool UI BELOW the chat; frontend already uses useCopilotAction("displayToolUI").
+          if (result?.toolUi) {
+            subscriber.next({
+              type: "ACTION_CALL",
+              name: "displayToolUI",
+              arguments: { toolUi: result.toolUi },
+              timestamp: Date.now(),
+            });
+          }
+
+          subscriber.next({ type: "RUN_FINISHED", timestamp: Date.now() });
+          subscriber.complete();
+        } catch (err: any) {
+          const msg = err?.message ? String(err.message) : "Unknown error.";
+
+          subscriber.next({ type: "TEXT_MESSAGE_START", payload: {}, timestamp: Date.now() });
+          subscriber.next({ type: "TEXT_MESSAGE_CONTENT", delta: msg, timestamp: Date.now() });
+          subscriber.next({ type: "TEXT_MESSAGE_END", timestamp: Date.now() });
+          subscriber.next({ type: "RUN_FINISHED", timestamp: Date.now() });
+
+          subscriber.complete();
+        }
+      })();
+
+      return () => {
+        // teardown no-op
       };
-
-      const required = requiredModeByAction[action];
-      if (required && currentMode !== required) {
-        const msg = `That action isn't available yet. Current phase: "${currentMode}". Required phase: "${required}".`;
-
-        this.events$.next({ type: "TEXT_MESSAGE_START", payload: {} });
-        this.events$.next({ type: "TEXT_MESSAGE_CONTENT", delta: msg });
-        this.events$.next({ type: "TEXT_MESSAGE_END" });
-        this.events$.next({ type: "RUN_FINISHED" });
-
-        return { result: msg, newMessages: [] };
-      }
-    }
-
-    const runtimeContext = new RuntimeContext();
-    runtimeContext.set("userId", ctx.userId);
-    runtimeContext.set("tenantId", ctx.tenantId);
-    if (ctx.vibeContext?.platformType) {
-      runtimeContext.set("platformType", ctx.vibeContext.platformType);
-    }
-
-    const result = await runVibeRouter({
-      userId: ctx.userId,
-      tenantId: ctx.tenantId,
-      vibeContext: ctx.vibeContext,
-      journey: ctx.journey,
-      userMessage,
-      runtimeContext,
     });
-
-    const text = String(result?.text || "").trim() || "OK.";
-
-    // Emit CopilotKit message events
-    this.events$.next({ type: "TEXT_MESSAGE_START", payload: {} });
-    this.events$.next({ type: "TEXT_MESSAGE_CONTENT", delta: text });
-    this.events$.next({ type: "TEXT_MESSAGE_END" });
-    this.events$.next({ type: "RUN_FINISHED" });
-
-    // Use CopilotKit's renderer to display tool UI if present
-    if (result?.toolUi) {
-      this.renderToolUi("displayToolUI", { toolUi: result.toolUi });
-    }
-
-    return {
-      result: text,
-      newMessages: [],
-      meta: null,
-    };
   }
 
   protected detachActiveRun(): void {
