@@ -5,12 +5,18 @@
 
 import { useMemo, useState } from "react";
 
+type ChartType = "line" | "area" | "bar";
+
+function isChartType(v: string): v is ChartType {
+  return v === "line" || v === "area" || v === "bar";
+}
+
 type Widget = {
   id: string;
   title: string;
   kind: "metric" | "chart" | "table" | "other";
   enabled: boolean;
-  chartType?: "line" | "area" | "bar";
+  chartType?: ChartType;
 };
 
 type PaletteOption = {
@@ -146,11 +152,11 @@ export function InteractiveEditPanel({
                   className="rounded-md border border-gray-200 bg-white px-2 py-1 text-sm"
                   value={w.kind === "chart" ? (w.chartType ?? "line") : ""}
                   onChange={(e) => {
-                    const v = e.target.value;
-                    if (v !== "line" && v !== "area" && v !== "bar") return;
+                    const raw = e.target.value;
+                    if (!isChartType(raw)) return;
 
-                    const next = localWidgets.map((x) =>
-                      x.id === w.id ? { ...x, chartType: v } : x
+                    const next: Widget[] = localWidgets.map((x) =>
+                      x.id === w.id ? { ...x, chartType: raw } : x
                     );
                     setLocalWidgets(next);
                   }}
