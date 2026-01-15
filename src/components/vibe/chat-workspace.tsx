@@ -577,11 +577,58 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
                 {backendWarning}
               </div>
             ) : null}
+            
+            <div className="flex items-center justify-between border-b border-gray-200 bg-white px-3 py-2">
+              <div className="text-sm font-semibold text-gray-900">VibeChat</div>
+              
+              <div className="flex items-center gap-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  className="hidden"
+                  multiple
+                  onChange={(e) => {
+                    const count = e.target.files?.length ?? 0;
+                    if (count > 0) addLog("info", `Attached ${count} file(s). (Upload wiring next.)`);
+                  }}
+                />
+
+                <button
+                  type="button"
+                  title="Attach files"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+                >
+                  +
+                </button>
+
+                <button
+                  type="button"
+                  title={chatMode === "chat" ? "Voice chat" : "Stop voice"}
+                  onClick={() => {
+                    if (chatMode === "chat") {
+                      setChatMode("voice");
+                      setIsListening(true);
+                      addLog("info", "Voice mode activated. (Wiring next.)");
+                    } else {
+                      setChatMode("chat");
+                      setIsListening(false);
+                      addLog("info", "Switched back to text mode.");
+                    }
+                  }}
+                  className={`inline-flex h-9 w-9 items-center justify-center rounded-md border ${
+                    isListening ? "border-red-300 bg-red-50 text-red-700" : "border-gray-200 bg-white text-gray-700"
+                  } hover:bg-gray-50`}
+                >
+                  🎙
+                </button>
+              </div>
+            </div>
             {/* CopilotChat contains built-in message list and input */}
             <div className="flex-1 min-h-0 overflow-hidden">
               <CopilotChat
                 labels={{
-                  title: "VibeChat",
+                  title: "",
                   initial: "Loading your journey…",
                   placeholder: "Type your message…",
                 }}
