@@ -1,12 +1,7 @@
 
-import { AbstractAgent } from "@ag-ui/client";
 import type { AgentInput } from "@copilotkit/runtime";
 import { RuntimeContext } from "@mastra/core/runtime-context";
-
-// Import the existing Vibe router handler logic directly (do NOT call over HTTP)
 import { runVibeRouter } from "@/app/api/vibe/router/runner";
-
-// NOTE: If the repo does not have a runner yet, create one in step 2b below.
 
 type VibeAgentContext = {
   userId: string;
@@ -25,8 +20,6 @@ function getLastUserMessage(input: any): string {
 }
 
 function getContextFromInput(input: any): VibeAgentContext {
-  // CopilotKit lets you pass custom context; we standardize it.
-  // If not provided, we fail with a clear message.
   const ctx = (input?.context ?? {}) as Partial<VibeAgentContext>;
   return {
     userId: String(ctx.userId || ""),
@@ -36,49 +29,47 @@ function getContextFromInput(input: any): VibeAgentContext {
   };
 }
 
-class VibeRouterAgent extends AbstractAgent {
-  constructor() {
-    super({
-      agentId: "vibe",
-      description: "CopilotKit agent that bridges UI messages to Flowetic Vibe Router phases.",
-    });
-  }
+type FloweticJourneyMode =
+  | "select_entity"
+  | "recommend"
+  | "align"
+  | "style"
+  | "build_preview"
+  | "interactive_edit"
+  | "deploy";
 
-  protected async run(input: AgentInput): Promise<any> {
+function emitText(events: any, text: string) {
+  events?.next?.({ type: "TEXT_MESSAGE_START", payload: {} });
+  events?.next?.({ type: "TEXT_MESSAGE_CONTENT", delta: text });
+  events?.next?.({ type: "TEXT_MESSAGE_END" });
+}
+
+export const vibeRouterAgent = {
+  id: "vibe",
+  description: "CopilotKit agent that bridges UI messages to Flowetic Vibe Router phases.",
+
+  // IMPORTANT: public run() (not protected) to satisfy CopilotKit Agent typing
+  async run(input: AgentInput, { events }: any = {}): Promise<any> {
     const ctx = getContextFromInput(input);
     const userMessage = getLastUserMessage(input);
 
+    events?.next?.({ type: "RUN_STARTED" });
+
     if (!ctx.userId || !ctx.tenantId) {
       const msg = "Missing userId/tenantId in CopilotKit context.";
-      this.events$.next({ type: "RUN_STARTED" });
-      this.events$.next({ type: "TEXT_MESSAGE_START", payload: {} });
-      this.events$.next({ type: "TEXT_MESSAGE_CONTENT", delta: msg });
-      this.events$.next({ type: "TEXT_MESSAGE_END" });
-      this.events$.next({ type: "RUN_FINISHED" });
+      emitText(events, msg);
+      events?.next?.({ type: "RUN_FINISHED" });
       return { result: msg, newMessages: [] };
     }
 
-    this.events$.next({ type: "RUN_STARTED" });
-
-    // Phase gating: keep adapter minimal and aligned with real Flowetic phases.
-    // Source of truth still lives in /api/vibe/router (Master Router Agent).
-    const currentMode = (ctx.journey?.mode ?? "select_entity") as
-      | "select_entity"
-      | "recommend"
-      | "align"
-      | "style"
-      | "build_preview"
-      | "interactive_edit"
-      | "deploy";
+    // Phase gating aligned with real Flowetic phases; keep adapter minimal.
+    const currentMode = (ctx.journey?.mode ?? "select_entity") as FloweticJourneyMode;
 
     if (userMessage.startsWith("__ACTION__:")) {
-      // Format examples:
-      // "__ACTION__:select_style_bundle:<bundleId>"
-      // "__ACTION__:interactive_edit:{...json...}"
       const parts = userMessage.split(":");
       const action = parts[1] || "";
 
-      const requiredModeByAction: Record<string, typeof currentMode> = {
+      const requiredModeByAction: Record<string, FloweticJourneyMode> = {
         select_style_bundle: "style",
         interactive_edit: "interactive_edit",
         publish: "deploy",
@@ -87,21 +78,18 @@ class VibeRouterAgent extends AbstractAgent {
       const required = requiredModeByAction[action];
       if (required && currentMode !== required) {
         const msg = `That action isn't available yet. Current phase: "${currentMode}". Required phase: "${required}".`;
-
-        this.events$.next({ type: "TEXT_MESSAGE_START", payload: {} });
-        this.events$.next({ type: "TEXT_MESSAGE_CONTENT", delta: msg });
-        this.events$.next({ type: "TEXT_MESSAGE_END" });
-        this.events$.next({ type: "RUN_FINISHED" });
-
+        emitText(events, msg);
+        events?.next?.({ type: "RUN_FINISHED" });
         return { result: msg, newMessages: [] };
       }
     }
 
-    // Call existing Vibe router logic
     const runtimeContext = new RuntimeContext();
     runtimeContext.set("userId", ctx.userId);
     runtimeContext.set("tenantId", ctx.tenantId);
-    if (ctx.vibeContext?.platformType) runtimeContext.set("platformType", ctx.vibeContext.platformType);
+    if (ctx.vibeContext?.platformType) {
+      runtimeContext.set("platformType", ctx.vibeContext.platformType);
+    }
 
     const result = await runVibeRouter({
       userId: ctx.userId,
@@ -113,28 +101,22 @@ class VibeRouterAgent extends AbstractAgent {
     });
 
     const text = String(result?.text || "").trim() || "OK.";
+    emitText(events, text);
 
-    // Emit CopilotKit message events
-    this.events$.next({ type: "TEXT_MESSAGE_START", payload: {} });
-    this.events$.next({ type: "TEXT_MESSAGE_CONTENT", delta: text });
-    this.events$.next({ type: "TEXT_MESSAGE_END" });
-    this.events$.next({ type: "RUN_FINISHED" });
+    events?.next?.({ type: "RUN_FINISHED" });
 
-    // Use CopilotKit's renderer to display tool UI if present
-    if (result?.toolUi) {
-      this.renderToolUi("displayToolUI", { toolUi: result.toolUi });
-    }
-
+    // Return toolUi in meta so the frontend can handle it via useCopilotAction if needed.
+    // (We keep tool UI below the chat, not inline.)
     return {
       result: text,
       newMessages: [],
-      meta: null, // We used the renderer instead
+      meta: {
+        toolUi: result?.toolUi ?? null,
+        journey: result?.journey ?? null,
+        interfaceId: result?.interfaceId ?? null,
+        previewUrl: result?.previewUrl ?? null,
+        previewVersionId: result?.previewVersionId ?? null,
+      },
     };
-  }
-
-  protected detachActiveRun(): void {
-    // no-op
-  }
-}
-
-export const vibeRouterAgent = new VibeRouterAgent();
+  },
+} as const;
