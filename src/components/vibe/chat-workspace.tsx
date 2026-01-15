@@ -343,7 +343,7 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
     parameters: [
       { name: "toolUi", type: "object", description: "Tool UI from vibe router" },
     ],
-    handler: ({ toolUi }) => {
+    handler: ({ toolUi }: { toolUi: ToolUiPayload | null }) => {
       setToolUi(toolUi);
     },
   });
