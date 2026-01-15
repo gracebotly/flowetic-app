@@ -175,7 +175,7 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
   const [vibeInitDone, setVibeInitDone] = useState(false);
 
   const [journeyMode, setJourneyMode] = useState<JourneyMode>("select_entity");
-  const [selectedOutcome, setSelectedOutcome] = useState<"dashboard" | "product" | null>(null);
+  const [selectedOutcome, setSelectedOutcome] = useState<"dashboard" | "tool" | "form" | "product" | null>(null);
   const [selectedStoryboard, setSelectedStoryboard] = useState<string | null>(null);
   const [selectedStyleBundleId, setSelectedStyleBundleId] = useState<string | null>(null);
   const [densityPreset, setDensityPreset] = useState<"compact" | "comfortable" | "spacious">("comfortable");
@@ -954,8 +954,8 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
                     tabIndex={0}
                     className="relative group cursor-pointer rounded-lg border border-gray-400/60 bg-gray-800/80 p-3 text-center transition-all hover:bg-[#3366cc] hover:border-[#3366cc]/50 focus:outline-none focus:ring-2 focus:ring-[#3366cc]/50"
                     onClick={() => {
-                      addLog("info", `User selected Tool. Update journey mode to tool.`);
-                      setJourneyMode("tool");
+                      addLog("info", `User selected Tool outcome.`);
+                      setSelectedOutcome("tool");
                       setView("terminal");
                       setToolUi(null);
                     }}
@@ -971,8 +971,8 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
                     tabIndex={0}
                     className="relative group cursor-pointer rounded-lg border border-gray-400/60 bg-gray-800/80 p-3 text-center transition-all hover:bg-[#3366cc] hover:border-[#3366cc]/50 focus:outline-none focus:ring-2 focus:ring-[#3366cc]/50"
                     onClick={() => {
-                      addLog("info", `User selected Form. Update journey mode to form.`);
-                      setJourneyMode("form");
+                      addLog("info", `User selected Form outcome.`);
+                      setSelectedOutcome("form");
                       setView("terminal");
                       setToolUi(null);
                     }}
