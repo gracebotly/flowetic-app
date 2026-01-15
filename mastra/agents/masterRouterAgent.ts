@@ -23,9 +23,9 @@ export const masterRouterAgent: Agent = new Agent({
   description:
     "Master Router Agent (Copilot-connected). Enforces the VibeChat journey phases and routes to platform mapping, design advisor, and dashboard builder.",
   instructions: async ({ runtimeContext }: { runtimeContext: RuntimeContext }) => {
-    const platformType = (runtimeContext.get("platformType") as PlatformType) || "other";
+    const platformType = (runtimeContext.get("platformType") as PlatformType) || "make";
     const platformSkill = await loadSkillMarkdown(platformType);
-    const todoSkill = await loadSkillMarkdown("other"); // fallback if you don't want a dedicated todo loader
+    const todoSkill = await loadSkillMarkdown("make"); // fallback if you don't want a dedicated todo loader
 
     return [
       {

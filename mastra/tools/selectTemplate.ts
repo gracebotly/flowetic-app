@@ -5,7 +5,7 @@ export const selectTemplate = createTool({
   id: 'select-template',
   description: 'Selects the best dashboard template based on platform type and schema',
   inputSchema: z.object({
-    platformType: z.enum(['vapi', 'retell', 'n8n', 'mastra', 'crewai', 'pydantic_ai', 'other']),
+    platformType: z.enum(['vapi', 'retell', 'n8n', 'mastra', 'crewai', 'activepieces', 'make']),
     eventTypes: z.array(z.string()),
     fields: z.array(z.object({
       name: z.string(),

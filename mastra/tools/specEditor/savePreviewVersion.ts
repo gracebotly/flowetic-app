@@ -21,7 +21,7 @@ export const savePreviewVersion = createTool({
   execute: async ({ context, runtimeContext }) => {
     const tenantId = runtimeContext?.get("tenantId") as string | undefined;
     const userId = runtimeContext?.get("userId") as string | undefined;
-    const platformType = (runtimeContext?.get("platformType") as string | undefined) ?? "other";
+    const platformType = (runtimeContext?.get("platformType") as string | undefined) ?? "make";
 
     if (!tenantId || !userId) throw new Error("AUTH_REQUIRED");
 

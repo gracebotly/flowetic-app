@@ -21,7 +21,7 @@ export const designAdvisorAgent: Agent = new Agent({
   instructions: async ({ runtimeContext }: { runtimeContext: RuntimeContext }) => {
     const mode = (runtimeContext.get("mode") as string | undefined) ?? "edit";
     const phase = (runtimeContext.get("phase") as string | undefined) ?? "editing";
-    const platformType = (runtimeContext.get("platformType") as string | undefined) ?? "other";
+    const platformType = (runtimeContext.get("platformType") as string | undefined) ?? "make";
 
     return [
       {

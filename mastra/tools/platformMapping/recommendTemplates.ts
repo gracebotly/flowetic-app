@@ -11,7 +11,7 @@ export const recommendTemplates = createTool({
   id: "recommendTemplates",
   description: "Recommend up to 3 dashboard templates deterministically based on platform type and schema.",
   inputSchema: z.object({
-    platformType: z.enum(["vapi", "retell", "n8n", "mastra", "crewai", "pydantic_ai", "other"]),
+    platformType: z.enum(["vapi", "retell", "n8n", "mastra", "crewai", "activepieces", "make"]),
     schemaSummary: z.object({
       eventTypes: z.array(z.string()),
       fields: z.array(
@@ -46,11 +46,11 @@ export const recommendTemplates = createTool({
       n8n: [{ id: "workflow-monitor", required: ["status"] }],
       mastra: [{ id: "workflow-monitor", required: ["status"] }],
       crewai: [{ id: "workflow-monitor", required: ["status"] }],
-      pydantic_ai: [{ id: "workflow-monitor", required: ["status"] }],
-      other: [{ id: "general-analytics", required: [] }],
+      activepieces: [{ id: "workflow-monitor", required: ["status"] }],
+      make: [{ id: "general-analytics", required: [] }],
     };
 
-    const candidates = templatesByPlatform[platformType] ?? templatesByPlatform.other;
+    const candidates = templatesByPlatform[platformType] ?? templatesByPlatform.make;
 
     const scored = candidates.map((t) => {
       const matched = t.required.filter((r) => {

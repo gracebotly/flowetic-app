@@ -20,7 +20,7 @@ export const platformMappingMaster: Agent = new Agent({
   description:
     "Platform Mapping Agent: inspects event samples, recommends templates, proposes mappings, and triggers preview workflow.",
   instructions: async ({ runtimeContext }: { runtimeContext: RuntimeContext }) => {
-    const platformType = (runtimeContext.get("platformType") as PlatformType) || "other";
+    const platformType = (runtimeContext.get("platformType") as PlatformType) || "make";
     const skill = await loadSkillMarkdown(platformType);
 
     return [

@@ -4,14 +4,14 @@
 
 
 ---
-name: pydantic-ai-skill
+name: activepieces-skill
 version: 1.0.0
-platformType: pydantic_ai
+platformType: activepieces
 description: Mapping guidance for PydanticAI traces to dashboard templates.
 lastUpdated: 2025-12-30
 ---
 
-# PydanticAI Skill
+# Activepieces Skill
 ## Templates
 - workflow-monitor
 
