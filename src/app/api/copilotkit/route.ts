@@ -1,5 +1,4 @@
-import { CopilotRuntime } from "@copilotkit/runtime";
-import { copilotRuntimeHandler } from "@copilotkit/runtime/nextjs";
+import { CopilotRuntime, copilotRuntimeHandler } from "@copilotkit/runtime";
 
 import { vibeRouterAgent } from "@/lib/copilotkit/vibe-router-agent";
 
