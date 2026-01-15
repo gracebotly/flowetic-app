@@ -12,6 +12,10 @@ export const POST = async (req: NextRequest) => {
   // Inject the Vibe router agent explicitly
   const copilotRuntime = new CopilotRuntime({
     agents: {
+      // Alias for clients/components that default to "default"
+      default: vibeRouterAgent,
+
+      // Canonical Flowetic agent id
       vibe: vibeRouterAgent,
     },
   });
