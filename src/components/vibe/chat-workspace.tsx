@@ -146,7 +146,6 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
   const [sessions, setSessions] = useState<any[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [threadId, setThreadId] = useState<string>("vibe");
-  const [createModalOpen, setCreateModalOpen] = useState(false);
   const [newConvOpen, setNewConvOpen] = useState(false);
   const [newPlatformType, setNewPlatformType] = useState<"retell"|"make"|"n8n"|"vapi"|"activepieces"|"other">("retell");
   const [newSourceId, setNewSourceId] = useState<string>("");
