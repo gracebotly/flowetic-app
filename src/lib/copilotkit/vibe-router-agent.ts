@@ -5,6 +5,40 @@ import { RuntimeContext } from "@mastra/core/runtime-context";
 import { runVibeRouter } from "@/app/api/vibe/router/runner";
 import { Observable } from "rxjs";
 
+function getOrCreateThreadId(input: any): string {
+  const candidate =
+    input?.threadId ||
+    input?.thread?.id ||
+    input?.conversationId ||
+    input?.context?.threadId;
+
+  if (typeof candidate === "string" && candidate.length > 0) return candidate;
+
+  // Fallback: stable-ish per session
+  return "thread_" + Math.random().toString(36).slice(2);
+}
+
+function getOrCreateRunId(input: any): string {
+  const candidate =
+    input?.runId ||
+    input?.run?.id ||
+    input?.context?.runId;
+
+  if (typeof candidate === "string" && candidate.length > 0) return candidate;
+
+  // Fallback: unique per invocation
+  return "run_" + crypto.randomUUID();
+}
+
+function emit(subscriber: any, base: { threadId: string; runId: string }, event: any) {
+  subscriber.next({
+    ...event,
+    threadId: base.threadId,
+    runId: base.runId,
+    timestamp: Date.now(),
+  });
+}
+
 type VibeAgentContext = {
   userId: string;
   tenantId: string;
@@ -76,18 +110,22 @@ class VibeRouterAgent extends AbstractAgent {
           const ctx = parsed.ctx ?? getContextFromInput(input);
           const userMessage = parsed.message;
 
+          const base = {
+            threadId: getOrCreateThreadId(input),
+            runId: getOrCreateRunId(input),
+          };
+
           // RUN_STARTED
-          subscriber.next({ type: "RUN_STARTED", timestamp: Date.now() });
+          emit(subscriber, base, { type: "RUN_STARTED" });
 
           if (!ctx.userId || !ctx.tenantId) {
-            subscriber.next({ type: "TEXT_MESSAGE_START", payload: {}, timestamp: Date.now() });
-            subscriber.next({
+            emit(subscriber, base, { type: "TEXT_MESSAGE_START", payload: {} });
+            emit(subscriber, base, {
               type: "TEXT_MESSAGE_CONTENT",
               delta: "I'm ready, but I don't have your session context yet. Please sign in and refresh, then click Enter Vibe (or open /vibe/chat after auth).",
-              timestamp: Date.now(),
             });
-            subscriber.next({ type: "TEXT_MESSAGE_END", timestamp: Date.now() });
-            subscriber.next({ type: "RUN_FINISHED", timestamp: Date.now() });
+            emit(subscriber, base, { type: "TEXT_MESSAGE_END" });
+            emit(subscriber, base, { type: "RUN_FINISHED" });
             subscriber.complete();
             return;
           }
@@ -116,10 +154,10 @@ class VibeRouterAgent extends AbstractAgent {
             if (required && currentMode !== required) {
               const msg = `That action isn't available yet. Current phase: "${currentMode}". Required phase: "${required}".`;
 
-              subscriber.next({ type: "TEXT_MESSAGE_START", payload: {}, timestamp: Date.now() });
-              subscriber.next({ type: "TEXT_MESSAGE_CONTENT", delta: msg, timestamp: Date.now() });
-              subscriber.next({ type: "TEXT_MESSAGE_END", timestamp: Date.now() });
-              subscriber.next({ type: "RUN_FINISHED", timestamp: Date.now() });
+              emit(subscriber, base, { type: "TEXT_MESSAGE_START", payload: {} });
+              emit(subscriber, base, { type: "TEXT_MESSAGE_CONTENT", delta: msg });
+              emit(subscriber, base, { type: "TEXT_MESSAGE_END" });
+              emit(subscriber, base, { type: "RUN_FINISHED" });
 
               subscriber.complete();
               return;
@@ -145,30 +183,29 @@ class VibeRouterAgent extends AbstractAgent {
           const text = String(result?.text || "").trim() || "OK.";
 
           // Message events
-          subscriber.next({ type: "TEXT_MESSAGE_START", payload: {}, timestamp: Date.now() });
-          subscriber.next({ type: "TEXT_MESSAGE_CONTENT", delta: text, timestamp: Date.now() });
-          subscriber.next({ type: "TEXT_MESSAGE_END", timestamp: Date.now() });
+          emit(subscriber, base, { type: "TEXT_MESSAGE_START", payload: {} });
+          emit(subscriber, base, { type: "TEXT_MESSAGE_CONTENT", delta: text });
+          emit(subscriber, base, { type: "TEXT_MESSAGE_END" });
 
           // If toolUi exists, emit an action/tool event that the frontend can render.
           // We keep tool UI BELOW the chat; frontend already uses useCopilotAction("displayToolUI").
           if (result?.toolUi) {
-            subscriber.next({
+            emit(subscriber, base, {
               type: "ACTION_CALL",
               name: "displayToolUI",
               arguments: { toolUi: result.toolUi },
-              timestamp: Date.now(),
             });
           }
 
-          subscriber.next({ type: "RUN_FINISHED", timestamp: Date.now() });
+          emit(subscriber, base, { type: "RUN_FINISHED" });
           subscriber.complete();
         } catch (err: any) {
           const msg = err?.message ? String(err.message) : "Unknown error.";
 
-          subscriber.next({ type: "TEXT_MESSAGE_START", payload: {}, timestamp: Date.now() });
-          subscriber.next({ type: "TEXT_MESSAGE_CONTENT", delta: msg, timestamp: Date.now() });
-          subscriber.next({ type: "TEXT_MESSAGE_END", timestamp: Date.now() });
-          subscriber.next({ type: "RUN_FINISHED", timestamp: Date.now() });
+          emit(subscriber, base, { type: "TEXT_MESSAGE_START", payload: {} });
+          emit(subscriber, base, { type: "TEXT_MESSAGE_CONTENT", delta: msg });
+          emit(subscriber, base, { type: "TEXT_MESSAGE_END" });
+          emit(subscriber, base, { type: "RUN_FINISHED" });
 
           subscriber.complete();
         }
