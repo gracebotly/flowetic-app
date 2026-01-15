@@ -107,6 +107,14 @@ interface ChatWorkspaceProps {
   showEnterVibeButton?: boolean;
 }
 
+function isToolUiPayload(value: unknown): value is ToolUiPayload {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "type" in value
+  );
+}
+
 export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProps) {
   const router = useRouter();
   const [view, setView] = useState<ViewMode>("terminal");
@@ -343,8 +351,12 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
     parameters: [
       { name: "toolUi", type: "object", description: "Tool UI from vibe router" },
     ],
-    handler: ({ toolUi }: { toolUi: ToolUiPayload | null }) => {
-      setToolUi(toolUi);
+    handler: ({ toolUi }: { toolUi: object }) => {
+      if (isToolUiPayload(toolUi)) {
+        setToolUi(toolUi);
+      } else {
+        setToolUi(null);
+      }
     },
   });
 
