@@ -83,7 +83,6 @@ type ToolUiPayload =
     };
 
 type Role = "user" | "assistant" | "system";
-type Msg = { id: string; role: Role; content: string };
 
 type LogType = "info" | "success" | "error" | "running";
 type TerminalLog = { id: string; type: LogType; text: string; detail?: string };
@@ -372,17 +371,6 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
         "Start chatting to build or edit your client dashboards.\nTry:\n• \"Create a dashboard for ABC Dental\"\n• \"Add a call volume chart\"\n• \"Change the header color to blue\"",
     },
   ]);
-
-  const [messages, setMessages] = useState<Msg[]>([
-    {
-      id: "m1",
-      role: "assistant",
-      content: "Hello! Welcome to GetFlowetic. How can I help you?",
-    },
-  ]);
-
-  const renderedMessages = useMemo(() => messages, [messages]);
-
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const logsEndRef = useRef<HTMLDivElement | null>(null);
 
