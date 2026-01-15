@@ -583,36 +583,6 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
                 instructions={/* optional custom instructions */ undefined}
               />
             </div>
-            {/* Tool UI renderer - displayed below CopilotChat */}
-            {toolUi ? (
-              <div className="border-t border-gray-200 bg-white p-3">
-                {toolUi.type === "style_bundles" ? (
-                  <StyleBundleCards
-                    title={toolUi.title}
-                    bundles={toolUi.bundles}
-                    onSelect={async (bundleId) => {
-                      setSelectedStyleBundleId(bundleId);
-                      setToolUi(null);
-                      await sendMessage(buildCtxEnvelope("__ACTION__:select_style_bundle:" + bundleId));
-                    }}
-                  />
-                ) : toolUi.type === "todos" ? (
-                  <TodoPanel title={toolUi.title} items={toolUi.items} />
-                ) : toolUi.type === "interactive_edit_panel" ? (
-                  <InteractiveEditPanel
-                    title={toolUi.title}
-                    interfaceId={toolUi.interfaceId}
-                    widgets={toolUi.widgets}
-                    palettes={toolUi.palettes}
-                    density={toolUi.density}
-                    onApply={async (payload) => {
-                      await sendMessage(buildCtxEnvelope("__ACTION__:interactive_edit:" + JSON.stringify(payload)));
-                      setToolUi(null);
-                    }}
-                  />
-                ) : null}
-              </div>
-            ) : null}
           </div>
         </CopilotKit>
 
@@ -709,6 +679,35 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
           {/* Terminal View */}
           {view === "terminal" ? (
             <div className="flex flex-1 flex-col bg-[#1e1e1e] min-h-0 overflow-hidden">
+              {toolUi ? (
+                <div className="mb-3 rounded-lg border border-gray-700 bg-gray-900 p-3 text-gray-100">
+                  {toolUi.type === "style_bundles" ? (
+                    <StyleBundleCards
+                      title={toolUi.title}
+                      bundles={toolUi.bundles}
+                      onSelect={async (bundleId) => {
+                        setSelectedStyleBundleId(bundleId);
+                        setToolUi(null);
+                        await sendMessage(buildCtxEnvelope("__ACTION__:select_style_bundle:" + bundleId));
+                      }}
+                    />
+                  ) : toolUi.type === "todos" ? (
+                    <TodoPanel title={toolUi.title} items={toolUi.items} />
+                  ) : toolUi.type === "interactive_edit_panel" ? (
+                    <InteractiveEditPanel
+                      title={toolUi.title}
+                      interfaceId={toolUi.interfaceId}
+                      widgets={toolUi.widgets}
+                      palettes={toolUi.palettes}
+                      density={toolUi.density}
+                      onApply={async (payload) => {
+                        await sendMessage(buildCtxEnvelope("__ACTION__:interactive_edit:" + JSON.stringify(payload)));
+                        setToolUi(null);
+                      }}
+                    />
+                  ) : null}
+                </div>
+              ) : null}
               <div className="flex-1 overflow-y-auto pl-4 pr-2 py-4 font-mono text-[13px] leading-6 text-[#d4d4d4] thin-scrollbar">
                 {logs.map((l) => {
                   const icon =

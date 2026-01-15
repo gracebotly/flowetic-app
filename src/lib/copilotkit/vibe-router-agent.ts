@@ -152,7 +152,12 @@ class VibeRouterAgent extends AbstractAgent {
           // If toolUi exists, emit an action/tool event that the frontend can render.
           // We keep tool UI BELOW the chat; frontend already uses useCopilotAction("displayToolUI").
           if (result?.toolUi) {
-            this.renderToolUi("displayToolUI", { toolUi: result.toolUi });
+            subscriber.next({
+              type: "ACTION_CALL",
+              name: "displayToolUI",
+              arguments: { toolUi: result.toolUi },
+              timestamp: Date.now(),
+            });
           }
 
           subscriber.next({ type: "RUN_FINISHED", timestamp: Date.now() });
