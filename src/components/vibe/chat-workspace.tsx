@@ -691,7 +691,8 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
   }
 
   return (
-    <div className="h-full min-h-0 flex flex-col mx-auto max-w-[1920px]">
+    <>
+      <div className="h-full min-h-0 flex flex-col mx-auto max-w-[1920px]">
       {showEnterVibeButton && (
         <div className="mb-4 flex justify-end">
           <Link
@@ -1309,5 +1310,8 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
         </div>
       </div>
     )}
+
+
+    </>
   );
 }
