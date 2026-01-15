@@ -131,6 +131,7 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
   const [chatMode, setChatMode] = useState<"chat" | "voice">("chat");
   const [isListening, setIsListening] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const chatContainerRef = useRef<HTMLDivElement | null>(null);
 
   // Conversation session state
   const [sessionsOpen, setSessionsOpen] = useState(false);
