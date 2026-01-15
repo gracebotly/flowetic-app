@@ -115,6 +115,27 @@ function isToolUiPayload(value: unknown): value is ToolUiPayload {
   );
 }
 
+function buildCtxEnvelope(message: string) {
+  return (
+    "__FLOWETIC_CTX__:" +
+    JSON.stringify({
+      userId: authContext.userId,
+      tenantId: authContext.tenantId,
+      vibeContext,
+      journey: {
+        mode: journeyMode,
+        selectedOutcome,
+        selectedStoryboard,
+        selectedStyleBundleId,
+        densityPreset,
+        paletteOverrideId,
+      },
+    }) +
+    "\n" +
+    message
+  );
+}
+
 export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProps) {
   const router = useRouter();
   const [view, setView] = useState<ViewMode>("terminal");
@@ -542,19 +563,6 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
         <CopilotKit 
           runtimeUrl="/api/copilotkit" 
           agent="vibe"
-          context={{
-            userId: authContext.userId,
-            tenantId: authContext.tenantId,
-            vibeContext: vibeContext,
-            journey: {
-              mode: journeyMode,
-              selectedOutcome,
-              selectedStoryboard,
-              selectedStyleBundleId,
-              densityPreset,
-              paletteOverrideId,
-            },
-          }}
         >
           <div className="flex w-[35%] min-w-[360px] flex-col border-r border-gray-300 bg-[#f9fafb] overflow-hidden">
             {backendWarning ? (
@@ -584,7 +592,7 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
                     onSelect={async (bundleId) => {
                       setSelectedStyleBundleId(bundleId);
                       setToolUi(null);
-                      await sendMessage("__ACTION__:select_style_bundle:" + bundleId);
+                      await sendMessage(buildCtxEnvelope("__ACTION__:select_style_bundle:" + bundleId));
                     }}
                   />
                 ) : toolUi.type === "todos" ? (
@@ -597,7 +605,7 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
                     palettes={toolUi.palettes}
                     density={toolUi.density}
                     onApply={async (payload) => {
-                      await sendMessage("__ACTION__:interactive_edit:" + JSON.stringify(payload));
+                      await sendMessage(buildCtxEnvelope("__ACTION__:interactive_edit:" + JSON.stringify(payload)));
                       setToolUi(null);
                     }}
                   />

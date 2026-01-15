@@ -40,6 +40,25 @@ function getContextFromInput(input: any): VibeAgentContext {
   };
 }
 
+function parseCtxEnvelope(input: any): { ctx: any; message: string } {
+  const raw = getLastUserMessage(input);
+  if (!raw.startsWith("__FLOWETIC_CTX__:")) return { ctx: null, message: raw };
+
+  const idx = raw.indexOf("\n");
+  if (idx === -1) return { ctx: null, message: raw };
+
+  const header = raw.slice(0, idx);
+  const body = raw.slice(idx + 1);
+
+  const jsonStr = header.replace("__FLOWETIC_CTX__:", "");
+  try {
+    const ctx = JSON.parse(jsonStr);
+    return { ctx, message: body };
+  } catch {
+    return { ctx: null, message: raw };
+  }
+}
+
 class VibeRouterAgent extends AbstractAgent {
   constructor() {
     super({
@@ -53,8 +72,9 @@ class VibeRouterAgent extends AbstractAgent {
     return new Observable((subscriber) => {
       (async () => {
         try {
-          const ctx = getContextFromInput(input);
-          const userMessage = getLastUserMessage(input);
+          const parsed = parseCtxEnvelope(input);
+          const ctx = parsed.ctx ?? getContextFromInput(input);
+          const userMessage = parsed.message;
 
           // RUN_STARTED
           subscriber.next({ type: "RUN_STARTED", timestamp: Date.now() });
