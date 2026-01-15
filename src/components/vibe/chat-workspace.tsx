@@ -18,6 +18,13 @@ import {
   MessageSquare,
   Plus,
   X,
+  LayoutDashboard,
+  Zap,
+  FileText,
+  Settings,
+  Shield,
+  Users,
+  BarChart3,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -29,6 +36,7 @@ import { TodoPanel } from "@/components/vibe/tool-renderers/todo-panel";
 import { InteractiveEditPanel } from "@/components/vibe/tool-renderers/interactive-edit-panel";
 import { PreviewInspector } from "@/components/vibe/preview/preview-inspector";
 import { WidgetPropertiesDrawer } from "@/components/vibe/preview/widget-properties-drawer";
+import { MessageInput } from "@/components/vibe/message-input";
 
 type ViewMode = "terminal" | "preview" | "publish";
 
@@ -138,17 +146,15 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
   const [sessions, setSessions] = useState<any[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [threadId, setThreadId] = useState<string>("vibe");
-  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [newConvOpen, setNewConvOpen] = useState(false);
+  const [newPlatformType, setNewPlatformType] = useState<"retell"|"make"|"n8n"|"vapi"|"activepieces"|"other">("retell");
+  const [newSourceId, setNewSourceId] = useState<string>("");
+  const [newEntityId, setNewEntityId] = useState<string>("");
+  const [newTitle, setNewTitle] = useState<string>("");
 
   // Message persistence state
-  type MessageRole = "system" | "user" | "assistant";
-  type Message = {
-    id: string;
-    role: MessageRole;
-    content: string;
-    created_at?: string;
-  };
-  const [messages, setMessages] = useState<Message[]>([]);
+  type Msg = { id: string; role: Role; content: string; createdAt?: string };
+  const [messages, setMessages] = useState<Msg[]>([]);
 
   const [previewDevice, setPreviewDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
   const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
@@ -168,7 +174,7 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
   const [vibeInitDone, setVibeInitDone] = useState(false);
 
   const [journeyMode, setJourneyMode] = useState<JourneyMode>("select_entity");
-  const [selectedOutcome, setSelectedOutcome] = useState<"dashboard" | "product" | null>(null);
+  const [selectedOutcome, setSelectedOutcome] = useState<"dashboard" | "tool" | "form" | "product" | null>(null);
   const [selectedStoryboard, setSelectedStoryboard] = useState<string | null>(null);
   const [selectedStyleBundleId, setSelectedStyleBundleId] = useState<string | null>(null);
   const [densityPreset, setDensityPreset] = useState<"compact" | "comfortable" | "spacious">("comfortable");
@@ -386,65 +392,56 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
   // Load sessions on mount
   useEffect(() => {
     if (authContext.userId && authContext.tenantId) {
-      (async () => {
-        try {
-          const resp = await fetch(
-            `/api/journey-sessions?tenantId=${authContext.tenantId}&userId=${authContext.userId}`
-          );
-          const data = await resp.json();
-          if (data.ok) {
-            setSessions(data.sessions);
-            if (data.sessions.length > 0) {
-              const latest = data.sessions[0];
-              setActiveSessionId(latest.id);
-              setThreadId(latest.thread_id);
-              setView("terminal");
-              await loadMessages(latest.thread_id);
-              // Update vibeContext with session info
-              setVibeContext(prev => prev ? {
-                ...prev,
-                threadId: latest.thread_id,
-                sourceId: latest.source_id,
-                entityId: latest.entity_id,
-                platformType: latest.platform_type
-              } : prev);
-            }
-          }
-        } catch (e) {
-          console.error("Failed to load sessions", e);
-        }
-      })();
+      loadSessions();
     }
   }, [authContext.userId, authContext.tenantId]);
 
-  // Load messages when thread changes
-  async function loadMessages(threadIdArg: string) {
-    if (!authContext.tenantId) return;
-    try {
-      const resp = await fetch(
-        `/api/journey-messages?tenantId=${authContext.tenantId}&threadId=${threadIdArg}`
-      );
-      const data = await resp.json();
-      if (data.ok) {
-        setMessages(data.messages);
-      }
-    } catch (e) {
-      console.error("Failed to load messages", e);
+  async function loadSessions() {
+    if (!authContext.userId || !authContext.tenantId) return;
+    const res = await fetch(`/api/journey-sessions?tenantId=${authContext.tenantId}&userId=${authContext.userId}`);
+    const json = await res.json();
+    if (!res.ok || !json.ok) throw new Error(json?.error || "FAILED_TO_LOAD_SESSIONS");
+    setSessions(json.sessions ?? []);
+    const first = (json.sessions ?? [])[0];
+    if (first && !activeSessionId) {
+      await switchToSession(first);
     }
   }
 
   // Session switching
-  async function switchToSession(session: any) {
-    setActiveSessionId(session.id);
-    setThreadId(session.thread_id);
-    await loadMessages(session.thread_id);
-    setVibeContext(prev => prev ? {
-      ...prev,
-      threadId: session.thread_id,
-      sourceId: session.source_id,
-      entityId: session.entity_id,
-      platformType: session.platform_type
-    } : prev);
+  async function switchToSession(s: any) {
+    setActiveSessionId(String(s.id));
+    setThreadId(String(s.thread_id));
+    setView("terminal"); // requirement: always default terminal
+    setToolUi(null);
+
+    // restore journey fields
+    if (s.mode) setJourneyMode(s.mode);
+    if (typeof s.selected_outcome !== "undefined") setSelectedOutcome(s.selected_outcome);
+    if (typeof s.selected_storyboard !== "undefined") setSelectedStoryboard(s.selected_storyboard);
+    if (typeof s.selected_style_bundle_id !== "undefined") setSelectedStyleBundleId(s.selected_style_bundle_id);
+    if (typeof s.density_preset !== "undefined") setDensityPreset(s.density_preset);
+    if (typeof s.palette_override_id !== "undefined") setPaletteOverrideId(s.palette_override_id);
+    if (s.preview_version_id) setPreviewVersionId(String(s.preview_version_id));
+
+    // ensure vibeContext carries threadId so master router uses it
+    setVibeContext((prev: any) => (prev ? { ...prev, threadId: String(s.thread_id) } : prev));
+
+    await loadThreadMessages(String(s.thread_id));
+  }
+
+  async function loadThreadMessages(tid: string) {
+    if (!authContext.tenantId) return;
+    const res = await fetch(`/api/journey-messages?tenantId=${authContext.tenantId}&threadId=${encodeURIComponent(tid)}&limit=200`);
+    const json = await res.json();
+    if (!res.ok || !json.ok) throw new Error(json?.error || "FAILED_TO_LOAD_MESSAGES");
+    const msgs = (json.messages ?? []).map((m: any) => ({
+      id: String(m.id),
+      role: m.role as Role,
+      content: String(m.content),
+      createdAt: m.created_at,
+    }));
+    setMessages(msgs);
   }
 
   // Create new session
@@ -468,7 +465,7 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
       if (data.ok) {
         setSessions(prev => [data.session, ...prev]);
         await switchToSession(data.session);
-        setCreateModalOpen(false);
+        setNewConvOpen(false);
       }
     } catch (e) {
       console.error("Failed to create session", e);
@@ -694,6 +691,38 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
       )}
 
       <div className="flex h-full min-h-0 w-full overflow-hidden rounded-xl border border-gray-300 bg-white">
+        {/* LEFT: vertical sidebar icons */}
+        <div className="flex flex-col items-center py-4 px-2 border-r border-gray-200 bg-white space-y-2">
+          <button
+            type="button"
+            title="Back"
+            onClick={backToWizard}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+          >
+            <ArrowLeft size={18} />
+          </button>
+          
+          <button
+            type="button"
+            title="New conversation"
+            onClick={async () => {
+              setNewConvOpen(true);
+            }}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+          >
+            <Plus size={18} />
+          </button>
+          
+          <button
+            type="button"
+            title="Conversations"
+            onClick={() => setSessionsOpen(true)}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+          >
+            <MessageSquare size={18} />
+          </button>
+        </div>
+
         {/* LEFT: chat (35%) - FIXED VERSION */}
         <CopilotKit 
           runtimeUrl="/api/copilotkit" 
@@ -705,73 +734,8 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
                 {backendWarning}
               </div>
             ) : null}
-            
-            <div className="flex items-center justify-between border-b border-gray-200 bg-white px-3 py-2">
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  title="Conversations"
-                  onClick={() => setSessionsOpen(!sessionsOpen)}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
-                >
-                  <MessageSquare className="h-4 w-4" />
-                </button>
-                <div className="text-sm font-semibold text-gray-900">VibeChat</div>
-              </div>
-              
-              <div className="flex items-center gap-2">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  className="hidden"
-                  multiple
-                  onChange={(e) => {
-                    const count = e.target.files?.length ?? 0;
-                    if (count > 0) addLog("info", `Attached ${count} file(s). (Upload wiring next.)`);
-                  }}
-                />
 
-                <button
-                  type="button"
-                  title="New conversation"
-                  onClick={() => setCreateModalOpen(true)}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
-                >
-                  <Plus className="h-4 w-4" />
-                </button>
-
-                <button
-                  type="button"
-                  title="Attach files"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
-                >
-                  +
-                </button>
-
-                <button
-                  type="button"
-                  title={chatMode === "chat" ? "Voice chat" : "Stop voice"}
-                  onClick={() => {
-                    if (chatMode === "chat") {
-                      setChatMode("voice");
-                      setIsListening(true);
-                      addLog("info", "Voice mode activated. (Wiring next.)");
-                    } else {
-                      setChatMode("chat");
-                      setIsListening(false);
-                      addLog("info", "Switched back to text mode.");
-                    }
-                  }}
-                  className={`inline-flex h-9 w-9 items-center justify-center rounded-md border ${
-                    isListening ? "border-red-300 bg-red-50 text-red-700" : "border-gray-200 bg-white text-gray-700"
-                  } hover:bg-gray-50`}
-                >
-                  🎙
-                </button>
-              </div>
-            </div>
-            {/* Custom message list - replacing CopilotChat */}
+{/* Custom message list - replacing CopilotChat */}
             <div ref={chatContainerRef} className="flex-1 overflow-y-auto px-4 py-6">
               {messages.length === 0 ? (
                 <div className="text-center text-gray-500 py-8">
@@ -793,6 +757,60 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
                       <div className="text-sm text-gray-800 whitespace-pre-wrap">
                         {msg.content}
                       </div>
+                      
+                      {/* Render outcome selection cards after the specific assistant message */}
+                      {msg.role === "assistant" && msg.content.includes("What would you like to build—an analytics dashboard, a tool, or a form?") && (
+                        <div className="mt-4 grid grid-cols-3 gap-3">
+                          <div
+                            role="button"
+                            tabIndex={0}
+                            className="relative group cursor-pointer rounded-lg border border-gray-400/60 bg-gray-800/80 p-3 text-center transition-all hover:bg-[#3366cc] hover:border-[#3366cc]/50 focus:outline-none focus:ring-2 focus:ring-[#3366cc]/50"
+                            onClick={async () => {
+                              addLog("info", `User selected Dashboard outcome.`);
+                              setSelectedOutcome("dashboard");
+                              await sendMessage("__ACTION__:select_outcome:dashboard");
+                            }}
+                          >
+                            <div className="mx-auto mb-3 size-16 flex items-center justify-center rounded-md bg-[#3366cc] text-white text shadow-sm group-hover:bg-white/10">
+                              <LayoutDashboard size={28} />
+                            </div>
+                            <div className="text-xs font-semibold text-white">Dashboard</div>
+                            <div className="text-xs text-gray-400">Analytics, grids, charts, reports</div>
+                          </div>
+                          <div
+                            role="button"
+                            tabIndex={0}
+                            className="relative group cursor-pointer rounded-lg border border-gray-400/60 bg-gray-800/80 p-3 text-center transition-all hover:bg-[#3366cc] hover:border-[#3366cc]/50 focus:outline-none focus:ring-2 focus:ring-[#3366cc]/50"
+                            onClick={async () => {
+                              addLog("info", `User selected Tool outcome.`);
+                              setSelectedOutcome("tool");
+                              await sendMessage("__ACTION__:select_outcome:tool");
+                            }}
+                          >
+                            <div className="mx-auto mb-3 size-16 flex items-center justify-center rounded-md bg-[#3366cc] text-white text shadow-sm group-hover:bg-white/10">
+                              <Zap size={28} />
+                            </div>
+                            <div className="text-xs font-semibold text-white">Tool</div>
+                            <div className="text-xs text-gray-400">Utils, processors, RPC, integrations</div>
+                          </div>
+                          <div
+                            role="button"
+                            tabIndex={0}
+                            className="relative group cursor-pointer rounded-lg border border-gray-400/60 bg-gray-800/80 p-3 text-center transition-all hover:bg-[#3366cc] hover:border-[#3366cc]/50 focus:outline-none focus:ring-2 focus:ring-[#3366cc]/50"
+                            onClick={async () => {
+                              addLog("info", `User selected Form outcome.`);
+                              setSelectedOutcome("form");
+                              await sendMessage("__ACTION__:select_outcome:form");
+                            }}
+                          >
+                            <div className="mx-auto mb-3 size-16 flex items-center justify-center rounded-md bg-[#3366cc] text-white text shadow-sm group-hover:bg-white/10">
+                              <FileText size={28} />
+                            </div>
+                            <div className="text-xs font-semibold text-white">Form</div>
+                            <div className="text-xs text-gray-400">Steps, schema, validation, submissions</div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                     {(msg.role === "assistant" || msg.role === "user") && (
                       <button
@@ -818,35 +836,23 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
               )}
               <div ref={messagesEndRef} />
             </div>
-            {/* Custom input */}
-            <div className="border-t border-gray-200 p-3">
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  if (input.trim()) {
-                    sendMessage(input);
-                    setInput("");
-                  }
-                }}
-                className="flex gap-2"
-              >
-                <input
-                  type="text"
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  placeholder="Type your message…"
-                  className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  disabled={isLoading}
-                />
-                <button
-                  type="submit"
-                  disabled={isLoading || !input.trim()}
-                  className="inline-flex items-center gap-2 rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:hover:bg-blue-600"
-                >
-                  <Send className="h-4 w-4" />
-                </button>
-              </form>
-            </div>
+            <MessageInput
+              value={input}
+              onChange={setInput}
+              disabled={isLoading}
+              isListening={isListening}
+              onToggleVoice={() => {
+                setChatMode((m) => (m === "chat" ? "voice" : "chat"));
+                setIsListening((v) => !v);
+                addLog("info", "Voice toggled (wiring next).");
+              }}
+              onAttachFiles={(files) => {
+                addLog("info", `Attached ${files.length} file(s). (Upload wiring next.)`);
+              }}
+              onSend={() => {
+                void sendFromInput();
+              }}
+            />
           </div>
         </CopilotKit>
 
@@ -943,7 +949,7 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
           {/* Terminal View */}
           {view === "terminal" ? (
             <div className="flex flex-1 flex-col bg-[#1e1e1e] min-h-0 overflow-hidden">
-              
+
               {toolUi && (toolUi.type === "style_bundles" || toolUi.type === "todos") ? (
                 <div className="mb-3 rounded-xl border border-gray-700 bg-gray-900 p-3 text-gray-100">
                   {toolUi.type === "style_bundles" ? (
@@ -1035,13 +1041,19 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
                       maxHeight: "100%",
                     }}
                   >
-                    <iframe
-                      key={`${previewVersionId}-${previewRefreshKey}`}
-                      src={`/preview/${previewDashboardId}/${previewVersionId}`}
-                      className="h-full w-full border-0"
-                      sandbox="allow-scripts allow-same-origin"
-                      title="Dashboard Preview"
-                    />
+                    {vibeContext?.previewUrl ? (
+                      <iframe
+                        key={previewRefreshKey}
+                        src={vibeContext.previewUrl}
+                        className="h-full w-full rounded-xl border border-gray-200 bg-white"
+                        sandbox="allow-scripts allow-same-origin"
+                        title="Dashboard Preview"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center rounded-xl border border-gray-200 bg-white text-sm text-gray-500">
+                        No preview yet. Continue the chat to generate a preview.
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1215,35 +1227,30 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
       </div>
     )}
 
-    {/* Create Session Modal */}
-    {createModalOpen && (
+    {/* New Conversation Modal */}
+    {newConvOpen && (
       <div className="fixed inset-0 z-50 flex items-center justify-center">
-        <div className="fixed inset-0 bg-black bg-opacity-50" onClick={() => setCreateModalOpen(false)} />
+        <div className="fixed inset-0 bg-black bg-opacity-50" onClick={() => setNewConvOpen(false)} />
         <div className="relative bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-900">New Conversation</h3>
-            <button onClick={() => setCreateModalOpen(false)} className="p-1 rounded-md hover:bg-gray-100">
+            <button onClick={() => setNewConvOpen(false)} className="p-1 rounded-md hover:bg-gray-100">
               <X className="h-5 w-5 text-gray-500" />
             </button>
           </div>
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              const formData = new FormData(e.currentTarget);
-              createNewSession(
-                formData.get("title") as string,
-                formData.get("platformType") as string,
-                formData.get("sourceId") as string,
-                formData.get("entityId") as string
-              );
+              createNewSession(newTitle, newPlatformType, newSourceId, newEntityId);
             }}
             className="space-y-4"
           >
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
               <input
-                name="title"
                 type="text"
+                value={newTitle}
+                onChange={(e) => setNewTitle(e.target.value)}
                 required
                 className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                 placeholder="New Dashboard Build"
@@ -1252,23 +1259,25 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Platform</label>
               <select
-                name="platformType"
+                value={newPlatformType}
+                onChange={(e) => setNewPlatformType(e.target.value as any)}
                 required
                 className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               >
-                <option value="other">Other</option>
                 <option value="retell">Retell</option>
                 <option value="make">Make</option>
                 <option value="n8n">n8n</option>
                 <option value="vapi">Vapi</option>
                 <option value="activepieces">Activepieces</option>
+                <option value="other">Other</option>
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Source ID</label>
               <input
-                name="sourceId"
                 type="text"
+                value={newSourceId}
+                onChange={(e) => setNewSourceId(e.target.value)}
                 required
                 className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                 placeholder="demo-source"
@@ -1277,8 +1286,9 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Entity ID</label>
               <input
-                name="entityId"
                 type="text"
+                value={newEntityId}
+                onChange={(e) => setNewEntityId(e.target.value)}
                 required
                 className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                 placeholder="demo-entity"
@@ -1293,7 +1303,7 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
               </button>
               <button
                 type="button"
-                onClick={() => setCreateModalOpen(false)}
+                onClick={() => setNewConvOpen(false)}
                 className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
               >
                 Cancel
