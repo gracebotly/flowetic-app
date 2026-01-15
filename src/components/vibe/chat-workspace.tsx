@@ -1178,44 +1178,48 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
     {/* Conversations Drawer */}
     {sessionsOpen && (
       <div className="fixed inset-0 z-50 flex">
-        <div className="fixed inset-0 bg-black bg-opacity-50" onClick={() => setSessionsOpen(false)} />
-        <div className="relative flex w-80 flex-col bg-white shadow-xl">
-          <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
-            <h2 className="text-lg font-semibold text-gray-900">Conversations</h2>
-            <button onClick={() => setSessionsOpen(false)} className="p-1 rounded-md hover:bg-gray-100">
-              <X className="h-5 w-5 text-gray-500" />
+        <div
+          className="fixed inset-0 bg-black/50"
+          onClick={() => setSessionsOpen(false)}
+        />
+        <div className="relative ml-4 mt-4 w-[380px] rounded-2xl bg-slate-900 p-4 text-white shadow-2xl">
+          <div className="mb-3 flex items-center justify-between">
+            <div className="text-sm font-semibold">Conversations</div>
+            <button
+              type="button"
+              onClick={() => setSessionsOpen(false)}
+              className="rounded-md px-2 py-1 text-white/80 hover:bg-white/10"
+            >
+              ✕
             </button>
           </div>
-          <div className="flex-1 overflow-y-auto p-4">
+
+          <div className="space-y-2">
             {sessions.length === 0 ? (
-              <div className="text-center text-gray-500 py-8">
-                <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">No conversations yet</p>
+              <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-sm text-white/70">
+                No conversations yet.
               </div>
             ) : (
-              <div className="space-y-2">
-                {sessions.map((session) => (
-                  <button
-                    key={session.id}
-                    onClick={() => {
-                      switchToSession(session);
-                      setSessionsOpen(false);
-                    }}
-                    className={`w-full text-left p-3 rounded-lg border transition-colors ${
-                      activeSessionId === session.id
-                        ? "border-blue-500 bg-blue-50"
-                        : "border-gray-200 hover:bg-gray-50"
-                    }`}
-                  >
-                    <div className="font-medium text-sm text-gray-900 truncate">
-                      {session.platform_type} Conversation
-                    </div>
-                    <div className="text-xs text-gray-500 mt-1">
-                      {new Date(session.updated_at).toLocaleDateString()}
-                    </div>
-                  </button>
-                ))}
-              </div>
+              sessions.map((s) => (
+                <button
+                  key={String(s.id)}
+                  type="button"
+                  onClick={() => {
+                    setActiveSessionId(String(s.id));
+                    setThreadId(String(s.thread_id));
+                    setView("terminal");
+                    setSessionsOpen(false);
+                  }}
+                  className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-left hover:bg-white/10"
+                >
+                  <div className="text-sm font-medium">
+                    {String(s.title ?? s.platform_type ?? "Untitled")}
+                  </div>
+                  <div className="text-xs text-white/60">
+                    {String(s.updated_at ?? s.created_at ?? "")}
+                  </div>
+                </button>
+              ))
             )}
           </div>
         </div>
