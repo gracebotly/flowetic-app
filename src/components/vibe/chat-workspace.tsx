@@ -1288,8 +1288,6 @@ export function ChatWorkspace({
     )}
 
           </CopilotKit>
-        </div>
-      </div>
 
     </>
   );
