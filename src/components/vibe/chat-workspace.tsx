@@ -935,10 +935,11 @@ return (
                   widgets={toolUi.widgets}
                   palettes={toolUi.palettes}
                   density={toolUi.density}
-                  selectedComponentId={selectedComponentId}
-                  onSelectComponent={setSelectedComponentId}
-                  onOpenProperties={setPropertiesOpen}
-                  refreshSpec={refreshCurrentSpec}
+                  onApply={async (payload) => {
+                    await sendMessage(
+                      `__ACTION__:apply_interactive_edits:${JSON.stringify(payload)}`
+                    );
+                  }}
                 />
               ) : (
                 <div className="flex flex-1 items-center justify-center">
