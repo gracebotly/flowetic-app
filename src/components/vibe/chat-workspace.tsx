@@ -898,8 +898,8 @@ return (
                 
                 {toolUi && toolUi.type === "style_bundles" ? (
                   <StyleBundleCards
+                    title={toolUi.title}
                     bundles={toolUi.bundles}
-                    selectedId={selectedStyleBundleId}
                     onSelect={(id) => {
                       void sendMessage(`__ACTION__:select_style_bundle:${id}`);
                     }}

@@ -175,22 +175,6 @@ export async function POST(req: NextRequest) {
     // ------------------------------------------------------------------
     // Action Handlers
     // ------------------------------------------------------------------
-    if (isAction(userMessage) && userMessage.startsWith("__ACTION__:select_outcome:")) {
-      const outcome = userMessage.replace("__ACTION__:select_outcome:", "").trim();
-
-      if (outcome !== "dashboard" && outcome !== "product") {
-        return NextResponse.json({ error: "INVALID_OUTCOME" }, { status: 400 });
-      }
-
-      return NextResponse.json({
-        text:
-          outcome === "dashboard"
-            ? "Locked: **Client ROI Dashboard (Retention)**. Next: choose to KPI storyboard."
-            : "Locked: **Workflow Product (SaaS wrapper)**. Next: choose to KPI storyboard.",
-        journey: { ...journey, selectedOutcome: outcome, mode: "align" },
-        toolUi: null,
-      });
-    }
 
     if (isAction(userMessage) && userMessage.startsWith("__ACTION__:select_storyboard:")) {
       const storyboardId = userMessage.replace("__ACTION__:select_storyboard:", "").trim();
