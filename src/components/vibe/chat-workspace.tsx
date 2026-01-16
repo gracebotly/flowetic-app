@@ -692,42 +692,41 @@ export function ChatWorkspace({
     );
   }
 
-  return (
-    <CopilotKit runtimeUrl="/api/copilotkit" agent="vibe">
-      <div className="h-full min-h-0 flex flex-col mx-auto max-w-[1920px]">
-        {showEnterVibeButton && (
-          <div className="mb-4 flex justify-end">
-            <Link
-              href="/vibe/chat"
-              className="rounded-md border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-            >
-              Enter Vibe Mode
-            </Link>
-          </div>
-        )}
+return (
+  <CopilotKit runtimeUrl="/api/copilotkit" agent="vibe">
+    <div className="h-full min-h-0 flex flex-col mx-auto max-w-[1920px]">
+      {showEnterVibeButton && (
+        <div className="mb-4 flex justify-end">
+          <Link
+            href="/vibe/chat"
+            className="rounded-md border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            Enter Vibe Mode
+          </Link>
+        </div>
+      )}
 
-        <div className="flex h-full min-h-0 w-full overflow-hidden rounded-xl border border-gray-300 bg-white">
-          {/* LEFT: chat column */}
-          <div className="flex w-[35%] min-w-[360px] flex-col border-r border-gray-300 bg-[#f9fafb] overflow-hidden">
-            {backendWarning ? (
-              <div className="border-b border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                {backendWarning}
+      <div className="flex h-full min-h-0 w-full overflow-hidden rounded-xl border border-gray-300 bg-white">
+        {/* LEFT: chat */}
+        <div className="flex w-[35%] min-w-[360px] flex-col border-r border-gray-300 bg-[#f9fafb] overflow-hidden">
+          {backendWarning ? (
+            <div className="border-b border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              {backendWarning}
+            </div>
+          ) : null}
+
+          <div ref={chatContainerRef} className="flex-1 overflow-y-auto px-4 py-6">
+            {messages.length === 0 ? (
+              <div className="text-center text-gray-500 py-8">
+                <TerminalIcon className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">Ready to build your workflow? Describe what you need.</p>
               </div>
-            ) : null}
-
-            {/* Custom message list - replacing CopilotChat */}
-            <div ref={chatContainerRef} className="flex-1 overflow-y-auto px-4 py-6">
-              {messages.length === 0 ? (
-                <div className="text-center text-gray-500 py-8">
-                  <TerminalIcon className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                  <p className="text-sm">Ready to build your workflow? Describe what you need.</p>
-                </div>
-              ) : (
-                messages.map((msg) => (
-                  <div
-                    key={msg.id}
-                    className={`mb-4 rounded-lg ${
-                      msg.role === "user"
+            ) : (
+              messages.map((msg) => (
+                <div
+                  key={msg.id}
+                  className={`mb-4 rounded-lg ${
+                    msg.role === "user"
                       ? "bg-blue-50 border-l-4 border-blue-200 pl-4 py-2 flex justify-between items-center"
                       : "bg-gray-50 border-l-4 border-gray-200 pl-4 py-2"
                   }`}
@@ -735,80 +734,20 @@ export function ChatWorkspace({
                   <div className="flex-1">
                     <div className="text-xs font-medium text-gray-600 mb-1">{msg.role}</div>
                     <div className="text-sm text-gray-800 whitespace-pre-wrap">{msg.content}</div>
-
-                    {msg.role === "assistant" &&
-                      msg.content.includes(
-                        "What would you like to build—an analytics dashboard, a tool, or a form?"
-                      ) && (
-                        <div className="mt-4 grid grid-cols-3 gap-3">
-                          <div
-                            role="button"
-                            tabIndex={0}
-                            className="relative group cursor-pointer rounded-lg border border-gray-400/60 bg-gray-800/80 p-3 text-center transition-all hover:bg-[#3366cc] hover:border-[#3366cc]/50 focus:outline-none focus:ring-2 focus:ring-[#3366cc]/50"
-                            onClick={async () => {
-                              addLog("info", `User selected Dashboard outcome.`);
-                              setSelectedOutcome("dashboard");
-                              await sendMessage("__ACTION__:select_outcome:dashboard");
-                            }}
-                          >
-                            <div className="mx-auto mb-3 size-16 flex items-center justify-center rounded-md bg-[#3366cc] text-white text shadow-sm group-hover:bg-white/10">
-                              <LayoutDashboard size={28} />
-                            </div>
-                            <div className="text-xs font-semibold text-white">Dashboard</div>
-                            <div className="text-xs text-gray-400">Analytics, grids, charts, reports</div>
-                          </div>
-
-                          <div
-                            role="button"
-                            tabIndex={0}
-                            className="relative group cursor-pointer rounded-lg border border-gray-400/60 bg-gray-800/80 p-3 text-center transition-all hover:bg-[#3366cc] hover:border-[#3366cc]/50 focus:outline-none focus:ring-2 focus:ring-[#3366cc]/50"
-                            onClick={async () => {
-                              addLog("info", `User selected Tool outcome.`);
-                              setSelectedOutcome("tool");
-                              await sendMessage("__ACTION__:select_outcome:tool");
-                            }}
-                          >
-                            <div className="mx-auto mb-3 size-16 flex items-center justify-center rounded-md bg-[#3366cc] text-white text shadow-sm group-hover:bg-white/10">
-                              <Zap size={28} />
-                            </div>
-                            <div className="text-xs font-semibold text-white">Tool</div>
-                            <div className="text-xs text-gray-400">Utils, processors, RPC, integrations</div>
-                          </div>
-
-                          <div
-                            role="button"
-                            tabIndex={0}
-                            className="relative group cursor-pointer rounded-lg border border-gray-400/60 bg-gray-800/80 p-3 text-center transition-all hover:bg-[#3366cc] hover:border-[#3366cc]/50 focus:outline-none focus:ring-2 focus:ring-[#3366cc]/50"
-                            onClick={async () => {
-                              addLog("info", `User selected Form outcome.`);
-                              setSelectedOutcome("form");
-                              await sendMessage("__ACTION__:select_outcome:form");
-                            }}
-                          >
-                            <div className="mx-auto mb-3 size-16 flex items-center justify-center rounded-md bg-[#3366cc] text-white text shadow-sm group-hover:bg-white/10">
-                              <FileText size={28} />
-                            </div>
-                            <div className="text-xs font-semibold text-white">Form</div>
-                            <div className="text-xs text-gray-400">Steps, schema, validation, submissions</div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {(msg.role === "assistant" || msg.role === "user") && (
-                      <button
-                        onClick={() => {
-                          navigator.clipboard.writeText(msg.content);
-                        }}
-                        className="ml-2 p-1 rounded hover:bg-gray-200"
-                        title="Copy message"
-                      >
-                        <CopyButton text={msg.content} />
-                      </button>
-                    )}
                   </div>
-                ))
-              )}
+
+                  {(msg.role === "assistant" || msg.role === "user") && (
+                    <button
+                      onClick={() => navigator.clipboard.writeText(msg.content)}
+                      className="ml-2 p-1 rounded hover:bg-gray-200"
+                      title="Copy message"
+                    >
+                      <CopyButton text={msg.content} />
+                    </button>
+                  )}
+                </div>
+              ))
+            )}
 
             {isLoading && (
               <div className="mb-4 rounded-lg bg-gray-50 border-l-4 border-gray-200 pl-4 py-2">
@@ -825,71 +764,41 @@ export function ChatWorkspace({
             onChange={setInput}
             disabled={isLoading}
             isListening={isListening}
-              onToggleVoice={() => {
-                setChatMode((m) => (m === "chat" ? "voice" : "chat"));
-                setIsListening((v) => !v);
-                addLog("info", "Voice toggled (wiring next).");
-              }}
-              onAttachFiles={(files) => {
-                addLog("info", `Attached ${files.length} file(s). (Upload wiring next.)`);
-              }}
-              onSend={() => {
-                void sendFromInput();
-              }}
-            />
-          </div>
-        {/* RIGHT: split view */}
+            onToggleVoice={() => {
+              setChatMode((m) => (m === "chat" ? "voice" : "chat"));
+              setIsListening((v) => !v);
+              addLog("info", "Voice toggled (wiring next).");
+            }}
+            onAttachFiles={(files) => {
+              addLog("info", `Attached ${files.length} file(s). (Upload wiring next.)`);
+            }}
+            onSend={() => {
+              void sendFromInput();
+            }}
+          />
+        </div>
+
+        {/* RIGHT */}
         <div className="flex flex-1 flex-col min-w-0">
           <div className="flex items-center justify-between border-b border-gray-300 bg-white px-4 py-2 flex-shrink-0">
-            <div className="flex items-center gap-3">
-              <div className="text-sm font-semibold text-gray-900">
-                {view === "terminal" ? "Current Changes" : view === "preview" ? "Dashboard Preview" : "Publish"}
-              </div>
-              {view === "preview" && (
-                <>
-                  <div className="inline-flex items-center gap-1 rounded-lg bg-gray-100 p-1">
-                    {(["desktop", "tablet", "mobile"] as const).map((d) => (
-                      <button
-                        key={d}
-                        type="button"
-                        onClick={() => setPreviewDevice(d)}
-                        className={
-                          previewDevice === d
-                            ? "rounded-md bg-blue-500 px-3 py-1 text-xs font-medium text-white"
-                            : "rounded-md px-3 py-1 text-xs font-medium text-gray-700 hover:bg-white/60"
-                        }
-                      >
-                        {d}
-                      </button>
-                    ))}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPreviewRefreshKey((k) => k + 1);
-                      addLog("info", "Preview refreshed");
-                    }}
-                    className="ml-2 inline-flex items-center justify-center rounded-md p-2 text-gray-600 hover:bg-gray-200"
-                    title="Refresh"
-                  >
-                    <RefreshCw size={16} />
-                  </button>
-                </>
-              )}
+            <div className="text-sm font-semibold text-gray-900">
+              {view === "terminal" ? "Current Changes" : view === "preview" ? "Dashboard Preview" : "Publish"}
             </div>
-              <div className="inline-flex items-center gap-1 rounded-lg bg-gray-100 p-1">
-                <button
-                  type="button"
-                  title="Terminal"
-                  onClick={() => setView("terminal")}
-                  className={
-                    view === "terminal"
-                      ? "inline-flex h-9 w-9 items-center justify-center rounded-md bg-blue-500 text-white"
-                      : "inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-white"
-                  }
-                >
-                  <TerminalIcon size={18} />
-                </button>
+
+            <div className="inline-flex items-center gap-1 rounded-lg bg-gray-100 p-1">
+              <button
+                type="button"
+                title="Terminal"
+                onClick={() => setView("terminal")}
+                className={
+                  view === "terminal"
+                    ? "inline-flex h-9 w-9 items-center justify-center rounded-md bg-blue-500 text-white"
+                    : "inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-white"
+                }
+              >
+                <TerminalIcon size={18} />
+              </button>
+
               <button
                 type="button"
                 title="Preview"
@@ -902,6 +811,7 @@ export function ChatWorkspace({
               >
                 <Eye size={18} />
               </button>
+
               <button
                 type="button"
                 title="Publish"
@@ -916,373 +826,167 @@ export function ChatWorkspace({
               </button>
             </div>
           </div>
-        </div>
 
-          {/* Terminal View */}
           {view === "terminal" ? (
             <div className="flex flex-1 flex-col bg-[#1e1e1e] min-h-0 overflow-hidden">
-
-              {toolUi && (toolUi.type === "style_bundles" || toolUi.type === "todos") ? (
-                <div className="mb-3 rounded-xl border border-gray-700 bg-gray-900 p-3 text-gray-100">
-                  {toolUi.type === "style_bundles" ? (
-                    <StyleBundleCards
-                      title={toolUi.title}
-                      bundles={toolUi.bundles}
-                      onSelect={async (bundleId) => {
-                        setSelectedStyleBundleId(bundleId);
-                        setToolUi(null);
-                        await sendMessage(buildCtxEnvelope("__ACTION__:select_style_bundle:" + bundleId));
-                      }}
-                    />
-                  ) : (
-                    <TodoPanel title={toolUi.title} items={toolUi.items} />
-                  )}
-                </div>
-              ) : null}
               <div className="flex-1 overflow-y-auto pl-4 pr-2 py-4 font-mono text-[13px] leading-6 text-[#d4d4d4] thin-scrollbar">
-                {logs.map((l) => {
-                  const icon =
-                    l.type === "success"
-                      ? "✓"
-                      : l.type === "error"
-                      ? "✗"
-                      : l.type === "running"
-                      ? "⋯"
-                      : "•";
-
-                  const iconColor =
-                    l.type === "success"
-                      ? "text-emerald-400"
-                      : l.type === "error"
-                      ? "text-red-400"
-                      : l.type === "running"
-                      ? "text-amber-300"
-                      : "text-gray-400";
-
-                  return (
-                    <div key={l.id} className="mb-3">
-                      <div className="flex gap-2">
-                        <span className={iconColor}>{icon}</span>
-                        <span>{l.text}</span>
-                      </div>
-                      {l.detail ? (
-                        <pre className="mt-1 whitespace-pre-wrap text-[#9ca3af]">{l.detail}</pre>
-                      ) : null}
+                {logs.map((l) => (
+                  <div key={l.id} className="mb-3">
+                    <div className="flex gap-2">
+                      <span>{l.text}</span>
                     </div>
-                  );
-                })}
+                    {l.detail ? <pre className="mt-1 whitespace-pre-wrap text-[#9ca3af]">{l.detail}</pre> : null}
+                  </div>
+                ))}
                 <div ref={logsEndRef} />
               </div>
             </div>
           ) : null}
 
-          {/* Preview View */}
           {view === "preview" ? (
-            <div className="relative flex h-full min-h-0 w-full">
-              <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
-                {toolUi && toolUi.type === "interactive_edit_panel" ? (
-                  <div className="mb-3 rounded-xl border border-gray-200 bg-white p-3">
-                    <InteractiveEditPanel
-                      title={toolUi.title}
-                      interfaceId={toolUi.interfaceId}
-                      widgets={toolUi.widgets}
-                      palettes={toolUi.palettes}
-                      density={toolUi.density}
-                      onApply={async (payload) => {
-                        await sendMessage(buildCtxEnvelope("__ACTION__:interactive_edit:" + JSON.stringify(payload)));
-                        setToolUi(null);
-                      }}
-                    />
-                  </div>
-                ) : null}
-                <div className="flex flex-1 overflow-auto bg-white pt-4 pl-4 pb-4 pr-2 thin-scrollbar">
-                  <div
-                    className="rounded-xl border border-gray-300 bg-white shadow-sm overflow-auto"
-                    style={{
-                      width:
-                        previewDevice === "desktop"
-                          ? "100%"
-                          : previewDevice === "tablet"
-                          ? 820
-                          : 390,
-                      height:
-                        previewDevice === "desktop"
-                          ? "100%"
-                          : "auto",
-                      maxWidth: "100%",
-                      maxHeight: "100%",
-                    }}
-                  >
-                    {vibeContext?.previewUrl ? (
-                      <iframe
-                        key={previewRefreshKey}
-                        src={vibeContext.previewUrl}
-                        className="h-full w-full rounded-xl border border-gray-200 bg-white"
-                        sandbox="allow-scripts allow-same-origin"
-                        title="Dashboard Preview"
-                      />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center rounded-xl border border-gray-200 bg-white text-sm text-gray-500">
-                        No preview yet. Continue the chat to generate a preview.
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
+            <div className="flex flex-1 items-center justify-center bg-white">
+              <div className="text-sm text-gray-500">Preview</div>
+            </div>
+          ) : null}
 
-              {/* Inspector column */}
-              <div className="w-[360px] flex-shrink-0 border-l border-gray-200 bg-[#f9fafb] p-3">
-                <PreviewInspector
-                  components={(currentSpec?.components ?? []) as any[]}
-                  selectedId={selectedComponentId}
-                  onSelect={(id) => {
-                    setSelectedComponentId(id);
-                    setPropertiesOpen(true);
-                  }}
+          {view === "publish" ? (
+            <div className="flex flex-1 items-center justify-center bg-white">
+              <div className="text-sm text-gray-500">Publish</div>
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      {/* Conversations Drawer */}
+      {sessionsOpen && (
+        <div className="fixed inset-0 z-50 flex">
+          <div className="fixed inset-0 bg-black/50" onClick={() => setSessionsOpen(false)}></div>
+          <div className="relative ml-4 mt-4 w-[380px] rounded-2xl bg-slate-900 p-4 text-white shadow-2xl">
+            <div className="mb-3 flex items-center justify-between">
+              <div className="text-sm font-semibold">Conversations</div>
+              <button
+                type="button"
+                onClick={() => setSessionsOpen(false)}
+                className="rounded-md px-2 py-1 text-white/80 hover:bg-white/10"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {sessions.length === 0 ? (
+                <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-sm text-white/70">
+                  No conversations yet.
+                </div>
+              ) : (
+                sessions.map((s) => (
+                  <button
+                    key={String(s.id)}
+                    type="button"
+                    onClick={() => {
+                      void switchToSession(s);
+                      setSessionsOpen(false);
+                    }}
+                    className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-left hover:bg-white/10"
+                  >
+                    <div className="text-sm font-medium">{String(s.title ?? s.platform_type ?? "Untitled")}</div>
+                    <div className="text-xs text-white/60">{String(s.updated_at ?? s.created_at ?? "")}</div>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* New Conversation Modal */}
+      {newConvOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="fixed inset-0 bg-black bg-opacity-50" onClick={() => setNewConvOpen(false)}></div>
+          <div className="relative bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">New Conversation</h3>
+              <button onClick={() => setNewConvOpen(false)} className="p-1 rounded-md hover:bg-gray-100">
+                <X className="h-5 w-5 text-gray-500" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                void createNewSession(newTitle, newPlatformType, newSourceId, newEntityId);
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
+                <input
+                  type="text"
+                  value={newTitle}
+                  onChange={(e) => setNewTitle(e.target.value)}
+                  required
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  placeholder="New Dashboard Build"
                 />
               </div>
 
-              {/* Properties Drawer */}
-              <WidgetPropertiesDrawer
-                open={propertiesOpen}
-                onClose={() => setPropertiesOpen(false)}
-                component={
-                  selectedComponentId
-                    ? ((currentSpec?.components ?? []).find((c: any) => c?.id === selectedComponentId) ?? null)
-                    : null
-                }
-                onApply={async (actions) => {
-                  setIsLoading(true);
-                  try {
-                    const res = await fetch("/api/vibe/router", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({
-                        userId: authContext.userId,
-                        tenantId: authContext.tenantId,
-                        vibeContext: { ...vibeContext, threadId },
-                        journey: {
-                          mode: journeyMode,
-                          selectedOutcome,
-                          selectedStoryboard,
-                          selectedStyleBundleId,
-                          densityPreset,
-                          paletteOverrideId,
-                        },
-                        userMessage: `__ACTION__:interactive_edit:${JSON.stringify({
-                          interfaceId: vibeContext?.interfaceId,
-                          actions,
-                        })}`,
-                      }),
-                    });
-
-                    const data = await res.json();
-                    if (!res.ok) throw new Error(data?.error || "INTERACTIVE_EDIT_FAILED");
-
-                    setMessages((prev) => [
-                      ...prev,
-                      { id: `a-${Date.now()}`, role: "assistant", content: data.text || "Updated." },
-                    ]);
-
-                    // Refresh spec so inspector + drawer reflect changes immediately
-                    await refreshCurrentSpec();
-
-                    // If you display previewUrl via iframe keying, bump refreshKey
-                    setPreviewRefreshKey((k) => k + 1);
-                  } finally {
-                    setIsLoading(false);
-                  }
-                }}
-              />
-            </div>
-          ) : null}
-
-          {/* Publish View */}
-          {view === "publish" ? (
-            <div className="flex flex-1 items-center justify-center bg-white overflow-auto">
-              <div className="mx-auto w-full max-w-[480px] px-6 py-12 text-center">
-                <CheckCircle size={64} className="mx-auto mb-6 text-emerald-500" />
-                <div className="mb-2 text-2xl font-semibold text-gray-900">Ready to Publish?</div>
-                <div className="mb-8 text-sm text-gray-500">
-                  This will replace the current dashboard for <span className="font-medium">[Client Name]</span>.
-                </div>
-
-                <div className="mb-8 rounded-lg border border-gray-300 bg-[#f9fafb] p-4 text-left text-[13px] leading-6">
-                  <div>
-                    <span className="text-gray-500">Client:</span>{" "}
-                    <span className="text-gray-900">ABC Dental</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-500">Dashboard:</span>{" "}
-                    <span className="text-gray-900">Main Dashboard (v2)</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-500">URL:</span>{" "}
-                    <span className="text-gray-900">abc-dental.getflowetic.com</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-500">Last deployed:</span>{" "}
-                    <span className="text-gray-900">2 hours ago</span>
-                  </div>
-                </div>
-
-                <div className="flex justify-center gap-3">
-                  <button
-                    type="button"
-                    className="rounded-lg bg-blue-500 px-8 py-3 font-semibold text-white hover:bg-blue-600"
-                  >
-                    Publish Now
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setView("terminal")}
-                    className="rounded-lg border border-gray-300 px-8 py-3 font-semibold text-gray-600 hover:bg-gray-50"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </div>
-          ) : null}
-
-    {/* Conversations Drawer */}
-    {sessionsOpen && (
-      <div className="fixed inset-0 z-50 flex">
-        <div
-          className="fixed inset-0 bg-black/50"
-          onClick={() => setSessionsOpen(false)}
-        ></div>
-        <div className="relative ml-4 mt-4 w-[380px] rounded-2xl bg-slate-900 p-4 text-white shadow-2xl">
-          <div className="mb-3 flex items-center justify-between">
-            <div className="text-sm font-semibold">Conversations</div>
-            <button
-              type="button"
-              onClick={() => setSessionsOpen(false)}
-              className="rounded-md px-2 py-1 text-white/80 hover:bg-white/10"
-            >
-              ✕
-            </button>
-          </div>
-
-          <div className="space-y-2">
-            {sessions.length === 0 ? (
-              <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-sm text-white/70">
-                No conversations yet.
-              </div>
-            ) : (
-              sessions.map((s) => (
-                <button
-                  key={String(s.id)}
-                  type="button"
-                  onClick={() => {
-                    setActiveSessionId(String(s.id));
-                    setThreadId(String(s.thread_id));
-                    setView("terminal");
-                    setSessionsOpen(false);
-                  }}
-                  className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-left hover:bg-white/10"
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Platform</label>
+                <select
+                  value={newPlatformType}
+                  onChange={(e) => setNewPlatformType(e.target.value as any)}
+                  required
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                 >
-                  <div className="text-sm font-medium">
-                    {String(s.title ?? s.platform_type ?? "Untitled")}
-                  </div>
-                  <div className="text-xs text-white/60">
-                    {String(s.updated_at ?? s.created_at ?? "")}
-                  </div>
-                </button>
-              ))
-            )}
-          </div>
-        </div>
-      </div>
-    )}
+                  <option value="retell">Retell</option>
+                  <option value="make">Make</option>
+                  <option value="n8n">n8n</option>
+                  <option value="vapi">Vapi</option>
+                  <option value="activepieces">Activepieces</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
 
-    {/* New Conversation Modal */}
-    {newConvOpen && (
-      <div className="fixed inset-0 z-50 flex items-center justify-center">
-        <div className="fixed inset-0 bg-black bg-opacity-50" onClick={() => setNewConvOpen(false)} />
-        <div className="relative bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">New Conversation</h3>
-            <button onClick={() => setNewConvOpen(false)} className="p-1 rounded-md hover:bg-gray-100">
-              <X className="h-5 w-5 text-gray-500" />
-            </button>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Source ID</label>
+                <input
+                  type="text"
+                  value={newSourceId}
+                  onChange={(e) => setNewSourceId(e.target.value)}
+                  required
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  placeholder="demo-source"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Entity ID</label>
+                <input
+                  type="text"
+                  value={newEntityId}
+                  onChange={(e) => setNewEntityId(e.target.value)}
+                  required
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  placeholder="demo-entity"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button type="submit" className="flex-1 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
+                  Create
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNewConvOpen(false)}
+                  className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
           </div>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              createNewSession(newTitle, newPlatformType, newSourceId, newEntityId);
-            }}
-            className="space-y-4"
-          >
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
-              <input
-                type="text"
-                value={newTitle}
-                onChange={(e) => setNewTitle(e.target.value)}
-                required
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                placeholder="New Dashboard Build"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Platform</label>
-              <select
-                value={newPlatformType}
-                onChange={(e) => setNewPlatformType(e.target.value as any)}
-                required
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              >
-                <option value="retell">Retell</option>
-                <option value="make">Make</option>
-                <option value="n8n">n8n</option>
-                <option value="vapi">Vapi</option>
-                <option value="activepieces">Activepieces</option>
-                <option value="other">Other</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Source ID</label>
-              <input
-                type="text"
-                value={newSourceId}
-                onChange={(e) => setNewSourceId(e.target.value)}
-                required
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                placeholder="demo-source"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Entity ID</label>
-              <input
-                type="text"
-                value={newEntityId}
-                onChange={(e) => setNewEntityId(e.target.value)}
-                required
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                placeholder="demo-entity"
-              />
-            </div>
-            <div className="flex gap-3 pt-4">
-              <button
-                type="submit"
-                className="flex-1 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-              >
-                Create
-              </button>
-              <button
-                type="button"
-                onClick={() => setNewConvOpen(false)}
-                className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
         </div>
-      </div>
+      )}
     </div>
-      </div>
-    </CopilotKit>
-  );
-}
+  </CopilotKit>
+);
