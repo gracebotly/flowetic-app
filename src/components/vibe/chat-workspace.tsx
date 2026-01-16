@@ -592,26 +592,34 @@ export function ChatWorkspace({
     },
   });
 
+  function isInternalActionMessage(text: string): boolean {
+    return text.startsWith("__ACTION__:");
+  }
+
   const sendMessage = async (userText: string) => {
     const text = String(userText ?? "").trim();
     if (!text || isLoading) return;
 
-    // Save user message to persistence
-    await fetch("/api/journey-messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        tenantId: authContext.tenantId,
-        threadId,
-        role: "user",
-        content: text,
-      }),
-    });
+    const isAction = isInternalActionMessage(text);
 
-    setMessages((prev) => [
-      ...prev,
-      { id: `u-${Date.now()}`, role: "user", content: text },
-    ]);
+    if (!isAction) {
+      // Save user message to persistence
+      await fetch("/api/journey-messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenantId: authContext.tenantId,
+          threadId,
+          role: "user",
+          content: text,
+        }),
+      });
+
+      setMessages((prev) => [
+        ...prev,
+        { id: `u-${Date.now()}`, role: "user", content: text },
+      ]);
+    }
 
     setIsLoading(true);
     try {
@@ -652,6 +660,9 @@ export function ChatWorkspace({
 
       setToolUi(data?.toolUi ?? null);
 
+      if (data?.vibeContext) {
+        setVibeContext((prev: any) => ({ ...prev, ...data.vibeContext }));
+      }
       if (data?.interfaceId) {
         setVibeContext((prev: any) => (prev ? { ...prev, interfaceId: data.interfaceId } : prev));
       }
