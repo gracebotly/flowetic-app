@@ -1,27 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import { PanelLeft, Plus, MessagesSquare, X } from "lucide-react";
+import { useState, useCallback } from "react";
+import { PanelLeft, Plus, MessagesSquare } from "lucide-react";
 import { ChatWorkspace } from "@/components/vibe/chat-workspace";
 
-type Conversation = {
-  id: string;
-  title: string;
-  updatedAt: string;
-};
-
 export default function VibeChatPage() {
-  const conversations: Conversation[] = useMemo(
-    () => [
-      { id: "c1", title: "ChatBot Insights dashboard", updatedAt: "Just now" },
-      { id: "c2", title: "ABC Dental dashboard", updatedAt: "2h ago" },
-      { id: "c3", title: "Retell mapping questions", updatedAt: "Yesterday" },
-    ],
-    []
-  );
+  const [requestNewConversationKey, setRequestNewConversationKey] = useState(0);
+  const [requestOpenConversationsKey, setRequestOpenConversationsKey] = useState(0);
 
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const requestNewConversation = useCallback(() => {
+    setRequestNewConversationKey((k) => k + 1);
+  }, []);
+
+  const requestOpenConversations = useCallback(() => {
+    setRequestOpenConversationsKey((k) => k + 1);
+  }, []);
 
   return (
     <div className="relative flex flex-col h-screen overflow-hidden bg-[#0b1220]">
@@ -41,8 +35,7 @@ export default function VibeChatPage() {
           type="button"
           title="New conversation"
           onClick={() => {
-            // MVP placeholder: later this will create a new thread + reset messages/logs
-            setDrawerOpen(false);
+            requestNewConversation();
           }}
           className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-white/10 text-white hover:bg-white/15"
         >
@@ -53,51 +46,25 @@ export default function VibeChatPage() {
         <button
           type="button"
           title="Conversations"
-          onClick={() => setDrawerOpen(true)}
+          onClick={() => {
+            requestOpenConversations();
+          }}
           className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-white/10 text-white hover:bg-white/15"
         >
           <MessagesSquare size={18} />
         </button>
       </div>
 
-      {/* Conversations drawer */}
-      {drawerOpen ? (
-        <div className="absolute left-20 top-4 z-[60] w-[320px] overflow-hidden rounded-2xl border border-white/10 bg-[#0f172a] text-white shadow-2xl">
-          <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
-            <div className="text-sm font-semibold">Conversations</div>
-            <button
-              type="button"
-              title="Close"
-              onClick={() => setDrawerOpen(false)}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-lg hover:bg-white/10"
-            >
-              <X size={18} />
-            </button>
-          </div>
-
-          <div className="max-h-[70vh] overflow-auto p-2">
-            {conversations.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => {
-                  // MVP placeholder: later loads that conversation thread
-                  setDrawerOpen(false);
-                }}
-                className="w-full rounded-xl px-3 py-3 text-left hover:bg-white/10"
-              >
-                <div className="text-sm font-medium">{c.title}</div>
-                <div className="mt-1 text-xs text-white/60">{c.updatedAt}</div>
-              </button>
-            ))} 
-          </div>
-        </div>
-      ) : null}
+      {/* REMOVE DRAWER - ChatWorkspace now handles conversations internally */}
 
       {/* Workspace area: padded so rail never blocks it */}
       <div className="relative flex-1 min-h-0 overflow-hidden px-20 py-4">
         <div className="h-full min-h-0 overflow-hidden">
-          <ChatWorkspace showEnterVibeButton={false} />
+          <ChatWorkspace
+            showEnterVibeButton={false}
+            requestNewConversationKey={requestNewConversationKey}
+            requestOpenConversationsKey={requestOpenConversationsKey}
+          />
         </div>
       </div>
     </div>
