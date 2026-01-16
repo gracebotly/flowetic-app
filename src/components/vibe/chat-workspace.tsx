@@ -1096,6 +1096,7 @@ export function ChatWorkspace({
                 }}
               />
             </div>
+          </div>
           ) : null}
 
           {/* Publish View */}
