@@ -693,25 +693,21 @@ export function ChatWorkspace({
   }
 
   return (
-    <>
+    <CopilotKit runtimeUrl="/api/copilotkit" agent="vibe">
       <div className="h-full min-h-0 flex flex-col mx-auto max-w-[1920px]">
-      {showEnterVibeButton && (
-        <div className="mb-4 flex justify-end">
-          <Link
-            href="/vibe/chat"
-            className="rounded-md border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
-            Enter Vibe Mode
-          </Link>
-        </div>
-      )}
+        {showEnterVibeButton && (
+          <div className="mb-4 flex justify-end">
+            <Link
+              href="/vibe/chat"
+              className="rounded-md border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Enter Vibe Mode
+            </Link>
+          </div>
+        )}
 
-      <div className="flex h-full min-h-0 w-full overflow-hidden rounded-xl border border-gray-300 bg-white">
-
-  <CopilotKit 
-          runtimeUrl="/api/copilotkit" 
-          agent="vibe"
-        >
+        <div className="flex h-full min-h-0 w-full overflow-hidden rounded-xl border border-gray-300 bg-white">
+          {/* LEFT: chat column */}
           <div className="flex w-[35%] min-w-[360px] flex-col border-r border-gray-300 bg-[#f9fafb] overflow-hidden">
             {backendWarning ? (
               <div className="border-b border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
@@ -719,7 +715,7 @@ export function ChatWorkspace({
               </div>
             ) : null}
 
-{/* Custom message list - replacing CopilotChat */}
+            {/* Custom message list - replacing CopilotChat */}
             <div ref={chatContainerRef} className="flex-1 overflow-y-auto px-4 py-6">
               {messages.length === 0 ? (
                 <div className="text-center text-gray-500 py-8">
@@ -732,18 +728,18 @@ export function ChatWorkspace({
                     key={msg.id}
                     className={`mb-4 rounded-lg ${
                       msg.role === "user"
-                        ? "bg-blue-50 border-l-4 border-blue-200 pl-4 py-2 flex justify-between items-center"
-                        : "bg-gray-50 border-l-4 border-gray-200 pl-4 py-2"
-                    }`}
-                  >
-                    <div className="flex-1">
-                      <div className="text-xs font-medium text-gray-600 mb-1">{msg.role}</div>
-                      <div className="text-sm text-gray-800 whitespace-pre-wrap">
-                        {msg.content}
-                      </div>
-                      
-                      {/* Render outcome selection cards after the specific assistant message */}
-                      {msg.role === "assistant" && msg.content.includes("What would you like to build—an analytics dashboard, a tool, or a form?") && (
+                      ? "bg-blue-50 border-l-4 border-blue-200 pl-4 py-2 flex justify-between items-center"
+                      : "bg-gray-50 border-l-4 border-gray-200 pl-4 py-2"
+                  }`}
+                >
+                  <div className="flex-1">
+                    <div className="text-xs font-medium text-gray-600 mb-1">{msg.role}</div>
+                    <div className="text-sm text-gray-800 whitespace-pre-wrap">{msg.content}</div>
+
+                    {msg.role === "assistant" &&
+                      msg.content.includes(
+                        "What would you like to build—an analytics dashboard, a tool, or a form?"
+                      ) && (
                         <div className="mt-4 grid grid-cols-3 gap-3">
                           <div
                             role="button"
@@ -761,6 +757,7 @@ export function ChatWorkspace({
                             <div className="text-xs font-semibold text-white">Dashboard</div>
                             <div className="text-xs text-gray-400">Analytics, grids, charts, reports</div>
                           </div>
+
                           <div
                             role="button"
                             tabIndex={0}
@@ -777,6 +774,7 @@ export function ChatWorkspace({
                             <div className="text-xs font-semibold text-white">Tool</div>
                             <div className="text-xs text-gray-400">Utils, processors, RPC, integrations</div>
                           </div>
+
                           <div
                             role="button"
                             tabIndex={0}
@@ -796,6 +794,7 @@ export function ChatWorkspace({
                         </div>
                       )}
                     </div>
+
                     {(msg.role === "assistant" || msg.role === "user") && (
                       <button
                         onClick={() => {
@@ -810,21 +809,22 @@ export function ChatWorkspace({
                   </div>
                 ))
               )}
-              {isLoading && (
-                <div className="mb-4 rounded-lg bg-gray-50 border-l-4 border-gray-200 pl-4 py-2">
-                  <div className="text-xs font-medium text-gray-600 mb-1">assistant</div>
-                  <div className="text-sm text-gray-400 animate-pulse">
-                    Thinking…
-                  </div>
-                </div>
-              )}
-              <div ref={messagesEndRef} />
-            </div>
-            <MessageInput
-              value={input}
-              onChange={setInput}
-              disabled={isLoading}
-              isListening={isListening}
+
+            {isLoading && (
+              <div className="mb-4 rounded-lg bg-gray-50 border-l-4 border-gray-200 pl-4 py-2">
+                <div className="text-xs font-medium text-gray-600 mb-1">assistant</div>
+                <div className="text-sm text-gray-400 animate-pulse">Thinking…</div>
+              </div>
+            )}
+
+            <div ref={messagesEndRef} />
+          </div>
+
+          <MessageInput
+            value={input}
+            onChange={setInput}
+            disabled={isLoading}
+            isListening={isListening}
               onToggleVoice={() => {
                 setChatMode((m) => (m === "chat" ? "voice" : "chat"));
                 setIsListening((v) => !v);
@@ -1281,11 +1281,8 @@ export function ChatWorkspace({
           </form>
         </div>
       </div>
-    )}
-
-        </div>
+    </div>
       </div>
-    </>
-          </CopilotKit>
+    </CopilotKit>
   );
 }
