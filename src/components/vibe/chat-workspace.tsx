@@ -14,9 +14,6 @@ import {
   Paperclip,
   MessageCircle,
   Mic,
-  ArrowLeft,
-  MessageSquare,
-  Plus,
   X,
   LayoutDashboard,
   Zap,
@@ -115,6 +112,8 @@ type VibeContextExtended = VibeContext & {
 
 interface ChatWorkspaceProps {
   showEnterVibeButton?: boolean;
+  onRequestNewConversation?: () => void;
+  onRequestOpenConversations?: () => void;
 }
 
 function isToolUiPayload(value: unknown): value is ToolUiPayload {
@@ -131,7 +130,11 @@ function getRightTabForToolUi(next: ToolUiPayload): ViewMode {
   return "terminal";
 }
 
-export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProps) {
+export function ChatWorkspace({
+  showEnterVibeButton = false,
+  onRequestNewConversation,
+  onRequestOpenConversations,
+}: ChatWorkspaceProps) {
   const router = useRouter();
   const [view, setView] = useState<ViewMode>("terminal");
   const [input, setInput] = useState("");
@@ -151,6 +154,22 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
   const [newSourceId, setNewSourceId] = useState<string>("");
   const [newEntityId, setNewEntityId] = useState<string>("");
   const [newTitle, setNewTitle] = useState<string>("");
+
+  // Handler wrappers for external control
+  const openNewConversation = () => setNewConvOpen(true);
+  const openConversations = () => setSessionsOpen(true);
+
+  useEffect(() => {
+    if (typeof onRequestNewConversation !== "function") return;
+    openNewConversation();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onRequestNewConversation]);
+
+  useEffect(() => {
+    if (typeof onRequestOpenConversations !== "function") return;
+    openConversations();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onRequestOpenConversations]);
 
   // Message persistence state
   type Msg = { id: string; role: Role; content: string; createdAt?: string };
@@ -691,37 +710,6 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
       )}
 
       <div className="flex h-full min-h-0 w-full overflow-hidden rounded-xl border border-gray-300 bg-white">
-        {/* LEFT: vertical sidebar icons */}
-        <div className="flex flex-col items-center py-4 px-2 border-r border-gray-200 bg-white space-y-2">
-          <button
-            type="button"
-            title="Back"
-            onClick={backToWizard}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
-          >
-            <ArrowLeft size={18} />
-          </button>
-          
-          <button
-            type="button"
-            title="New conversation"
-            onClick={async () => {
-              setNewConvOpen(true);
-            }}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
-          >
-            <Plus size={18} />
-          </button>
-          
-          <button
-            type="button"
-            title="Conversations"
-            onClick={() => setSessionsOpen(true)}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
-          >
-            <MessageSquare size={18} />
-          </button>
-        </div>
 
         {/* LEFT: chat (35%) - FIXED VERSION */}
         <CopilotKit 
@@ -895,16 +883,6 @@ export function ChatWorkspace({ showEnterVibeButton = false }: ChatWorkspaceProp
                 </>
               )}
             </div>
-            <div className="flex items-center gap-2">
-              {!showEnterVibeButton && (
-                <button
-                  type="button"
-                  onClick={backToWizard}
-                  className="rounded-md border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                >
-                  ← Back
-                </button>
-              )}
               <div className="inline-flex items-center gap-1 rounded-lg bg-gray-100 p-1">
                 <button
                   type="button"
