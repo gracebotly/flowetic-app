@@ -1288,8 +1288,8 @@ export function ChatWorkspace({
       </div>
     )}
 
-        </CopilotKit>
-      </div>
+          </CopilotKit>
+        </div>
       </div>
       </div>
 
