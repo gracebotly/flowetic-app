@@ -94,6 +94,16 @@ type ToolUiPayload =
         swatches: Array<{ name: string; hex: string }>;
       }>;
       density: "compact" | "comfortable" | "spacious";
+    }
+  | {
+      type: "storyboard_cards";
+      title: string;
+      options: Array<{
+        id: string;
+        title: string;
+        description: string;
+        kpis: string[];
+      }>;
     };
 
 type Role = "user" | "assistant" | "system";
