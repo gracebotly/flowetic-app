@@ -641,6 +641,10 @@ export function ChatWorkspace({
       ]);
     }
 
+    if (text.startsWith("__ACTION__:select_style_bundle:")) {
+      addLog("running", "Generating preview…", "This can take ~10–30 seconds on first run.");
+    }
+
     setIsLoading(true);
     try {
       const res = await fetch("/api/vibe/router", {
@@ -897,6 +901,20 @@ return (
                           <div className="mt-1 text-xs text-gray-300">{opt.description}</div>
                         </button>
                       ))}
+                    </div>
+                    <div className="mt-3">
+                      <button
+                        type="button"
+                        className="w-full rounded-xl border border-gray-700 bg-gray-950 px-4 py-3 text-left hover:bg-gray-800"
+                        onClick={async () => {
+                          await sendMessage("__ACTION__:outcome_help_me_decide");
+                        }}
+                      >
+                        <div className="text-sm font-semibold text-white">I'm not sure — help me decide</div>
+                        <div className="mt-1 text-xs text-gray-300">
+                          I'll ask 1–2 quick questions and recommend the best path.
+                        </div>
+                      </button>
                     </div>
                   </div>
                 ) : null}

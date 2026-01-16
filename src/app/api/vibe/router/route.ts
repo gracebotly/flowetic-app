@@ -133,6 +133,79 @@ export async function POST(req: NextRequest) {
     const effectiveMode: JourneyMode =
       mode === "select_entity" && hasSelectedEntity ? "recommend" : mode;
 
+    const deepLaneStep = journey?.deepLane?.step as number | undefined;
+
+    if (effectiveMode === "recommend" && deepLaneStep && !isAction(userMessage)) {
+      if (deepLaneStep === 1) {
+        const nextJourney = {
+          ...journey,
+          deepLane: {
+            step: 2,
+            answers: {
+              ...(journey?.deepLane?.answers ?? {}),
+              q1: userMessage,
+            },
+          },
+        };
+
+        const agentRes = await masterRouterAgent.generate(
+          "System: Deep lane step 2. Ask ONLY 1 more question (no jargon). Question 2 must be: who will mainly use this UI day-to-day (you/your team vs the client)?",
+          { runtimeContext }
+        );
+        const agentText = String((agentRes as any)?.text ?? "").trim();
+
+        return NextResponse.json({
+          text: agentText || "One more quick question: who will mainly use this — your team, or the client?",
+          journey: nextJourney,
+          toolUi: null,
+          vibeContext: { ...(vibeContext ?? {}), skillMD },
+        });
+      }
+
+      if (deepLaneStep === 2) {
+        // Deep lane complete: ask agent to recommend one path and tell user to pick via the cards
+        const answers = journey?.deepLane?.answers ?? {};
+        const agentRes = await masterRouterAgent.generate(
+          `System: The user answered deep lane questions. Provide a strong recommendation (dashboard vs product) with 2 bullet reasons, in non-technical language. Answers:\nQ1: ${String(
+            answers.q1 ?? ""
+          )}\nQ2: ${String(userMessage)}\nThen end with: "Pick one of the two cards on the right."`,
+          { runtimeContext }
+        );
+        const agentText = String((agentRes as any)?.text ?? "").trim();
+
+        const clearedJourney = {
+          ...journey,
+          deepLane: null,
+        };
+
+        const toolUi: ToolUi = {
+          type: "outcome_cards",
+          title: "Outcome + Monetization Strategy",
+          options: [
+            {
+              id: "dashboard",
+              title: "Client ROI Dashboard (Retention)",
+              description:
+                "Helps renew retainers, makes automation value visible weekly, and proves ROI to clients.",
+            },
+            {
+              id: "product",
+              title: "Workflow Product (SaaS wrapper)",
+              description:
+                "Sell access monthly, hide the underlying workflow, and provide a form/button UI to run it.",
+            },
+          ],
+        };
+
+        return NextResponse.json({
+          text: agentText || "Based on your answers, I recommend starting with the dashboard. Pick one of the two cards on the right.",
+          journey: clearedJourney,
+          toolUi,
+          vibeContext: { ...(vibeContext ?? {}), skillMD },
+        });
+      }
+    }
+
     const supabase = await createClient();
 
     // Helper: list workflows WITH events for picker (MVP rule A)
@@ -189,15 +262,66 @@ export async function POST(req: NextRequest) {
         ],
       };
 
-      // Agent-driven user-facing text, skill-aware
+      // Agent-driven user-facing text, skill-aware with plain language
       const agentInput = actionToAgentHint(userMessage);
-      const agentRes = await masterRouterAgent.generate(agentInput, { runtimeContext });
+      const agentRes = await masterRouterAgent.generate(
+        "System: You are a premium agency business consultant speaking to a non-technical user. " +
+        "Use plain language. Avoid technical jargon. Explain what happens next in simple terms.",
+        { runtimeContext }
+      );
       const agentText = String((agentRes as any)?.text ?? "").trim();
 
       return NextResponse.json({
         text: agentText || "Great — now pick a storyboard so we lock the story before design.",
         journey: nextJourney,
         toolUi: storyboardToolUi,
+        vibeContext: { ...(vibeContext ?? {}), skillMD },
+      });
+    }
+
+    // ------------------------------------------------------------------
+    // ACTION: outcome help me decide (deep lane, max 2 questions)
+    // ------------------------------------------------------------------
+    if (isAction(userMessage) && userMessage === "__ACTION__:outcome_help_me_decide") {
+      const deepLaneJourney = {
+        ...journey,
+        mode: "recommend",
+        deepLane: {
+          step: 1,
+          answers: {},
+        },
+      };
+
+      const agentRes = await masterRouterAgent.generate(
+        "System: The user is unsure. Ask ONLY 1 question now (no jargon). Question 1 must be: is this mainly for client retention (prove value) or selling access as a product?",
+        { runtimeContext }
+      );
+      const agentText = String((agentRes as any)?.text ?? "").trim();
+
+      // Keep showing the same two cards so user can still pick anytime
+      const toolUi: ToolUi = {
+        type: "outcome_cards",
+        title: "Outcome + Monetization Strategy",
+        options: [
+          {
+            id: "dashboard",
+            title: "Client ROI Dashboard (Retention)",
+            description:
+              "Helps renew retainers, makes automation value visible weekly, and proves ROI to clients.",
+          },
+          {
+            id: "product",
+            title: "Workflow Product (SaaS wrapper)",
+            description:
+              "Sell access monthly, hide the underlying workflow, and provide a form/button UI to run it.",
+          },
+        ],
+      };
+
+      return NextResponse.json({
+        text: agentText || "No worries — quick question: is this for client retention, or to sell access as a product?",
+        journey: deepLaneJourney,
+        toolUi,
         vibeContext: { ...(vibeContext ?? {}), skillMD },
       });
     }
@@ -316,11 +440,15 @@ export async function POST(req: NextRequest) {
       };
 
       const workflowName = String(vibeContext?.displayName ?? vibeContext?.externalId ?? "").trim();
-      const agentPrompt =
-        "System: Phase 1 outcome selection. Strongly recommend one path (dashboard retention vs product SaaS wrapper) in plain language, then invite the user to pick via the cards." +
-        (workflowName ? ` The selected workflow is: "${workflowName}".` : "");
-
-      const agentRes = await masterRouterAgent.generate(agentPrompt, { runtimeContext });
+      
+      const agentRes = await masterRouterAgent.generate(
+        "System: Phase 1. You are a premium agency business consultant speaking to a non-technical user. " +
+        "Use plain language. Avoid terms like execution status, success rates, optimize processes. " +
+        "Start with a strong recommendation (dashboard vs product) with 2 short bullet reasons. " +
+        "Then say: 'Pick one of the two cards on the right.'" +
+        (workflowName ? ` The selected workflow is: "${workflowName}".` : ""),
+        { runtimeContext }
+      );
       const agentText = String((agentRes as any)?.text ?? "").trim();
 
       return NextResponse.json({
@@ -416,13 +544,56 @@ export async function POST(req: NextRequest) {
       let interfaceId = vibeContext?.interfaceId as string | undefined;
 
       if (!interfaceId) {
-        return NextResponse.json(
-          {
-            error:
-              "MISSING_INTERFACE_ID_FOR_PREVIEW. Preview generation must be executed by the existing master agent workflow and must set vibeContext.interfaceId (and optionally previewUrl/previewVersionId) before entering build_preview.",
-          },
-          { status: 400 }
-        );
+        // Trigger preview generation via existing agent orchestrator.
+        // This must return interfaceId + previewUrl + versionId, or at minimum previewUrl + versionId.
+        const previewRes = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL ?? ""}/api/agent/master`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tenantId,
+            userId,
+            message: "Generate preview dashboard now.",
+            platformType,
+            sourceId,
+          }),
+        });
+
+        const previewJson = await previewRes.json().catch(() => ({}));
+
+        if (!previewRes.ok || previewJson?.type === "error") {
+          return NextResponse.json(
+            { error: previewJson?.message || "PREVIEW_GENERATION_FAILED" },
+            { status: 500 }
+          );
+        }
+
+        // Attempt to extract preview outputs (must match your existing /api/agent/master response)
+        const previewUrl = String(previewJson?.previewUrl ?? previewJson?.result?.previewUrl ?? "");
+        const newInterfaceId = String(previewJson?.interfaceId ?? previewJson?.result?.interfaceId ?? "");
+        const newVersionId = String(previewJson?.versionId ?? previewJson?.result?.versionId ?? "");
+
+        if (!newInterfaceId) {
+          return NextResponse.json(
+            { error: "PREVIEW_GENERATION_DID_NOT_RETURN_INTERFACE_ID" },
+            { status: 500 }
+          );
+        }
+
+        interfaceId = newInterfaceId;
+
+        // Merge into vibeContext for subsequent steps
+        const nextVibeContext = {
+          ...(vibeContext ?? {}),
+          interfaceId: newInterfaceId,
+          previewUrl: previewUrl || null,
+          previewVersionId: newVersionId || null,
+          skillMD,
+        };
+
+        // Continue build_preview using the newly created interfaceId
+        vibeContext.interfaceId = newInterfaceId;
+        vibeContext.previewUrl = previewUrl || null;
+        vibeContext.previewVersionId = newVersionId || null;
       }
 
       // Load the actual current spec to extract real component IDs for interactive edit.
@@ -503,7 +674,7 @@ export async function POST(req: NextRequest) {
         interfaceId,
         previewUrl: vibeContext?.previewUrl ?? null,
         previewVersionId: vibeContext?.previewVersionId ?? null,
-        vibeContext: { ...(vibeContext ?? {}), skillMD },
+        vibeContext: { ...(vibeContext ?? {}), skillMD, interfaceId, previewUrl: vibeContext?.previewUrl ?? null, previewVersionId: vibeContext?.previewVersionId ?? null },
       });
     }
 
