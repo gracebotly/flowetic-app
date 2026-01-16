@@ -1149,7 +1149,6 @@ export function ChatWorkspace({
           ) : null}
         </div>
       </div>
-    </div>
 
     {/* Conversations Drawer */}
     {sessionsOpen && (
@@ -1157,7 +1156,7 @@ export function ChatWorkspace({
         <div
           className="fixed inset-0 bg-black/50"
           onClick={() => setSessionsOpen(false)}
-        />
+        ></div>
         <div className="relative ml-4 mt-4 w-[380px] rounded-2xl bg-slate-900 p-4 text-white shadow-2xl">
           <div className="mb-3 flex items-center justify-between">
             <div className="text-sm font-semibold">Conversations</div>
@@ -1289,6 +1288,10 @@ export function ChatWorkspace({
       </div>
     )}
 
+        </CopilotKit>
+      </div>
+      </div>
+      </div>
 
     </>
   );
