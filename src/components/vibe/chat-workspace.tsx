@@ -1286,11 +1286,11 @@ export function ChatWorkspace({
           </form>
         </div>
       </div>
+      </div>
     )}
 
           </CopilotKit>
         </div>
-      </div>
       </div>
 
     </>
