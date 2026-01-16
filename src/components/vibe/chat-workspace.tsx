@@ -708,8 +708,9 @@ export function ChatWorkspace({
 
       <div className="flex h-full min-h-0 w-full overflow-hidden rounded-xl border border-gray-300 bg-white">
 
-        {/* LEFT: chat (35%) - FIXED VERSION */}
-        <CopilotKit 
+  return (
+    {/* LEFT: chat (35%) - FIXED VERSION */}
+    <CopilotKit 
           runtimeUrl="/api/copilotkit" 
           agent="vibe"
         >
