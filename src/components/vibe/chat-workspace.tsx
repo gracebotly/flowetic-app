@@ -1147,6 +1147,7 @@ export function ChatWorkspace({
           ) : null}
         </div>
       </div>
+    </div>
 
     {/* Conversations Drawer */}
     {sessionsOpen && (
