@@ -24,6 +24,36 @@ type JourneyMode =
   | "interactive_edit"
   | "deploy";
 
+type ToolUi =
+  | {
+      type: "outcome_cards";
+      title: string;
+      options: Array<{ id: "dashboard" | "product"; title: string; description: string }>;
+    }
+  | {
+      type: "storyboard_cards";
+      title: string;
+      options: Array<{ id: string; title: string; description: string; kpis: string[] }>;
+    }
+  | {
+      type: "style_bundles";
+      title: string;
+      bundles: any[];
+    }
+  | {
+      type: "todos";
+      title: string;
+      items: any[];
+    }
+  | {
+      type: "interactive_edit_panel";
+      title: string;
+      interfaceId: string;
+      widgets: any[];
+      palettes: any[];
+      density: "compact" | "comfortable" | "spacious";
+    };
+
 function isAction(msg: string) {
   return msg.startsWith("__ACTION__:");
 }
@@ -143,6 +173,39 @@ export async function POST(req: NextRequest) {
     }
 
     // ------------------------------------------------------------------
+    // Action Handlers
+    // ------------------------------------------------------------------
+    if (isAction(userMessage) && userMessage.startsWith("__ACTION__:select_outcome:")) {
+      const outcome = userMessage.replace("__ACTION__:select_outcome:", "").trim();
+
+      if (outcome !== "dashboard" && outcome !== "product") {
+        return NextResponse.json({ error: "INVALID_OUTCOME" }, { status: 400 });
+      }
+
+      return NextResponse.json({
+        text:
+          outcome === "dashboard"
+            ? "Locked: **Client ROI Dashboard (Retention)**. Next: choose to KPI storyboard."
+            : "Locked: **Workflow Product (SaaS wrapper)**. Next: choose to KPI storyboard.",
+        journey: { ...journey, selectedOutcome: outcome, mode: "align" },
+        toolUi: null,
+      });
+    }
+
+    if (isAction(userMessage) && userMessage.startsWith("__ACTION__:select_storyboard:")) {
+      const storyboardId = userMessage.replace("__ACTION__:select_storyboard:", "").trim();
+      if (!storyboardId) {
+        return NextResponse.json({ error: "MISSING_STORYBOARD_ID" }, { status: 400 });
+      }
+
+      return NextResponse.json({
+        text: "Locked. Next: choose a style bundle (required).",
+        journey: { ...journey, selectedStoryboard: storyboardId, mode: "style" },
+        toolUi: null,
+      });
+    }
+
+    // ------------------------------------------------------------------
     // Phase: select_entity
     // ------------------------------------------------------------------
     if (effectiveMode === "select_entity") {
@@ -150,9 +213,12 @@ export async function POST(req: NextRequest) {
 
       return NextResponse.json({
         text:
-          "Pick which workflow you want to package first. I'm only showing workflows that already have activity so we can generate a real dashboard preview fast.",
-        journey: { ...journey, mode: "recommend" },
-        toolUi: {
+          "Select a workflow with activity in the Control Panel first (Phase 0). Then return here to continue.",
+        journey: { ...journey, mode: "select_entity" },
+        toolUi: null,
+        workflows,
+      });
+    }
           type: "todos",
           title: "Build plan",
           items: [],
@@ -162,47 +228,69 @@ export async function POST(req: NextRequest) {
     }
 
     // ------------------------------------------------------------------
-    // Phase: recommend (two cards)
+    // Phase: recommend (Phase 1 — deterministic 2 cards)
     // ------------------------------------------------------------------
     if (effectiveMode === "recommend") {
+      const toolUi: ToolUi = {
+        type: "outcome_cards",
+        title: "Outcome + Monetization Strategy",
+        options: [
+          {
+            id: "dashboard",
+            title: "Client ROI Dashboard (Retention)",
+            description:
+              "Helps renew retainers, makes automation value visible weekly, and proves ROI to clients.",
+          },
+          {
+            id: "product",
+            title: "Workflow Product (SaaS wrapper)",
+            description:
+              "Sell access monthly, hide the underlying workflow, and provide a form/button UI to run it.",
+          },
+        ],
+      };
+
       return NextResponse.json({
         text:
-          "Based on your workflow activity, the fastest path to revenue is:\n\n" +
-          "1) Build a **Client ROI Dashboard** (prove ROI + reduce churn)\n" +
-          "2) Then optionally wrap the same workflow as a **Workflow Product** (SaaS wrapper)\n\n" +
-          "Choose one to start:",
+          "Choose what you want to build first. You can do the other later — but we need one outcome to proceed.",
         journey: { ...journey, mode: "recommend" },
-        toolUi: {
-          type: "outcome_cards",
-          title: "Choose your outcome",
-          options: [
-            {
-              id: "dashboard",
-              title: "Client ROI Dashboard",
-              description: "A dashboard your client can log into to see workflow value, KPIs, and impact over time.",
-            },
-            {
-              id: "product",
-              title: "Workflow Product (SaaS wrapper)",
-              description: "Package the workflow behind a product UI so it can be sold as a recurring subscription.",
-            },
-          ],
-        },
+        toolUi,
       });
     }
 
     // ------------------------------------------------------------------
-    // Phase: align (business goals)
+    // Phase: align (Phase 2 — storyboard cards)
     // ------------------------------------------------------------------
     if (effectiveMode === "align") {
+      const toolUi: ToolUi = {
+        type: "storyboard_cards",
+        title: "Choose your KPI Storyboard",
+        options: [
+          {
+            id: "roi_proof",
+            title: "ROI Proof (Client-facing)",
+            description: "Prove automation value and time saved to drive renewals.",
+            kpis: ["Tasks automated", "Time saved", "Success rate", "Executions over time", "Most recent runs"],
+          },
+          {
+            id: "reliability_ops",
+            title: "Reliability Ops (Agency-facing)",
+            description: "Operate and debug reliability across workflows quickly.",
+            kpis: ["Failure count", "Success rate", "Recent errors", "Avg runtime", "Slowest runs"],
+          },
+          {
+            id: "delivery_sla",
+            title: "Delivery / SLA (Client-facing)",
+            description: "Show delivery health and turnaround time trends.",
+            kpis: ["Runs completed", "Avg turnaround time", "Incidents this week", "Last successful run", "Status trend"],
+          },
+        ],
+      };
+
       return NextResponse.json({
-        text:
-          "Quick alignment so this UI makes money:\n\n" +
-          "1) Is this primarily for **your client (ROI proof)** or **your team (ops reliability)**?\n" +
-          "2) Default time window: **7d**, **30d**, or **90d**?\n\n" +
-          "Answer in one line (e.g., 'client, 30d').",
-        journey: { ...journey, mode: "style" },
-        toolUi: null,
+        text: "Pick a storyboard. This locks the story of the UI before we design it.",
+        journey: { ...journey, mode: "align" },
+        toolUi,
       });
     }
 

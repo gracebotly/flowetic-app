@@ -859,6 +859,32 @@ return (
                     </div>
                   </div>
                 ) : null}
+
+                {toolUi && toolUi.type === "storyboard_cards" ? (
+                  <div className="mb-3 rounded-xl border border-gray-700 bg-gray-900 p-4 text-gray-100">
+                    <div className="mb-3 text-sm font-semibold">{toolUi.title}</div>
+                    <div className="grid grid-cols-3 gap-3">
+                      {toolUi.options.map((opt: any) => (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          className="rounded-xl border border-gray-700 bg-gray-950 p-4 text-left hover:bg-gray-800"
+                          onClick={async () => {
+                            await sendMessage(`__ACTION__:select_storyboard:${opt.id}`);
+                          }}
+                        >
+                          <div className="text-sm font-semibold text-white">{opt.title}</div>
+                          <div className="mt-1 text-xs text-gray-300">{opt.description}</div>
+                          <ul className="mt-3 space-y-1 text-xs text-gray-300">
+                            {(opt.kpis || []).slice(0, 5).map((k: string) => (
+                              <li key={k}>• {k}</li>
+                            ))}
+                          </ul>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
                 
                 {toolUi && toolUi.type === "style_bundles" ? (
                   <StyleBundleCards
