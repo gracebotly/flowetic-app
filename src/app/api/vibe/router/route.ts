@@ -226,6 +226,7 @@ export async function POST(req: NextRequest) {
         text: `Locked in: **${bundle.name}** (${bundle.palette.name}). Generating your preview now...`,
         journey: { ...journey, selectedStyleBundleId: selectedId, mode: "build_preview" },
         toolUi: null,
+        vibeContext: { ...(vibeContext ?? {}), skillMD },
       });
     }
 
@@ -239,10 +240,36 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "MISSING_STORYBOARD_ID" }, { status: 400 });
       }
 
+      const nextJourney = { ...journey, selectedStoryboard: storyboardId, mode: "style" };
+
+      const bundlesResult = await getStyleBundles.execute({
+        context: {
+          platformType,
+          outcome: nextJourney?.selectedOutcome ?? "dashboard",
+          audience: "client",
+          dashboardKind: "workflow-activity",
+          notes: "Return premium style+palette bundles appropriate for agency white-label client delivery.",
+        },
+        runtimeContext,
+      } as any);
+
       return NextResponse.json({
-        text: "Locked. Next: choose a style bundle (required).",
-        journey: { ...journey, selectedStoryboard: storyboardId, mode: "style" },
-        toolUi: null,
+        text: "Perfect. Now choose a style bundle (required) so your preview looks premium immediately.",
+        journey: nextJourney,
+        toolUi: {
+          type: "style_bundles",
+          title: "Choose your dashboard style",
+          bundles: bundlesResult.bundles.map((b) => ({
+            id: b.id,
+            name: b.name,
+            description: b.description,
+            previewImageUrl: b.previewImageUrl,
+            palette: b.palette,
+            tags: b.tags,
+          })),
+        },
+        debug: { sources: bundlesResult.sources },
+        vibeContext: { ...(vibeContext ?? {}), skillMD },
       });
     }
 
@@ -281,10 +308,12 @@ export async function POST(req: NextRequest) {
         ],
       };
 
-      const agentRes = await masterRouterAgent.generate(
-        "System: ask the user to choose an outcome (dashboard retention vs product SaaS wrapper).",
-        { runtimeContext }
-      );
+      const workflowName = String(vibeContext?.displayName ?? vibeContext?.externalId ?? "").trim();
+      const agentPrompt =
+        "System: Phase 1 outcome selection. Strongly recommend one path (dashboard retention vs product SaaS wrapper) in plain language, then invite the user to pick via the cards." +
+        (workflowName ? ` The selected workflow is: "${workflowName}".` : "");
+
+      const agentRes = await masterRouterAgent.generate(agentPrompt, { runtimeContext });
       const agentText = String((agentRes as any)?.text ?? "").trim();
 
       return NextResponse.json({
@@ -561,6 +590,7 @@ export async function POST(req: NextRequest) {
         toolUi: null,
         previewUrl: result.previewUrl,
         previewVersionId: result.previewVersionId,
+        vibeContext: { ...(vibeContext ?? {}), skillMD },
       });
     }
 

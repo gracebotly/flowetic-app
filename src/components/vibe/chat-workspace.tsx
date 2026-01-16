@@ -361,43 +361,63 @@ export function ChatWorkspace({
 
       setVibeContext(ctx);
 
-      const skillText = await loadSkillMD(ctx.skillMD);
-
-      // Initialize agent (first assistant message)
       try {
-        const resp = await fetch("/api/agent/master", {
+        const res = await fetch("/api/vibe/router", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            action: "initialize",
-            tenantId: authContext.tenantId,
             userId: authContext.userId,
-            context: { ...ctx, skillMD: skillText },
+            tenantId: authContext.tenantId,
+            vibeContext: { ...ctx, threadId },
+            journey: {
+              mode: "select_entity",
+              selectedOutcome: null,
+              selectedStoryboard: null,
+              selectedStyleBundleId: null,
+              densityPreset,
+              paletteOverrideId,
+            },
+            userMessage: "System: start Phase 1 outcome selection.",
           }),
         });
 
-        const data = await resp.json().catch(() => ({}));
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          addLog("error", "Failed to start Phase 1", data?.error || "ROUTER_REQUEST_FAILED");
+        } else {
+          if (data?.journey?.mode) setJourneyMode(data.journey.mode);
+          setToolUi(data?.toolUi ?? null);
 
-        if (!resp.ok || data?.type === "error") {
-          addLog("error", "Agent init failed", data?.message || "Failed to initialize agent.");
-          setVibeInitDone(true);
-          return;
+          if (data?.vibeContext) {
+            setVibeContext((prev: any) => ({ ...(prev ?? {}), ...data.vibeContext }));
+            setVibeContextSnapshot(data.vibeContext);
+          }
+
+          const first = String(data?.text ?? "").trim();
+          if (first) {
+            // Persist assistant message like normal
+            await fetch("/api/journey-messages", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                tenantId: authContext.tenantId,
+                threadId,
+                role: "assistant",
+                content: first,
+              }),
+            });
+
+            setMessages((prev) => [
+              ...prev,
+              { id: `a-init-${Date.now()}`, role: "assistant", content: first },
+            ]);
+          }
         }
-
-        // Expecting { message } or { text }
-        const first = String(data?.message || data?.text || "").trim();
-        if (first) {
-          setMessages((prev) => [
-            ...prev,
-            { id: `a-init-${Date.now()}`, role: "assistant", content: first },
-          ]);
-        }
-
-        setVibeInitDone(true);
       } catch (e: any) {
-        addLog("error", "Agent init failed", e?.message || "Failed to initialize agent.");
-        setVibeInitDone(true);
+        addLog("error", "Failed to start Phase 1", e?.message || "Unknown error");
       }
+
+      setVibeInitDone(true);
     }
 
     initFromSession();
@@ -661,7 +681,7 @@ export function ChatWorkspace({
       setToolUi(data?.toolUi ?? null);
 
       if (data?.vibeContext) {
-        setVibeContext((prev: any) => ({ ...prev, ...data.vibeContext }));
+        setVibeContext((prev: any) => ({ ...(prev ?? {}), ...data.vibeContext }));
       }
       if (data?.interfaceId) {
         setVibeContext((prev: any) => (prev ? { ...prev, interfaceId: data.interfaceId } : prev));
