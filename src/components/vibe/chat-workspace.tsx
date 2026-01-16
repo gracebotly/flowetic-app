@@ -48,6 +48,15 @@ type JourneyMode =
 
 type ToolUiPayload =
   | {
+      type: "outcome_cards";
+      title: string;
+      options: Array<{
+        id: string;
+        title: string;
+        description: string;
+      }>;
+    }
+  | {
       type: "style_bundles";
       title: string;
       bundles: Array<{
@@ -830,6 +839,44 @@ return (
           {view === "terminal" ? (
             <div className="flex flex-1 flex-col bg-[#1e1e1e] min-h-0 overflow-hidden">
               <div className="flex-1 overflow-y-auto pl-4 pr-2 py-4 font-mono text-[13px] leading-6 text-[#d4d4d4] thin-scrollbar">
+                {toolUi && toolUi.type === "outcome_cards" ? (
+                  <div className="mb-3 rounded-xl border border-gray-700 bg-gray-900 p-3 text-gray-100">
+                    <div className="mb-2 text-sm font-semibold">{toolUi.title}</div>
+                    <div className="grid grid-cols-2 gap-3">
+                      {toolUi.options.map((opt: any) => (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          className="rounded-xl border border-gray-700 bg-gray-950 p-4 text-left hover:bg-gray-800"
+                          onClick={async () => {
+                            await sendMessage(`__ACTION__:select_outcome:${opt.id}`);
+                          }}
+                        >
+                          <div className="text-sm font-semibold text-white">{opt.title}</div>
+                          <div className="mt-1 text-xs text-gray-300">{opt.description}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+                
+                {toolUi && toolUi.type === "style_bundles" ? (
+                  <StyleBundleCards
+                    bundles={toolUi.bundles}
+                    selectedId={selectedStyleBundleId}
+                    onSelect={(id) => {
+                      void sendMessage(`__ACTION__:select_style_bundle:${id}`);
+                    }}
+                  />
+                ) : null}
+                
+                {toolUi && toolUi.type === "todos" ? (
+                  <TodoPanel
+                    todos={toolUi.items}
+                    title={toolUi.title}
+                  />
+                ) : null}
+
                 {logs.map((l) => (
                   <div key={l.id} className="mb-3">
                     <div className="flex gap-2">
@@ -844,8 +891,24 @@ return (
           ) : null}
 
           {view === "preview" ? (
-            <div className="flex flex-1 items-center justify-center bg-white">
-              <div className="text-sm text-gray-500">Preview</div>
+            <div className="flex flex-1 bg-white min-h-0 overflow-hidden">
+              {toolUi && toolUi.type === "interactive_edit_panel" ? (
+                <InteractiveEditPanel
+                  title={toolUi.title}
+                  interfaceId={toolUi.interfaceId}
+                  widgets={toolUi.widgets}
+                  palettes={toolUi.palettes}
+                  density={toolUi.density}
+                  selectedComponentId={selectedComponentId}
+                  onSelectComponent={setSelectedComponentId}
+                  onOpenProperties={setPropertiesOpen}
+                  refreshSpec={refreshCurrentSpec}
+                />
+              ) : (
+                <div className="flex flex-1 items-center justify-center">
+                  <div className="text-sm text-gray-500">Preview</div>
+                </div>
+              )}
             </div>
           ) : null}
 

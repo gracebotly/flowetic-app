@@ -66,6 +66,10 @@ export async function POST(req: NextRequest) {
 
     const mode: JourneyMode = journey?.mode || "select_entity";
 
+    const hasSelectedEntity = Boolean(vibeContext?.entityId && vibeContext?.sourceId);
+    const effectiveMode: JourneyMode =
+      mode === "select_entity" && hasSelectedEntity ? "recommend" : mode;
+
     const supabase = await createClient();
 
     // Helper: list workflows WITH events for picker (MVP rule A)
@@ -85,10 +89,30 @@ export async function POST(req: NextRequest) {
     }
 
     // ------------------------------------------------------------------
+    // ACTION: outcome selection
+    // ------------------------------------------------------------------
+    if (isAction(userMessage) && userMessage.startsWith("__ACTION__:select_outcome:")) {
+      const outcome = userMessage.replace("__ACTION__:select_outcome:", "").trim();
+
+      if (outcome !== "dashboard" && outcome !== "product") {
+        return NextResponse.json({ error: "INVALID_OUTCOME" }, { status: 400 });
+      }
+
+      return NextResponse.json({
+        text:
+          outcome === "dashboard"
+            ? "Great — we'll build a Client ROI Dashboard first. Next: quick alignment."
+            : "Great — we'll build a Workflow Product first. Next: quick alignment.",
+        journey: { ...journey, selectedOutcome: outcome, mode: "align" },
+        toolUi: null,
+      });
+    }
+
+    // ------------------------------------------------------------------
     // ACTION: style bundle selected
     // ------------------------------------------------------------------
-    if (userMessage === "__ACTION__:select_style_bundle") {
-      const selectedId = journey?.selectedStyleBundleId;
+    if (isAction(userMessage) && userMessage.startsWith("__ACTION__:select_style_bundle:")) {
+      const selectedId = userMessage.replace("__ACTION__:select_style_bundle:", "").trim();
       if (!selectedId) {
         return NextResponse.json({ error: "MISSING_STYLE_BUNDLE_ID" }, { status: 400 });
       }
@@ -113,7 +137,7 @@ export async function POST(req: NextRequest) {
       // Store selected bundle in journey and proceed
       return NextResponse.json({
         text: `Locked in: **${bundle.name}** (${bundle.palette.name}). Generating your preview now...`,
-        journey: { ...journey, mode: "build_preview" },
+        journey: { ...journey, selectedStyleBundleId: selectedId, mode: "build_preview" },
         toolUi: null,
       });
     }
@@ -121,7 +145,7 @@ export async function POST(req: NextRequest) {
     // ------------------------------------------------------------------
     // Phase: select_entity
     // ------------------------------------------------------------------
-    if (mode === "select_entity") {
+    if (effectiveMode === "select_entity") {
       const workflows = await listActiveWorkflows();
 
       return NextResponse.json({
@@ -140,62 +164,29 @@ export async function POST(req: NextRequest) {
     // ------------------------------------------------------------------
     // Phase: recommend (two cards)
     // ------------------------------------------------------------------
-    if (mode === "recommend") {
-      // Create initial todos (lightweight)
-      await todoAdd.execute({
-        context: {
-          tenantId,
-          threadId,
-          title: "Select outcome (dashboard vs product)",
-          priority: "high",
-          tags: ["journey"],
-        },
-        runtimeContext,
-      });
-
-      await todoAdd.execute({
-        context: {
-          tenantId,
-          threadId,
-          title: "Choose style bundle (required)",
-          priority: "high",
-          tags: ["journey", "design"],
-        },
-        runtimeContext,
-      });
-
-      await todoAdd.execute({
-        context: {
-          tenantId,
-          threadId,
-          title: "Generate preview",
-          priority: "high",
-          tags: ["journey"],
-        },
-        runtimeContext,
-      });
-
-      const todos = await todoList.execute({
-        context: { tenantId, threadId, status: "all" },
-        runtimeContext,
-      });
-
+    if (effectiveMode === "recommend") {
       return NextResponse.json({
         text:
           "Based on your workflow activity, the fastest path to revenue is:\n\n" +
-          "1) Build a **Workflow Activity Dashboard** (prove ROI + reduce churn)\n" +
-          "2) Then optionally wrap the same workflow as a **sellable product** (SaaS wrapper)\n\n" +
-          "Which do you want first: **dashboard** or **product**?",
-        journey: { ...journey, mode: "align" },
+          "1) Build a **Client ROI Dashboard** (prove ROI + reduce churn)\n" +
+          "2) Then optionally wrap the same workflow as a **Workflow Product** (SaaS wrapper)\n\n" +
+          "Choose one to start:",
+        journey: { ...journey, mode: "recommend" },
         toolUi: {
-          type: "todos",
-          title: "Build plan",
-          items: todos.todos.map((t: any) => ({
-            id: t.id,
-            title: t.title,
-            status: t.status,
-            priority: t.priority,
-          })),
+          type: "outcome_cards",
+          title: "Choose your outcome",
+          options: [
+            {
+              id: "dashboard",
+              title: "Client ROI Dashboard",
+              description: "A dashboard your client can log into to see workflow value, KPIs, and impact over time.",
+            },
+            {
+              id: "product",
+              title: "Workflow Product (SaaS wrapper)",
+              description: "Package the workflow behind a product UI so it can be sold as a recurring subscription.",
+            },
+          ],
         },
       });
     }
@@ -203,7 +194,7 @@ export async function POST(req: NextRequest) {
     // ------------------------------------------------------------------
     // Phase: align (business goals)
     // ------------------------------------------------------------------
-    if (mode === "align") {
+    if (effectiveMode === "align") {
       return NextResponse.json({
         text:
           "Quick alignment so this UI makes money:\n\n" +
@@ -218,7 +209,7 @@ export async function POST(req: NextRequest) {
     // ------------------------------------------------------------------
     // Phase: style (RAG -> 4 bundles)
     // ------------------------------------------------------------------
-    if (mode === "style") {
+    if (effectiveMode === "style") {
       const bundlesResult = await getStyleBundles.execute({
         context: {
           platformType,
@@ -252,18 +243,40 @@ export async function POST(req: NextRequest) {
     // ------------------------------------------------------------------
     // Phase: build_preview (delegate to platformMappingMaster for real preview)
     // ------------------------------------------------------------------
-    if (mode === "build_preview") {
-      // IMPORTANT: platformMappingMaster must have created/persisted a preview interface/version by now.
-      // If your current preview workflow returns interfaceId/versionId, store them into vibeContext and/or journey.
-      const interfaceId = vibeContext?.interfaceId as string | undefined;
+    if (effectiveMode === "build_preview") {
+      let interfaceId = vibeContext?.interfaceId as string | undefined;
+
       if (!interfaceId) {
-        return NextResponse.json(
-          {
-            error:
-              "MISSING_INTERFACE_ID_FOR_PREVIEW. Wire preview workflow to return interfaceId and set vibeContext.interfaceId.",
+        const result = await platformMappingMaster.execute({
+          context: {
+            tenantId,
+            userId,
+            platformType,
+            sourceId,
+            entityId: vibeContext?.entityId,
+            outcome: journey?.selectedOutcome ?? "dashboard",
+            styleBundleId: journey?.selectedStyleBundleId ?? null,
           },
-          { status: 400 }
-        );
+          runtimeContext,
+        } as any);
+
+        interfaceId = result?.interfaceId;
+
+        if (!interfaceId) {
+          return NextResponse.json(
+            { error: "PREVIEW_GENERATION_FAILED_NO_INTERFACE_ID" },
+            { status: 500 }
+          );
+        }
+
+        return NextResponse.json({
+          text: "Preview generated. Loading editor…",
+          journey: { ...journey, mode: "build_preview" },
+          toolUi: null,
+          interfaceId,
+          previewUrl: result?.previewUrl ?? null,
+          previewVersionId: result?.versionId ?? result?.previewVersionId ?? null,
+        });
       }
 
       // Load the actual current spec to extract real component IDs for interactive edit.
@@ -334,7 +347,7 @@ export async function POST(req: NextRequest) {
         text: "Preview is ready. Use the controls below to refine it before deploying.",
         journey: { ...journey, mode: "interactive_edit" },
         toolUi: {
-          type: "interactive_edit",
+          type: "interactive_edit_panel",
           title: "Refine your dashboard",
           interfaceId,
           widgets,
