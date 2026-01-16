@@ -1285,7 +1285,5 @@ export function ChatWorkspace({
     )}
 
           </CopilotKit>
-
-    </>
   );
 }
