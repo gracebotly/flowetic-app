@@ -7,7 +7,7 @@ import { loadSkill } from "@/mastra/skills/loadSkill";
 import { z } from "zod";
 
 import { designAdvisorAgent } from "@/mastra/agents/designAdvisorAgent";
-import { platformMappingMaster } from "@/mastra/agents/platformMappingMaster";
+
 import { dashboardBuilderAgent } from "@/mastra/agents/dashboardBuilderAgent";
 
 import { todoAdd, todoList } from "@/mastra/tools/todo";
@@ -335,36 +335,13 @@ export async function POST(req: NextRequest) {
       let interfaceId = vibeContext?.interfaceId as string | undefined;
 
       if (!interfaceId) {
-        const result = await platformMappingMaster.execute({
-          context: {
-            tenantId,
-            userId,
-            platformType,
-            sourceId,
-            entityId: vibeContext?.entityId,
-            outcome: journey?.selectedOutcome ?? "dashboard",
-            styleBundleId: journey?.selectedStyleBundleId ?? null,
+        return NextResponse.json(
+          {
+            error:
+              "MISSING_INTERFACE_ID_FOR_PREVIEW. Preview generation must be executed by the existing master agent workflow and must set vibeContext.interfaceId (and optionally previewUrl/previewVersionId) before entering build_preview.",
           },
-          runtimeContext,
-        } as any);
-
-        interfaceId = result?.interfaceId;
-
-        if (!interfaceId) {
-          return NextResponse.json(
-            { error: "PREVIEW_GENERATION_FAILED_NO_INTERFACE_ID" },
-            { status: 500 }
-          );
-        }
-
-        return NextResponse.json({
-          text: "Preview generated. Loading editor…",
-          journey: { ...journey, mode: "build_preview" },
-          toolUi: null,
-          interfaceId,
-          previewUrl: result?.previewUrl ?? null,
-          previewVersionId: result?.versionId ?? result?.previewVersionId ?? null,
-        });
+          { status: 400 }
+        );
       }
 
       // Load the actual current spec to extract real component IDs for interactive edit.
