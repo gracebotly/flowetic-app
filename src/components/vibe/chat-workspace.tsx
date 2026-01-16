@@ -112,8 +112,8 @@ type VibeContextExtended = VibeContext & {
 
 interface ChatWorkspaceProps {
   showEnterVibeButton?: boolean;
-  onRequestNewConversation?: () => void;
-  onRequestOpenConversations?: () => void;
+  requestNewConversationKey?: number;
+  requestOpenConversationsKey?: number;
 }
 
 function isToolUiPayload(value: unknown): value is ToolUiPayload {
@@ -132,8 +132,8 @@ function getRightTabForToolUi(next: ToolUiPayload): ViewMode {
 
 export function ChatWorkspace({
   showEnterVibeButton = false,
-  onRequestNewConversation,
-  onRequestOpenConversations,
+  requestNewConversationKey,
+  requestOpenConversationsKey,
 }: ChatWorkspaceProps) {
   const router = useRouter();
   const [view, setView] = useState<ViewMode>("terminal");
@@ -155,21 +155,18 @@ export function ChatWorkspace({
   const [newEntityId, setNewEntityId] = useState<string>("");
   const [newTitle, setNewTitle] = useState<string>("");
 
-  // Handler wrappers for external control
-  const openNewConversation = () => setNewConvOpen(true);
-  const openConversations = () => setSessionsOpen(true);
+  // Key-based external control effects
+  useEffect(() => {
+    if (typeof requestNewConversationKey !== "number") return;
+    if (requestNewConversationKey <= 0) return;
+    setNewConvOpen(true);
+  }, [requestNewConversationKey]);
 
   useEffect(() => {
-    if (typeof onRequestNewConversation !== "function") return;
-    openNewConversation();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onRequestNewConversation]);
-
-  useEffect(() => {
-    if (typeof onRequestOpenConversations !== "function") return;
-    openConversations();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onRequestOpenConversations]);
+    if (typeof requestOpenConversationsKey !== "number") return;
+    if (requestOpenConversationsKey <= 0) return;
+    setSessionsOpen(true);
+  }, [requestOpenConversationsKey]);
 
   // Message persistence state
   type Msg = { id: string; role: Role; content: string; createdAt?: string };

@@ -62,8 +62,8 @@ export default function VibeChatPage() {
         <div className="h-full min-h-0 overflow-hidden">
           <ChatWorkspace
             showEnterVibeButton={false}
-            onRequestNewConversation={() => requestNewConversationKey}
-            onRequestOpenConversations={() => requestOpenConversationsKey}
+            requestNewConversationKey={requestNewConversationKey}
+            requestOpenConversationsKey={requestOpenConversationsKey}
           />
         </div>
       </div>
