@@ -908,8 +908,8 @@ return (
                 
                 {toolUi && toolUi.type === "todos" ? (
                   <TodoPanel
-                    todos={toolUi.items}
                     title={toolUi.title}
+                    items={toolUi.items}
                   />
                 ) : null}
 
