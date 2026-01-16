@@ -120,6 +120,13 @@ export async function POST(req: NextRequest) {
     const threadId = vibeContext?.threadId || "vibe";
     runtimeContext.set("threadId", threadId);
 
+    // Extra context for business-outcomes-advisor + platform skill reasoning
+    if (vibeContext?.displayName) runtimeContext.set("workflowName", String(vibeContext.displayName));
+    if (vibeContext?.externalId) runtimeContext.set("workflowExternalId", String(vibeContext.externalId));
+    if (vibeContext?.entityId) runtimeContext.set("workflowEntityId", String(vibeContext.entityId));
+    if (journey?.selectedOutcome) runtimeContext.set("selectedOutcome", String(journey.selectedOutcome));
+    if (journey?.selectedStoryboard) runtimeContext.set("selectedStoryboard", String(journey.selectedStoryboard));
+
     const mode: JourneyMode = journey?.mode || "select_entity";
 
     const hasSelectedEntity = Boolean(vibeContext?.entityId && vibeContext?.sourceId);
