@@ -990,3 +990,4 @@ return (
     </div>
   </CopilotKit>
 );
+}
