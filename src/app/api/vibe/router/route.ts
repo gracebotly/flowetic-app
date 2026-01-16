@@ -9,6 +9,7 @@ import { z } from "zod";
 import { designAdvisorAgent } from "@/mastra/agents/designAdvisorAgent";
 
 import { dashboardBuilderAgent } from "@/mastra/agents/dashboardBuilderAgent";
+import { masterRouterAgent } from "@/mastra/agents/masterRouterAgent";
 
 import { todoAdd, todoList } from "@/mastra/tools/todo";
 import { getStyleBundles } from "@/mastra/tools/design/getStyleBundles";
@@ -58,6 +59,28 @@ function isAction(msg: string) {
   return msg.startsWith("__ACTION__:");
 }
 
+function actionToAgentHint(userMessage: string): string {
+  if (!isAction(userMessage)) return userMessage;
+
+  if (userMessage.startsWith("__ACTION__:select_outcome:")) {
+    const outcome = userMessage.replace("__ACTION__:select_outcome:", "").trim();
+    return `System: user selected outcome "${outcome}".`;
+  }
+
+  if (userMessage.startsWith("__ACTION__:select_storyboard:")) {
+    const storyboardId = userMessage.replace("__ACTION__:select_storyboard:", "").trim();
+    return `System: user selected storyboard "${storyboardId}".`;
+  }
+
+  if (userMessage.startsWith("__ACTION__:select_style_bundle:")) {
+    const bundleId = userMessage.replace("__ACTION__:select_style_bundle:", "").trim();
+    return `System: user selected style bundle "${bundleId}".`;
+  }
+
+  // Leave other actions as-is
+  return `System: received action "${userMessage}".`;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -90,9 +113,19 @@ export async function POST(req: NextRequest) {
     runtimeContext.set("platformType", platformType);
     if (sourceId) runtimeContext.set("sourceId", sourceId);
 
+    const skillMD = await loadSkill(platformType);
+    runtimeContext.set("skillMD", skillMD);
+
     // Thread id: use vibeContextSnapshot/thread id if you have it; fallback to "vibe"
     const threadId = vibeContext?.threadId || "vibe";
     runtimeContext.set("threadId", threadId);
+
+    // Extra context for business-outcomes-advisor + platform skill reasoning
+    if (vibeContext?.displayName) runtimeContext.set("workflowName", String(vibeContext.displayName));
+    if (vibeContext?.externalId) runtimeContext.set("workflowExternalId", String(vibeContext.externalId));
+    if (vibeContext?.entityId) runtimeContext.set("workflowEntityId", String(vibeContext.entityId));
+    if (journey?.selectedOutcome) runtimeContext.set("selectedOutcome", String(journey.selectedOutcome));
+    if (journey?.selectedStoryboard) runtimeContext.set("selectedStoryboard", String(journey.selectedStoryboard));
 
     const mode: JourneyMode = journey?.mode || "select_entity";
 
@@ -119,7 +152,7 @@ export async function POST(req: NextRequest) {
     }
 
     // ------------------------------------------------------------------
-    // ACTION: outcome selection
+    // ACTION: outcome selection (agent-driven copy)
     // ------------------------------------------------------------------
     if (isAction(userMessage) && userMessage.startsWith("__ACTION__:select_outcome:")) {
       const outcome = userMessage.replace("__ACTION__:select_outcome:", "").trim();
@@ -128,13 +161,44 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "INVALID_OUTCOME" }, { status: 400 });
       }
 
+      const nextJourney = { ...journey, selectedOutcome: outcome, mode: "align" };
+
+      // Keep your existing storyboard cards UI (the part you like visually)
+      const storyboardToolUi: ToolUi = {
+        type: "storyboard_cards",
+        title: "Choose your KPI Storyboard",
+        options: [
+          {
+            id: "roi_proof",
+            title: "ROI Proof (Client-facing)",
+            description: "Prove automation value and time saved to drive renewals.",
+            kpis: ["Tasks automated", "Time saved", "Success rate", "Executions over time", "Most recent runs"],
+          },
+          {
+            id: "reliability_ops",
+            title: "Reliability Ops (Agency-facing)",
+            description: "Operate and debug reliability across workflows quickly.",
+            kpis: ["Failure count", "Success rate", "Recent errors", "Avg runtime", "Slowest runs"],
+          },
+          {
+            id: "delivery_sla",
+            title: "Delivery / SLA (Client-facing)",
+            description: "Show delivery health and turnaround time trends.",
+            kpis: ["Runs completed", "Avg turnaround time", "Incidents this week", "Last successful run", "Status trend"],
+          },
+        ],
+      };
+
+      // Agent-driven user-facing text, skill-aware
+      const agentInput = actionToAgentHint(userMessage);
+      const agentRes = await masterRouterAgent.generate(agentInput, { runtimeContext });
+      const agentText = String((agentRes as any)?.text ?? "").trim();
+
       return NextResponse.json({
-        text:
-          outcome === "dashboard"
-            ? "Great — we'll build a Client ROI Dashboard first. Next: quick alignment."
-            : "Great — we'll build a Workflow Product first. Next: quick alignment.",
-        journey: { ...journey, selectedOutcome: outcome, mode: "align" },
-        toolUi: null,
+        text: agentText || "Great — now pick a storyboard so we lock the story before design.",
+        journey: nextJourney,
+        toolUi: storyboardToolUi,
+        vibeContext: { ...(vibeContext ?? {}), skillMD },
       });
     }
 
@@ -169,6 +233,7 @@ export async function POST(req: NextRequest) {
         text: `Locked in: **${bundle.name}** (${bundle.palette.name}). Generating your preview now...`,
         journey: { ...journey, selectedStyleBundleId: selectedId, mode: "build_preview" },
         toolUi: null,
+        vibeContext: { ...(vibeContext ?? {}), skillMD },
       });
     }
 
@@ -182,10 +247,36 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "MISSING_STORYBOARD_ID" }, { status: 400 });
       }
 
+      const nextJourney = { ...journey, selectedStoryboard: storyboardId, mode: "style" };
+
+      const bundlesResult = await getStyleBundles.execute({
+        context: {
+          platformType,
+          outcome: nextJourney?.selectedOutcome ?? "dashboard",
+          audience: "client",
+          dashboardKind: "workflow-activity",
+          notes: "Return premium style+palette bundles appropriate for agency white-label client delivery.",
+        },
+        runtimeContext,
+      } as any);
+
       return NextResponse.json({
-        text: "Locked. Next: choose a style bundle (required).",
-        journey: { ...journey, selectedStoryboard: storyboardId, mode: "style" },
-        toolUi: null,
+        text: "Perfect. Now choose a style bundle (required) so your preview looks premium immediately.",
+        journey: nextJourney,
+        toolUi: {
+          type: "style_bundles",
+          title: "Choose your dashboard style",
+          bundles: bundlesResult.bundles.map((b) => ({
+            id: b.id,
+            name: b.name,
+            description: b.description,
+            previewImageUrl: b.previewImageUrl,
+            palette: b.palette,
+            tags: b.tags,
+          })),
+        },
+        debug: { sources: bundlesResult.sources },
+        vibeContext: { ...(vibeContext ?? {}), skillMD },
       });
     }
 
@@ -224,11 +315,19 @@ export async function POST(req: NextRequest) {
         ],
       };
 
+      const workflowName = String(vibeContext?.displayName ?? vibeContext?.externalId ?? "").trim();
+      const agentPrompt =
+        "System: Phase 1 outcome selection. Strongly recommend one path (dashboard retention vs product SaaS wrapper) in plain language, then invite the user to pick via the cards." +
+        (workflowName ? ` The selected workflow is: "${workflowName}".` : "");
+
+      const agentRes = await masterRouterAgent.generate(agentPrompt, { runtimeContext });
+      const agentText = String((agentRes as any)?.text ?? "").trim();
+
       return NextResponse.json({
-        text:
-          "Choose what you want to build first. You can do the other later — but we need one outcome to proceed.",
+        text: agentText || "Choose what you want to build first. You can do the other later — but we need one outcome to proceed.",
         journey: { ...journey, mode: "recommend" },
         toolUi,
+        vibeContext: { ...(vibeContext ?? {}), skillMD },
       });
     }
 
@@ -261,10 +360,17 @@ export async function POST(req: NextRequest) {
         ],
       };
 
+      const agentRes = await masterRouterAgent.generate(
+        actionToAgentHint(userMessage),
+        { runtimeContext }
+      );
+      const agentText = String((agentRes as any)?.text ?? "").trim();
+
       return NextResponse.json({
-        text: "Pick a storyboard. This locks the story of the UI before we design it.",
+        text: agentText || "Pick a storyboard. This locks the story of the UI before we design it.",
         journey: { ...journey, mode: "align" },
         toolUi,
+        vibeContext: { ...(vibeContext ?? {}), skillMD },
       });
     }
 
@@ -299,6 +405,7 @@ export async function POST(req: NextRequest) {
           })),
         },
         debug: { sources: bundlesResult.sources },
+        vibeContext: { ...(vibeContext ?? {}), skillMD },
       });
     }
 
@@ -396,6 +503,7 @@ export async function POST(req: NextRequest) {
         interfaceId,
         previewUrl: vibeContext?.previewUrl ?? null,
         previewVersionId: vibeContext?.previewVersionId ?? null,
+        vibeContext: { ...(vibeContext ?? {}), skillMD },
       });
     }
 
@@ -489,6 +597,7 @@ export async function POST(req: NextRequest) {
         toolUi: null,
         previewUrl: result.previewUrl,
         previewVersionId: result.previewVersionId,
+        vibeContext: { ...(vibeContext ?? {}), skillMD },
       });
     }
 
@@ -497,6 +606,7 @@ export async function POST(req: NextRequest) {
       text: "I'm ready. Tell me what you want to do next.",
       journey,
       toolUi: null,
+      vibeContext: { ...(vibeContext ?? {}), skillMD },
     });
   } catch (err: any) {
     return NextResponse.json(

@@ -2,7 +2,7 @@
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 import { RuntimeContext } from "@mastra/core/runtime-context";
-import { loadSkillMarkdown, PlatformType } from "../skills/loadSkill";
+import { loadSkillMarkdown, loadNamedSkillMarkdown, PlatformType } from "../skills/loadSkill";
 
 import { todoAdd, todoList, todoUpdate, todoComplete } from "../tools/todo";
 import { designAdvisorAgent } from "./designAdvisorAgent";
@@ -25,6 +25,11 @@ export const masterRouterAgent: Agent = new Agent({
   instructions: async ({ runtimeContext }: { runtimeContext: RuntimeContext }) => {
     const platformType = (runtimeContext.get("platformType") as PlatformType) || "make";
     const platformSkill = await loadSkillMarkdown(platformType);
+
+    // NEW: business consultant skill (will exist after you added the folder)
+    const businessSkill = await loadNamedSkillMarkdown("business-outcomes-advisor");
+
+    // Keep existing todoSkill behavior as-is for now
     const todoSkill = await loadSkillMarkdown("make"); // fallback if you don't want a dedicated todo loader
 
     return [
@@ -47,6 +52,15 @@ export const masterRouterAgent: Agent = new Agent({
           "4) build_preview (generate preview)\n" +
           "5) interactive_edit (reorder/toggle/rename/switch chart + palette + density)\n" +
           "6) deploy\n\n" +
+          "Phase 1 (recommend) behavior:\n" +
+          "- Always start with a strong recommendation (dashboard vs product) in plain language + 2 bullet reasons.\n" +
+          "- Then ask ONE question: which outcome do you want first?\n" +
+          "- If the user is unsure, ask at most 2 consultative questions, then recommend again.\n\n" +
+          "Phase 2 (align/storyboard) behavior:\n" +
+          "- Bridge: 'Now let's design the story this dashboard/product will tell.'\n" +
+          "- Recommend one storyboard option based on workflow type and selected outcome.\n\n" +
+          "Business Outcomes Advisor Skill:\n" +
+          (businessSkill || "MISSING_BUSINESS_SKILL") + "\n\n" +
           "Platform Skill:\n" +
           platformSkill,
       },
