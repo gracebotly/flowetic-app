@@ -209,21 +209,11 @@ export async function POST(req: NextRequest) {
     // Phase: select_entity
     // ------------------------------------------------------------------
     if (effectiveMode === "select_entity") {
-      const workflows = await listActiveWorkflows();
-
       return NextResponse.json({
         text:
-          "Select a workflow with activity in the Control Panel first (Phase 0). Then return here to continue.",
+          "Phase 0 happens in /control-panel/chat. Select a workflow there first, then come back to /vibe/chat.",
         journey: { ...journey, mode: "select_entity" },
         toolUi: null,
-        workflows,
-      });
-    }
-          type: "todos",
-          title: "Build plan",
-          items: [],
-        },
-        workflows,
       });
     }
 
