@@ -907,6 +907,18 @@ return (
                         type="button"
                         className="w-full rounded-xl border border-gray-700 bg-gray-950 px-4 py-3 text-left hover:bg-gray-800"
                         onClick={async () => {
+                          // Visible acknowledgement in chat so click feels connected
+                          setMessages((prev) => [
+                            ...prev,
+                            {
+                              id: `a-ack-${Date.now()}`,
+                              role: "assistant",
+                              content: "Got it — I'll help you decide. Two quick questions and I'll recommend the best path.",
+                            },
+                          ]);
+
+                          addLog("info", "Deep lane started", "Asking 1–2 quick questions to recommend dashboard vs product.");
+
                           await sendMessage("__ACTION__:outcome_help_me_decide");
                         }}
                       >
