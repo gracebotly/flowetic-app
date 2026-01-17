@@ -81,6 +81,15 @@ function actionToAgentHint(userMessage: string): string {
   return `System: received action "${userMessage}".`;
 }
 
+const NO_ROADMAP_RULES = [
+  "Rules:",
+  "- Do NOT explain the whole process or list the phases/steps.",
+  "- Do NOT write a roadmap (no numbered onboarding plan).",
+  "- Keep it premium and brief.",
+  "- Use plain language for non-technical users.",
+  "- Avoid jargon like: execution status, success rate, optimize processes, workflow activity dashboard.",
+].join("\n");
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -152,13 +161,12 @@ export async function POST(req: NextRequest) {
         const agentRes = await masterRouterAgent.generate(
           [
             "System: Deep lane step 2 (final question).",
-            workflowName ? `System: The selected workflow is "${workflowName}".` : "",
-            "Rules:",
-            "- Ask EXACTLY ONE question now.",
-            "- Use plain language. No jargon.",
-            "- Do NOT explain the journey/phases.",
+            workflowName ? `System: Selected workflow name: "${workflowName}".` : "",
+            NO_ROADMAP_RULES,
+            "Output requirements:",
+            "- Ask EXACTLY ONE question.",
             "- This must be the last deep-lane question.",
-            "Question must be: who will use this most often (you/your team vs the client)?",
+            "- Question: who will use this UI most often (your team vs the client)?",
           ].filter(Boolean).join("\n"),
           { runtimeContext }
         );
@@ -177,12 +185,12 @@ export async function POST(req: NextRequest) {
         const answers = journey?.deepLane?.answers ?? {};
         const agentRes = await masterRouterAgent.generate(
           [
-            "System: Deep lane complete. Produce recommendation.",
-            workflowName ? `System: The selected workflow is "${workflowName}".` : "",
-            "Rules:",
-            "- Do NOT explain the full journey/phases.",
-            "- Recommend ONE path (dashboard vs product) with 2 bullet reasons.",
-            "- Use plain language. Avoid: execution status, success rates, optimize processes.",
+            "System: Deep lane complete. Provide final recommendation.",
+            workflowName ? `System: Selected workflow name: "${workflowName}".` : "",
+            NO_ROADMAP_RULES,
+            "Output requirements:",
+            "- Recommend ONE path (dashboard vs product).",
+            "- Exactly 2 bullet reasons.",
             "- End with: 'Pick one of the two cards on the right.'",
             `User answers:\nQ1: ${String(answers.q1 ?? "")}\nQ2: ${String(userMessage)}`,
           ].filter(Boolean).join("\n"),
@@ -309,19 +317,18 @@ export async function POST(req: NextRequest) {
         },
       };
 
+      const workflowName = String(vibeContext?.displayName ?? vibeContext?.externalId ?? "").trim();
+
       const agentRes = await masterRouterAgent.generate(
         [
-          "System: Deep lane start.",
-          workflowName ? `System: The selected workflow is "${workflowName}".` : "",
-          "System: The user clicked 'I'm not sure — help me decide'.",
-          "Rules:",
-          "- Do NOT explain the full journey/phases.",
-          "- Do NOT give a roadmap or numbered onboarding steps.",
-          "- Ask EXACTLY ONE question now.",
-          "- Use plain language for non-technical users.",
-          "- The question must help decide between: (A) retention dashboard (prove value to clients) vs (B) sellable product (charge for access).",
-          "Output format:",
-          "1 short sentence acknowledging the click, then a single question.",
+          "System: Deep lane start. User clicked: I'm not sure.",
+          workflowName ? `System: Selected workflow name: "${workflowName}".` : "",
+          NO_ROADMAP_RULES,
+          "Output requirements:",
+          "- Acknowledge in 1 short sentence.",
+          "- Ask EXACTLY ONE question.",
+          "- The question must decide between: (A) retention dashboard (prove value to a client) vs (B) sellable product (charge for access).",
+          "- Do not add extra explanation.",
         ].filter(Boolean).join("\n"),
         { runtimeContext }
       );
@@ -468,16 +475,17 @@ export async function POST(req: NextRequest) {
         ],
       };
 
+      const workflowName = String(vibeContext?.displayName ?? vibeContext?.externalId ?? "").trim();
+
       const agentRes = await masterRouterAgent.generate(
         [
           "System: Phase 1 outcome selection.",
-          workflowName ? `System: The selected workflow is "${workflowName}".` : "",
-          "Rules:",
-          "- Sound like a premium agency consultant for a non-technical user.",
+          workflowName ? `System: Selected workflow name: "${workflowName}".` : "",
+          NO_ROADMAP_RULES,
+          "Output requirements:",
           "- Start with: 'I recommend starting with X.'",
-          "- Give exactly 2 bullet reasons in plain language.",
-          "- Avoid jargon: execution status, success rates, optimize processes, workflow activity dashboard.",
-          "- Then say: 'Pick one of the two cards on the right.'",
+          "- Exactly 2 bullet reasons tied to the workflow name (best-effort).",
+          "- End with: 'Pick one of the two cards on the right.'",
         ].filter(Boolean).join("\n"),
         { runtimeContext }
       );
@@ -520,15 +528,17 @@ export async function POST(req: NextRequest) {
         ],
       };
 
+      const workflowName = String(vibeContext?.displayName ?? vibeContext?.externalId ?? "").trim();
+
       const agentRes = await masterRouterAgent.generate(
         [
-          "System: Phase 2 storyboard selection.",
-          workflowName ? `System: The selected workflow is "${workflowName}".` : "",
-          "Rules:",
-          "- Use plain language, non-technical.",
-          "- One short sentence: 'Now we pick the story this will tell.'",
-          "- Recommend ONE storyboard option by name (ROI Proof vs Reliability Ops vs Delivery/SLA) with 1 reason tied to the workflow name (best-effort).",
-          "- Do NOT list lots of metrics in chat (the cards already show metrics).",
+          "System: Phase 2 storyboard selection (KPI story).",
+          workflowName ? `System: Selected workflow name: "${workflowName}".` : "",
+          NO_ROADMAP_RULES,
+          "Output requirements:",
+          "- 1 sentence: 'Now we pick the story this will tell.'",
+          "- Recommend ONE storyboard by name (ROI Proof vs Reliability Ops vs Delivery/SLA) with 1 short reason.",
+          "- Do NOT list metrics (the cards already show them).",
         ].filter(Boolean).join("\n"),
         { runtimeContext }
       );

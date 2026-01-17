@@ -161,6 +161,49 @@ export async function POST(req: NextRequest) {
 
     const { wantsPreview, wantsMapping } = detectIntent(message);
 
+    // NO_ROADMAP_RULES: Guard against.agent explaining the process
+    if (message.toLowerCase().includes("phase") || 
+        message.toLowerCase().includes("step") || 
+        message.toLowerCase().includes("roadmap") ||
+        message.toLowerCase().includes("process")) {
+      return new Response(
+        JSON.stringify({
+          type: "error",
+          code: "NO_ROADMAP_RULES",
+          message: "Let's focus on what you want to build right now, not the process. Which outcome matters most to you?",
+        }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    // ENFORCE STYLE_BEFORE_PREVIEW
+    if (wantsPreview || wantsMapping) {
+      const { data: threads } = await supabase
+        .from("assistant_threads")
+        .select("messages")
+        .eq("tenant_id", tenantId)
+        .eq("thread_id", threadId)
+        .maybeSingle();
+
+      const messages = threads?.messages || [];
+      const hasSelectedStyle = messages.some((msg: any) => 
+        msg.content?.includes("selected_style") || 
+        msg.tool_call?.includes("select_style_bundle") ||
+        msg.role === "assistant" && msg.content?.toLowerCase().includes("style")
+      );
+
+      if (!hasSelectedStyle) {
+        return new Response(
+          JSON.stringify({
+            type: "error",
+            code: "STYLE_REQUIRED_FIRST",
+            message: "Hey! We need to pick a style before generating a preview. Choose one of the style pack options on the right.",
+          }),
+          { status: 400, headers: { "Content-Type": "application/json" } },
+        );
+      }
+    }
+
     if (wantsPreview || wantsMapping) {
       const mappingAgent = mastra.getAgent("platformMappingMaster");
       if (!mappingAgent) {
