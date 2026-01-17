@@ -892,6 +892,7 @@ return (
                         <OutcomeCards
                           options={toolUi.options}
                           onSelect={(id) => sendMessage(`__ACTION__:select_outcome:${id}`)}
+                          onHelpDecide={() => sendMessage("__ACTION__:outcome_help_me_decide")}
                         />
                       )}
                       

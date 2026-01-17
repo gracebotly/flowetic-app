@@ -1,3 +1,5 @@
+
+
 "use client";
 
 import { motion } from "framer-motion";
@@ -10,9 +12,10 @@ interface OutcomeCardsProps {
     description: string;
   }>;
   onSelect: (id: string) => void;
+  onHelpDecide?: () => void;
 }
 
-export function OutcomeCards({ options, onSelect }: OutcomeCardsProps) {
+export function OutcomeCards({ options, onSelect, onHelpDecide }: OutcomeCardsProps) {
   const getIcon = (id: string) => {
     if (id === "dashboard") return LayoutDashboard;
     if (id === "product") return Package;
@@ -52,20 +55,23 @@ export function OutcomeCards({ options, onSelect }: OutcomeCardsProps) {
       </div>
 
       {/* "I'm not sure" button */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.3 }}
-        className="flex justify-center"
-      >
-        <button
-          onClick={() => onSelect("__ACTION__:outcome_help_me_decide")}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border-2 border-gray-300 bg-white text-sm font-medium text-gray-700 hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all duration-200"
+      {onHelpDecide && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.3 }}
+          className="flex justify-center"
         >
-          <HelpCircle size={16} />
-          I'm not sure, help me decide
-        </button>
-      </motion.div>
+          <button
+            onClick={onHelpDecide}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border-2 border-gray-300 bg-white text-sm font-medium text-gray-700 hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all duration-200"
+          >
+            <HelpCircle size={16} />
+            I'm not sure, help me decide
+          </button>
+        </motion.div>
+      )}
     </div>
   );
 }
+
