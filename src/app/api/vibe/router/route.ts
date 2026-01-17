@@ -15,6 +15,7 @@ import { todoAdd, todoList } from "@/mastra/tools/todo";
 import { getStyleBundles } from "@/mastra/tools/design/getStyleBundles";
 import { applyInteractiveEdits } from "@/mastra/tools/interactiveEdit";
 import { getCurrentSpec, applySpecPatch } from "@/mastra/tools/specEditor";
+import { DASHBOARD_VISUAL_STORIES, PRODUCT_VISUAL_STORIES } from "@/lib/vibe/storyboard-data";
 
 type JourneyMode =
   | "select_entity"
@@ -124,6 +125,50 @@ export async function POST(req: NextRequest) {
 
     const skillMD = await loadSkill(platformType);
     runtimeContext.set("skillMD", skillMD);
+
+    // Enhance system prompt with workflow context
+    let workflowContext = "";
+    if (vibeContext?.skillMD) {
+      workflowContext = `
+
+## INDEXED WORKFLOW CONTEXT
+
+You are helping build a dashboard for this specific workflow:
+
+${vibeContext.skillMD}
+
+**CRITICAL INSTRUCTIONS:**
+1. Your recommendations MUST reference this workflow's actual capabilities, data points, and business purpose
+2. DO NOT give generic advice - be specific about what this workflow does
+3. When recommending outcomes, explain HOW this workflow's data maps to the outcome
+4. Use plain business language - avoid technical jargon like "schema", "API", "integration"
+5. Reference specific workflow steps, triggers, or outputs when explaining your recommendation
+
+Platform: ${vibeContext.platformType}
+Source ID: ${vibeContext.sourceId}
+${vibeContext.entityId ? `Entity ID: ${vibeContext.entityId}` : ''}
+`;
+    }
+
+    const baseSystemPrompt = `You are the Getflowetic vibe agent helping agencies build client dashboards from AI automation workflows.
+
+Your personality:
+- Consultative business advisor (not a technical engineer)
+- Make strong recommendations based on workflow analysis
+- Use plain language: "prove ROI", "quick status check", "hide your prompts" (NOT "stakeholder value", "schema", "API")
+- Fast lane by default: recommend → show cards → proceed
+- Deep lane only when user says "not sure" or "help me decide"
+
+Journey phases:
+- Phase 1: Recommend Dashboard or Product based on workflow type
+- Phase 2: Recommend Visual Story style (Performance Snapshot, Deep Analytics, or Impact Report)
+- Phase 3: Style bundle selection
+- Phase 4: Build preview
+- Phase 5: Interactive editing
+- Phase 6: Deploy
+`;
+
+    const enhancedSystemPrompt = baseSystemPrompt + workflowContext;
 
     // Thread id: use vibeContextSnapshot/thread id if you have it; fallback to "vibe"
     const threadId = vibeContext?.threadId || "vibe";
@@ -456,88 +501,137 @@ export async function POST(req: NextRequest) {
     // Phase: recommend (Phase 1 — deterministic 2 cards)
     // ------------------------------------------------------------------
     if (effectiveMode === "recommend") {
-      const toolUi: ToolUi = {
-        type: "outcome_cards",
-        title: "Outcome + Monetization Strategy",
-        options: [
+      // Phase 1: Outcome recommendation based on workflow analysis
+      
+      const phase1Prompt = `Based on the indexed workflow context, analyze the workflow type and recommend either Dashboard or Product.
+
+WORKFLOW ANALYSIS RULES:
+- If the workflow is BACKEND/AUTOMATED (runs without user input): recommend Dashboard
+  - Example: scheduled data processing, automated lead scoring, background enrichment
+  - Reason: "Your workflow runs 24/7 behind the scenes - a Dashboard proves it's working"
+  
+- If the workflow is USER-TRIGGERED (requires human action): recommend Product
+  - Example: user clicks button, fills form, requests action
+  - Reason: "Your workflow needs user input - a Product lets them control it"
+
+RESPONSE FORMAT (JSON):
+{
+  "recommendation": "dashboard" | "product",
+  "reasons": [
+    "Specific reason referencing the actual workflow",
+    "Another specific reason about the workflow's business value"
+  ],
+  "message": "1-2 sentence explanation in plain language"
+}
+
+Remember:
+- Reference SPECIFIC workflow steps/triggers/data
+- Use plain business language
+- Be confident and consultative
+- Keep the message brief - the cards will show both options`;
+
+      try {
+        // Call master router agent with enhanced prompt
+        const agentResponse = await fetch('/api/agent/master', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tenantId,
+            userId,
+            systemPrompt: enhancedSystemPrompt + "\n\n" + phase1Prompt,
+            userMessage: userMessage,
+            context: vibeContext,
+          }),
+        });
+
+        const agentData = await agentResponse.json();
+        const parsed = JSON.parse(agentData.text || '{}');
+
+        const outcomeCards = [
           {
             id: "dashboard",
-            title: "Client ROI Dashboard (Retention)",
-            description:
-              "Helps renew retainers, makes automation value visible weekly, and proves ROI to clients.",
+            title: "Dashboard",
+            description: "Show real-time data and prove your automation is working 24/7",
           },
           {
             id: "product",
-            title: "Workflow Product (SaaS wrapper)",
-            description:
-              "Sell access monthly, hide the underlying workflow, and provide a form/button UI to run it.",
+            title: "Product",
+            description: "Let users trigger actions and control the workflow themselves",
           },
-        ],
-      };
+        ];
 
-      const workflowName = String(vibeContext?.displayName ?? vibeContext?.externalId ?? "").trim();
+        return NextResponse.json({
+          ok: true,
+          text: `I recommend **${parsed.recommendation === 'dashboard' ? 'Dashboard' : 'Product'}** because:\n\n${parsed.reasons.map((r: string) => `• ${r}`).join('\n')}\n\n${parsed.message}\n\nPick one of the cards below to continue.`,
+          toolUi: {
+            type: "outcome_cards",
+            title: "Choose Your Outcome",
+            options: outcomeCards,
+          },
+          journey: { ...journey, mode: "recommend" },
+          vibeContext: { ...(vibeContext ?? {}), skillMD },
+        });
+      } catch (e) {
+        console.error('Phase 1 agent call failed:', e);
+        
+        // Fallback to static response
+        const toolUi: ToolUi = {
+          type: "outcome_cards",
+          title: "Choose Your Outcome",
+          options: [
+            {
+              id: "dashboard",
+              title: "Dashboard",
+              description: "Show real-time data and prove your automation is working 24/7",
+            },
+            {
+              id: "product",
+              title: "Product",
+              description: "Let users trigger actions and control the workflow themselves",
+            },
+          ],
+        };
 
-      const agentRes = await masterRouterAgent.generate(
-        [
-          "System: Phase 1 outcome selection.",
-          workflowName ? `System: Selected workflow name: "${workflowName}".` : "",
-          NO_ROADMAP_RULES,
-          "Output requirements:",
-          "- Start with: 'I recommend starting with X.'",
-          "- Exactly 2 bullet reasons tied to the workflow name (best-effort).",
-          "- End with: 'Pick one of the two cards on the right.'",
-        ].filter(Boolean).join("\n"),
-        { runtimeContext }
-      );
-      const agentText = String((agentRes as any)?.text ?? "").trim();
-
-      return NextResponse.json({
-        text: agentText || "Choose what you want to build first. You can do the other later — but we need one outcome to proceed.",
-        journey: { ...journey, mode: "recommend" },
-        toolUi,
-        vibeContext: { ...(vibeContext ?? {}), skillMD },
-      });
+        return NextResponse.json({
+          ok: true,
+          text: "Based on your workflow type, I recommend starting with a Dashboard to prove ROI, or a Product to let users control the workflow. Pick an option below:",
+          toolUi,
+          journey: { ...journey, mode: "recommend" },
+          vibeContext: { ...(vibeContext ?? {}), skillMD },
+        });
+      }
     }
 
     // ------------------------------------------------------------------
     // Phase: align (Phase 2 — storyboard cards)
     // ------------------------------------------------------------------
     if (effectiveMode === "align") {
+      const selectedOutcome = journey?.selectedOutcome;
+      const visualStories = selectedOutcome === "product" ? PRODUCT_VISUAL_STORIES : DASHBOARD_VISUAL_STORIES;
+      
       const toolUi: ToolUi = {
         type: "storyboard_cards",
-        title: "Choose your KPI Storyboard",
-        options: [
-          {
-            id: "roi_proof",
-            title: "ROI Proof (Client-facing)",
-            description: "Prove automation value and time saved to drive renewals.",
-            kpis: ["Tasks automated", "Time saved", "Success rate", "Executions over time", "Most recent runs"],
-          },
-          {
-            id: "reliability_ops",
-            title: "Reliability Ops (Agency-facing)",
-            description: "Operate and debug reliability across workflows quickly.",
-            kpis: ["Failure count", "Success rate", "Recent errors", "Avg runtime", "Slowest runs"],
-          },
-          {
-            id: "delivery_sla",
-            title: "Delivery / SLA (Client-facing)",
-            description: "Show delivery health and turnaround time trends.",
-            kpis: ["Runs completed", "Avg turnaround time", "Incidents this week", "Last successful run", "Status trend"],
-          },
-        ],
+        title: "Choose Your Visual Story",
+        options: visualStories.map((story) => ({
+          id: story.id,
+          title: story.title,
+          description: story.description,
+          kpis: story.exampleMetrics,
+        })),
       };
 
       const workflowName = String(vibeContext?.displayName ?? vibeContext?.externalId ?? "").trim();
 
       const agentRes = await masterRouterAgent.generate(
         [
-          "System: Phase 2 storyboard selection (KPI story).",
+          "System: Phase 2 visual story selection.",
           workflowName ? `System: Selected workflow name: "${workflowName}".` : "",
+          `System: Selected outcome: ${selectedOutcome}`,
           NO_ROADMAP_RULES,
           "Output requirements:",
-          "- 1 sentence: 'Now we pick the story this will tell.'",
-          "- Recommend ONE storyboard by name (ROI Proof vs Reliability Ops vs Delivery/SLA) with 1 short reason.",
+          "- 1 sentence: 'Now we pick the visual story this will tell.'",
+          "- Recommend ONE visual story by name with 1 short reason.",
+          "- Reference the audience this will serve.",
           "- Do NOT list metrics (the cards already show them).",
         ].filter(Boolean).join("\n"),
         { runtimeContext }
@@ -545,7 +639,7 @@ export async function POST(req: NextRequest) {
       const agentText = String((agentRes as any)?.text ?? "").trim();
 
       return NextResponse.json({
-        text: agentText || "Now let's pick the story this will tell. Choose the option that matches what you want to prove first.",
+        text: agentText || "Now let's pick the visual story this will tell. Choose the option that best matches your audience and goals.",
         journey: { ...journey, mode: "align" },
         toolUi,
         vibeContext: { ...(vibeContext ?? {}), skillMD },

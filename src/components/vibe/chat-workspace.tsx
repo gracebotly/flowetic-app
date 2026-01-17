@@ -248,11 +248,35 @@ export function ChatWorkspace({
 
   
 
-  async function loadSkillMD(skillKey: string | undefined) {
-    // SkillMD not implemented yet; return empty string but keep contract.
-    // Later: fetch(`/skills/${skillKey}/Skill.md`) or similar.
+  async function loadSkillMD(platformType: string, sourceId: string, entityId?: string) {
+  if (!authContext.tenantId || !platformType || !sourceId) {
     return "";
   }
+
+  try {
+    const supabase = createClient();
+    
+    // Query indexed_entities for the skillMD
+    const { data, error } = await supabase
+      .from('indexed_entities')
+      .select('skill_md')
+      .eq('tenant_id', authContext.tenantId)
+      .eq('platform_type', platformType)
+      .eq('source_id', sourceId)
+      .eq('entity_id', entityId || '')
+      .maybeSingle();
+
+    if (error) {
+      console.error('Error loading skillMD:', error);
+      return "";
+    }
+
+    return data?.skill_md || "";
+  } catch (e) {
+    console.error('Failed to load skillMD:', e);
+    return "";
+  }
+}
 
   async function refreshCurrentSpec() {
     if (!authContext.userId || !authContext.tenantId) return;
@@ -364,7 +388,10 @@ export function ChatWorkspace({
         return;
       }
 
-      setVibeContext(ctx);
+      // Load skillMD before setting context
+      const skillMD = await loadSkillMD(ctx.platformType, ctx.sourceId, ctx.entityId);
+      const enrichedCtx = { ...ctx, skillMD };
+      setVibeContext(enrichedCtx);
 
       try {
         const res = await fetch("/api/vibe/router", {
@@ -373,7 +400,7 @@ export function ChatWorkspace({
           body: JSON.stringify({
             userId: authContext.userId,
             tenantId: authContext.tenantId,
-            vibeContext: { ...ctx, threadId },
+            vibeContext: { ...enrichedCtx, threadId },
             journey: {
               mode: "select_entity",
               selectedOutcome: null,
@@ -484,8 +511,18 @@ export function ChatWorkspace({
     if (typeof s.palette_override_id !== "undefined") setPaletteOverrideId(s.palette_override_id);
     if (s.preview_version_id) setPreviewVersionId(String(s.preview_version_id));
 
-    // ensure vibeContext carries threadId so master router uses it
-    setVibeContext((prev: any) => (prev ? { ...prev, threadId: String(s.thread_id) } : prev));
+    // Load skillMD for this session
+    const skillMD = await loadSkillMD(s.platform_type, s.source_id, s.entity_id);
+
+    // Update vibeContext with skillMD
+    setVibeContext((prev: any) => ({
+      ...prev,
+      platformType: s.platform_type,
+      sourceId: s.source_id,
+      entityId: s.entity_id,
+      skillMD,
+      threadId: String(s.thread_id)
+    }));
 
     await loadThreadMessages(String(s.thread_id));
   }
@@ -507,6 +544,10 @@ export function ChatWorkspace({
   // Create new session
   async function createNewSession(title: string, platformType: string, sourceId: string, entityId: string) {
     const newThreadId = crypto.randomUUID();
+    
+    // Load skillMD for the new session
+    const skillMD = await loadSkillMD(platformType, sourceId, entityId);
+    
     try {
       const resp = await fetch("/api/journey-sessions", {
         method: "POST",
