@@ -204,20 +204,26 @@ Journey phases:
 
         const agentRes = await masterRouterAgent.generate(
           [
-            "System: Deep lane step 2 (final question).",
-            workflowName ? `System: Selected workflow name: "${workflowName}".` : "",
+            "System: Deep lane step 2 (final question). User needs help deciding.",
+            workflowName ? `System: User's workflow: "${workflowName}".` : "",
+            "",
+            "TONE: Consultative and helpful (not interrogative)",
+            "",
+            "OUTPUT STRUCTURE:",
+            "1. Acknowledge their answer briefly (1 sentence)",
+            "2. Ask ONE final question: Who will use this most often - your team or client?",
+            "",
+            "EXAMPLE:",
+            "Got it. One more quick question: who will mainly use this — your team, or client?",
+            "",
             NO_ROADMAP_RULES,
-            "Output requirements:",
-            "- Ask EXACTLY ONE question.",
-            "- This must be the last deep-lane question.",
-            "- Question: who will use this UI most often (your team vs the client)?",
           ].filter(Boolean).join("\n"),
           { runtimeContext }
         );
         const agentText = String((agentRes as any)?.text ?? "").trim();
 
         return NextResponse.json({
-          text: agentText || "One more quick question: who will mainly use this — your team, or the client?",
+          text: agentText || "Got it. One more quick question: who will mainly use this — your team, or client?",
           journey: nextJourney,
           toolUi: null,
           vibeContext: { ...(vibeContext ?? {}), skillMD },
@@ -225,18 +231,34 @@ Journey phases:
       }
 
       if (deepLaneStep === 2) {
-        // Deep lane complete: ask agent to recommend one path and tell user to pick via the cards
+        // Deep lane complete: provide recommendation based on answers
         const answers = journey?.deepLane?.answers ?? {};
         const agentRes = await masterRouterAgent.generate(
           [
             "System: Deep lane complete. Provide final recommendation.",
-            workflowName ? `System: Selected workflow name: "${workflowName}".` : "",
+            workflowName ? `System: User's workflow: "${workflowName}".` : "",
+            "",
+            "User's answers:",
+            `Q1: ${String(answers.q1 ?? "")}`,
+            `Q2: ${String(userMessage)}`,
+            "",
+            "TONE: Confident consultant wrapping up discovery",
+            "",
+            "OUTPUT STRUCTURE:",
+            "1. Transition: 'Based on what you told me...'",
+            "2. Recommendation: 'I recommend [Dashboard/Product].'",
+            "3. Exactly 2 bullet reasons (tie to their specific answers)",
+            "4. CTA: 'Pick one of the cards below.'",
+            "",
+            "EXAMPLE:",
+            "Based on what you told me, I recommend starting with a **Dashboard**.",
+            "",
+            "• Since your team will be the main users, a dashboard helps you monitor performance internally",
+            "• You mentioned proving value - dashboards are perfect for showing results to stakeholders",
+            "",
+            "Pick one of the cards below.",
+            "",
             NO_ROADMAP_RULES,
-            "Output requirements:",
-            "- Recommend ONE path (dashboard vs product).",
-            "- Exactly 2 bullet reasons.",
-            "- End with: 'Pick one of the two cards on the right.'",
-            `User answers:\nQ1: ${String(answers.q1 ?? "")}\nQ2: ${String(userMessage)}`,
           ].filter(Boolean).join("\n"),
           { runtimeContext }
         );
@@ -267,7 +289,7 @@ Journey phases:
         };
 
         return NextResponse.json({
-          text: agentText || "Based on your answers, I recommend starting with the dashboard. Pick one of the two cards on the right.",
+          text: agentText || "Based on your answers, I recommend starting with a dashboard. Pick one of the cards below.",
           journey: clearedJourney,
           toolUi,
           vibeContext: { ...(vibeContext ?? {}), skillMD },
@@ -365,14 +387,19 @@ Journey phases:
 
       const agentRes = await masterRouterAgent.generate(
         [
-          "System: Deep lane start. User clicked: I'm not sure.",
-          workflowName ? `System: Selected workflow name: "${workflowName}".` : "",
+          "System: Deep lane start. User clicked 'I'm not sure, help me decide'.",
+          workflowName ? `System: User's workflow: "${workflowName}".` : "",
+          "",
+          "TONE: Supportive consultant (not pushy)",
+          "",
+          "OUTPUT STRUCTURE:",
+          "1. Acknowledge: 'No problem! Let me help you figure this out.' (1 sentence)",
+          "2. Ask ONE question: What's your main goal - to prove results to a client (retention), or to sell access as a product?",
+          "",
+          "EXAMPLE:",
+          "No problem! Quick question: is this mainly to prove results to a client and help with renewals, or to sell access to the workflow as a product?",
+          "",
           NO_ROADMAP_RULES,
-          "Output requirements:",
-          "- Acknowledge in 1 short sentence.",
-          "- Ask EXACTLY ONE question.",
-          "- The question must decide between: (A) retention dashboard (prove value to a client) vs (B) sellable product (charge for access).",
-          "- Do not add extra explanation.",
         ].filter(Boolean).join("\n"),
         { runtimeContext }
       );
@@ -399,7 +426,7 @@ Journey phases:
       };
 
       return NextResponse.json({
-        text: agentText || "Totally — quick question: is this mainly to prove results to a client (retention dashboard), or to sell access as a product?",
+        text: agentText || "No problem! Quick question: is this mainly to prove results to a client (retention dashboard), or to sell access as a product?",
         journey: deepLaneJourney,
         toolUi,
         vibeContext: { ...(vibeContext ?? {}), skillMD },
@@ -500,104 +527,66 @@ Journey phases:
     // Phase: recommend (Phase 1 — deterministic 2 cards)
     // ------------------------------------------------------------------
     if (effectiveMode === "recommend") {
-      // Phase 1: Outcome recommendation based on workflow analysis
-      
-      const phase1Prompt = `Based on the indexed workflow context, analyze the workflow type and recommend either Dashboard or Product.
+      const toolUi: ToolUi = {
+        type: "outcome_cards",
+        title: "Outcome + Monetization Strategy",
+        options: [
+          {
+            id: "dashboard",
+            title: "Client ROI Dashboard (Retention)",
+            description:
+              "Helps renew retainers, makes automation value visible weekly, and proves ROI to clients.",
+          },
+          {
+            id: "product",
+            title: "Workflow Product (SaaS wrapper)",
+            description:
+              "Sell access monthly, hide the underlying workflow, and provide a form/button UI to run it.",
+          },
+        ],
+      };
 
-WORKFLOW ANALYSIS RULES:
-- If the workflow is BACKEND/AUTOMATED (runs without user input): recommend Dashboard
-  - Example: scheduled data processing, automated lead scoring, background enrichment
-  - Reason: "Your workflow runs 24/7 behind the scenes - a Dashboard proves it's working"
-  
-- If the workflow is USER-TRIGGERED (requires human action): recommend Product
-  - Example: user clicks button, fills form, requests action
-  - Reason: "Your workflow needs user input - a Product lets them control it"
+      const workflowName = String(vibeContext?.displayName ?? vibeContext?.externalId ?? "").trim();
 
-RESPONSE FORMAT (JSON):
-{
-  "recommendation": "dashboard" | "product",
-  "reasons": [
-    "Specific reason referencing the actual workflow",
-    "Another specific reason about the workflow's business value"
-  ],
-  "message": "1-2 sentence explanation in plain language"
-}
+      const agentRes = await masterRouterAgent.generate(
+        [
+          "System: Phase 1 outcome selection. You are a premium business consultant.",
+          workflowName ? `System: User's workflow name: "${workflowName}".` : "",
+          "",
+          "TONE REQUIREMENTS:",
+          "- Warm and consultative (not robotic)",
+          "- Use plain business language",
+          "- Reference the workflow naturally in context",
+          "- Make the user feel understood",
+          "",
+          "OUTPUT STRUCTURE (exactly 4 parts):",
+          "1. Greeting: 'Hey! I see you're working with [workflow name/type].'",
+          "2. Recommendation: 'I recommend starting with a [Dashboard/Product].'",
+          "3. Reasons: Exactly 2 bullet points explaining WHY (tie to the workflow's purpose)",
+          "4. CTA: 'Pick one of the cards below, or click \"I'm not sure\" if you want help deciding.'",
+          "",
+          "EXAMPLE:",
+          "Hey! I see you're working with your WooCommerce Support Agent.",
+          "",
+          "I recommend starting with a **Dashboard**.",
+          "",
+          "• It will help you easily track how well your support agent is handling customer queries",
+          "• You'll be able to quickly identify any issues and improve response times",
+          "",
+          "Pick one of the cards below, or click \"I'm not sure\" if you want help deciding.",
+          "",
+          NO_ROADMAP_RULES,
+        ].filter(Boolean).join("\n"),
+        { runtimeContext }
+      );
+      const agentText = String((agentRes as any)?.text ?? "").trim();
 
-Remember:
-- Reference SPECIFIC workflow steps/triggers/data
-- Use plain business language
-- Be confident and consultative
-- Keep the message brief - the cards will show both options`;
-
-      try {
-        const agentRes = await masterRouterAgent.generate(
-          [
-            "System: Phase 1 outcome selection.",
-            workflowName ? `System: Selected workflow name: "${workflowName}".` : "",
-            NO_ROADMAP_RULES,
-            "Output requirements:",
-            "- Start with: 'I recommend starting with X.'",
-            "- Exactly 2 bullet reasons tied to the workflow name (best-effort).",
-            "- End with: 'Pick one of the two cards on the right.'",
-          ].filter(Boolean).join("\n"),
-          { runtimeContext }
-        );
-        const agentText = String((agentRes as any)?.text ?? "").trim();
-
-        const toolUi: ToolUi = {
-          type: "outcome_cards",
-          title: "Outcome + Monetization Strategy",
-          options: [
-            {
-              id: "dashboard",
-              title: "Client ROI Dashboard (Retention)",
-              description:
-                "Helps renew retainers, makes automation value visible weekly, and proves ROI to clients.",
-            },
-            {
-              id: "product",
-              title: "Workflow Product (SaaS wrapper)",
-              description:
-                "Sell access monthly, hide the underlying workflow, and provide a form/button UI to run it.",
-            },
-          ],
-        };
-
-        return NextResponse.json({
-          text: agentText || "Choose what you want to build first. You can do the other later — but we need one outcome to proceed.",
-          journey: { ...journey, mode: "recommend" },
-          toolUi,
-          vibeContext: { ...(vibeContext ?? {}), skillMD },
-        });
-      } catch (e) {
-        console.error('Phase 1 agent call failed:', e);
-        
-        // Fallback to static response
-        const toolUi: ToolUi = {
-          type: "outcome_cards",
-          title: "Choose Your Outcome",
-          options: [
-            {
-              id: "dashboard",
-              title: "Dashboard",
-              description: "Show real-time data and prove your automation is working 24/7",
-            },
-            {
-              id: "product",
-              title: "Product",
-              description: "Let users trigger actions and control the workflow themselves",
-            },
-          ],
-        };
-
-        return NextResponse.json({
-          ok: true,
-          text: "Based on your workflow type, I recommend starting with a Dashboard to prove ROI, or a Product to let users control the workflow. Pick an option below:",
-          toolUi,
-          journey: { ...journey, mode: "recommend" },
-          vibeContext: { ...(vibeContext ?? {}), skillMD },
-        });
-      }
+      return NextResponse.json({
+        text: agentText || "Hey! Let's figure out what you want to build first. Pick one of the cards below, or click \"I'm not sure\" if you want help deciding.",
+        journey: { ...journey, mode: "recommend" },
+        toolUi,
+        vibeContext: { ...(vibeContext ?? {}), skillMD },
+      });
     }
 
     // ------------------------------------------------------------------
