@@ -794,7 +794,7 @@ return (
           )}
 
           {/* Phase Progress Indicator */}
-          <div className="border-b border-gray-200 p-4">
+          <div className="border-b border-gray-200 px-4 py-3">
             <PhaseIndicator currentMode={journeyMode} />
           </div>
 
@@ -910,7 +910,7 @@ return (
         <div className="flex flex-1 flex-col min-w-0 bg-white">
           <div className="flex items-center justify-between border-b border-gray-200 bg-white px-4 py-3">
             <h2 className="text-sm font-semibold text-gray-900">
-              {view === "preview" ? "Dashboard Preview" : "Current Changes"}
+              {view === "preview" ? "Dashboard Preview" : view === "publish" ? "Deploy Dashboard" : "Current Changes"}
             </h2>
             
             <div className="inline-flex items-center gap-1 rounded-lg bg-gray-100 p-1">
@@ -937,6 +937,19 @@ return (
               >
                 <Eye size={18} />
               </button>
+
+              <button
+                type="button"
+                title="Deploy"
+                onClick={() => setView("publish")}
+                className={
+                  view === "publish"
+                    ? "inline-flex h-9 w-9 items-center justify-center rounded-md bg-indigo-500 text-white"
+                    : "inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-white"
+                }
+              >
+                <Rocket size={18} />
+              </button>
             </div>
           </div>
 
@@ -959,13 +972,39 @@ return (
                 title="Dashboard Preview"
               />
             </div>
-          ) : (
+          ) : view === "preview" ? (
             <div className="flex-1 flex items-center justify-center bg-gray-50">
               <div className="text-center">
                 <Eye className="w-12 h-12 mx-auto mb-3 text-gray-400" />
                 <p className="text-sm text-gray-500">
                   Preview will appear here once generated
                 </p>
+              </div>
+            </div>
+          ) : null}
+
+          {view === "publish" && (
+            <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-indigo-50 to-purple-50">
+              <div className="text-center max-w-md px-6">
+                <div className="inline-flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 text-white mb-6 shadow-lg shadow-indigo-500/50">
+                  <Rocket size={40} />
+                </div>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">
+                  Ready to Deploy
+                </h3>
+                <p className="text-sm text-gray-600 mb-6">
+                  Your dashboard is ready to go live. Click deploy to make it accessible to your clients.
+                </p>
+                <button
+                  onClick={async () => {
+                    // TODO: Implement actual deploy logic
+                    alert("Deploy functionality coming soon!");
+                  }}
+                  className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-indigo-500 to-purple-600 px-6 py-3 text-sm font-semibold text-white hover:from-indigo-600 hover:to-purple-700 shadow-lg shadow-indigo-500/50 transition-all duration-300"
+                >
+                  <Rocket size={18} />
+                  Deploy Dashboard
+                </button>
               </div>
             </div>
           )}
