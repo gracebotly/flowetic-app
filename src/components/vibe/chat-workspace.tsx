@@ -940,93 +940,13 @@ return (
             </div>
           </div>
 
-          {view === "terminal" && (
-            <div className="flex-1 overflow-auto">
-              <pre
-                ref={codeContainerRef}
-                className="p-4 text-xs font-mono text-gray-800 whitespace-pre-wrap break-words"
-              >
-                {toolUi && toolUi.type === "outcome_cards" ? (
-                  <div className="mb-3 rounded-xl border border-gray-700 bg-gray-900 p-3 text-gray-100">
-                    <div className="mb-2 text-sm font-semibold">{toolUi.title}</div>
-                    <div className="grid grid-cols-2 gap-3">
-                      {toolUi.options.map((opt: any) => (
-                        <button
-                          key={opt.id}
-                          type="button"
-                          className="rounded-xl border border-gray-700 bg-gray-950 p-4 text-left hover:bg-gray-800"
-                          onClick={async () => {
-                            await sendMessage(`__ACTION__:select_outcome:${opt.id}`);
-                          }}
-                        >
-                          <div className="text-sm font-semibold text-white">{opt.title}</div>
-                          <div className="mt-1 text-xs text-gray-300">{opt.description}</div>
-                        </button>
-                      ))}
-                    </div>
-                    <div className="mt-3">
-                      <button
-                        type="button"
-                        className="w-full rounded-xl border border-gray-700 bg-gray-950 px-4 py-3 text-left hover:bg-gray-800"
-                        onClick={async () => {
-                          // Visible acknowledgement in chat so click feels connected
-                          setMessages((prev) => [
-                            ...prev,
-                            {
-                              id: `a-ack-${Date.now()}`,
-                              role: "assistant",
-                              content: "Got it — I'll help you decide. Two quick questions and I'll recommend the best path.",
-                            },
-                          ]);
-
-                          addLog("info", "Deep lane started", "Asking 1–2 quick questions to recommend dashboard vs product.");
-
-                          await sendMessage("__ACTION__:outcome_help_me_decide");
-                        }}
-                      >
-                        <div className="text-sm font-semibold text-white">I'm not sure — help me decide</div>
-                        <div className="mt-1 text-xs text-gray-300">
-                          I'll ask 1–2 quick questions and recommend the best path.
-                        </div>
-                      </button>
-                    </div>
-                  </div>
-                ) : null}
-
-                {toolUi && toolUi.type === "storyboard_cards" ? (
-                  <div className="mb-3 rounded-xl border border-gray-700 bg-gray-900 p-4 text-gray-100">
-                    <div className="mb-3 text-sm font-semibold">{toolUi.title}</div>
-                    <div className="grid grid-cols-3 gap-3">
-                      {toolUi.options.map((opt: any) => (
-                        <button
-                          key={opt.id}
-                          type="button"
-                          className="rounded-xl border border-gray-700 bg-gray-950 p-4 text-left hover:bg-gray-800"
-                          onClick={async () => {
-                            await sendMessage(`__ACTION__:select_storyboard:${opt.id}`);
-                          }}
-                        >
-                          <div className="text-sm font-semibold text-white">{opt.title}</div>
-                          <div className="mt-1 text-xs text-gray-300">{opt.description}</div>
-                          <ul className="mt-3 space-y-1 text-xs text-gray-300">
-                            {(opt.kpis || []).slice(0, 5).map((k: string) => (
-                              <li key={k}>• {k}</li>
-                            ))}
-                          </ul>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-                {logs.map((l) => (
-                  <div key={l.id} className="mb-3">
-                    <div className="flex gap-2">
-                      <span>{l.text}</span>
-                    </div>
-                    {l.detail ? <pre className="mt-1 whitespace-pre-wrap text-[#9ca3af]">{l.detail}</pre> : null}
-                  </div>
-                ))}
-                <div ref={logsEndRef} />
+          {view === "terminal" ? (
+            <div className="flex flex-1 items-center justify-center bg-gray-50">
+              <div className="text-center">
+                <TerminalIcon className="w-12 h-12 mx-auto mb-3 text-gray-400" />
+                <p className="text-sm text-gray-500">
+                  Terminal view removed - all interactions now in chat sidebar
+                </p>
               </div>
             </div>
           ) : null}
