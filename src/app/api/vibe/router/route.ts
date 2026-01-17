@@ -15,7 +15,6 @@ import { todoAdd, todoList } from "@/mastra/tools/todo";
 import { getStyleBundles } from "@/mastra/tools/design/getStyleBundles";
 import { applyInteractiveEdits } from "@/mastra/tools/interactiveEdit";
 import { getCurrentSpec, applySpecPatch } from "@/mastra/tools/specEditor";
-import { DASHBOARD_VISUAL_STORIES, PRODUCT_VISUAL_STORIES } from "@/lib/vibe/storyboard-data";
 
 type JourneyMode =
   | "select_entity"
@@ -531,44 +530,43 @@ Remember:
 - Keep the message brief - the cards will show both options`;
 
       try {
-        // Call master router agent with enhanced prompt
-        const agentResponse = await fetch('/api/agent/master', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            tenantId,
-            userId,
-            systemPrompt: enhancedSystemPrompt + "\n\n" + phase1Prompt,
-            userMessage: userMessage,
-            context: vibeContext,
-          }),
-        });
+        const agentRes = await masterRouterAgent.generate(
+          [
+            "System: Phase 1 outcome selection.",
+            workflowName ? `System: Selected workflow name: "${workflowName}".` : "",
+            NO_ROADMAP_RULES,
+            "Output requirements:",
+            "- Start with: 'I recommend starting with X.'",
+            "- Exactly 2 bullet reasons tied to the workflow name (best-effort).",
+            "- End with: 'Pick one of the two cards on the right.'",
+          ].filter(Boolean).join("\n"),
+          { runtimeContext }
+        );
+        const agentText = String((agentRes as any)?.text ?? "").trim();
 
-        const agentData = await agentResponse.json();
-        const parsed = JSON.parse(agentData.text || '{}');
-
-        const outcomeCards = [
-          {
-            id: "dashboard",
-            title: "Dashboard",
-            description: "Show real-time data and prove your automation is working 24/7",
-          },
-          {
-            id: "product",
-            title: "Product",
-            description: "Let users trigger actions and control the workflow themselves",
-          },
-        ];
+        const toolUi: ToolUi = {
+          type: "outcome_cards",
+          title: "Outcome + Monetization Strategy",
+          options: [
+            {
+              id: "dashboard",
+              title: "Client ROI Dashboard (Retention)",
+              description:
+                "Helps renew retainers, makes automation value visible weekly, and proves ROI to clients.",
+            },
+            {
+              id: "product",
+              title: "Workflow Product (SaaS wrapper)",
+              description:
+                "Sell access monthly, hide the underlying workflow, and provide a form/button UI to run it.",
+            },
+          ],
+        };
 
         return NextResponse.json({
-          ok: true,
-          text: `I recommend **${parsed.recommendation === 'dashboard' ? 'Dashboard' : 'Product'}** because:\n\n${parsed.reasons.map((r: string) => `• ${r}`).join('\n')}\n\n${parsed.message}\n\nPick one of the cards below to continue.`,
-          toolUi: {
-            type: "outcome_cards",
-            title: "Choose Your Outcome",
-            options: outcomeCards,
-          },
+          text: agentText || "Choose what you want to build first. You can do the other later — but we need one outcome to proceed.",
           journey: { ...journey, mode: "recommend" },
+          toolUi,
           vibeContext: { ...(vibeContext ?? {}), skillMD },
         });
       } catch (e) {
@@ -606,32 +604,41 @@ Remember:
     // Phase: align (Phase 2 — storyboard cards)
     // ------------------------------------------------------------------
     if (effectiveMode === "align") {
-      const selectedOutcome = journey?.selectedOutcome;
-      const visualStories = selectedOutcome === "product" ? PRODUCT_VISUAL_STORIES : DASHBOARD_VISUAL_STORIES;
-      
       const toolUi: ToolUi = {
         type: "storyboard_cards",
-        title: "Choose Your Visual Story",
-        options: visualStories.map((story) => ({
-          id: story.id,
-          title: story.title,
-          description: story.description,
-          kpis: story.exampleMetrics,
-        })),
+        title: "Choose your KPI Storyboard",
+        options: [
+          {
+            id: "roi_proof",
+            title: "ROI Proof (Client-facing)",
+            description: "Prove automation value and time saved to drive renewals.",
+            kpis: ["Tasks automated", "Time saved", "Success rate", "Executions over time", "Most recent runs"],
+          },
+          {
+            id: "reliability_ops",
+            title: "Reliability Ops (Agency-facing)",
+            description: "Operate and debug reliability across workflows quickly.",
+            kpis: ["Failure count", "Success rate", "Recent errors", "Avg runtime", "Slowest runs"],
+          },
+          {
+            id: "delivery_sla",
+            title: "Delivery / SLA (Client-facing)",
+            description: "Show delivery health and turnaround time trends.",
+            kpis: ["Runs completed", "Avg turnaround time", "Incidents this week", "Last successful run", "Status trend"],
+          },
+        ],
       };
 
       const workflowName = String(vibeContext?.displayName ?? vibeContext?.externalId ?? "").trim();
 
       const agentRes = await masterRouterAgent.generate(
         [
-          "System: Phase 2 visual story selection.",
+          "System: Phase 2 storyboard selection (KPI story).",
           workflowName ? `System: Selected workflow name: "${workflowName}".` : "",
-          `System: Selected outcome: ${selectedOutcome}`,
           NO_ROADMAP_RULES,
           "Output requirements:",
-          "- 1 sentence: 'Now we pick the visual story this will tell.'",
-          "- Recommend ONE visual story by name with 1 short reason.",
-          "- Reference the audience this will serve.",
+          "- 1 sentence: 'Now we pick the story this will tell.'",
+          "- Recommend ONE storyboard by name (ROI Proof vs Reliability Ops vs Delivery/SLA) with 1 short reason.",
           "- Do NOT list metrics (the cards already show them).",
         ].filter(Boolean).join("\n"),
         { runtimeContext }
@@ -639,7 +646,7 @@ Remember:
       const agentText = String((agentRes as any)?.text ?? "").trim();
 
       return NextResponse.json({
-        text: agentText || "Now let's pick the visual story this will tell. Choose the option that best matches your audience and goals.",
+        text: agentText || "Now let's pick the story this will tell. Choose the option that matches what you want to prove first.",
         journey: { ...journey, mode: "align" },
         toolUi,
         vibeContext: { ...(vibeContext ?? {}), skillMD },
