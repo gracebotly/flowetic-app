@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { motion } from "framer-motion";
@@ -62,4 +61,3 @@ export function StoryboardCards({ options, onSelect }: StoryboardCardsProps) {
     </div>
   );
 }
-
