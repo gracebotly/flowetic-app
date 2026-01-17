@@ -33,16 +33,12 @@ import { motion } from "framer-motion";
 import { createClient } from '@/lib/supabase/client';
 import { useCopilotAction } from "@copilotkit/react-core";
 import { CopilotKit } from "@copilotkit/react-core";
-import { StyleBundleCards } from "@/components/vibe/tool-renderers/style-bundle-cards";
-import { TodoPanel } from "@/components/vibe/tool-renderers/todo-panel";
-import { InteractiveEditPanel } from "@/components/vibe/tool-renderers/interactive-edit-panel";
-import { PreviewInspector } from "@/components/vibe/preview/preview-inspector";
-import { WidgetPropertiesDrawer } from "@/components/vibe/preview/widget-properties-drawer";
+
 import { MessageInput } from "@/components/vibe/message-input";
 import { PhaseIndicator } from "@/components/vibe/phase-indicator";
 import { OutcomeCards } from "@/components/vibe/inline-cards/outcome-cards";
 import { StoryboardCards } from "@/components/vibe/inline-cards/storyboard-cards";
-import { StyleBundleCards as InlineStyleBundleCards } from "@/components/vibe/inline-cards/style-bundle-cards";
+import { StyleBundleCards } from "@/components/vibe/inline-cards/style-bundle-cards";
 
 type ViewMode = "terminal" | "preview" | "publish";
 
@@ -866,7 +862,7 @@ return (
                       )}
                       
                       {toolUi.type === "style_bundles" && (
-                        <InlineStyleBundleCards
+                        <StyleBundleCards
                           bundles={toolUi.bundles}
                           onSelect={(id) => sendMessage(`__ACTION__:select_style_bundle:${id}`)}
                         />
@@ -1022,24 +1018,6 @@ return (
                     </div>
                   </div>
                 ) : null}
-                
-                {toolUi && toolUi.type === "style_bundles" ? (
-                  <StyleBundleCards
-                    title={toolUi.title}
-                    bundles={toolUi.bundles}
-                    onSelect={(id) => {
-                      void sendMessage(`__ACTION__:select_style_bundle:${id}`);
-                    }}
-                  />
-                ) : null}
-                
-                {toolUi && toolUi.type === "todos" ? (
-                  <TodoPanel
-                    title={toolUi.title}
-                    items={toolUi.items}
-                  />
-                ) : null}
-
                 {logs.map((l) => (
                   <div key={l.id} className="mb-3">
                     <div className="flex gap-2">
