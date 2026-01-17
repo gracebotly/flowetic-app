@@ -22,8 +22,13 @@ import {
   Shield,
   Users,
   BarChart3,
+  PanelLeft,
+  Plus,
+  MessagesSquare,
+  Sparkles,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { motion } from "framer-motion";
 
 import { createClient } from '@/lib/supabase/client';
 import { useCopilotAction } from "@copilotkit/react-core";
@@ -34,6 +39,10 @@ import { InteractiveEditPanel } from "@/components/vibe/tool-renderers/interacti
 import { PreviewInspector } from "@/components/vibe/preview/preview-inspector";
 import { WidgetPropertiesDrawer } from "@/components/vibe/preview/widget-properties-drawer";
 import { MessageInput } from "@/components/vibe/message-input";
+import { PhaseIndicator } from "@/components/vibe/phase-indicator";
+import { OutcomeCards } from "@/components/vibe/inline-cards/outcome-cards";
+import { StoryboardCards } from "@/components/vibe/inline-cards/storyboard-cards";
+import { StyleBundleCards as InlineStyleBundleCards } from "@/components/vibe/inline-cards/style-bundle-cards";
 
 type ViewMode = "terminal" | "preview" | "publish";
 
@@ -748,142 +757,199 @@ export function ChatWorkspace({
 
 return (
   <CopilotKit runtimeUrl="/api/copilotkit" agent="vibe">
-    <div className="h-full min-h-0 flex flex-col mx-auto max-w-[1920px]">
-      {showEnterVibeButton && (
-        <div className="mb-4 flex justify-end">
-          <Link
-            href="/vibe/chat"
-            className="rounded-md border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
-            Enter Vibe Mode
-          </Link>
-        </div>
-      )}
+    <div className="flex h-screen w-full overflow-hidden bg-[#0b1220]">
+      {/* Left mini-rail */}
+      <div className="absolute left-4 top-4 z-[60] flex flex-col gap-2">
+        <Link
+          href="/control-panel/chat"
+          title="Back to Control Panel"
+          className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-white/10 text-white hover:bg-white/15"
+        >
+          <PanelLeft size={18} />
+        </Link>
 
-      <div className="flex h-full min-h-0 w-full overflow-hidden rounded-xl border border-gray-300 bg-white">
-        {/* LEFT: chat */}
-        <div className="flex w-[35%] min-w-[360px] flex-col border-r border-gray-300 bg-[#f9fafb] overflow-hidden">
-          {backendWarning ? (
+        <button
+          type="button"
+          title="New conversation"
+          onClick={() => setNewConvOpen(true)}
+          className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-white/10 text-white hover:bg-white/15"
+        >
+          <Plus size={18} />
+        </button>
+
+        <button
+          type="button"
+          title="Conversations"
+          onClick={() => setSessionsOpen(true)}
+          className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-white/10 text-white hover:bg-white/15"
+        >
+          <MessagesSquare size={18} />
+        </button>
+      </div>
+
+      {/* Main content area */}
+      <div className="flex flex-1 min-h-0 pl-20">
+        {/* Chat sidebar */}
+        <div className="flex w-[480px] flex-col border-r border-gray-700 bg-white overflow-hidden">
+          {backendWarning && (
             <div className="border-b border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
               {backendWarning}
             </div>
-          ) : null}
+          )}
 
+          {/* Phase Progress Indicator */}
+          <div className="border-b border-gray-200 p-4">
+            <PhaseIndicator currentMode={journeyMode} />
+          </div>
+
+          {/* Chat messages */}
           <div ref={chatContainerRef} className="flex-1 overflow-y-auto px-4 py-6">
             {messages.length === 0 ? (
-              <div className="text-center text-gray-500 py-8">
-                <TerminalIcon className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">Ready to build your workflow? Describe what you need.</p>
-              </div>
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5 }}
+                className="flex items-start gap-4 p-6 rounded-xl bg-gradient-to-r from-indigo-500/5 to-purple-500/5 border border-indigo-500/20"
+              >
+                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/50 flex-shrink-0">
+                  <Sparkles className="w-6 h-6 text-white" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-gray-900 mb-1">Dashboard Assistant</h3>
+                  <p className="text-sm text-gray-600">
+                    Start chatting to build or edit your client dashboards.
+                  </p>
+                </div>
+              </motion.div>
             ) : (
-              messages.map((msg) => (
-                <div
+              messages.map((msg, index) => (
+                <motion.div
                   key={msg.id}
-                  className={`mb-4 rounded-lg ${
-                    msg.role === "user"
-                      ? "bg-blue-50 border-l-4 border-blue-200 pl-4 py-2 flex justify-between items-center"
-                      : "bg-gray-50 border-l-4 border-gray-200 pl-4 py-2"
-                  }`}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, delay: index * 0.05 }}
+                  className="mb-4"
                 >
-                  <div className="flex-1">
+                  <div className={`rounded-lg ${
+                    msg.role === "user"
+                      ? "bg-blue-50 border-l-4 border-blue-200 pl-4 py-2"
+                      : "bg-gray-50 border-l-4 border-gray-200 pl-4 py-2"
+                  }`}>
                     <div className="text-xs font-medium text-gray-600 mb-1">{msg.role}</div>
                     <div className="text-sm text-gray-800 whitespace-pre-wrap">{msg.content}</div>
+                    
+                    {msg.role === "assistant" && (
+                      <button
+                        onClick={() => navigator.clipboard.writeText(msg.content)}
+                        className="mt-2 text-xs text-gray-500 hover:text-gray-700"
+                      >
+                        <CopyButton text={msg.content} />
+                      </button>
+                    )}
                   </div>
 
-                  {(msg.role === "assistant" || msg.role === "user") && (
-                    <button
-                      onClick={() => navigator.clipboard.writeText(msg.content)}
-                      className="ml-2 p-1 rounded hover:bg-gray-200"
-                      title="Copy message"
-                    >
-                      <CopyButton text={msg.content} />
-                    </button>
+                  {/* Render inline cards after assistant messages */}
+                  {msg.role === "assistant" && toolUi && (
+                    <>
+                      {toolUi.type === "outcome_cards" && (
+                        <OutcomeCards
+                          options={toolUi.options}
+                          onSelect={(id) => sendMessage(`__ACTION__:select_outcome:${id}`)}
+                        />
+                      )}
+                      
+                      {toolUi.type === "storyboard_cards" && (
+                        <StoryboardCards
+                          options={toolUi.options}
+                          onSelect={(id) => sendMessage(`__ACTION__:select_storyboard:${id}`)}
+                        />
+                      )}
+                      
+                      {toolUi.type === "style_bundles" && (
+                        <InlineStyleBundleCards
+                          bundles={toolUi.bundles}
+                          onSelect={(id) => sendMessage(`__ACTION__:select_style_bundle:${id}`)}
+                        />
+                      )}
+                    </>
                   )}
-                </div>
+                </motion.div>
               ))
             )}
 
             {isLoading && (
-              <div className="mb-4 rounded-lg bg-gray-50 border-l-4 border-gray-200 pl-4 py-2">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="mb-4 rounded-lg bg-gray-50 border-l-4 border-gray-200 pl-4 py-2"
+              >
                 <div className="text-xs font-medium text-gray-600 mb-1">assistant</div>
                 <div className="text-sm text-gray-400 animate-pulse">Thinking…</div>
-              </div>
+              </motion.div>
             )}
 
             <div ref={messagesEndRef} />
           </div>
 
-          <MessageInput
-            value={input}
-            onChange={setInput}
-            disabled={isLoading}
-            isListening={isListening}
-            onToggleVoice={() => {
-              setChatMode((m) => (m === "chat" ? "voice" : "chat"));
-              setIsListening((v) => !v);
-              addLog("info", "Voice toggled (wiring next).");
-            }}
-            onAttachFiles={(files) => {
-              addLog("info", `Attached ${files.length} file(s). (Upload wiring next.)`);
-            }}
-            onSend={() => {
-              void sendFromInput();
-            }}
-          />
+          {/* Message input */}
+          <div className="border-t border-gray-200 p-4">
+            <MessageInput
+              value={input}
+              onChange={setInput}
+              disabled={isLoading}
+              isListening={isListening}
+              onToggleVoice={() => {
+                setChatMode((m) => (m === "chat" ? "voice" : "chat"));
+                setIsListening((v) => !v);
+              }}
+              onAttachFiles={(files) => {
+                console.log("Files attached:", files.length);
+              }}
+              onSend={sendFromInput}
+            />
+          </div>
         </div>
 
-        {/* RIGHT */}
-        <div className="flex flex-1 flex-col min-w-0">
-          <div className="flex items-center justify-between border-b border-gray-300 bg-white px-4 py-2 flex-shrink-0">
-            <div className="text-sm font-semibold text-gray-900">
-              {view === "terminal" ? "Current Changes" : view === "preview" ? "Dashboard Preview" : "Publish"}
-            </div>
-
+        {/* Right: Preview area */}
+        <div className="flex flex-1 flex-col min-w-0 bg-white">
+          <div className="flex items-center justify-between border-b border-gray-200 bg-white px-4 py-3">
+            <h2 className="text-sm font-semibold text-gray-900">
+              {view === "preview" ? "Dashboard Preview" : "Current Changes"}
+            </h2>
+            
             <div className="inline-flex items-center gap-1 rounded-lg bg-gray-100 p-1">
               <button
                 type="button"
-                title="Terminal"
                 onClick={() => setView("terminal")}
                 className={
                   view === "terminal"
-                    ? "inline-flex h-9 w-9 items-center justify-center rounded-md bg-blue-500 text-white"
+                    ? "inline-flex h-9 w-9 items-center justify-center rounded-md bg-indigo-500 text-white"
                     : "inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-white"
                 }
               >
                 <TerminalIcon size={18} />
               </button>
-
+              
               <button
                 type="button"
-                title="Preview"
                 onClick={() => setView("preview")}
                 className={
                   view === "preview"
-                    ? "inline-flex h-9 w-9 items-center justify-center rounded-md bg-blue-500 text-white"
+                    ? "inline-flex h-9 w-9 items-center justify-center rounded-md bg-indigo-500 text-white"
                     : "inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-white"
                 }
               >
                 <Eye size={18} />
               </button>
-
-              <button
-                type="button"
-                title="Publish"
-                onClick={() => setView("publish")}
-                className={
-                  view === "publish"
-                    ? "inline-flex h-9 w-9 items-center justify-center rounded-md bg-blue-500 text-white"
-                    : "inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-white"
-                }
-              >
-                <Rocket size={18} />
-              </button>
             </div>
           </div>
 
-          {view === "terminal" ? (
-            <div className="flex flex-1 flex-col bg-[#1e1e1e] min-h-0 overflow-hidden">
-              <div className="flex-1 overflow-y-auto pl-4 pr-2 py-4 font-mono text-[13px] leading-6 text-[#d4d4d4] thin-scrollbar">
+          {view === "terminal" && (
+            <div className="flex-1 overflow-auto">
+              <pre
+                ref={codeContainerRef}
+                className="p-4 text-xs font-mono text-gray-800 whitespace-pre-wrap break-words"
+              >
                 {toolUi && toolUi.type === "outcome_cards" ? (
                   <div className="mb-3 rounded-xl border border-gray-700 bg-gray-900 p-3 text-gray-100">
                     <div className="mb-2 text-sm font-semibold">{toolUi.title}</div>
@@ -987,34 +1053,24 @@ return (
             </div>
           ) : null}
 
-          {view === "preview" ? (
-            <div className="flex flex-1 bg-white min-h-0 overflow-hidden">
-              {toolUi && toolUi.type === "interactive_edit_panel" ? (
-                <InteractiveEditPanel
-                  title={toolUi.title}
-                  interfaceId={toolUi.interfaceId}
-                  widgets={toolUi.widgets}
-                  palettes={toolUi.palettes}
-                  density={toolUi.density}
-                  onApply={async (payload) => {
-                    await sendMessage(
-                      `__ACTION__:apply_interactive_edits:${JSON.stringify(payload)}`
-                    );
-                  }}
-                />
-              ) : (
-                <div className="flex flex-1 items-center justify-center">
-                  <div className="text-sm text-gray-500">Preview</div>
-                </div>
-              )}
+          {view === "preview" && vibeContext?.previewUrl ? (
+            <div className="flex-1 overflow-hidden">
+              <iframe
+                src={vibeContext.previewUrl}
+                className="w-full h-full border-0"
+                title="Dashboard Preview"
+              />
             </div>
-          ) : null}
-
-          {view === "publish" ? (
-            <div className="flex flex-1 items-center justify-center bg-white">
-              <div className="text-sm text-gray-500">Publish</div>
+          ) : (
+            <div className="flex-1 flex items-center justify-center bg-gray-50">
+              <div className="text-center">
+                <Eye className="w-12 h-12 mx-auto mb-3 text-gray-400" />
+                <p className="text-sm text-gray-500">
+                  Preview will appear here once generated
+                </p>
+              </div>
             </div>
-          ) : null}
+          )}
         </div>
       </div>
 
