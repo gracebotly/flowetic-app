@@ -22,8 +22,10 @@ import {
   Shield,
   Users,
   BarChart3,
+  Sparkles,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { motion } from "framer-motion";
 
 import { createClient } from '@/lib/supabase/client';
 import { useCopilotAction } from "@copilotkit/react-core";
@@ -771,14 +773,29 @@ return (
 
           <div ref={chatContainerRef} className="flex-1 overflow-y-auto px-4 py-6">
             {messages.length === 0 ? (
-              <div className="text-center text-gray-500 py-8">
-                <TerminalIcon className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">Ready to build your workflow? Describe what you need.</p>
-              </div>
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5 }}
+                className="flex items-start gap-4 p-6 rounded-xl bg-gradient-to-r from-indigo-500/5 to-purple-500/5 border border-indigo-500/20"
+              >
+                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/50 flex-shrink-0">
+                  <Sparkles className="w-6 h-6 text-white" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-gray-900 mb-1">Dashboard Assistant</h3>
+                  <p className="text-sm text-gray-600">
+                    Start chatting to build or edit your client dashboards.
+                  </p>
+                </div>
+              </motion.div>
             ) : (
-              messages.map((msg) => (
-                <div
+              messages.map((msg, index) => (
+                <motion.div
                   key={msg.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, delay: index * 0.05 }}
                   className={`mb-4 rounded-lg ${
                     msg.role === "user"
                       ? "bg-blue-50 border-l-4 border-blue-200 pl-4 py-2 flex justify-between items-center"
@@ -799,15 +816,19 @@ return (
                       <CopyButton text={msg.content} />
                     </button>
                   )}
-                </div>
+                </motion.div>
               ))
             )}
 
             {isLoading && (
-              <div className="mb-4 rounded-lg bg-gray-50 border-l-4 border-gray-200 pl-4 py-2">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="mb-4 rounded-lg bg-gray-50 border-l-4 border-gray-200 pl-4 py-2"
+              >
                 <div className="text-xs font-medium text-gray-600 mb-1">assistant</div>
                 <div className="text-sm text-gray-400 animate-pulse">Thinking…</div>
-              </div>
+              </motion.div>
             )}
 
             <div ref={messagesEndRef} />
@@ -885,21 +906,36 @@ return (
             <div className="flex flex-1 flex-col bg-[#1e1e1e] min-h-0 overflow-hidden">
               <div className="flex-1 overflow-y-auto pl-4 pr-2 py-4 font-mono text-[13px] leading-6 text-[#d4d4d4] thin-scrollbar">
                 {toolUi && toolUi.type === "outcome_cards" ? (
-                  <div className="mb-3 rounded-xl border border-gray-700 bg-gray-900 p-3 text-gray-100">
-                    <div className="mb-2 text-sm font-semibold">{toolUi.title}</div>
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5 }}
+                    className="mb-3 rounded-xl border border-gray-700 bg-gray-900 p-3 text-gray-100"
+                  >
+                    <h2 className="mb-2 text-base font-bold bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent animate-gradient">
+                      {toolUi.title}
+                    </h2>
                     <div className="grid grid-cols-2 gap-3">
-                      {toolUi.options.map((opt: any) => (
-                        <button
+                      {toolUi.options.map((opt: any, index: number) => (
+                        <motion.button
                           key={opt.id}
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.5, delay: index * 0.1 }}
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
                           type="button"
-                          className="rounded-xl border border-gray-700 bg-gray-950 p-4 text-left hover:bg-gray-800"
+                          className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900/90 to-slate-800/90 backdrop-blur-2xl p-6 border border-white/10 hover:border-indigo-500/50 transition-all duration-500 hover:shadow-[0_20px_70px_-10px_rgba(99,102,241,0.3)] text-left"
                           onClick={async () => {
                             await sendMessage(`__ACTION__:select_outcome:${opt.id}`);
                           }}
                         >
-                          <div className="text-sm font-semibold text-white">{opt.title}</div>
-                          <div className="mt-1 text-xs text-gray-300">{opt.description}</div>
-                        </button>
+                          <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/0 to-purple-500/0 group-hover:from-indigo-500/10 group-hover:to-purple-500/10 transition-all duration-500" />
+                          <div className="relative z-10">
+                            <div className="text-base font-semibold text-white mb-2">{opt.title}</div>
+                            <div className="text-sm text-slate-400">{opt.description}</div>
+                          </div>
+                        </motion.button>
                       ))}
                     </div>
                     <div className="mt-3">
@@ -928,33 +964,51 @@ return (
                         </div>
                       </button>
                     </div>
-                  </div>
+                  </motion.div>
                 ) : null}
 
                 {toolUi && toolUi.type === "storyboard_cards" ? (
-                  <div className="mb-3 rounded-xl border border-gray-700 bg-gray-900 p-4 text-gray-100">
-                    <div className="mb-3 text-sm font-semibold">{toolUi.title}</div>
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5 }}
+                    className="mb-3 rounded-xl border border-gray-700 bg-gray-900 p-4 text-gray-100"
+                  >
+                    <h2 className="mb-3 text-base font-bold bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent animate-gradient">
+                      {toolUi.title}
+                    </h2>
                     <div className="grid grid-cols-3 gap-3">
-                      {toolUi.options.map((opt: any) => (
-                        <button
+                      {toolUi.options.map((opt: any, index: number) => (
+                        <motion.button
                           key={opt.id}
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.5, delay: index * 0.1 }}
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
                           type="button"
-                          className="rounded-xl border border-gray-700 bg-gray-950 p-4 text-left hover:bg-gray-800"
+                          className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900/90 to-slate-800/90 backdrop-blur-2xl p-6 border border-white/10 hover:border-indigo-500/50 transition-all duration-500 hover:shadow-[0_20px_70px_-10px_rgba(99,102,241,0.3)] text-left"
                           onClick={async () => {
                             await sendMessage(`__ACTION__:select_storyboard:${opt.id}`);
                           }}
                         >
-                          <div className="text-sm font-semibold text-white">{opt.title}</div>
-                          <div className="mt-1 text-xs text-gray-300">{opt.description}</div>
-                          <ul className="mt-3 space-y-1 text-xs text-gray-300">
-                            {(opt.kpis || []).slice(0, 5).map((k: string) => (
-                              <li key={k}>• {k}</li>
-                            ))}
-                          </ul>
-                        </button>
+                          <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/0 to-purple-500/0 group-hover:from-indigo-500/10 group-hover:to-purple-500/10 transition-all duration-500" />
+                          <div className="relative z-10">
+                            <div className="text-base font-semibold text-white mb-2">{opt.title}</div>
+                            <div className="text-sm text-slate-400 mb-4">{opt.description}</div>
+                            <ul className="space-y-2">
+                              {(opt.kpis || []).slice(0, 5).map((k: string) => (
+                                <li key={k} className="flex items-center text-sm text-slate-300">
+                                  <span className="mr-2 text-indigo-400">▸</span>
+                                  {k}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        </motion.button>
                       ))}
                     </div>
-                  </div>
+                  </motion.div>
                 ) : null}
                 
                 {toolUi && toolUi.type === "style_bundles" ? (
