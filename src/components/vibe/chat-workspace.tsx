@@ -777,16 +777,17 @@ return (
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5 }}
-                className="flex items-start gap-4 p-6 rounded-xl bg-gradient-to-r from-indigo-500/5 to-purple-500/5 border border-indigo-500/20"
               >
-                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/50 flex-shrink-0">
-                  <Sparkles className="w-6 h-6 text-white" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="font-semibold text-gray-900 mb-1">Dashboard Assistant</h3>
-                  <p className="text-sm text-gray-600">
-                    Start chatting to build or edit your client dashboards.
-                  </p>
+                <div className="flex items-start gap-4 p-6 rounded-xl bg-gradient-to-r from-indigo-500/5 to-purple-500/5 border border-indigo-500/20">
+                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/50 flex-shrink-0">
+                    <Sparkles className="w-6 h-6 text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-gray-900 mb-1">Dashboard Assistant</h3>
+                    <p className="text-sm text-gray-600">
+                      Start chatting to build or edit your client dashboards.
+                    </p>
+                  </div>
                 </div>
               </motion.div>
             ) : (
@@ -796,26 +797,27 @@ return (
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.3, delay: index * 0.05 }}
-                  className={`mb-4 rounded-lg ${
+                >
+                  <div className={`mb-4 rounded-lg ${
                     msg.role === "user"
                       ? "bg-blue-50 border-l-4 border-blue-200 pl-4 py-2 flex justify-between items-center"
                       : "bg-gray-50 border-l-4 border-gray-200 pl-4 py-2"
-                  }`}
-                >
-                  <div className="flex-1">
-                    <div className="text-xs font-medium text-gray-600 mb-1">{msg.role}</div>
-                    <div className="text-sm text-gray-800 whitespace-pre-wrap">{msg.content}</div>
-                  </div>
+                  }`}>
+                    <div className="flex-1">
+                      <div className="text-xs font-medium text-gray-600 mb-1">{msg.role}</div>
+                      <div className="text-sm text-gray-800 whitespace-pre-wrap">{msg.content}</div>
+                    </div>
 
-                  {(msg.role === "assistant" || msg.role === "user") && (
-                    <button
-                      onClick={() => navigator.clipboard.writeText(msg.content)}
-                      className="ml-2 p-1 rounded hover:bg-gray-200"
-                      title="Copy message"
-                    >
-                      <CopyButton text={msg.content} />
-                    </button>
-                  )}
+                    {(msg.role === "assistant" || msg.role === "user") && (
+                      <button
+                        onClick={() => navigator.clipboard.writeText(msg.content)}
+                        className="ml-2 p-1 rounded hover:bg-gray-200"
+                        title="Copy message"
+                      >
+                        <CopyButton text={msg.content} />
+                      </button>
+                    )}
+                  </div>
                 </motion.div>
               ))
             )}
@@ -824,10 +826,11 @@ return (
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="mb-4 rounded-lg bg-gray-50 border-l-4 border-gray-200 pl-4 py-2"
               >
-                <div className="text-xs font-medium text-gray-600 mb-1">assistant</div>
-                <div className="text-sm text-gray-400 animate-pulse">Thinking…</div>
+                <div className="mb-4 rounded-lg bg-gray-50 border-l-4 border-gray-200 pl-4 py-2">
+                  <div className="text-xs font-medium text-gray-600 mb-1">assistant</div>
+                  <div className="text-sm text-gray-400 animate-pulse">Thinking…</div>
+                </div>
               </motion.div>
             )}
 
@@ -910,38 +913,41 @@ return (
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5 }}
-                    className="mb-3 rounded-xl border border-gray-700 bg-gray-900 p-3 text-gray-100"
                   >
+                    <div className="mb-3 rounded-xl border border-gray-700 bg-gray-900 p-3 text-gray-100">
                     <h2 className="mb-2 text-base font-bold bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent animate-gradient">
                       {toolUi.title}
                     </h2>
                     <div className="grid grid-cols-2 gap-3">
                       {toolUi.options.map((opt: any, index: number) => (
-                        <motion.button
+                        <motion.div
                           key={opt.id}
                           initial={{ opacity: 0, y: 20 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ duration: 0.5, delay: index * 0.1 }}
                           whileHover={{ scale: 1.02 }}
                           whileTap={{ scale: 0.98 }}
-                          type="button"
-                          className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900/90 to-slate-800/90 backdrop-blur-2xl p-6 border border-white/10 hover:border-indigo-500/50 transition-all duration-500 hover:shadow-[0_20px_70px_-10px_rgba(99,102,241,0.3)] text-left"
-                          onClick={async () => {
-                            // Visible click acknowledgement (user-side), not persisted
-                            setMessages((prev) => [
-                              ...prev,
-                              { id: `u-click-${Date.now()}`, role: "user", content: `Selected: ${opt.id === "dashboard" ? "Dashboard" : "SaaS wrapper"}` },
-                            ]);
-
-                            await sendMessage(`__ACTION__:select_outcome:${opt.id}`);
-                          }}
                         >
-                          <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/0 to-purple-500/0 group-hover:from-indigo-500/10 group-hover:to-purple-500/10 transition-all duration-500" />
-                          <div className="relative z-10">
-                            <div className="text-base font-semibold text-white mb-2">{opt.title}</div>
-                            <div className="text-sm text-slate-400">{opt.description}</div>
-                          </div>
-                        </motion.button>
+                          <button
+                            type="button"
+                            className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900/90 to-slate-800/90 backdrop-blur-2xl p-6 border border-white/10 hover:border-indigo-500/50 transition-all duration-500 hover:shadow-[0_20px_70px_-10px_rgba(99,102,241,0.3)] text-left w-full"
+                            onClick={async () => {
+                              // Visible click acknowledgement (user-side), not persisted
+                              setMessages((prev) => [
+                                ...prev,
+                                { id: `u-click-${Date.now()}`, role: "user", content: `Selected: ${opt.id === "dashboard" ? "Dashboard" : "SaaS wrapper"}` },
+                              ]);
+
+                              await sendMessage(`__ACTION__:select_outcome:${opt.id}`);
+                            }}
+                          >
+                            <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/0 to-purple-500/0 group-hover:from-indigo-500/10 group-hover:to-purple-500/10 transition-all duration-500" />
+                            <div className="relative z-10">
+                              <div className="text-base font-semibold text-white mb-2">{opt.title}</div>
+                              <div className="text-sm text-slate-400">{opt.description}</div>
+                            </div>
+                          </button>
+                        </motion.div>
                       ))}
                     </div>
                     <div className="mt-3">
@@ -965,6 +971,7 @@ return (
                         </div>
                       </button>
                     </div>
+                    </div>
                   </motion.div>
                 ) : null}
 
@@ -973,41 +980,45 @@ return (
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5 }}
-                    className="mb-3 rounded-xl border border-gray-700 bg-gray-900 p-4 text-gray-100"
                   >
+                    <div className="mb-3 rounded-xl border border-gray-700 bg-gray-900 p-4 text-gray-100">
                     <h2 className="mb-3 text-base font-bold bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent animate-gradient">
                       {toolUi.title}
                     </h2>
                     <div className="grid grid-cols-3 gap-3">
                       {toolUi.options.map((opt: any, index: number) => (
-                        <motion.button
+                        <motion.div
                           key={opt.id}
                           initial={{ opacity: 0, y: 20 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ duration: 0.5, delay: index * 0.1 }}
                           whileHover={{ scale: 1.02 }}
                           whileTap={{ scale: 0.98 }}
-                          type="button"
-                          className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900/90 to-slate-800/90 backdrop-blur-2xl p-6 border border-white/10 hover:border-indigo-500/50 transition-all duration-500 hover:shadow-[0_20px_70px_-10px_rgba(99,102,241,0.3)] text-left"
-                          onClick={async () => {
-                            await sendMessage(`__ACTION__:select_storyboard:${opt.id}`);
-                          }}
                         >
-                          <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/0 to-purple-500/0 group-hover:from-indigo-500/10 group-hover:to-purple-500/10 transition-all duration-500" />
-                          <div className="relative z-10">
-                            <div className="text-base font-semibold text-white mb-2">{opt.title}</div>
-                            <div className="text-sm text-slate-400 mb-4">{opt.description}</div>
-                            <ul className="space-y-2">
-                              {(opt.kpis || []).slice(0, 5).map((k: string) => (
-                                <li key={k} className="flex items-center text-sm text-slate-300">
-                                  <span className="mr-2 text-indigo-400">▸</span>
-                                  {k}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        </motion.button>
+                          <button
+                            type="button"
+                            className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900/90 to-slate-800/90 backdrop-blur-2xl p-6 border border-white/10 hover:border-indigo-500/50 transition-all duration-500 hover:shadow-[0_20px_70px_-10px_rgba(99,102,241,0.3)] text-left w-full"
+                            onClick={async () => {
+                              await sendMessage(`__ACTION__:select_storyboard:${opt.id}`);
+                            }}
+                          >
+                            <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/0 to-purple-500/0 group-hover:from-indigo-500/10 group-hover:to-purple-500/10 transition-all duration-500" />
+                            <div className="relative z-10">
+                              <div className="text-base font-semibold text-white mb-2">{opt.title}</div>
+                              <div className="text-sm text-slate-400 mb-4">{opt.description}</div>
+                              <ul className="space-y-2">
+                                {(opt.kpis || []).slice(0, 5).map((k: string) => (
+                                  <li key={k} className="flex items-center text-sm text-slate-300">
+                                    <span className="mr-2 text-indigo-400">▸</span>
+                                    {k}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          </button>
+                        </motion.div>
                       ))}
+                    </div>
                     </div>
                   </motion.div>
                 ) : null}
