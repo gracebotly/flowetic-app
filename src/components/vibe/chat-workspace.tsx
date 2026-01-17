@@ -36,6 +36,7 @@ import { InteractiveEditPanel } from "@/components/vibe/tool-renderers/interacti
 import { PreviewInspector } from "@/components/vibe/preview/preview-inspector";
 import { WidgetPropertiesDrawer } from "@/components/vibe/preview/widget-properties-drawer";
 import { MessageInput } from "@/components/vibe/message-input";
+import { PhaseIndicator } from "@/components/vibe/phase-indicator";
 
 type ViewMode = "terminal" | "preview" | "publish";
 
@@ -908,6 +909,7 @@ return (
           {view === "terminal" ? (
             <div className="flex flex-1 flex-col bg-[#1e1e1e] min-h-0 overflow-hidden">
               <div className="flex-1 overflow-y-auto pl-4 pr-2 py-4 font-mono text-[13px] leading-6 text-[#d4d4d4] thin-scrollbar">
+                <PhaseIndicator currentMode={journeyMode} />
                 {toolUi && toolUi.type === "outcome_cards" ? (
                   <motion.div
                     initial={{ opacity: 0, y: 20 }}
@@ -915,7 +917,7 @@ return (
                     transition={{ duration: 0.5 }}
                   >
                     <div className="mb-3 rounded-xl border border-gray-700 bg-gray-900 p-3 text-gray-100">
-                    <h2 className="mb-2 text-base font-bold bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent animate-gradient">
+                    <h2 className="mb-2 text-base font-bold text-white">
                       {toolUi.title}
                     </h2>
                     <div className="grid grid-cols-2 gap-3">
@@ -982,7 +984,7 @@ return (
                     transition={{ duration: 0.5 }}
                   >
                     <div className="mb-3 rounded-xl border border-gray-700 bg-gray-900 p-4 text-gray-100">
-                    <h2 className="mb-3 text-base font-bold bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent animate-gradient">
+                    <h2 className="mb-3 text-base font-bold text-white">
                       {toolUi.title}
                     </h2>
                     <div className="grid grid-cols-3 gap-3">
