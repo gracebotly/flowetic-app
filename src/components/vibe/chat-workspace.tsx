@@ -927,6 +927,12 @@ return (
                           type="button"
                           className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900/90 to-slate-800/90 backdrop-blur-2xl p-6 border border-white/10 hover:border-indigo-500/50 transition-all duration-500 hover:shadow-[0_20px_70px_-10px_rgba(99,102,241,0.3)] text-left"
                           onClick={async () => {
+                            // Visible click acknowledgement (user-side), not persisted
+                            setMessages((prev) => [
+                              ...prev,
+                              { id: `u-click-${Date.now()}`, role: "user", content: `Selected: ${opt.id === "dashboard" ? "Dashboard" : "SaaS wrapper"}` },
+                            ]);
+
                             await sendMessage(`__ACTION__:select_outcome:${opt.id}`);
                           }}
                         >
@@ -943,14 +949,9 @@ return (
                         type="button"
                         className="w-full rounded-xl border border-gray-700 bg-gray-950 px-4 py-3 text-left hover:bg-gray-800"
                         onClick={async () => {
-                          // Visible acknowledgement in chat so click feels connected
                           setMessages((prev) => [
                             ...prev,
-                            {
-                              id: `a-ack-${Date.now()}`,
-                              role: "assistant",
-                              content: "Got it — I'll help you decide. Two quick questions and I'll recommend the best path.",
-                            },
+                            { id: `u-click-${Date.now()}`, role: "user", content: "Selected: I'm not sure — help me decide" },
                           ]);
 
                           addLog("info", "Deep lane started", "Asking 1–2 quick questions to recommend dashboard vs product.");
