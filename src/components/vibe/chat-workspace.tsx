@@ -169,6 +169,35 @@ export function ChatWorkspace({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
 
+  function getActionAcknowledgment(action: string): string {
+    if (action.startsWith("__ACTION__:select_outcome:")) {
+      const outcome = action.replace("__ACTION__:select_outcome:", "").trim();
+      return outcome === "dashboard" 
+        ? "You selected: Client ROI Dashboard" 
+        : "You selected: Workflow Product";
+    }
+    
+    if (action.startsWith("__ACTION__:select_storyboard:")) {
+      const id = action.replace("__ACTION__:select_storyboard:", "").trim();
+      const labels: Record<string, string> = {
+        roi_proof: "ROI Proof",
+        reliability_ops: "Reliability Ops",
+        delivery_sla: "Delivery / SLA",
+      };
+      return `You selected: ${labels[id] || id}`;
+    }
+    
+    if (action.startsWith("__ACTION__:select_style_bundle:")) {
+      return "You selected a style bundle";
+    }
+    
+    if (action === "__ACTION__:outcome_help_me_decide") {
+      return "I'm not sure, help me decide";
+    }
+    
+    return "Action received";
+  }
+
   // Conversation session state
   const [sessionsOpen, setSessionsOpen] = useState(false);
   const [sessions, setSessions] = useState<any[]>([]);
@@ -669,8 +698,29 @@ export function ChatWorkspace({
 
     const isAction = isInternalActionMessage(text);
 
-    if (!isAction) {
-      // Save user message to persistence
+    // For action messages, show user acknowledgment FIRST
+    if (isAction) {
+      const acknowledgment = getActionAcknowledgment(text);
+      
+      // Save acknowledgment as user message
+      await fetch("/api/journey-messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenantId: authContext.tenantId,
+          threadId,
+          role: "user",
+          content: acknowledgment,
+        }),
+      });
+
+      // Show acknowledgment in UI immediately
+      setMessages((prev) => [
+        ...prev,
+        { id: `u-${Date.now()}`, role: "user", content: acknowledgment },
+      ]);
+    } else {
+      // Regular user message (not an action)
       await fetch("/api/journey-messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

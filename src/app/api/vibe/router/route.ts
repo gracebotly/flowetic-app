@@ -225,7 +225,7 @@ Journey phases:
         return NextResponse.json({
           text: agentText || "Got it. One more quick question: who will mainly use this — your team, or client?",
           journey: nextJourney,
-          toolUi: null,
+          toolUi: null, // KEEP cards hidden during deep lane
           vibeContext: { ...(vibeContext ?? {}), skillMD },
         });
       }
@@ -405,30 +405,11 @@ Journey phases:
       );
       const agentText = String((agentRes as any)?.text ?? "").trim();
 
-      // Keep showing the same two cards so user can still pick anytime
-      const toolUi: ToolUi = {
-        type: "outcome_cards",
-        title: "Outcome + Monetization Strategy",
-        options: [
-          {
-            id: "dashboard",
-            title: "Client ROI Dashboard (Retention)",
-            description:
-              "Helps renew retainers, makes automation value visible weekly, and proves ROI to clients.",
-          },
-          {
-            id: "product",
-            title: "Workflow Product (SaaS wrapper)",
-            description:
-              "Sell access monthly, hide the underlying workflow, and provide a form/button UI to run it.",
-          },
-        ],
-      };
 
       return NextResponse.json({
         text: agentText || "No problem! Quick question: is this mainly to prove results to a client (retention dashboard), or to sell access as a product?",
         journey: deepLaneJourney,
-        toolUi,
+        toolUi: null, // ← CHANGED: Don't show cards during deep lane questions
         vibeContext: { ...(vibeContext ?? {}), skillMD },
       });
     }
