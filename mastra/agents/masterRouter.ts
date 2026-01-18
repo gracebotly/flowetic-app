@@ -16,7 +16,7 @@ import { persistPreviewVersion } from '../tools/persistPreviewVersion';
  * dashboard lifecycle.  It uses RuntimeContext values such as mode and phase
  * (supplied in the API route) to tailor its responses.
  */
-export const masterRouterAgent = new Agent({
+export const masterRouter = new Agent({
   name: 'Master Router',
   instructions: `
 You are the Master Router Agent for GetFlowetic, a platform that builds custom dashboards from client event streams.
