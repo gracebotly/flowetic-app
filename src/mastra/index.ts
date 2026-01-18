@@ -1,27 +1,21 @@
 /**
  * Mastra CLI Entry Point (Bridge File)
  * 
- * This file exists solely to satisfy the Mastra CLI's hardcoded lookup path.
- * The CLI only looks for src/mastra/index.ts by convention.
- * 
- * All actual Mastra code lives in /mastra/ directory at project root.
- * This file simply re-exports everything to make it discoverable to the CLI.
- * 
- * DO NOT put actual Mastra logic here - keep it in /mastra/
+ * CRITICAL: Only export agents, tools, workflows, skills
+ * DO NOT export the main Mastra instance - it has Next.js dependencies
  */
 
-// Re-export all agents
+// Re-export agents (CLI needs these)
 export * from '../../mastra/agents';
 
-// Re-export all tools
+// Re-export tools (CLI needs these)
 export * from '../../mastra/tools';
 
-// Re-export all workflows
+// Re-export workflows (CLI needs these)
 export * from '../../mastra/workflows';
 
-// Re-export all skills
+// Re-export skills (CLI needs these)
 export * from '../../mastra/skills';
 
-// Re-export main configuration/exports from mastra/index.ts
-export * from '../../mastra';
+// DO NOT export from '../../mastra' - it imports Next.js modules
 
