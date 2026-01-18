@@ -225,14 +225,16 @@ Journey phases:
         return NextResponse.json({
           text: agentText || "Got it. One more quick question: who will mainly use this — your team, or client?",
           journey: nextJourney,
-          toolUi: null,
+          toolUi: null, // KEEP cards hidden during deep lane
           vibeContext: { ...(vibeContext ?? {}), skillMD },
         });
       }
 
       if (deepLaneStep === 2) {
-        // Deep lane complete: provide recommendation based on answers
+        // Deep lane complete: user answered both questions
         const answers = journey?.deepLane?.answers ?? {};
+        
+        // Agent generates final recommendation
         const agentRes = await masterRouterAgent.generate(
           [
             "System: Deep lane complete. Provide final recommendation.",
@@ -248,15 +250,15 @@ Journey phases:
             "1. Transition: 'Based on what you told me...'",
             "2. Recommendation: 'I recommend [Dashboard/Product].'",
             "3. Exactly 2 bullet reasons (tie to their specific answers)",
-            "4. CTA: 'Pick one of the cards below.'",
+            "4. Transition: 'Now let's pick the story this will tell.'",
             "",
             "EXAMPLE:",
             "Based on what you told me, I recommend starting with a **Dashboard**.",
             "",
-            "• Since your team will be the main users, a dashboard helps you monitor performance internally",
-            "• You mentioned proving value - dashboards are perfect for showing results to stakeholders",
+            "• Since this is for proving results to clients, dashboards are perfect for showing ROI",
+            "• Your team will use it internally to monitor performance before sharing with clients",
             "",
-            "Pick one of the cards below.",
+            "Now let's pick the story this will tell.",
             "",
             NO_ROADMAP_RULES,
           ].filter(Boolean).join("\n"),
@@ -264,33 +266,48 @@ Journey phases:
         );
         const agentText = String((agentRes as any)?.text ?? "").trim();
 
-        const clearedJourney = {
+        // CRITICAL FIX: Determine outcome from answers
+        const inferredOutcome = String(answers.q1 ?? "").toLowerCase().includes("product") 
+          ? "product" 
+          : "dashboard";
+
+        // Transition to Phase 2 (align) automatically
+        const nextJourney = {
           ...journey,
+          mode: "align" as JourneyMode,
+          selectedOutcome: inferredOutcome,
           deepLane: null,
         };
 
+        // Show storyboard cards for Phase 2
         const toolUi: ToolUi = {
-          type: "outcome_cards",
-          title: "Outcome + Monetization Strategy",
+          type: "storyboard_cards",
+          title: "Choose your KPI Storyboard",
           options: [
             {
-              id: "dashboard",
-              title: "Client ROI Dashboard (Retention)",
-              description:
-                "Helps renew retainers, makes automation value visible weekly, and proves ROI to clients.",
+              id: "roi_proof",
+              title: "ROI Proof (Client-facing)",
+              description: "Prove automation value and time saved to drive renewals.",
+              kpis: ["Tasks automated", "Time saved", "Success rate", "Executions over time", "Most recent runs"],
             },
             {
-              id: "product",
-              title: "Workflow Product (SaaS wrapper)",
-              description:
-                "Sell access monthly, hide the underlying workflow, and provide a form/button UI to run it.",
+              id: "reliability_ops",
+              title: "Reliability Ops (Agency-facing)",
+              description: "Operate and debug reliability across workflows quickly.",
+              kpis: ["Failure count", "Success rate", "Recent errors", "Avg runtime", "Slowest runs"],
+            },
+            {
+              id: "delivery_sla",
+              title: "Delivery / SLA (Client-facing)",
+              description: "Show delivery health and turnaround time trends.",
+              kpis: ["Runs completed", "Avg turnaround time", "Incidents this week", "Last successful run", "Status trend"],
             },
           ],
         };
 
         return NextResponse.json({
-          text: agentText || "Based on your answers, I recommend starting with a dashboard. Pick one of the cards below.",
-          journey: clearedJourney,
+          text: agentText || "Based on your answers, I recommend starting with a Dashboard. Now let's pick the story this will tell.",
+          journey: nextJourney,
           toolUi,
           vibeContext: { ...(vibeContext ?? {}), skillMD },
         });
@@ -405,30 +422,11 @@ Journey phases:
       );
       const agentText = String((agentRes as any)?.text ?? "").trim();
 
-      // Keep showing the same two cards so user can still pick anytime
-      const toolUi: ToolUi = {
-        type: "outcome_cards",
-        title: "Outcome + Monetization Strategy",
-        options: [
-          {
-            id: "dashboard",
-            title: "Client ROI Dashboard (Retention)",
-            description:
-              "Helps renew retainers, makes automation value visible weekly, and proves ROI to clients.",
-          },
-          {
-            id: "product",
-            title: "Workflow Product (SaaS wrapper)",
-            description:
-              "Sell access monthly, hide the underlying workflow, and provide a form/button UI to run it.",
-          },
-        ],
-      };
 
       return NextResponse.json({
         text: agentText || "No problem! Quick question: is this mainly to prove results to a client (retention dashboard), or to sell access as a product?",
         journey: deepLaneJourney,
-        toolUi,
+        toolUi: null, // ← CHANGED: Don't show cards during deep lane questions
         vibeContext: { ...(vibeContext ?? {}), skillMD },
       });
     }

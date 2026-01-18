@@ -165,8 +165,38 @@ export function ChatWorkspace({
   const [isLoading, setIsLoading] = useState(false);
   const [chatMode, setChatMode] = useState<"chat" | "voice">("chat");
   const [isListening, setIsListening] = useState(false);
+  const [isChatExpanded, setIsChatExpanded] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
+
+  function getActionAcknowledgment(action: string): string {
+    if (action.startsWith("__ACTION__:select_outcome:")) {
+      const outcome = action.replace("__ACTION__:select_outcome:", "").trim();
+      return outcome === "dashboard" 
+        ? "You selected: Client ROI Dashboard" 
+        : "You selected: Workflow Product";
+    }
+    
+    if (action.startsWith("__ACTION__:select_storyboard:")) {
+      const id = action.replace("__ACTION__:select_storyboard:", "").trim();
+      const labels: Record<string, string> = {
+        roi_proof: "ROI Proof",
+        reliability_ops: "Reliability Ops",
+        delivery_sla: "Delivery / SLA",
+      };
+      return `You selected: ${labels[id] || id}`;
+    }
+    
+    if (action.startsWith("__ACTION__:select_style_bundle:")) {
+      return "You selected a style bundle";
+    }
+    
+    if (action === "__ACTION__:outcome_help_me_decide") {
+      return "I'm not sure, help me decide";
+    }
+    
+    return "Action received";
+  }
 
   // Conversation session state
   const [sessionsOpen, setSessionsOpen] = useState(false);
@@ -668,8 +698,29 @@ export function ChatWorkspace({
 
     const isAction = isInternalActionMessage(text);
 
-    if (!isAction) {
-      // Save user message to persistence
+    // For action messages, show user acknowledgment FIRST
+    if (isAction) {
+      const acknowledgment = getActionAcknowledgment(text);
+      
+      // Save acknowledgment as user message
+      await fetch("/api/journey-messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenantId: authContext.tenantId,
+          threadId,
+          role: "user",
+          content: acknowledgment,
+        }),
+      });
+
+      // Show acknowledgment in UI immediately
+      setMessages((prev) => [
+        ...prev,
+        { id: `u-${Date.now()}`, role: "user", content: acknowledgment },
+      ]);
+    } else {
+      // Regular user message (not an action)
       await fetch("/api/journey-messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -827,7 +878,9 @@ return (
       {/* Main content area */}
       <div className="flex flex-1 min-h-0 pl-20">
         {/* Chat sidebar */}
-        <div className="flex w-[480px] flex-col border-r border-gray-700 bg-white overflow-hidden">
+        <div className={`flex flex-col border-r border-gray-700 bg-white overflow-hidden transition-all duration-300 ${
+          isChatExpanded ? 'w-[720px]' : 'w-[480px]'
+        }`}>
           {backendWarning && (
             <div className="border-b border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
               {backendWarning}
@@ -835,8 +888,34 @@ return (
           )}
 
           {/* Phase Progress Indicator */}
-          <div className="border-b border-gray-200 px-4 py-3">
+          <div className="border-b border-gray-200 px-4 py-3 flex items-center justify-between">
             <PhaseIndicator currentMode={journeyMode} />
+            
+            {/* Expand button - show only in Phase 1 & 2 */}
+            {(journeyMode === "recommend" || journeyMode === "align") && (
+              <button
+                type="button"
+                onClick={() => setIsChatExpanded(!isChatExpanded)}
+                className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 transition-colors"
+                title={isChatExpanded ? "Collapse view" : "Expand for more space"}
+              >
+                {isChatExpanded ? (
+                  <>
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                    </svg>
+                    <span>Collapse</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                    </svg>
+                    <span>Expand</span>
+                  </>
+                )}
+              </button>
+            )}
           </div>
 
           {/* Chat messages */}
@@ -885,8 +964,8 @@ return (
                     )}
                   </div>
 
-                  {/* Render inline cards after assistant messages */}
-                  {msg.role === "assistant" && toolUi && (
+                  {/* Render inline cards ONLY after the LAST assistant message */}
+                  {msg.role === "assistant" && toolUi && index === messages.length - 1 && (
                     <>
                       {toolUi.type === "outcome_cards" && (
                         <OutcomeCards
