@@ -1,0 +1,225 @@
+# Branch: fix/mastra-cli-nextjs-dependencies
+
+## ⚠️ TEMPORARY CHANGES - READ BEFORE MERGING
+
+This branch **temporarily removes** functionality to unblock Mastra Studio access. These files/features need to be restored once the core agent journey is validated in Studio.
+
+---
+
+## 🗑️ FILES REMOVED (Must Restore Later)
+
+### 1. `src/app/api/admin/ingest-design-kb/route.ts`
+**Purpose**: Admin endpoint for ingesting design system knowledge base into vector storage for RAG-powered design advisor agent.
+
+**What it does**:
+- Reads markdown/txt files from `vendor/ui-ux-pro-max-skill/`
+- Chunks documents (900 chars, 140 overlap)
+- Generates embeddings via OpenAI `text-embedding-3-small`
+- Stores in Postgres vector index via `@mastra/pg`
+- Used by `designAdvisorAgent` for grounded design recommendations
+
+**Dependencies removed**:
+- `@mastra/pg` package (removed from package.json)
+
+**Environment variables needed when restored**:
+- `POSTGRES_CONNECTION_STRING` - Postgres DB with pgvector extension
+- `DESIGN_KB_ROOT` - Path to design knowledge base files (defaults to `vendor/ui-ux-pro-max-skill`)
+- `MASTRA_DESIGN_KB_INDEX_NAME` - Vector index name (defaults to `design_kb`)
+
+**Restore instructions**:
+1. Add `"@mastra/pg": "^0.1.0"` to package.json dependencies
+2. Restore `src/app/api/admin/ingest-design-kb/route.ts` from git history
+3. Run ingestion: `POST /api/admin/ingest-design-kb` (requires admin role)
+4. Verify `searchDesignKB` tool works in `designAdvisorAgent`
+
+---
+
+## 📦 PACKAGES REMOVED
+
+### `@mastra/pg@0.1.0`
+**Why removed**: Causes Mastra Cloud bundler to fail with module resolution errors:
+```
+Cannot find module '@mastra/core/dist/error/index.js' 
+imported from @mastra/libsql
+```
+
+**Impact**:
+- ❌ Can't use Postgres vector storage in Mastra agents
+- ❌ `designAdvisorAgent` RAG search won't have grounded context
+- ❌ Will fall back to `searchDesignKBLocal` (keyword-based, lower quality)
+
+**Alternatives when restored**:
+- Option A: Wait for `@mastra/pg` version compatible with `@mastra/core@0.19.0`
+- Option B: Use Supabase vector extension directly (no Mastra wrapper)
+- Option C: Use `@mastra/rag` with different vector store (Pinecone, Weaviate, etc.)
+
+---
+
+## 🎯 WHY THESE CHANGES WERE MADE
+
+### The Problem:
+After 5+ hours of debugging, could not get `mastra dev` CLI or Mastra Cloud to work due to:
+
+1. **Circular dependency** (resolved):
+```
+   mastra/index.ts → platformMappingMaster.ts → 
+   runGeneratePreviewWorkflow.ts → mastra/index.ts
+```
+   **Fixed by**: Importing workflow directly instead of through mastra instance
+
+2. **Next.js module imports in CLI context** (resolved):
+```
+   Cannot find module 'next/headers' in telemetry-config.mjs
+```
+   **Fixed by**: Creating separate `mastra/lib/supabase.ts` without Next.js dependencies
+
+3. **@mastra/pg dependency conflict** (temporary workaround):
+```
+   @mastra/libsql requires @mastra/core/dist/error/index.js which doesn't exist
+```
+   **Workaround**: Removed `@mastra/pg` and the RAG ingestion route that uses it
+
+### The Goal:
+**Get Mastra Studio access** to test the 7-phase agent journey:
+```
+recommend → align → style → build_preview → 
+interactive_edit → vibe_coding → deploy
+```
+
+Studio provides:
+- ✅ Instant feedback loop (seconds vs minutes)
+- ✅ Complete visibility into agent reasoning and tool calls
+- ✅ Isolated testing (no UI bugs interfering)
+- ✅ Export working agent config to code after validation
+
+**Without Studio**: Writing agent code blindly → 5+ hour debug cycles
+**With Studio**: Test agents interactively → export working config → 1 hour total
+
+---
+
+## 🔄 RESTORATION CHECKLIST
+
+When ready to restore RAG functionality:
+
+### Step 1: Verify Core Agents Work in Studio
+- [ ] `masterRouterAgent` handles all 7 phases correctly
+- [ ] `platformMappingMaster` generates previews successfully
+- [ ] `dashboardBuilderAgent` applies spec edits correctly
+- [ ] `designAdvisorAgent` works WITHOUT RAG (using fallback)
+
+### Step 2: Add RAG Back
+- [ ] Check if `@mastra/pg@0.2.0+` is released (compatible with core@0.19.0)
+- [ ] If not, implement Supabase vector alternative:
+```typescript
+  // Use Supabase's pgvector extension directly
+  import { createClient } from '@/lib/supabase/server';
+  
+  const supabase = await createClient();
+  const { data } = await supabase.rpc('match_design_kb', {
+    query_embedding: embedding,
+    match_threshold: 0.8,
+    match_count: 5
+  });
+```
+- [ ] Restore `src/app/api/admin/ingest-design-kb/route.ts`
+- [ ] Test ingestion endpoint works
+- [ ] Verify `searchDesignKB` tool returns relevant results
+- [ ] Test `designAdvisorAgent` with RAG-grounded recommendations
+
+### Step 3: Merge Strategy
+**Option A**: Keep RAG on separate branch until package is fixed
+- Branch: `feature/design-advisor-rag`
+- Keep main branch deployable without RAG
+
+**Option B**: Use Supabase vector directly (no `@mastra/pg`)
+- Implement custom vector search in `mastra/tools/designAdvisor/searchDesignKB.ts`
+- No new dependencies needed (use existing `@supabase/supabase-js`)
+
+---
+
+## 📝 RELATED FILES (NOT REMOVED, BUT DEPENDENT)
+
+These files reference the removed functionality but don't block builds:
+
+### `mastra/agents/designAdvisorAgent.ts`
+- Imports `searchDesignKB` tool (will use fallback if RAG unavailable)
+- Has fallback to `searchDesignKBLocal` (keyword-based)
+- **Status**: ✅ Works without RAG (reduced quality)
+
+### `mastra/tools/designAdvisor/searchDesignKB.ts`
+- Main RAG search tool for design guidance
+- **Status**: ⚠️ Will fail if called when index doesn't exist
+- **Fallback**: Agent instructions say "fall back to searchDesignKBLocal"
+
+---
+
+## 🚀 DEPLOYMENT STATUS
+
+### Vercel (Next.js App)
+- ✅ Builds successfully
+- ✅ All routes work except `/api/admin/ingest-design-kb`
+- ⚠️ Design advisor agent quality reduced (no RAG)
+
+### Mastra Cloud (Studio)
+- ✅ Import succeeds
+- ✅ Studio UI accessible
+- ✅ All agents testable
+- ⚠️ `searchDesignKB` will fail (use keyword fallback)
+
+---
+
+## 📅 TIMELINE
+
+- **Created**: January 18, 2026
+- **Reason**: Unblock Mastra Studio access after 5+ hours of dependency debugging
+- **Restore by**: After validating core 7-phase journey in Studio (1-2 days)
+- **Long-term fix**: Wait for `@mastra/pg` package update or use Supabase directly
+
+---
+
+## 🔗 RELATED DOCUMENTATION
+
+- Deep research doc: `MASTRA_CLI_TROUBLESHOOTING.md`
+- Agent architecture: `AGENTS_ARCHITECTURE_V1.md`
+- Debugging guide: `Debugging_guide_2_Mastra_CopilotKit.md`
+- Original issue: PR #93 "Fix Mastra CLI Next.js dependencies"
+
+---
+
+## ⚡ QUICK REFERENCE
+
+**To restore RAG**:
+```bash
+# 1. Add package
+npm install @mastra/pg@latest
+
+# 2. Restore file
+git checkout main -- src/app/api/admin/ingest-design-kb/route.ts
+
+# 3. Run ingestion
+curl -X POST https://your-app.vercel.app/api/admin/ingest-design-kb \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+**Alternative (Supabase vector)**:
+```sql
+-- Enable pgvector extension
+create extension if not exists vector;
+
+-- Create table
+create table design_kb (
+  id uuid primary key default gen_random_uuid(),
+  content text,
+  embedding vector(1536),
+  metadata jsonb
+);
+
+-- Create index
+create index on design_kb using ivfflat (embedding vector_cosine_ops);
+```
+
+---
+
+**Branch owner**: @gracebotly  
+**Status**: 🚧 Temporary - Do Not Merge to Main Until RAG Restored  
+**Next steps**: Test agents in Studio, then restore RAG with Supabase approach
