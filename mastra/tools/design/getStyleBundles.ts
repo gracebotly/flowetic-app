@@ -1,6 +1,5 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
-import { searchDesignKB, searchDesignKBLocal } from "@/mastra/tools/designAdvisor";
 
 const Swatch = z.object({ name: z.string(), hex: z.string() });
 
@@ -145,61 +144,6 @@ function fallbackBundles(): StyleBundle[] {
   ];
 }
 
-// Parse function is intentionally conservative; it tries to extract palette hexes if present.
-// If parsing fails, returns safe fallback bundles.
-function parseBundlesFromText(text: string): StyleBundle[] | null {
-  const lines = text.split("\n").map((l) => l.trim());
-  const hexes = text.match(/#[0-9a-fA-F]{6}/g) ?? [];
-
-  // If we don't even see colors, don't pretend.
-  if (hexes.length < 8) return null;
-
-  // Create 4 bundles by slicing hexes into 5-color palettes.
-  const bundles: StyleBundle[] = [];
-  const names = [
-    { name: "Agency Premium (Glass)", preview: "/style-previews/glassmorphism.png", tags: ["Client-facing", "Premium", "Clean"] },
-    { name: "Modern SaaS (Dark)", preview: "/style-previews/dark-mode.png", tags: ["Ops", "Modern", "High contrast"] },
-    { name: "Minimal Report", preview: "/style-previews/minimalism.png", tags: ["Client-facing", "Report", "Minimal"] },
-    { name: "Bold Startup", preview: "/style-previews/brutalism.png", tags: ["SaaS", "Bold", "High energy"] },
-  ];
-
-  for (let i = 0; i < 4; i++) {
-    const paletteHex = hexes.slice(i * 5, i * 5 + 5);
-    if (paletteHex.length < 5) break;
-
-    const bundleName = names[i]!.name;
-    bundles.push({
-      id: stableId(bundleName),
-      name: bundleName,
-      description: "RAG-recommended bundle based on your dashboard goals.",
-      previewImageUrl: names[i]!.preview,
-      palette: {
-        name: "RAG Palette",
-        swatches: [
-          { name: "Primary", hex: paletteHex[0]! },
-          { name: "Accent", hex: paletteHex[1]! },
-          { name: "Background", hex: paletteHex[2]! },
-          { name: "Surface", hex: paletteHex[3]! },
-          { name: "Text", hex: paletteHex[4]! },
-        ],
-      },
-      densityPreset: "comfortable",
-      tags: names[i]!.tags,
-      designTokens: {
-        "theme.color.primary": paletteHex[0]!,
-        "theme.color.accent": paletteHex[1]!,
-        "theme.color.background": paletteHex[2]!,
-        "theme.color.surface": paletteHex[3]!,
-        "theme.color.text": paletteHex[4]!,
-        "theme.spacing.base": 10,
-        "theme.radius.md": 12,
-        "theme.shadow.card": "soft",
-      },
-    });
-  }
-
-  return bundles.length === 4 ? bundles : null;
-}
 
 export const getStyleBundles = createTool({
   id: "design.getStyleBundles",
@@ -216,54 +160,12 @@ export const getStyleBundles = createTool({
     bundles: z.array(StyleBundle).length(4),
     sources: z.array(z.object({ kind: z.string(), note: z.string() })).default([]),
   }),
-  execute: async ({ context, runtimeContext }) => {
-    const queryText =
-      `Return 4 style+palette bundles for a ${context.dashboardKind} ` +
-      `${context.outcome} UI, audience=${context.audience}, platform=${context.platformType}. ` +
-      `Each bundle must include: name, brief description, and a 5-color palette (hex). ` +
-      `Prefer premium client-ready styles. Notes: ${context.notes ?? ""}`;
-
-    // Try vector search; if unavailable, fallback local.
-    let relevantText = "";
-    const sources: Array<{ kind: string; note: string }> = [];
-
-    const kb = searchDesignKB;
-    const exec = kb?.execute;
-
-    if (exec) {
-      try {
-        const rag = await exec({
-          context: {
-            query: queryText,
-            topK: 8,
-            filter: {},
-          } as any,
-          runtimeContext,
-        } as any);
-
-        // createVectorQueryTool output shape depends on Mastra version; keep conservative:
-        relevantText = JSON.stringify(rag).slice(0, 12000);
-        sources.push({ kind: "vector", note: "searchDesignKB" });
-      } catch {
-        // ignore and fallback
-      }
-    }
-
-    if (!relevantText) {
-      const local = await searchDesignKBLocal.execute({
-        context: { queryText, maxChars: 8000 },
-        runtimeContext,
-      } as any);
-      relevantText = local.relevantContext || "";
-      sources.push({ kind: "local", note: "searchDesignKBLocal" });
-    }
-
-    const parsed = parseBundlesFromText(relevantText);
-    const bundles = parsed ?? fallbackBundles();
-
-    // Validate output against schema before returning
+  execute: async () => {
+    const bundles = fallbackBundles();
     const validated = z.array(StyleBundle).length(4).parse(bundles);
-
-    return { bundles: validated, sources };
+    return { 
+      bundles: validated, 
+      sources: [{ kind: "hardcoded", note: "Production style bundles" }] 
+    };
   },
 });
