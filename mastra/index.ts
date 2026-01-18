@@ -8,6 +8,10 @@ import { designAdvisorAgent } from "./agents/designAdvisorAgent";
 import { generatePreviewWorkflow } from './workflows/generatePreview';
 
 export const mastra = new Mastra({
+  telemetry: {
+    serviceName: 'flowetic-mastra',
+    sampling: 0,
+  },
   agents: {
     masterRouterAgent: masterRouterAgent,
     default: masterRouterAgent,
