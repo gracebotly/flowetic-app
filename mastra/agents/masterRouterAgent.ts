@@ -5,6 +5,9 @@ import { RuntimeContext } from "@mastra/core/runtime-context";
 import { loadSkillMarkdown, loadNamedSkillMarkdown, PlatformType } from "../skills/loadSkill";
 
 import { todoAdd, todoList, todoUpdate, todoComplete } from "../tools/todo";
+import { createSource, listSources, updateSource, deleteSource } from "../tools/sources";
+import { createProject, listProjects, updateProject, deleteProject } from "../tools/projects";
+import { navigateTo } from "../tools/navigation";
 import { designAdvisorAgent } from "./designAdvisorAgent";
 import { dashboardBuilderAgent } from "./dashboardBuilderAgent";
 import { platformMappingMaster } from "./platformMappingMaster";
@@ -81,6 +84,11 @@ export const masterRouterAgent: Agent = new Agent({
           "",
           "# PLATFORM KNOWLEDGE",
           platformSkill || "[Platform skill not loaded]",
+          "",
+          "# CAPABILITIES",
+          "You can manage Connections (sources): create, list, update, and delete platform connections for the tenant.",
+          "You can manage Projects: create, list, update, and delete projects for the tenant.",
+          "You can return a navigation URL using the navigation.navigateTo tool when you want the UI to move to a specific page.",
         ].join("\n"),
       },
       {
@@ -108,6 +116,21 @@ export const masterRouterAgent: Agent = new Agent({
     todoList,
     todoUpdate,
     todoComplete,
+
+    // Sources CRUD
+    createSource,
+    listSources,
+    updateSource,
+    deleteSource,
+
+    // Projects CRUD
+    createProject,
+    listProjects,
+    updateProject,
+    deleteProject,
+
+    // Navigation
+    navigateTo,
   },
 });
 

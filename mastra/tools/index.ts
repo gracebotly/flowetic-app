@@ -27,3 +27,5 @@ export * from "./specEditor";
 export * from "./sources";
 
 export * from "./projects";
+
+export * from "./navigation";
