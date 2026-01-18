@@ -10,7 +10,7 @@ import { generatePreviewWorkflow } from './workflows/generatePreview';
 export const mastra = new Mastra({
   telemetry: {
     serviceName: 'flowetic-mastra',
-    sampling: { probability: 0 },
+    sampling: { type: 'ratio', probability: 0 },
   },
   agents: {
     masterRouterAgent: masterRouterAgent,
