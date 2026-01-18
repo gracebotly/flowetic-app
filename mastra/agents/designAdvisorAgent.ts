@@ -1,5 +1,10 @@
 
 
+/*
+// Temporarily disabled - RAG dependencies removed
+// TODO: Restore when implementing Supabase-based RAG
+
+
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 import { RuntimeContext } from "@mastra/core/runtime-context";
@@ -72,4 +77,16 @@ export const designAdvisorAgent: Agent = new Agent({
     todoUpdate,
     todoComplete,
   },
+});
+*/
+
+// Temporary stub to prevent import errors
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+
+export const designAdvisorAgent = new Agent({
+  name: "design-advisor",
+  instructions: "Design advisor temporarily disabled",
+  model: openai("gpt-4o-mini"),
+  tools: {},
 });
