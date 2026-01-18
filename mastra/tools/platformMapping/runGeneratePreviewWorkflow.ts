@@ -1,7 +1,7 @@
 import { createTool } from "@mastra/core/tools";
 import { RuntimeContext } from "@mastra/core/runtime-context";
 import { z } from "zod";
-import { mastra } from "../../index";
+import { generatePreviewWorkflow } from "../../workflows/generatePreview";
 
 export const runGeneratePreviewWorkflow = createTool({
   id: "runGeneratePreviewWorkflow",
@@ -24,12 +24,7 @@ export const runGeneratePreviewWorkflow = createTool({
       throw new Error("RUNTIME_CONTEXT_REQUIRED");
     }
 
-    const workflow = mastra.getWorkflow("generatePreview");
-    if (!workflow) {
-      throw new Error("WORKFLOW_NOT_FOUND");
-    }
-
-    const run = await workflow.createRunAsync();
+    const run = await generatePreviewWorkflow.createRunAsync();
 
     const result = await run.start({
       inputData: {
@@ -42,13 +37,9 @@ export const runGeneratePreviewWorkflow = createTool({
       runtimeContext: runtimeContext as RuntimeContext,
     });
 
-
-    // In Mastra, run.start returns a result envelope; your workflow's output schema
-    // is the final output, available on result.result when status === 'success'.
     if (result.status !== "success") {
       throw new Error("WORKFLOW_FAILED");
     }
-
 
     return {
       runId: result.result.runId,

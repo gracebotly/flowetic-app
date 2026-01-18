@@ -1,6 +1,6 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '../lib/supabase';
 
 export const analyzeSchema = createTool({
   id: 'analyze-schema',
