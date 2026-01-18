@@ -147,13 +147,13 @@ export async function POST(req: NextRequest) {
     runtimeContext.set("threadId", threadId);
 
     // 5) Always start with Master Router
-    const master = mastra.getAgent("masterRouter");
+    const master = mastra.getAgent("masterRouterAgent");
     if (!master) {
       return new Response(
         JSON.stringify({
           type: "error",
           code: "AGENT_NOT_FOUND",
-          message: "masterRouter agent not registered.",
+          message: "masterRouterAgent not registered.",
         }),
         { status: 500, headers: { "Content-Type": "application/json" } },
       );
@@ -230,7 +230,7 @@ export async function POST(req: NextRequest) {
       return new Response(
         JSON.stringify({
           type: "success",
-          agentKey: "masterRouter->platformMappingMaster",
+          agentKey: "masterRouterAgent->platformMappingMaster",
           text: `${routerResponse.text ?? ""}\n\n${mappingResponse.text ?? ""}`.trim(),
         }),
         { headers: { "Content-Type": "application/json" } },
@@ -245,7 +245,7 @@ export async function POST(req: NextRequest) {
     return new Response(
       JSON.stringify({
         type: "success",
-        agentKey: "masterRouter",
+        agentKey: "masterRouterAgent",
         text: routerOnly.text ?? "",
       }),
       { headers: { "Content-Type": "application/json" } },
