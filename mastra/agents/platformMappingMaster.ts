@@ -10,7 +10,6 @@ import {
   recommendTemplates,
   proposeMapping,
   saveMapping,
-  runGeneratePreviewWorkflow,
 } from "../tools/platformMapping";
 import { todoAdd, todoList, todoUpdate, todoComplete } from "../tools/todo";
 import { getStyleBundles } from "../tools/design";
@@ -50,7 +49,6 @@ export const platformMappingMaster: Agent = new Agent({
     recommendTemplates,
     proposeMapping,
     saveMapping,
-    runGeneratePreviewWorkflow,
     getStyleBundles,
     todoAdd,
     todoList,
