@@ -6,7 +6,6 @@
     "dev": "next dev",
     "mastra:dev": "mastra dev --dir ./mastra",
     "mastra:dev:nocache": "MASTRA_DEV_NO_CACHE=1 mastra dev --dir ./mastra",
-    "mastra:sync-output-skills": "node ./scripts/sync-mastra-output-skills.mjs",
     "build": "next build",
     "build:mastra": "mastra build --dir mastra",
     "start": "next start",
