@@ -7,8 +7,6 @@
     "mastra:dev": "mastra dev --dir ./mastra",
     "mastra:dev:nocache": "MASTRA_DEV_NO_CACHE=1 mastra dev --dir ./mastra",
     "mastra:sync-output-skills": "node scripts/sync-mastra-output-skills.mjs",
-    "mastra:dev:nocache:with-skills": "rm -rf .mastra && MASTRA_DEV_NO_CACHE=1 mastra dev --dir ./mastra & sleep 3 && npm run mastra:sync-output-skills",
-    "mastra:dev:windows": "powershell -NoProfile -Command \"$ErrorActionPreference='Stop'; Remove-Item -Recurse -Force .mastra -ErrorAction SilentlyContinue; $env:MASTRA_DEV_NO_CACHE='1'; Start-Process -NoNewWindow -FilePath 'mastra' -ArgumentList 'dev','--dir','./mastra'; Start-Sleep -Seconds 3; node scripts/sync-mastra-output-skills.mjs\"",
     "build": "next build",
     "build:mastra": "mastra build --dir mastra",
     "start": "next start",

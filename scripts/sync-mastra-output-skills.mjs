@@ -21,7 +21,10 @@ async function copyDir(src, dest) {
 
     if (entry.isDirectory()) {
       await copyDir(srcPath, destPath);
-    } else if (entry.isFile()) {
+      continue;
+    }
+
+    if (entry.isFile()) {
       await fs.copyFile(srcPath, destPath);
     }
   }
@@ -29,22 +32,21 @@ async function copyDir(src, dest) {
 
 const repoRoot = process.cwd();
 
-// Source of truth: your existing repo-root skills folder
-// (this already exists in main, and is what your agents expect semantically)
+// Source folder (repo-root) that already exists in your project
 const srcSkills = path.join(repoRoot, "skills");
 
-// Mastra dev/build runtime CWD is .mastra/output (proven by stack trace),
-// so the bundled loader looks for ./skills/** relative to that.
-const outSkills = path.join(repoRoot, ".mastra", "output", "skills");
+// Destination folder required by your currently bundled loadSkill() logic
+const outDir = path.join(repoRoot, ".mastra", "output");
+const outSkills = path.join(outDir, "skills");
 
 if (!(await exists(srcSkills))) {
   console.error(`[sync-mastra-output-skills] Missing source skills folder: ${srcSkills}`);
   process.exit(1);
 }
 
-if (!(await exists(path.join(repoRoot, ".mastra", "output")))) {
+if (!(await exists(outDir))) {
   console.error(
-    `[sync-mastra-output-skills] Missing .mastra/output. Run 'mastra dev --dir ./mastra' first.`,
+    `[sync-mastra-output-skills] Missing ${outDir}. Start mastra dev/build first so output exists.`,
   );
   process.exit(1);
 }
