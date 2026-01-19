@@ -36,7 +36,7 @@ export const platformMappingMaster: Agent = new Agent({
       {
         role: "system",
         content:
-          "When user asks to generate/preview, call runGeneratePreviewWorkflow. " +
+          "When user asks to generate/preview, confirm all required parameters (schemaName, storyboardKey, styleBundleId) are collected, then respond: 'Ready to generate preview. Parameters confirmed.' The system will trigger the workflow automatically. " +
           "Before that, use getClientContext/getRecentEventSamples/recommendTemplates/proposeMapping as needed.",
       },
     ];
