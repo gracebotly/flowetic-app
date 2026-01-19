@@ -1,6 +1,5 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 
 export type PlatformType =
   | "vapi"
@@ -10,13 +9,6 @@ export type PlatformType =
   | "crewai"
   | "activepieces"
   | "make";
-
-function getRepoRootFromThisFile(): string {
-  // mastra/skills/loadSkill.ts  -> repo root is ../../
-  const __filename = fileURLToPath(import.meta.url);
-  const __dirname = path.dirname(__filename);
-  return path.resolve(__dirname, "..", "..");
-}
 
 async function readFirstExisting(pathsToTry: string[]): Promise<string> {
   for (const p of pathsToTry) {
@@ -34,38 +26,22 @@ async function readFirstExisting(pathsToTry: string[]): Promise<string> {
 export async function loadSkill(platformType: PlatformType): Promise<string> {
   const safePlatform: PlatformType = (platformType || "make") as PlatformType;
 
-  const repoRoot = getRepoRootFromThisFile();
+  const cwd = process.cwd();
 
-  // 1) Preferred, build-compatible location (Mastra build copies src/mastra/public -> .mastra/output)
-  const publicSkillPath = path.join(
-    repoRoot,
-    "src",
-    "mastra",
-    "public",
-    "skills",
-    safePlatform,
-    "Skill.md",
-  );
+  // When you run: mastra dev --dir ./mastra
+  // Mastra copies ./mastra/public -> .mastra/output during build/dev.
+  // But the bundle we observed is still using process.cwd() resolution,
+  // so we make both locations work.
+  const mastraPublicSkill = path.join(cwd, "mastra", "public", "skills", safePlatform, "Skill.md");
+  const legacySkill = path.join(cwd, "skills", safePlatform, "Skill.md");
 
-  // 2) Back-compat: existing repo-root skills folder (useful in dev / local runs)
-  const legacySkillPath = path.join(repoRoot, "skills", safePlatform, "Skill.md");
-
-  // 3) Fallback to make
-  const publicFallback = path.join(
-    repoRoot,
-    "src",
-    "mastra",
-    "public",
-    "skills",
-    "make",
-    "Skill.md",
-  );
-  const legacyFallback = path.join(repoRoot, "skills", "make", "Skill.md");
+  const mastraPublicFallback = path.join(cwd, "mastra", "public", "skills", "make", "Skill.md");
+  const legacyFallback = path.join(cwd, "skills", "make", "Skill.md");
 
   return readFirstExisting([
-    publicSkillPath,
-    legacySkillPath,
-    publicFallback,
+    mastraPublicSkill,
+    legacySkill,
+    mastraPublicFallback,
     legacyFallback,
   ]);
 }
@@ -74,36 +50,18 @@ export async function loadNamedSkillMarkdown(skillKey: string): Promise<string> 
   const safeKey = String(skillKey || "").trim();
   if (!safeKey) return "";
 
-  const repoRoot = getRepoRootFromThisFile();
+  const cwd = process.cwd();
 
-  // Prefer Mastra-public folder first
-  const publicPrimary = path.join(
-    repoRoot,
-    "src",
-    "mastra",
-    "public",
-    "skills",
-    safeKey,
-    "SKILL.md",
-  );
-  const publicSecondary = path.join(
-    repoRoot,
-    "src",
-    "mastra",
-    "public",
-    "skills",
-    safeKey,
-    "Skill.md",
-  );
+  const mastraPublicPrimary = path.join(cwd, "mastra", "public", "skills", safeKey, "SKILL.md");
+  const mastraPublicSecondary = path.join(cwd, "mastra", "public", "skills", safeKey, "Skill.md");
 
-  // Back-compat
-  const legacyPrimary = path.join(repoRoot, "skills", safeKey, "SKILL.md");
-  const legacySecondary = path.join(repoRoot, "skills", safeKey, "Skill.md");
+  const legacyPrimary = path.join(cwd, "skills", safeKey, "SKILL.md");
+  const legacySecondary = path.join(cwd, "skills", safeKey, "Skill.md");
 
   try {
     return await readFirstExisting([
-      publicPrimary,
-      publicSecondary,
+      mastraPublicPrimary,
+      mastraPublicSecondary,
       legacyPrimary,
       legacySecondary,
     ]);
@@ -112,6 +70,5 @@ export async function loadNamedSkillMarkdown(skillKey: string): Promise<string> 
   }
 }
 
-// Backwards-compatible alias (older agents/tools may still import this name)
 export const loadSkillMarkdown = loadSkill;
 
