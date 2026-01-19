@@ -1,8 +1,6 @@
-
-
-
 import fs from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 export type PlatformType =
   | "vapi"
@@ -13,60 +11,104 @@ export type PlatformType =
   | "activepieces"
   | "make";
 
-export async function loadSkill(platformType: PlatformType): Promise<string> {
-  const safePlatform: PlatformType = platformType || "make";
-  
-  // Try bundled path first (when running in Mastra Studio)
-  const bundledPath = path.join(process.cwd(), ".mastra", "output", "skills", safePlatform, "Skill.md");
-  // Fallback to source path (when running in Next.js)
-  const sourcePath = path.join(process.cwd(), "mastra", "skills", safePlatform, "Skill.md");
+function getRepoRootFromThisFile(): string {
+  // mastra/skills/loadSkill.ts  -> repo root is ../../
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
+  return path.resolve(__dirname, "..", "..");
+}
 
-  try {
-    return await fs.readFile(bundledPath, "utf8");
-  } catch {
+async function readFirstExisting(pathsToTry: string[]): Promise<string> {
+  for (const p of pathsToTry) {
     try {
-      return await fs.readFile(sourcePath, "utf8");
+      return await fs.readFile(p, "utf8");
     } catch {
-      // Final fallback to "make" platform
-      const fallbackBundled = path.join(process.cwd(), ".mastra", "output", "skills", "make", "Skill.md");
-      const fallbackSource = path.join(process.cwd(), "mastra", "skills", "make", "Skill.md");
-      try {
-        return await fs.readFile(fallbackBundled, "utf8");
-      } catch {
-        return await fs.readFile(fallbackSource, "utf8");
-      }
+      // continue
     }
   }
+  throw new Error(
+    `Skill markdown not found. Tried:\n${pathsToTry.map((p) => `- ${p}`).join("\n")}`,
+  );
+}
+
+export async function loadSkill(platformType: PlatformType): Promise<string> {
+  const safePlatform: PlatformType = (platformType || "make") as PlatformType;
+
+  const repoRoot = getRepoRootFromThisFile();
+
+  // 1) Preferred, build-compatible location (Mastra build copies src/mastra/public -> .mastra/output)
+  const publicSkillPath = path.join(
+    repoRoot,
+    "src",
+    "mastra",
+    "public",
+    "skills",
+    safePlatform,
+    "Skill.md",
+  );
+
+  // 2) Back-compat: existing repo-root skills folder (useful in dev / local runs)
+  const legacySkillPath = path.join(repoRoot, "skills", safePlatform, "Skill.md");
+
+  // 3) Fallback to make
+  const publicFallback = path.join(
+    repoRoot,
+    "src",
+    "mastra",
+    "public",
+    "skills",
+    "make",
+    "Skill.md",
+  );
+  const legacyFallback = path.join(repoRoot, "skills", "make", "Skill.md");
+
+  return readFirstExisting([
+    publicSkillPath,
+    legacySkillPath,
+    publicFallback,
+    legacyFallback,
+  ]);
 }
 
 export async function loadNamedSkillMarkdown(skillKey: string): Promise<string> {
   const safeKey = String(skillKey || "").trim();
   if (!safeKey) return "";
 
-  // Try bundled paths first (when running in Mastra Studio)
-  const bundledPrimary = path.join(process.cwd(), ".mastra", "output", "skills", safeKey, "SKILL.md");
-  const bundledSecondary = path.join(process.cwd(), ".mastra", "output", "skills", safeKey, "Skill.md");
-  
-  // Fallback to source paths (when running in Next.js)
-  const sourcePrimary = path.join(process.cwd(), "mastra", "skills", safeKey, "SKILL.md");
-  const sourceSecondary = path.join(process.cwd(), "mastra", "skills", safeKey, "Skill.md");
+  const repoRoot = getRepoRootFromThisFile();
+
+  // Prefer Mastra-public folder first
+  const publicPrimary = path.join(
+    repoRoot,
+    "src",
+    "mastra",
+    "public",
+    "skills",
+    safeKey,
+    "SKILL.md",
+  );
+  const publicSecondary = path.join(
+    repoRoot,
+    "src",
+    "mastra",
+    "public",
+    "skills",
+    safeKey,
+    "Skill.md",
+  );
+
+  // Back-compat
+  const legacyPrimary = path.join(repoRoot, "skills", safeKey, "SKILL.md");
+  const legacySecondary = path.join(repoRoot, "skills", safeKey, "Skill.md");
 
   try {
-    return await fs.readFile(bundledPrimary, "utf8");
+    return await readFirstExisting([
+      publicPrimary,
+      publicSecondary,
+      legacyPrimary,
+      legacySecondary,
+    ]);
   } catch {
-    try {
-      return await fs.readFile(bundledSecondary, "utf8");
-    } catch {
-      try {
-        return await fs.readFile(sourcePrimary, "utf8");
-      } catch {
-        try {
-          return await fs.readFile(sourceSecondary, "utf8");
-        } catch {
-          return "";
-        }
-      }
-    }
+    return "";
   }
 }
 
