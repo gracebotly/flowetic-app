@@ -1,7 +1,6 @@
 import { createTool } from "@mastra/core/tools";
 import { RuntimeContext } from "@mastra/core/runtime-context";
 import { z } from "zod";
-import { mastra } from "../../index";
 
 export const runGeneratePreviewWorkflow = createTool({
   id: "runGeneratePreviewWorkflow",
@@ -24,7 +23,14 @@ export const runGeneratePreviewWorkflow = createTool({
       throw new Error("RUNTIME_CONTEXT_REQUIRED");
     }
 
-    const workflow = mastra.getWorkflow("generatePreview");
+    // Get mastra instance from runtimeContext instead of importing it
+    const mastraInstance = runtimeContext.get("mastra");
+    
+    if (!mastraInstance) {
+      throw new Error("MASTRA_INSTANCE_NOT_FOUND_IN_CONTEXT");
+    }
+
+    const workflow = mastraInstance.getWorkflow("generatePreview");
     if (!workflow) {
       throw new Error("WORKFLOW_NOT_FOUND");
     }
@@ -42,13 +48,9 @@ export const runGeneratePreviewWorkflow = createTool({
       runtimeContext: runtimeContext as RuntimeContext,
     });
 
-
-    // In Mastra, run.start returns a result envelope; your workflow's output schema
-    // is the final output, available on result.result when status === 'success'.
     if (result.status !== "success") {
       throw new Error("WORKFLOW_FAILED");
     }
-
 
     return {
       runId: result.result.runId,
