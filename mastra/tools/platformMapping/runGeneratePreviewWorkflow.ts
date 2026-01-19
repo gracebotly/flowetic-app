@@ -1,7 +1,6 @@
 import { createTool } from "@mastra/core/tools";
 import { RuntimeContext } from "@mastra/core/runtime-context";
 import { z } from "zod";
-import { mastra } from "../../index";
 
 export const runGeneratePreviewWorkflow = createTool({
   id: "runGeneratePreviewWorkflow",
@@ -19,7 +18,7 @@ export const runGeneratePreviewWorkflow = createTool({
     previewVersionId: z.string().uuid(),
     previewUrl: z.string(),
   }),
-  execute: async ({ context, runtimeContext }) => {
+  execute: async ({ context, runtimeContext, mastra }) => {
     if (!runtimeContext) {
       throw new Error("RUNTIME_CONTEXT_REQUIRED");
     }
