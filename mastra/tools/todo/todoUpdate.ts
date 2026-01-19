@@ -3,7 +3,7 @@
 
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "../../lib/supabase";
 import { TodoItem, TodoPriority, TodoStatus } from "./types";
 
 export const todoUpdate = createTool({
@@ -23,7 +23,7 @@ export const todoUpdate = createTool({
     todo: TodoItem,
   }),
   execute: async ({ context }) => {
-    const supabase = await createClient();
+    const supabase = createClient();
     const { tenantId, threadId, todoId, ...patch } = context;
 
     const { data, error } = await supabase

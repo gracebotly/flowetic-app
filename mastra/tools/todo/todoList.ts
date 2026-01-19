@@ -2,7 +2,7 @@
 
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "../../lib/supabase";
 import { TodoItem, TodoStatus } from "./types";
 
 export const todoList = createTool({
@@ -17,7 +17,7 @@ export const todoList = createTool({
     todos: z.array(TodoItem),
   }),
   execute: async ({ context }) => {
-    const supabase = await createClient();
+    const supabase = createClient();
     const { tenantId, threadId, status } = context;
 
     let q = supabase
