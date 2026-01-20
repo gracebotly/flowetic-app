@@ -23,6 +23,8 @@ export const analyzeSchema = createTool({
   execute: async (inputData, context) => {
     const { tenantId, sourceId, sampleSize } = inputData;
     
+    const limit = typeof sampleSize === "number" ? sampleSize : 100;
+    
     const supabase = await createClient();
     
     // Fetch sample events
@@ -32,7 +34,7 @@ export const analyzeSchema = createTool({
       .eq('tenant_id', tenantId)
       .eq('source_id', sourceId)
       .order('created_at', { ascending: false })
-      .limit(sampleSize);
+      .limit(limit);
     
     if (error || !events || events.length === 0) {
       throw new Error('NO_EVENTS_AVAILABLE');
