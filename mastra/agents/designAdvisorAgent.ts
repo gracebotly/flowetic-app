@@ -3,7 +3,6 @@
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 import { RequestContext } from "@mastra/core/request-context";
-import { ToolAction } from "@mastra/core/tools";
 import { searchDesignKB, searchDesignKBLocal } from "../tools/designAdvisor";
 import {
   getCurrentSpec,
@@ -61,7 +60,7 @@ export const designAdvisorAgent: Agent = new Agent({
   },
   model: openai("gpt-4o"),
   tools: {
-    searchDesignKB: searchDesignKB as unknown as ToolAction,
+    searchDesignKB,
     searchDesignKBLocal,
     getStyleBundles,
     getCurrentSpec,
