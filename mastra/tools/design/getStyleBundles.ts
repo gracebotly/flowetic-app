@@ -252,13 +252,21 @@ export const getStyleBundles = createTool({
       // ignore and fallback
     }
 
-    if (!relevantText) {
-      const local = await searchDesignKBLocal.execute(
-        { queryText, maxChars: 8000 },
-        { requestContext: context?.requestContext }
-      );
-      relevantText = local.relevantText || "";
-      sources.push({ kind: "local", note: "searchDesignKBLocal" });
+    if (!relevantText && searchDesignKBLocal && searchDesignKBLocal.execute) {
+      try {
+        const local = await searchDesignKBLocal.execute(
+          { queryText, maxChars: 8000 },
+          { requestContext: context?.requestContext }
+        );
+
+        // Type-narrow: ensure local has the expected structure
+        if (local && typeof local === 'object' && 'relevantText' in local) {
+          relevantText = local.relevantText || "";
+          sources.push({ kind: "local", note: "searchDesignKBLocal" });
+        }
+      } catch {
+        // ignore and fallback
+      }
     }
 
     const parsed = parseBundlesFromText(relevantText);
