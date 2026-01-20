@@ -1,10 +1,6 @@
 
 import type { ToolExecutionContext } from "@mastra/core/tools";
 
-export type ToolLike<TInput, TResult> = {
-  execute: (inputData: TInput, context?: ToolExecutionContext<any, any>) => Promise<TResult>;
-};
-
 export type ValidationErrorLike = {
   error: boolean;
   message: string;
@@ -23,14 +19,29 @@ function isValidationErrorLike(value: unknown): value is ValidationErrorLike {
 }
 
 /**
- * Executes a Mastra tool and throws if the result is a ValidationError-like object.
- * This makes downstream property access type-safe and prevents TS union errors.
+ * Minimal structural type for Mastra tools.
+ * In Mastra v1, Tool.execute can be optional at the type level, so we accept that and throw if missing.
  */
-export async function executeToolOrThrow<TInput, TResult>(
-  tool: ToolLike<TInput, TResult>,
-  inputData: TInput,
+export type ToolLike = {
+  execute?: (inputData: any, context?: ToolExecutionContext<any, any>) => Promise<any>;
+};
+
+/**
+ * Executes a Mastra tool and throws if:
+ * - tool.execute is missing
+ * - tool returns a ValidationError-like object
+ *
+ * Returns the successful result with ValidationError stripped out for downstream TS safety.
+ */
+export async function executeToolOrThrow<TResult>(
+  tool: ToolLike,
+  inputData: any,
   context?: ToolExecutionContext<any, any>,
 ): Promise<Exclude<TResult, ValidationErrorLike>> {
+  if (typeof tool.execute !== "function") {
+    throw new Error("TOOL_EXECUTE_MISSING");
+  }
+
   const result = await tool.execute(inputData, context);
 
   if (isValidationErrorLike(result)) {
