@@ -49,8 +49,9 @@ export const searchDesignKBLocal = createTool({
       }
     }
 
-    if (relevantText.length > maxChars) {
-      relevantText = relevantText.slice(0, maxChars) + "...";
+    const limit = maxChars ?? 2000;
+    if (relevantText.length > limit) {
+      relevantText = relevantText.slice(0, limit) + "...";
     }
 
     return {
