@@ -31,7 +31,7 @@ export const applyInteractiveEdits = createTool({
   execute: async (inputData, context) => {
     if (!getCurrentSpec?.execute) throw new Error("TOOL_NOT_AVAILABLE");
     const current = await getCurrentSpec.execute(
-      { tenantId: inputData.tenantId, interfaceId: inputData.interfaceId },
+      { interfaceId: inputData.interfaceId },
       { requestContext: context?.requestContext }
     );
 
