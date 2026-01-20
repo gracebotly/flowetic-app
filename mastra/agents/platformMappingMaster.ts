@@ -15,7 +15,7 @@ import {
 import { todoAdd, todoList, todoUpdate, todoComplete } from "../tools/todo";
 import { getStyleBundles } from "../tools/design";
 
-export const platformMappingMaster: Agent = new Agent({
+export const platformMappingMaster = new Agent({
   id: "platform-mapping-master",
   name: "platformMappingMaster",
   description:

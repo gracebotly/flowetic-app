@@ -21,7 +21,7 @@ type JourneyMode =
   | "interactive_edit"
   | "deploy";
 
-export const masterRouterAgent: Agent = new Agent({
+export const masterRouterAgent = new Agent({
   id: "master-router-agent",
   name: "masterRouterAgent",
   description:

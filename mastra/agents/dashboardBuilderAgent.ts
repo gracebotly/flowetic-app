@@ -10,7 +10,7 @@ import { validateSpec } from "../tools/validateSpec";
 import { todoAdd, todoList, todoUpdate, todoComplete } from "../tools/todo";
 import { getStyleBundles } from "../tools/design";
 
-export const dashboardBuilderAgent: Agent = new Agent({
+export const dashboardBuilderAgent = new Agent({
   id: "dashboard-builder-agent",
   name: "dashboardBuilderAgent",
   description:
