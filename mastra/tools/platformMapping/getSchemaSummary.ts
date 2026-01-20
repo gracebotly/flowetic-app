@@ -24,7 +24,7 @@ export const getSchemaSummary = createTool({
     confidence: z.number(),
   }),
   execute: async (inputData, context) => {
-    const { samples, includeStatistics } = context;
+    const { samples, includeStatistics } = inputData;
 
     try {
       if (!samples || samples.length === 0) {

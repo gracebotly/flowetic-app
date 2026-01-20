@@ -18,7 +18,7 @@ export const deleteSource = createTool({
   }),
   execute: async (inputData, context) => {
     const supabase = await createClient();
-    const { tenantId, sourceId } = context;
+    const { tenantId, sourceId } = inputData;
 
     // Pre-check so we can return SOURCE_NOT_FOUND deterministically.
     const { data: existing, error: exErr } = await supabase

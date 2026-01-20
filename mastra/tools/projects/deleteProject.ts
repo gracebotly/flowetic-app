@@ -24,7 +24,7 @@ export const deleteProject = createTool({
   }),
   execute: async (inputData, context) => {
     const supabase = await createClient();
-    const { tenantId, projectId } = context;
+    const { tenantId, projectId } = inputData;
 
     // Pre-check so we can return PROJECT_NOT_FOUND deterministically.
     const { data: existing, error: exErr } = await supabase

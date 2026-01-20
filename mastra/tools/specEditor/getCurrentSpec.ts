@@ -18,12 +18,14 @@ export const getCurrentSpec = createTool({
   }),
   execute: async (inputData, context) => {
     const supabase = await createClient();
+    const requestContext = context?.requestContext;
 
-    const tenantId = runtimeContext?.get("tenantId") as string | undefined;
+    const tenantId = requestContext?.get("tenantId") as string | undefined;
     if (!tenantId) throw new Error("AUTH_REQUIRED");
 
     const explicitInterfaceId =
-      inputData.interfaceId ?? (runtimeContext?.get("interfaceId") as string | undefined);
+      inputData.interfaceId ??
+      (requestContext?.get("interfaceId") as string | undefined);
 
     let interfaceId: string | undefined = explicitInterfaceId;
 
@@ -44,12 +46,12 @@ export const getCurrentSpec = createTool({
       // No dashboard exists yet — return a safe empty spec skeleton so the agent can proceed.
       // The savePreviewVersion tool will create the interface if needed.
       return {
-        interfaceId: (runtimeContext?.get("interfaceId") as string) || "00000000-0000-0000-0000-000000000000",
+        interfaceId: (requestContext?.get("interfaceId") as string) || "00000000-0000-0000-0000-000000000000",
         versionId: null,
         spec_json: {
           version: "1.0",
           templateId: "general-analytics",
-          platformType: (runtimeContext?.get("platformType") as string | undefined) ?? "make",
+          platformType: (requestContext?.get("platformType") as string | undefined) ?? "make",
           layout: { type: "grid", columns: 12, gap: 4 },
           components: [],
         },
@@ -73,7 +75,7 @@ export const getCurrentSpec = createTool({
       spec_json: (version?.spec_json as Record<string, any>) ?? {
         version: "1.0",
         templateId: "general-analytics",
-        platformType: (runtimeContext?.get("platformType") as string | undefined) ?? "make",
+        platformType: (requestContext?.get("platformType") as string | undefined) ?? "make",
         layout: { type: "grid", columns: 12, gap: 4 },
         components: [],
       },

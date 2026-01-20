@@ -21,7 +21,7 @@ export const proposeMapping = createTool({
     confidence: z.number(),
   }),
   execute: async (inputData, context) => {
-    const { templateId, schemaFields } = context;
+    const { templateId, schemaFields } = inputData;
 
     const available = schemaFields.map((f) => f.name);
     const lower = schemaFields.map((f) => f.name.toLowerCase());

@@ -30,7 +30,8 @@ export const applyInteractiveEdits = createTool({
   }),
   execute: async (inputData, context) => {
     const current = await getCurrentSpec.execute(
-      { context: { tenantId: inputData.tenantId, interfaceId: inputData.interfaceId }, runtimeContext } as any
+      { tenantId: inputData.tenantId, interfaceId: inputData.interfaceId },
+      { requestContext: context?.requestContext }
     );
 
     let nextSpec = current.spec_json ?? {};
@@ -39,7 +40,8 @@ export const applyInteractiveEdits = createTool({
     const reorderAction = inputData.actions.find((a) => a.type === "reorder_widgets") as any;
     if (reorderAction?.orderedIds?.length) {
       const reordered = await reorderComponents.execute(
-        { context: { spec_json: nextSpec, orderedIds: reorderAction.orderedIds }, runtimeContext } as any
+        { spec_json: nextSpec, orderedIds: reorderAction.orderedIds },
+        { requestContext: context?.requestContext }
       );
       nextSpec = reordered.spec_json;
     }
@@ -76,29 +78,29 @@ export const applyInteractiveEdits = createTool({
 
     if (ops.length) {
       const patched = await applySpecPatch.execute(
-        { context: { spec_json: nextSpec, design_tokens: nextTokens, operations: ops }, runtimeContext } as any
+        { spec_json: nextSpec, design_tokens: nextTokens, operations: ops },
+        { requestContext: context?.requestContext }
       );
       nextSpec = patched.spec_json;
       nextTokens = patched.design_tokens;
     }
 
     const validation = await validateSpec.execute(
-      { context: { spec_json: nextSpec }, runtimeContext } as any
+      { spec_json: nextSpec },
+      { requestContext: context?.requestContext }
     );
     if (!validation.valid || validation.score < 0.8) throw new Error("INTERACTIVE_EDIT_VALIDATION_FAILED");
 
     const saved = await savePreviewVersion.execute(
       {
-        context: {
-          tenantId: inputData.tenantId,
-          userId: inputData.userId,
-          interfaceId: inputData.interfaceId,
-          spec_json: nextSpec,
-          design_tokens: nextTokens,
-          platformType: inputData.platformType,
-        },
-        runtimeContext,
-      } as any
+        tenantId: inputData.tenantId,
+        userId: inputData.userId,
+        interfaceId: inputData.interfaceId,
+        spec_json: nextSpec,
+        design_tokens: nextTokens,
+        platformType: inputData.platformType,
+      },
+      { requestContext: context?.requestContext }
     );
 
     return { previewUrl: saved.previewUrl, previewVersionId: saved.versionId };

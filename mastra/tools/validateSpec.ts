@@ -35,7 +35,7 @@ export const validateSpec = createTool({
     score: z.number().min(0).max(1),
   }),
   execute: async (inputData, context) => {
-    const { spec_json } = context;
+    const { spec_json } = inputData;
     
     try {
       // Validate against schema

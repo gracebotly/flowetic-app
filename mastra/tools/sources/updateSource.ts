@@ -25,7 +25,7 @@ export const updateSource = createTool({
   }),
   execute: async (inputData, context) => {
     const supabase = await createClient();
-    const { tenantId, sourceId } = context;
+    const { tenantId, sourceId } = inputData;
 
     const { data: existing, error: exErr } = await supabase
       .from("sources")

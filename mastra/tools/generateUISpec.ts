@@ -14,7 +14,7 @@ export const generateUISpec = createTool({
     design_tokens: z.record(z.any()),
   }),
   execute: async (inputData, context) => {
-    const { templateId, mappings, platformType } = context;
+    const { templateId, mappings, platformType } = inputData;
     
     // Generate spec based on template (simplified for MVP)
     const spec_json = {

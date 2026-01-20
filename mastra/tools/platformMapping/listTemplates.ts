@@ -27,7 +27,7 @@ export const listTemplates = createTool({
     })),
   }),
   execute: async (inputData, context) => {
-    const { platformType, category } = context;
+    const { platformType, category } = inputData;
 
     try {
       // Mock templates data

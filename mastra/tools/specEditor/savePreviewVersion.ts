@@ -7,7 +7,7 @@ import { persistPreviewVersion } from "../persistPreviewVersion";
 export const savePreviewVersion = createTool({
   id: "savePreviewVersion",
   description:
-    "Persist a validated spec_json + design_tokens as a new preview interface version. Reads tenantId/userId/interfaceId/platformType from runtimeContext when available.",
+    "Persist a validated spec_json + design_tokens as a new preview interface version. Reads tenantId/userId/interfaceId/platformType from requestContext when available.",
   inputSchema: z.object({
     spec_json: z.record(z.any()),
     design_tokens: z.record(z.any()).default({}),
@@ -19,19 +19,20 @@ export const savePreviewVersion = createTool({
     previewUrl: z.string(),
   }),
   execute: async (inputData, context) => {
-    const tenantId = runtimeContext?.get("tenantId") as string | undefined;
-    const userId = runtimeContext?.get("userId") as string | undefined;
-    const platformType = (runtimeContext?.get("platformType") as string | undefined) ?? "make";
+    const requestContext = context?.requestContext;
+    const tenantId = requestContext?.get("tenantId") as string | undefined;
+    const userId = requestContext?.get("userId") as string | undefined;
+    const platformType = (requestContext?.get("platformType") as string | undefined) ?? "make";
 
     if (!tenantId || !userId) throw new Error("AUTH_REQUIRED");
 
     const interfaceId =
       inputData.interfaceId ??
-      (runtimeContext?.get("interfaceId") as string | undefined) ??
+      (requestContext?.get("interfaceId") as string | undefined) ??
       undefined;
 
-    const result = await persistPreviewVersion.execute({
-      context: {
+    const result = await persistPreviewVersion.execute(
+      {
         tenantId,
         userId,
         interfaceId,
@@ -39,8 +40,8 @@ export const savePreviewVersion = createTool({
         design_tokens: inputData.design_tokens ?? {},
         platformType,
       },
-      runtimeContext,
-    });
+      { requestContext: context?.requestContext }
+    );
 
     return {
       interfaceId: result.interfaceId,

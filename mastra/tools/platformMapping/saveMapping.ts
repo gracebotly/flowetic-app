@@ -33,7 +33,7 @@ export const saveMapping = createTool({
     requiresReview: z.boolean(),
   }),
   execute: async (inputData, context) => {
-    const { tenantId, userId, interfaceId, templateId, mappings, confidence, metadata } = context;
+    const { tenantId, userId, interfaceId, templateId, mappings, confidence, metadata } = inputData;
 
     try {
       // Validate inputs

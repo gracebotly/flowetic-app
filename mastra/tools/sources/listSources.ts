@@ -15,7 +15,7 @@ export const listSources = createTool({
   }),
   execute: async (inputData, context) => {
     const supabase = await createClient();
-    const { tenantId } = context;
+    const { tenantId } = inputData;
 
     const { data, error } = await supabase
       .from("sources")

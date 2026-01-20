@@ -32,12 +32,12 @@ export const getRecentEventSamples = createTool({
 
     const tenantId =
       inputData.tenantId ??
-      (runtimeContext?.get("tenantId") as string | undefined) ??
+      (context?.requestContext?.get("tenantId") as string | undefined) ??
       undefined;
 
     const sourceId =
       inputData.sourceId ??
-      (runtimeContext?.get("sourceId") as string | undefined) ??
+      (context?.requestContext?.get("sourceId") as string | undefined) ??
       undefined;
 
     if (!tenantId) throw new Error("AUTH_REQUIRED");

@@ -21,7 +21,7 @@ export const todoAdd = createTool({
   }),
   execute: async (inputData, context) => {
     const supabase = await createClient();
-    const { tenantId, threadId, title, description, priority, tags, parentId } = context;
+    const { tenantId, threadId, title, description, priority, tags, parentId } = inputData;
 
     const { data, error } = await supabase
       .from("todos")

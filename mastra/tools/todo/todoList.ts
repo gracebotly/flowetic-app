@@ -18,7 +18,7 @@ export const todoList = createTool({
   }),
   execute: async (inputData, context) => {
     const supabase = await createClient();
-    const { tenantId, threadId, status } = context;
+    const { tenantId, threadId, status } = inputData;
 
     let q = supabase
       .from("todos")

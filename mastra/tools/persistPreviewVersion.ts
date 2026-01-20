@@ -19,7 +19,7 @@ export const persistPreviewVersion = createTool({
     previewUrl: z.string(),
   }),
   execute: async (inputData, context) => {
-    const { tenantId, userId, interfaceId, spec_json, design_tokens, platformType } = context;
+    const { tenantId, userId, interfaceId, spec_json, design_tokens, platformType } = inputData;
     
     const supabase = await createClient();
     

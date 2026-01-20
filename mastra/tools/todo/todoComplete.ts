@@ -20,7 +20,7 @@ export const todoComplete = createTool({
   }),
   execute: async (inputData, context) => {
     const supabase = await createClient();
-    const { tenantId, threadId, todoId } = context;
+    const { tenantId, threadId, todoId } = inputData;
 
     const { data, error } = await supabase
       .from("todos")
