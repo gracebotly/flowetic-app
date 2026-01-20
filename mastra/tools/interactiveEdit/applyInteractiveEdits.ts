@@ -29,6 +29,7 @@ export const applyInteractiveEdits = createTool({
     previewVersionId: z.string().uuid(),
   }),
   execute: async (inputData, context) => {
+    if (!getCurrentSpec?.execute) throw new Error("TOOL_NOT_AVAILABLE");
     const current = await getCurrentSpec.execute(
       { requestContext: context?.requestContext },
       { tenantId: inputData.tenantId, interfaceId: inputData.interfaceId }
@@ -39,6 +40,7 @@ export const applyInteractiveEdits = createTool({
 
     const reorderAction = inputData.actions.find((a) => a.type === "reorder_widgets") as any;
     if (reorderAction?.orderedIds?.length) {
+      if (!reorderComponents?.execute) throw new Error("TOOL_NOT_AVAILABLE");
       const reordered = await reorderComponents.execute(
         { requestContext: context?.requestContext },
         { spec_json: nextSpec, orderedIds: reorderAction.orderedIds }
@@ -77,6 +79,7 @@ export const applyInteractiveEdits = createTool({
     }
 
     if (ops.length) {
+      if (!applySpecPatch?.execute) throw new Error("TOOL_NOT_AVAILABLE");
       const patched = await applySpecPatch.execute(
         { requestContext: context?.requestContext },
         { spec_json: nextSpec, design_tokens: nextTokens, operations: ops }
@@ -85,12 +88,14 @@ export const applyInteractiveEdits = createTool({
       nextTokens = patched.design_tokens;
     }
 
+    if (!validateSpec?.execute) throw new Error("TOOL_NOT_AVAILABLE");
     const validation = await validateSpec.execute(
       { requestContext: context?.requestContext },
       { spec_json: nextSpec }
     );
     if (!validation.valid || validation.score < 0.8) throw new Error("INTERACTIVE_EDIT_VALIDATION_FAILED");
 
+    if (!savePreviewVersion?.execute) throw new Error("TOOL_NOT_AVAILABLE");
     const saved = await savePreviewVersion.execute(
       { requestContext: context?.requestContext },
       {
