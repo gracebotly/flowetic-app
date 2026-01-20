@@ -230,24 +230,24 @@ export const getStyleBundles = createTool({
 
     try {
       if (searchDesignKB) {
-        const rag = await executeToolOrThrow(
-          searchDesignKB,
+        const rag = await searchDesignKB.execute(
           { query: queryText, maxResults: 8 },
-          { requestContext: context?.requestContext }
+          { requestContext: context?.requestContext },
         );
 
-        // Type-narrow: ensure rag has the expected structure before accessing properties
-        if (
-          rag &&
-          typeof rag === 'object' &&
-          'retrieved' in rag &&
-          'results' in rag &&
-          rag.retrieved === true &&
-          Array.isArray(rag.results) &&
-          rag.results.length > 0
-        ) {
-          relevantText = rag.results.map((r: any) => r.content).join("\n\n").slice(0, 12000);
-          sources.push({ kind: "vector", note: "searchDesignKB" });
+        if (typeof rag === "object" && rag !== null && "error" in rag && (rag as any).error) {
+          // Treat tool output validation failure like "no retrieval"
+          relevantText = "";
+        } else {
+          // Your tool returns { results: [...], retrieved: boolean }
+          // Convert to a text blob for prompt grounding (keep existing behavior)
+          const results = (rag as any)?.results ?? [];
+          relevantText = Array.isArray(results)
+            ? results.map((r: any) => String(r?.content ?? "")).filter(Boolean).join("\n\n")
+            : "";
+          if (results.length > 0) {
+            sources.push({ kind: "vector", note: "searchDesignKB" });
+          }
         }
       }
     } catch {
