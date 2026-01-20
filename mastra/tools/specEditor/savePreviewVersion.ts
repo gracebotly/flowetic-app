@@ -32,6 +32,7 @@ export const savePreviewVersion = createTool({
       undefined;
 
     const result = await persistPreviewVersion.execute(
+      { requestContext: context?.requestContext },
       {
         tenantId,
         userId,
@@ -39,8 +40,7 @@ export const savePreviewVersion = createTool({
         spec_json: inputData.spec_json,
         design_tokens: inputData.design_tokens ?? {},
         platformType,
-      },
-      { requestContext: context?.requestContext }
+      }
     );
 
     return {
