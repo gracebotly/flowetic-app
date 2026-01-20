@@ -1,5 +1,6 @@
 
 import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
 import { openai } from "@ai-sdk/openai";
 import { RuntimeContext } from "@mastra/core/runtime-context";
 import { loadSkillMarkdown, loadNamedSkillMarkdown, PlatformType } from "../skills/loadSkill";
@@ -111,6 +112,11 @@ export const masterRouterAgent: Agent = new Agent({
     ];
   },
   model: openai("gpt-4o"),
+  memory: new Memory({
+    options: {
+      lastMessages: 20,
+    },
+  }),
   tools: {
     todoAdd,
     todoList,
