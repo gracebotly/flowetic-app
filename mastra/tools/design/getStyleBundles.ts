@@ -228,15 +228,17 @@ export const getStyleBundles = createTool({
     const sources: Array<{ kind: string; note: string }> = [];
 
     try {
-      const rag = await searchDesignKB.execute(
-        { query: queryText, maxResults: 8 },
-        { requestContext: context?.requestContext }
-      );
+      if (searchDesignKB) {
+        const rag = await searchDesignKB.execute(
+          { query: queryText, maxResults: 8 },
+          { requestContext: context?.requestContext }
+        );
 
-      // Use the results from searchDesignKB
-      if (rag.retrieved && rag.results.length > 0) {
-        relevantText = rag.results.map(r => r.content).join("\n\n").slice(0, 12000);
-        sources.push({ kind: "vector", note: "searchDesignKB" });
+        // Use the results from searchDesignKB
+        if (rag.retrieved && rag.results.length > 0) {
+          relevantText = rag.results.map(r => r.content).join("\n\n").slice(0, 12000);
+          sources.push({ kind: "vector", note: "searchDesignKB" });
+        }
       }
     } catch {
       // ignore and fallback
