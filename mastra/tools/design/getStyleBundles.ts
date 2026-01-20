@@ -229,26 +229,28 @@ export const getStyleBundles = createTool({
     const sources: Array<{ kind: string; note: string }> = [];
 
     try {
-      if (searchDesignKB) {
+      if (searchDesignKB?.execute) {
         const rag = await searchDesignKB.execute(
           { query: queryText, maxResults: 8 },
           { requestContext: context?.requestContext },
         );
 
         if (typeof rag === "object" && rag !== null && "error" in rag && (rag as any).error) {
-          // Treat tool output validation failure like "no retrieval"
           relevantText = "";
         } else {
-          // Your tool returns { results: [...], retrieved: boolean }
-          // Convert to a text blob for prompt grounding (keep existing behavior)
           const results = (rag as any)?.results ?? [];
           relevantText = Array.isArray(results)
-            ? results.map((r: any) => String(r?.content ?? "")).filter(Boolean).join("\n\n")
+            ? results
+                .map((r: any) => String(r?.content ?? ""))
+                .filter(Boolean)
+                .join("\n\n")
             : "";
           if (results.length > 0) {
             sources.push({ kind: "vector", note: "searchDesignKB" });
           }
         }
+      } else {
+        relevantText = "";
       }
     } catch {
       // ignore and fallback
