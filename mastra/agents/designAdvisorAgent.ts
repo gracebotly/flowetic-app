@@ -13,7 +13,7 @@ import { validateSpec } from "../tools/validateSpec";
 import { todoAdd, todoList, todoUpdate, todoComplete } from "../tools/todo";
 import { getStyleBundles } from "../tools/design";
 
-export const designAdvisorAgent: Agent = new Agent({
+export const designAdvisorAgent = new Agent({
   id: "design-advisor-agent",
   name: "designAdvisorAgent",
   description:
