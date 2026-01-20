@@ -1,7 +1,6 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { searchDesignKB, searchDesignKBLocal } from "@/mastra/tools/designAdvisor";
-import { executeToolOrThrow } from "../../lib/executeToolOrThrow";
 
 const Swatch = z.object({ name: z.string(), hex: z.string() });
 
@@ -256,18 +255,25 @@ export const getStyleBundles = createTool({
       // ignore and fallback
     }
 
-    if (!relevantText && searchDesignKBLocal) {
+    if (!relevantText && searchDesignKBLocal?.execute) {
       try {
-        const local = await executeToolOrThrow(
-          searchDesignKBLocal,
+        const local = await searchDesignKBLocal.execute(
           { queryText, maxChars: 8000 },
-          { requestContext: context?.requestContext }
+          { requestContext: context?.requestContext },
         );
 
-        // Type-narrow: ensure local has the expected structure
-        if (local && typeof local === 'object' && 'relevantText' in local) {
-          relevantText = local.relevantText || "";
-          sources.push({ kind: "local", note: "searchDesignKBLocal" });
+        if (
+          typeof local === "object" &&
+          local !== null &&
+          "error" in local &&
+          (local as any).error
+        ) {
+          relevantText = "";
+        } else {
+          relevantText = String((local as any)?.relevantText ?? "");
+          if ((local as any)?.relevantText) {
+            sources.push({ kind: "local", note: "searchDesignKBLocal" });
+          }
         }
       } catch {
         // ignore and fallback
