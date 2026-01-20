@@ -31,8 +31,8 @@ export const applyInteractiveEdits = createTool({
   execute: async (inputData, context) => {
     if (!getCurrentSpec?.execute) throw new Error("TOOL_NOT_AVAILABLE");
     const current = await getCurrentSpec.execute(
-      { requestContext: context?.requestContext },
-      { tenantId: inputData.tenantId, interfaceId: inputData.interfaceId }
+      { tenantId: inputData.tenantId, interfaceId: inputData.interfaceId },
+      { requestContext: context?.requestContext }
     );
 
     let nextSpec = current.spec_json ?? {};
@@ -42,8 +42,8 @@ export const applyInteractiveEdits = createTool({
     if (reorderAction?.orderedIds?.length) {
       if (!reorderComponents?.execute) throw new Error("TOOL_NOT_AVAILABLE");
       const reordered = await reorderComponents.execute(
-        { requestContext: context?.requestContext },
-        { spec_json: nextSpec, orderedIds: reorderAction.orderedIds }
+        { spec_json: nextSpec, orderedIds: reorderAction.orderedIds },
+        { requestContext: context?.requestContext }
       );
       nextSpec = reordered.spec_json;
     }
@@ -81,8 +81,8 @@ export const applyInteractiveEdits = createTool({
     if (ops.length) {
       if (!applySpecPatch?.execute) throw new Error("TOOL_NOT_AVAILABLE");
       const patched = await applySpecPatch.execute(
-        { requestContext: context?.requestContext },
-        { spec_json: nextSpec, design_tokens: nextTokens, operations: ops }
+        { spec_json: nextSpec, design_tokens: nextTokens, operations: ops },
+        { requestContext: context?.requestContext }
       );
       nextSpec = patched.spec_json;
       nextTokens = patched.design_tokens;
@@ -90,14 +90,13 @@ export const applyInteractiveEdits = createTool({
 
     if (!validateSpec?.execute) throw new Error("TOOL_NOT_AVAILABLE");
     const validation = await validateSpec.execute(
-      { requestContext: context?.requestContext },
-      { spec_json: nextSpec }
+      { spec_json: nextSpec },
+      { requestContext: context?.requestContext }
     );
     if (!validation.valid || validation.score < 0.8) throw new Error("INTERACTIVE_EDIT_VALIDATION_FAILED");
 
     if (!savePreviewVersion?.execute) throw new Error("TOOL_NOT_AVAILABLE");
     const saved = await savePreviewVersion.execute(
-      { requestContext: context?.requestContext },
       {
         tenantId: inputData.tenantId,
         userId: inputData.userId,
@@ -105,7 +104,8 @@ export const applyInteractiveEdits = createTool({
         spec_json: nextSpec,
         design_tokens: nextTokens,
         platformType: inputData.platformType,
-      }
+      },
+      { requestContext: context?.requestContext }
     );
 
     return { previewUrl: saved.previewUrl, previewVersionId: saved.versionId };
