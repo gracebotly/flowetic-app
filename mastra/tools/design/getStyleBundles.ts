@@ -227,34 +227,27 @@ export const getStyleBundles = createTool({
     let relevantText = "";
     const sources: Array<{ kind: string; note: string }> = [];
 
-    const kb = searchDesignKB;
-    const exec = kb?.execute;
+    try {
+      const rag = await searchDesignKB.execute(
+        { query: queryText, maxResults: 8 },
+        { requestContext: context?.requestContext }
+      );
 
-    if (exec) {
-      try {
-        const rag = await exec({
-          context: {
-            query: queryText,
-            topK: 8,
-            filter: {},
-          } as any,
-          runtimeContext,
-        } as any);
-
-        // createVectorQueryTool output shape depends on Mastra version; keep conservative:
-        relevantText = JSON.stringify(rag).slice(0, 12000);
+      // Use the results from searchDesignKB
+      if (rag.retrieved && rag.results.length > 0) {
+        relevantText = rag.results.map(r => r.content).join("\n\n").slice(0, 12000);
         sources.push({ kind: "vector", note: "searchDesignKB" });
-      } catch {
-        // ignore and fallback
       }
+    } catch {
+      // ignore and fallback
     }
 
     if (!relevantText) {
-      const local = await searchDesignKBLocal.execute({
-        context: { queryText, maxChars: 8000 },
-        runtimeContext,
-      } as any);
-      relevantText = local.relevantContext || "";
+      const local = await searchDesignKBLocal.execute(
+        { queryText, maxChars: 8000 },
+        { requestContext: context?.requestContext }
+      );
+      relevantText = local.relevantText || "";
       sources.push({ kind: "local", note: "searchDesignKBLocal" });
     }
 
