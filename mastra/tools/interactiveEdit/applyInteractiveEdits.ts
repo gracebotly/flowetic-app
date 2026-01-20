@@ -35,6 +35,11 @@ export const applyInteractiveEdits = createTool({
       { requestContext: context?.requestContext }
     );
 
+    // Type-narrow before accessing properties
+    if (!current || 'error' in current) {
+      throw new Error("FAILED_TO_GET_CURRENT_SPEC");
+    }
+
     let nextSpec = current.spec_json ?? {};
     let nextTokens = current.design_tokens ?? {};
 
