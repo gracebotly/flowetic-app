@@ -70,7 +70,7 @@ const analyzeSchemaStep = createStep({
         sourceId,
         sampleSize,
       },
-      context?.requestContext,
+      requestContext: context?.requestContext,
     });
     
     return result;
@@ -99,7 +99,7 @@ const selectTemplateStep = createStep({
         eventTypes: analyzeResult.eventTypes,
         fields: analyzeResult.fields,
       },
-      context?.requestContext,
+      requestContext: context?.requestContext,
     });
     return result;
   },
@@ -129,7 +129,7 @@ const generateMappingStep = createStep({
         fields: analyzeResult.fields,
         platformType,
       },
-      context?.requestContext,
+      requestContext: context?.requestContext,
     });
     return result;
   },
@@ -211,7 +211,7 @@ const generateUISpecStep = createStep({
         mappings: mappingResult.mappings,
         platformType,
       },
-      context?.requestContext,
+      requestContext: context?.requestContext,
     });
     
     return result;
@@ -271,7 +271,7 @@ const persistPreviewVersionStep = createStep({
         design_tokens,
         platformType,
       },
-      context?.requestContext,
+      requestContext: context?.requestContext,
     });
     return result;
   },

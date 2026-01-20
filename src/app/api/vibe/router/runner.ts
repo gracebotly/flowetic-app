@@ -1,5 +1,5 @@
 
-import { RequestContext } from "@mastra/core/runtime-context";
+import { RequestContext } from "@mastra/core/request-context";
 import { POST as vibeRouterPOST } from "./route";
 
 // This runner reuses the existing route handler without HTTP.

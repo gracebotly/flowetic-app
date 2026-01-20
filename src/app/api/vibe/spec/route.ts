@@ -1,7 +1,7 @@
 
 
 import { NextRequest, NextResponse } from "next/server";
-import { RequestContext } from "@mastra/core/runtime-context";
+import { RequestContext } from "@mastra/core/request-context";
 import { getCurrentSpec } from "@/mastra/tools/specEditor";
 
 export async function POST(req: NextRequest) {
@@ -22,7 +22,8 @@ export async function POST(req: NextRequest) {
     requestContext.set("tenantId", tenantId);
 
     const current = await getCurrentSpec.execute(
-      { context: { tenantId, interfaceId }, requestContext } as any
+      { tenantId, interfaceId }, // inputData
+      { requestContext } // context
     );
 
     return NextResponse.json({

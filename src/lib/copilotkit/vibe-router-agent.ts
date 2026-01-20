@@ -1,7 +1,7 @@
 
 import { AbstractAgent } from "@ag-ui/client";
 
-import { RequestContext } from "@mastra/core/runtime-context";
+import { RequestContext } from "@mastra/core/request-context";
 import { runVibeRouter } from "@/app/api/vibe/router/runner";
 import { Observable } from "rxjs";
 

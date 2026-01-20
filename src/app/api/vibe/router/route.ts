@@ -1,7 +1,7 @@
 
 
 import { NextRequest, NextResponse } from "next/server";
-import { RequestContext } from "@mastra/core/runtime-context";
+import { RequestContext } from "@mastra/core/request-context";
 import { createClient } from "@/lib/supabase/server";
 import { loadSkill } from "@/mastra/skills/loadSkill";
 import { z } from "zod";
@@ -441,16 +441,16 @@ Journey phases:
       }
 
       // Get bundle list again, pick chosen bundle
-      const bundlesResult = await getStyleBundles.execute({
-        context: {
+      const bundlesResult = await getStyleBundles.execute(
+        {
           platformType,
           outcome: journey?.selectedOutcome ?? "dashboard",
           audience: "client",
           dashboardKind: "workflow-activity",
           notes: "User selected a bundle; return the same set for token extraction.",
-        },
-        requestContext,
-      } as any);
+        }, // inputData
+        { requestContext } // context
+      );
 
       const bundle = bundlesResult.bundles.find((b) => b.id === selectedId);
       if (!bundle) {
@@ -478,16 +478,16 @@ Journey phases:
 
       const nextJourney = { ...journey, selectedStoryboard: storyboardId, mode: "style" };
 
-      const bundlesResult = await getStyleBundles.execute({
-        context: {
+      const bundlesResult = await getStyleBundles.execute(
+        {
           platformType,
           outcome: nextJourney?.selectedOutcome ?? "dashboard",
           audience: "client",
           dashboardKind: "workflow-activity",
           notes: "Return premium style+palette bundles appropriate for agency white-label client delivery.",
-        },
-        requestContext,
-      } as any);
+        }, // inputData
+        { requestContext } // context
+      );
 
       return NextResponse.json({
         text: "Perfect. Now choose a style bundle (required) so your preview looks premium immediately.",
@@ -644,16 +644,16 @@ Journey phases:
     // Phase: style (RAG -> 4 bundles)
     // ------------------------------------------------------------------
     if (effectiveMode === "style") {
-      const bundlesResult = await getStyleBundles.execute({
-        context: {
+      const bundlesResult = await getStyleBundles.execute(
+        {
           platformType,
           outcome: journey?.selectedOutcome ?? "dashboard",
           audience: "client",
           dashboardKind: "workflow-activity",
           notes: "Return premium style+palette bundles appropriate for agency white-label client delivery.",
-        },
-        requestContext,
-      } as any);
+        }, // inputData
+        { requestContext } // context
+      );
 
       return NextResponse.json({
         text: "Choose a style bundle (required). This sets the look + palette so the preview feels sellable immediately.",
@@ -736,7 +736,8 @@ Journey phases:
 
       // Load the actual current spec to extract real component IDs for interactive edit.
       const current = await getCurrentSpec.execute(
-        { context: { tenantId, interfaceId }, requestContext } as any
+        { tenantId, interfaceId }, // inputData
+        { requestContext } // context
       );
 
       const spec = current.spec_json as any;
@@ -868,37 +869,37 @@ Journey phases:
           // Apply palette tokens immediately using applySpecPatch so the interactive edit tool stays simple.
           await applySpecPatch.execute(
             {
-              context: {
-                spec_json: (await getCurrentSpec.execute(
-                  { context: { tenantId, interfaceId: payload.interfaceId }, requestContext } as any
-                )).spec_json,
-                design_tokens: (await getCurrentSpec.execute(
-                  { context: { tenantId, interfaceId: payload.interfaceId }, requestContext } as any
-                )).design_tokens,
-                operations: [
-                  { op: "setDesignToken", tokenPath: "theme.color.primary", tokenValue: p.primary },
-                  { op: "setDesignToken", tokenPath: "theme.color.accent", tokenValue: p.accent },
-                  { op: "setDesignToken", tokenPath: "theme.color.background", tokenValue: p.background },
-                  { op: "setDesignToken", tokenPath: "theme.color.surface", tokenValue: p.surface },
-                  { op: "setDesignToken", tokenPath: "theme.color.text", tokenValue: p.text },
-                ],
-              },
-              requestContext,
-            } as any
+              spec_json: (await getCurrentSpec.execute(
+                { tenantId, interfaceId: payload.interfaceId }, // inputData
+                { requestContext } // context
+              )).spec_json,
+              design_tokens: (await getCurrentSpec.execute(
+                { tenantId, interfaceId: payload.interfaceId }, // inputData
+                { requestContext } // context
+              )).design_tokens,
+              operations: [
+                { op: "setDesignToken", tokenPath: "theme.color.primary", tokenValue: p.primary },
+                { op: "setDesignToken", tokenPath: "theme.color.accent", tokenValue: p.accent },
+                { op: "setDesignToken", tokenPath: "theme.color.background", tokenValue: p.background },
+                { op: "setDesignToken", tokenPath: "theme.color.surface", tokenValue: p.surface },
+                { op: "setDesignToken", tokenPath: "theme.color.text", tokenValue: p.text },
+              ],
+            }, // inputData
+            { requestContext } // context
           );
         }
       }
 
-      const result = await applyInteractiveEdits.execute({
-        context: {
+      const result = await applyInteractiveEdits.execute(
+        {
           tenantId,
           userId,
           interfaceId: payload.interfaceId,
           platformType,
           actions: actions,
-        },
-        requestContext,
-      } as any);
+        }, // inputData
+        { requestContext } // context
+      );
 
       return NextResponse.json({
         text: "Done — your preview has been updated.",
