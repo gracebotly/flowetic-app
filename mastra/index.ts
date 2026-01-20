@@ -9,7 +9,7 @@ import { generatePreviewWorkflow } from './workflows/generatePreview';
 
 export const mastra = new Mastra({
   telemetry: {
-    enabled: false,
+    enabled: true,
   },
   agents: {
     masterRouterAgent: masterRouterAgent,
