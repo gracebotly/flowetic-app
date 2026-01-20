@@ -6,7 +6,6 @@ import { getCurrentSpec, applySpecPatch, savePreviewVersion } from "@/mastra/too
 import { validateSpec } from "@/mastra/tools/validateSpec";
 import { EditAction, DensityPreset } from "./types";
 import { reorderComponents } from "./reorderComponents";
-import { executeToolOrThrow } from "../../lib/executeToolOrThrow";
 
 function densityToSpacingBase(d: z.infer<typeof DensityPreset>) {
   if (d === "compact") return 8;
@@ -30,23 +29,30 @@ export const applyInteractiveEdits = createTool({
     previewVersionId: z.string().uuid(),
   }),
   execute: async (inputData, context) => {
-    const current = await executeToolOrThrow(
-      getCurrentSpec,
+    const current = await getCurrentSpec.execute(
       { interfaceId: inputData.interfaceId },
-      { requestContext: context?.requestContext }
+      { requestContext: context?.requestContext },
     );
+
+    if (typeof current === "object" && current !== null && "error" in current && (current as any).error) {
+      throw new Error((current as any).message ?? "getCurrentSpec failed");
+    }
 
     let nextSpec = current.spec_json ?? {};
     let nextTokens = current.design_tokens ?? {};
 
     const reorderAction = inputData.actions.find((a) => a.type === "reorder_widgets") as any;
     if (reorderAction?.orderedIds?.length) {
-      const reordered = await executeToolOrThrow(
-        reorderComponents,
+      const reordered = await reorderComponents.execute(
         { spec_json: nextSpec, orderedIds: reorderAction.orderedIds },
-        { requestContext: context?.requestContext }
+        { requestContext: context?.requestContext },
       );
-      nextSpec = reordered.spec_json;
+
+      if (typeof reordered === "object" && reordered !== null && "error" in reordered && (reordered as any).error) {
+        throw new Error((reordered as any).message ?? "reorderComponents failed");
+      }
+
+      nextSpec = (reordered as any).spec_json;
     }
 
     const ops: any[] = [];
@@ -80,24 +86,31 @@ export const applyInteractiveEdits = createTool({
     }
 
     if (ops.length) {
-      const patched = await executeToolOrThrow(
-        applySpecPatch,
+      const patched = await applySpecPatch.execute(
         { spec_json: nextSpec, design_tokens: nextTokens, operations: ops },
-        { requestContext: context?.requestContext }
+        { requestContext: context?.requestContext },
       );
-      nextSpec = patched.spec_json;
-      nextTokens = patched.design_tokens;
+
+      if (typeof patched === "object" && patched !== null && "error" in patched && (patched as any).error) {
+        throw new Error((patched as any).message ?? "applySpecPatch failed");
+      }
+
+      nextSpec = (patched as any).spec_json;
+      nextTokens = (patched as any).design_tokens;
     }
 
-    const validation = await executeToolOrThrow(
-      validateSpec,
+    const validation = await validateSpec.execute(
       { spec_json: nextSpec },
-      { requestContext: context?.requestContext }
+      { requestContext: context?.requestContext },
     );
+
+    if (typeof validation === "object" && validation !== null && "error" in validation && (validation as any).error) {
+      throw new Error((validation as any).message ?? "validateSpec failed");
+    }
+
     if (!validation.valid || validation.score < 0.8) throw new Error("INTERACTIVE_EDIT_VALIDATION_FAILED");
 
-    const saved = await executeToolOrThrow(
-      savePreviewVersion,
+    const saved = await savePreviewVersion.execute(
       {
         tenantId: inputData.tenantId,
         userId: inputData.userId,
@@ -106,8 +119,12 @@ export const applyInteractiveEdits = createTool({
         design_tokens: nextTokens,
         platformType: inputData.platformType,
       },
-      { requestContext: context?.requestContext }
+      { requestContext: context?.requestContext },
     );
+
+    if (typeof saved === "object" && saved !== null && "error" in saved && (saved as any).error) {
+      throw new Error((saved as any).message ?? "savePreviewVersion failed");
+    }
 
     return { previewUrl: saved.previewUrl, previewVersionId: saved.versionId };
   },
