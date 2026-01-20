@@ -216,12 +216,12 @@ export const getStyleBundles = createTool({
     bundles: z.array(StyleBundle).length(4),
     sources: z.array(z.object({ kind: z.string(), note: z.string() })).default([]),
   }),
-  execute: async ({ context, runtimeContext }) => {
+  execute: async (inputData, context) => {
     const queryText =
-      `Return 4 style+palette bundles for a ${context.dashboardKind} ` +
-      `${context.outcome} UI, audience=${context.audience}, platform=${context.platformType}. ` +
+      `Return 4 style+palette bundles for a ${inputData.dashboardKind} ` +
+      `${inputData.outcome} UI, audience=${inputData.audience}, platform=${inputData.platformType}. ` +
       `Each bundle must include: name, brief description, and a 5-color palette (hex). ` +
-      `Prefer premium client-ready styles. Notes: ${context.notes ?? ""}`;
+      `Prefer premium client-ready styles. Notes: ${inputData.notes ?? ""}`;
 
     // Try vector search; if unavailable, fallback local.
     let relevantText = "";

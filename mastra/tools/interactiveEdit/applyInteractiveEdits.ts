@@ -28,15 +28,15 @@ export const applyInteractiveEdits = createTool({
     previewUrl: z.string().url(),
     previewVersionId: z.string().uuid(),
   }),
-  execute: async ({ context, runtimeContext }) => {
+  execute: async (inputData, context) => {
     const current = await getCurrentSpec.execute(
-      { context: { tenantId: context.tenantId, interfaceId: context.interfaceId }, runtimeContext } as any
+      { context: { tenantId: inputData.tenantId, interfaceId: inputData.interfaceId }, runtimeContext } as any
     );
 
     let nextSpec = current.spec_json ?? {};
     let nextTokens = current.design_tokens ?? {};
 
-    const reorderAction = context.actions.find((a) => a.type === "reorder_widgets") as any;
+    const reorderAction = inputData.actions.find((a) => a.type === "reorder_widgets") as any;
     if (reorderAction?.orderedIds?.length) {
       const reordered = await reorderComponents.execute(
         { context: { spec_json: nextSpec, orderedIds: reorderAction.orderedIds }, runtimeContext } as any
@@ -46,7 +46,7 @@ export const applyInteractiveEdits = createTool({
 
     const ops: any[] = [];
 
-    for (const a of context.actions) {
+    for (const a of inputData.actions) {
       if (a.type === "toggle_widget") {
         ops.push({
           op: "updateComponentProps",
@@ -90,12 +90,12 @@ export const applyInteractiveEdits = createTool({
     const saved = await savePreviewVersion.execute(
       {
         context: {
-          tenantId: context.tenantId,
-          userId: context.userId,
-          interfaceId: context.interfaceId,
+          tenantId: inputData.tenantId,
+          userId: inputData.userId,
+          interfaceId: inputData.interfaceId,
           spec_json: nextSpec,
           design_tokens: nextTokens,
-          platformType: context.platformType,
+          platformType: inputData.platformType,
         },
         runtimeContext,
       } as any

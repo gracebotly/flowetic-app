@@ -18,7 +18,7 @@ export const todoComplete = createTool({
   outputSchema: z.object({
     todo: TodoItem,
   }),
-  execute: async ({ context }) => {
+  execute: async (inputData, context) => {
     const supabase = await createClient();
     const { tenantId, threadId, todoId } = context;
 

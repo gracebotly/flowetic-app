@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 export const getCurrentSpec = createTool({
   id: "getCurrentSpec",
   description:
-    "Fetch the latest dashboard UI spec and design tokens for the current interface (dashboard). Uses runtimeContext.interfaceId if provided; otherwise finds most recent interface for tenant.",
+    "Fetch the latest dashboard UI spec and design tokens for the current interface (dashboard). Uses context?.requestContext?.interfaceId if provided; otherwise finds most recent interface for tenant.",
   inputSchema: z.object({
     interfaceId: z.string().uuid().optional(),
   }),
@@ -16,14 +16,14 @@ export const getCurrentSpec = createTool({
     spec_json: z.record(z.any()),
     design_tokens: z.record(z.any()),
   }),
-  execute: async ({ context, runtimeContext }) => {
+  execute: async (inputData, context) => {
     const supabase = await createClient();
 
     const tenantId = runtimeContext?.get("tenantId") as string | undefined;
     if (!tenantId) throw new Error("AUTH_REQUIRED");
 
     const explicitInterfaceId =
-      context.interfaceId ?? (runtimeContext?.get("interfaceId") as string | undefined);
+      inputData.interfaceId ?? (runtimeContext?.get("interfaceId") as string | undefined);
 
     let interfaceId: string | undefined = explicitInterfaceId;
 

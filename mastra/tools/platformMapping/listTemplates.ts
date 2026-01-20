@@ -26,7 +26,7 @@ export const listTemplates = createTool({
       preview: z.string().optional(),
     })),
   }),
-  execute: async ({ context }) => {
+  execute: async (inputData, context) => {
     const { platformType, category } = context;
 
     try {

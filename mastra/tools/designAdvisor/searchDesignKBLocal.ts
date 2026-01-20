@@ -23,7 +23,7 @@ export const searchDesignKBLocal = createTool({
       }),
     ),
   }),
-  execute: async ({ context }) => {
+  execute: async (inputData, context) => {
     const { queryText, maxChars } = context;
     const q = queryText.toLowerCase();
     const terms = q

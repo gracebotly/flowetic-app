@@ -32,7 +32,7 @@ export const saveMapping = createTool({
     fieldCount: z.number(),
     requiresReview: z.boolean(),
   }),
-  execute: async ({ context }) => {
+  execute: async (inputData, context) => {
     const { tenantId, userId, interfaceId, templateId, mappings, confidence, metadata } = context;
 
     try {

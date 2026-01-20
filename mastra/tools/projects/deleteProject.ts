@@ -22,7 +22,7 @@ export const deleteProject = createTool({
     success: z.boolean(),
     message: z.string(),
   }),
-  execute: async ({ context }) => {
+  execute: async (inputData, context) => {
     const supabase = await createClient();
     const { tenantId, projectId } = context;
 

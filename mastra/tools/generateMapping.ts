@@ -17,7 +17,7 @@ export const generateMapping = createTool({
     missingFields: z.array(z.string()),
     confidence: z.number().min(0).max(1),
   }),
-  execute: async ({ context }) => {
+  execute: async (inputData, context) => {
     const { templateId, fields, platformType } = context;
     
     // Template requirements (simplified for MVP)

@@ -7,7 +7,7 @@ import {
   persistPreviewVersion,
 } from '@/mastra/tools';
 import { NextRequest } from 'next/server';
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { RequestContext } from '@mastra/core/request-context';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -44,50 +44,50 @@ export async function POST(req: NextRequest) {
     }
 
     // Create runtime context with necessary values
-    const runtimeContext = new RuntimeContext();
-    runtimeContext.set('sourceId', sourceId);
-    runtimeContext.set('platformType', platformType);
+    const requestContext = new RequestContext();
+    requestContext.set('sourceId', sourceId);
+    requestContext.set('platformType', platformType);
 
     // Step 1: analyze schema
     const analyzeResult = await analyzeSchema.execute({
-      context: { tenantId, sourceId, sampleSize: 100 },
-      runtimeContext,
+      inputData: { tenantId, sourceId, sampleSize: 100 },
+      requestContext,
     });
 
     // Step 2: select template
     const selectResult = await selectTemplate.execute({
-      context: {
+      inputData: {
         platformType,
         eventTypes: analyzeResult.eventTypes,
         fields: analyzeResult.fields,
       },
-      runtimeContext,
+      requestContext,
     });
 
     // Step 3: generate mapping
     const mappingResult = await generateMapping.execute({
-      context: {
+      inputData: {
         templateId: selectResult.templateId,
         fields: analyzeResult.fields,
         platformType,
       },
-      runtimeContext,
+      requestContext,
     });
 
     // Step 4: generate UI spec
     const uiSpecResult = await generateUISpec.execute({
-      context: {
+      inputData: {
         templateId: selectResult.templateId,
         mappings: mappingResult.mappings,
         platformType,
       },
-      runtimeContext,
+      requestContext,
     });
 
     // Step 5: validate spec
     const validationResult = await validateSpec.execute({
-      context: { spec_json: uiSpecResult.spec_json },
-      runtimeContext,
+      inputData: { spec_json: uiSpecResult.spec_json },
+      requestContext,
     });
     if (!validationResult.valid || validationResult.score < 0.8) {
       return new Response(
@@ -104,7 +104,7 @@ export async function POST(req: NextRequest) {
     const finalInterfaceId =
       interfaceId || `preview-${Date.now().toString()}`;
     const persistResult = await persistPreviewVersion.execute({
-      context: {
+      inputData: {
         tenantId,
         userId,
         interfaceId: finalInterfaceId,
@@ -112,7 +112,7 @@ export async function POST(req: NextRequest) {
         design_tokens: uiSpecResult.design_tokens,
         platformType,
       },
-      runtimeContext,
+      requestContext,
     });
 
     return new Response(

@@ -17,7 +17,7 @@ export const selectTemplate = createTool({
     confidence: z.number().min(0).max(1),
     reason: z.string(),
   }),
-  execute: async ({ context }) => {
+  execute: async (inputData, context) => {
     const { platformType, eventTypes, fields } = context;
     
     // Template selection logic (deterministic, not AI-based)

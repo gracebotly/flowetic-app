@@ -32,7 +32,7 @@ export const recommendTemplates = createTool({
       }),
     ),
   }),
-  execute: async ({ context }) => {
+  execute: async (inputData, context) => {
     const { platformType, schemaSummary } = context;
 
     const fields = new Set(schemaSummary.fields.map((f) => f.name.toLowerCase()));

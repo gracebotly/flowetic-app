@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { RuntimeContext } from "@mastra/core/runtime-context";
+import { RequestContext } from "@mastra/core/runtime-context";
 import { mastra } from "@/mastra";
 import { createClient } from "@/lib/supabase/server";
 
@@ -137,14 +137,14 @@ export async function POST(req: NextRequest) {
       (typeof body.threadId === "string" && body.threadId.trim()) ||
       `thread-${tenantId}`;
 
-    // 4) Build runtimeContext with real IDs
-    const runtimeContext = new RuntimeContext();
-    runtimeContext.set("tenantId", tenantId);
-    runtimeContext.set("userId", userId);
-    runtimeContext.set("userRole", userRole);
-    runtimeContext.set("sourceId", sourceId);
-    runtimeContext.set("platformType", platformType);
-    runtimeContext.set("threadId", threadId);
+    // 4) Build requestContext with real IDs
+    const requestContext = new RequestContext();
+    requestContext.set("tenantId", tenantId);
+    requestContext.set("userId", userId);
+    requestContext.set("userRole", userRole);
+    requestContext.set("sourceId", sourceId);
+    requestContext.set("platformType", platformType);
+    requestContext.set("threadId", threadId);
 
     // 5) Always start with Master Router
     const master = mastra.getAgent("masterRouterAgent");
@@ -219,12 +219,12 @@ export async function POST(req: NextRequest) {
 
       const routerResponse = await master.generate(message, {
         maxSteps: 3,
-        runtimeContext,
+        requestContext,
       });
 
       const mappingResponse = await mappingAgent.generate(message, {
         maxSteps: 8,
-        runtimeContext,
+        requestContext,
       });
 
       return new Response(
@@ -239,7 +239,7 @@ export async function POST(req: NextRequest) {
 
     const routerOnly = await master.generate(message, {
       maxSteps: 3,
-      runtimeContext,
+      requestContext,
     });
 
     return new Response(

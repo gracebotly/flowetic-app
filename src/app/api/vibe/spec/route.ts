@@ -1,7 +1,7 @@
 
 
 import { NextRequest, NextResponse } from "next/server";
-import { RuntimeContext } from "@mastra/core/runtime-context";
+import { RequestContext } from "@mastra/core/runtime-context";
 import { getCurrentSpec } from "@/mastra/tools/specEditor";
 
 export async function POST(req: NextRequest) {
@@ -17,12 +17,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "MISSING_REQUIRED_FIELDS" }, { status: 400 });
     }
 
-    const runtimeContext = new RuntimeContext();
-    runtimeContext.set("userId", userId);
-    runtimeContext.set("tenantId", tenantId);
+    const requestContext = new RequestContext();
+    requestContext.set("userId", userId);
+    requestContext.set("tenantId", tenantId);
 
     const current = await getCurrentSpec.execute(
-      { context: { tenantId, interfaceId }, runtimeContext } as any
+      { context: { tenantId, interfaceId }, requestContext } as any
     );
 
     return NextResponse.json({

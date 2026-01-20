@@ -1,7 +1,7 @@
 import { createTool } from "@mastra/core/tools";
-import { RuntimeContext } from "@mastra/core/runtime-context";
+import { RequestContext } from "@mastra/core/request-context";
 import { z } from "zod";
-import { mastra } from "../../index";
+import { generatePreviewWorkflow } from "../../workflows/generatePreview";
 
 export const runGeneratePreviewWorkflow = createTool({
   id: "runGeneratePreviewWorkflow",
@@ -19,27 +19,23 @@ export const runGeneratePreviewWorkflow = createTool({
     previewVersionId: z.string().uuid(),
     previewUrl: z.string(),
   }),
-  execute: async ({ context, runtimeContext }) => {
-    if (!runtimeContext) {
-      throw new Error("RUNTIME_CONTEXT_REQUIRED");
+  execute: async (inputData, context) => {
+    const requestContext = context?.requestContext;
+    if (!requestContext) {
+      throw new Error("REQUEST_CONTEXT_REQUIRED");
     }
 
-    const workflow = mastra.getWorkflow("generatePreview");
-    if (!workflow) {
-      throw new Error("WORKFLOW_NOT_FOUND");
-    }
-
-    const run = await workflow.createRunAsync();
+    const run = await generatePreviewWorkflow.createRunAsync();
 
     const result = await run.start({
       inputData: {
-        tenantId: context.tenantId,
-        userId: context.userId,
-        userRole: context.userRole,
-        interfaceId: context.interfaceId,
-        instructions: context.instructions,
+        tenantId: inputData.tenantId,
+        userId: inputData.userId,
+        userRole: inputData.userRole,
+        interfaceId: inputData.interfaceId,
+        instructions: inputData.instructions,
       },
-      runtimeContext: runtimeContext as RuntimeContext,
+      requestContext: requestContext as RequestContext,
     });
 
 

@@ -20,7 +20,7 @@ export const analyzeSchema = createTool({
     eventTypes: z.array(z.string()),
     confidence: z.number().min(0).max(1),
   }),
-  execute: async ({ context }) => {
+  execute: async (inputData, context) => {
     const { tenantId, sourceId, sampleSize } = context;
     
     const supabase = await createClient();

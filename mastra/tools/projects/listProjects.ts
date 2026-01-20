@@ -18,7 +18,7 @@ export const listProjects = createTool({
   outputSchema: z.object({
     projects: z.array(ProjectPublic),
   }),
-  execute: async ({ context }) => {
+  execute: async (inputData, context) => {
     const supabase = await createClient();
     const { tenantId, type, status, limit } = context;
 
