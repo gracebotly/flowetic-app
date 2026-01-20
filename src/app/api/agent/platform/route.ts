@@ -49,46 +49,46 @@ export async function POST(req: NextRequest) {
     requestContext.set('platformType', platformType);
 
     // Step 1: analyze schema
-    const analyzeResult = await analyzeSchema.execute({
-      inputData: { tenantId, sourceId, sampleSize: 100 },
-      requestContext,
-    });
+    const analyzeResult = await analyzeSchema.execute(
+      { requestContext },
+      { tenantId, sourceId, sampleSize: 100 }
+    );
 
     // Step 2: select template
-    const selectResult = await selectTemplate.execute({
-      inputData: {
+    const selectResult = await selectTemplate.execute(
+      { requestContext },
+      {
         platformType,
         eventTypes: analyzeResult.eventTypes,
         fields: analyzeResult.fields,
-      },
-      requestContext,
-    });
+      }
+    );
 
     // Step 3: generate mapping
-    const mappingResult = await generateMapping.execute({
-      inputData: {
+    const mappingResult = await generateMapping.execute(
+      { requestContext },
+      {
         templateId: selectResult.templateId,
         fields: analyzeResult.fields,
         platformType,
-      },
-      requestContext,
-    });
+      }
+    );
 
     // Step 4: generate UI spec
-    const uiSpecResult = await generateUISpec.execute({
-      inputData: {
+    const uiSpecResult = await generateUISpec.execute(
+      { requestContext },
+      {
         templateId: selectResult.templateId,
         mappings: mappingResult.mappings,
         platformType,
-      },
-      requestContext,
-    });
+      }
+    );
 
     // Step 5: validate spec
-    const validationResult = await validateSpec.execute({
-      inputData: { spec_json: uiSpecResult.spec_json },
-      requestContext,
-    });
+    const validationResult = await validateSpec.execute(
+      { requestContext },
+      { spec_json: uiSpecResult.spec_json }
+    );
     if (!validationResult.valid || validationResult.score < 0.8) {
       return new Response(
         JSON.stringify({
@@ -103,17 +103,17 @@ export async function POST(req: NextRequest) {
     // Step 6: persist preview version
     const finalInterfaceId =
       interfaceId || `preview-${Date.now().toString()}`;
-    const persistResult = await persistPreviewVersion.execute({
-      inputData: {
+    const persistResult = await persistPreviewVersion.execute(
+      { requestContext },
+      {
         tenantId,
         userId,
         interfaceId: finalInterfaceId,
         spec_json: uiSpecResult.spec_json,
         design_tokens: uiSpecResult.design_tokens,
         platformType,
-      },
-      requestContext,
-    });
+      }
+    );
 
     return new Response(
       JSON.stringify({
