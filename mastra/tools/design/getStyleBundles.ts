@@ -234,9 +234,17 @@ export const getStyleBundles = createTool({
           { requestContext: context?.requestContext }
         );
 
-        // Use the results from searchDesignKB
-        if (rag.retrieved && rag.results.length > 0) {
-          relevantText = rag.results.map(r => r.content).join("\n\n").slice(0, 12000);
+        // Type-narrow: ensure rag has the expected structure before accessing properties
+        if (
+          rag &&
+          typeof rag === 'object' &&
+          'retrieved' in rag &&
+          'results' in rag &&
+          rag.retrieved === true &&
+          Array.isArray(rag.results) &&
+          rag.results.length > 0
+        ) {
+          relevantText = rag.results.map((r: any) => r.content).join("\n\n").slice(0, 12000);
           sources.push({ kind: "vector", note: "searchDesignKB" });
         }
       }
