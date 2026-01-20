@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { RequestContext } from "@mastra/core/request-context";
 import { getCurrentSpec } from "@/mastra/tools/specEditor";
+import { executeToolOrThrow } from "@/mastra/lib/executeToolOrThrow";
 
 export async function POST(req: NextRequest) {
   try {
@@ -21,8 +22,9 @@ export async function POST(req: NextRequest) {
     requestContext.set("userId", userId);
     requestContext.set("tenantId", tenantId);
 
-    const current = await getCurrentSpec.execute(
-      { tenantId, interfaceId }, // inputData
+    const current = await executeToolOrThrow(
+      getCurrentSpec,
+      { interfaceId }, // inputData - tenantId removed as it's not needed
       { requestContext } // context
     );
 

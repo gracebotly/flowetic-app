@@ -6,6 +6,7 @@ import { generateMapping } from '../tools/generateMapping';
 import { generateUISpec } from '../tools/generateUISpec';
 import { validateSpec } from '../tools/validateSpec';
 import { persistPreviewVersion } from '../tools/persistPreviewVersion';
+import { executeToolOrThrow } from '../lib/executeToolOrThrow';
 
 // Platform type derived from selectTemplate tool schema
 type SelectTemplatePlatformType = z.infer<typeof selectTemplate.inputSchema>['platformType'];
@@ -64,13 +65,14 @@ const analyzeSchemaStep = createStep({
       throw new Error('CONNECTION_NOT_CONFIGURED');
     }
     
-    const result = await analyzeSchema.execute(
-      { requestContext: context?.requestContext },
+    const result = await executeToolOrThrow(
+      analyzeSchema,
       {
         tenantId,
         sourceId,
         sampleSize,
-      }
+      },
+      { requestContext: context?.requestContext }
     );
     
     return result;
@@ -93,13 +95,14 @@ const selectTemplateStep = createStep({
       throw new Error('TEMPLATE_NOT_FOUND');
     }
     const platformType = (runtimeContext?.get('platformType') || 'make') as SelectTemplatePlatformType;
-    const result = await selectTemplate.execute(
-      { requestContext: context?.requestContext },
+    const result = await executeToolOrThrow(
+      selectTemplate,
       {
         platformType,
         eventTypes: analyzeResult.eventTypes,
         fields: analyzeResult.fields,
-      }
+      },
+      { requestContext: context?.requestContext }
     );
     return result;
   },
@@ -123,13 +126,14 @@ const generateMappingStep = createStep({
     const fields = analyzeResult.fields;
     const templateId = templateResult.templateId;
     const platformType = (runtimeContext?.get('platformType') || 'make') as SelectTemplatePlatformType;
-    const result = await generateMapping.execute(
-      { requestContext: context?.requestContext },
+    const result = await executeToolOrThrow(
+      generateMapping,
       {
         templateId,
         fields: analyzeResult.fields,
         platformType,
-      }
+      },
+      { requestContext: context?.requestContext }
     );
     return result;
   },
@@ -205,13 +209,14 @@ const generateUISpecStep = createStep({
     const mappings = mappingResult.mappings;
     const platformType = (runtimeContext?.get('platformType') || 'make') as SelectTemplatePlatformType;
     
-    const result = await generateUISpec.execute(
-      { requestContext: context?.requestContext },
+    const result = await executeToolOrThrow(
+      generateUISpec,
       {
         templateId,
         mappings: mappingResult.mappings,
         platformType,
-      }
+      },
+      { requestContext: context?.requestContext }
     );
     
     return result;
@@ -230,9 +235,10 @@ const validateSpecStep = createStep({
   async execute(inputData, context) {
     const specResult = getStepResult(generateUISpecStep);
     const spec_json = specResult?.spec_json || {};
-    const result = await validateSpec.execute(
-      { requestContext: context?.requestContext },
-      { spec_json }
+    const result = await executeToolOrThrow(
+      validateSpec,
+      { spec_json },
+      { requestContext: context?.requestContext }
     );
     if (!result.valid || result.score < 0.8) {
       throw new Error('SCORING_HARD_GATE_FAILED');
@@ -260,8 +266,8 @@ const persistPreviewVersionStep = createStep({
     const userId = initData.userId;
     const interfaceId = initData.interfaceId;
     const platformType = (runtimeContext?.get('platformType') || 'make') as SelectTemplatePlatformType;
-    const result = await persistPreviewVersion.execute(
-      { requestContext: context?.requestContext },
+    const result = await executeToolOrThrow(
+      persistPreviewVersion,
       {
         tenantId,
         userId,
@@ -269,7 +275,8 @@ const persistPreviewVersionStep = createStep({
         spec_json,
         design_tokens,
         platformType,
-      }
+      },
+      { requestContext: context?.requestContext }
     );
     return result;
   },

@@ -6,6 +6,7 @@ import { getCurrentSpec, applySpecPatch, savePreviewVersion } from "@/mastra/too
 import { validateSpec } from "@/mastra/tools/validateSpec";
 import { EditAction, DensityPreset } from "./types";
 import { reorderComponents } from "./reorderComponents";
+import { executeToolOrThrow } from "../../lib/executeToolOrThrow";
 
 function densityToSpacingBase(d: z.infer<typeof DensityPreset>) {
   if (d === "compact") return 8;
@@ -29,24 +30,19 @@ export const applyInteractiveEdits = createTool({
     previewVersionId: z.string().uuid(),
   }),
   execute: async (inputData, context) => {
-    if (!getCurrentSpec?.execute) throw new Error("TOOL_NOT_AVAILABLE");
-    const current = await getCurrentSpec.execute(
+    const current = await executeToolOrThrow(
+      getCurrentSpec,
       { interfaceId: inputData.interfaceId },
       { requestContext: context?.requestContext }
     );
-
-    // Type-narrow before accessing properties
-    if (!current || 'error' in current) {
-      throw new Error("FAILED_TO_GET_CURRENT_SPEC");
-    }
 
     let nextSpec = current.spec_json ?? {};
     let nextTokens = current.design_tokens ?? {};
 
     const reorderAction = inputData.actions.find((a) => a.type === "reorder_widgets") as any;
     if (reorderAction?.orderedIds?.length) {
-      if (!reorderComponents?.execute) throw new Error("TOOL_NOT_AVAILABLE");
-      const reordered = await reorderComponents.execute(
+      const reordered = await executeToolOrThrow(
+        reorderComponents,
         { spec_json: nextSpec, orderedIds: reorderAction.orderedIds },
         { requestContext: context?.requestContext }
       );
@@ -84,8 +80,8 @@ export const applyInteractiveEdits = createTool({
     }
 
     if (ops.length) {
-      if (!applySpecPatch?.execute) throw new Error("TOOL_NOT_AVAILABLE");
-      const patched = await applySpecPatch.execute(
+      const patched = await executeToolOrThrow(
+        applySpecPatch,
         { spec_json: nextSpec, design_tokens: nextTokens, operations: ops },
         { requestContext: context?.requestContext }
       );
@@ -93,15 +89,15 @@ export const applyInteractiveEdits = createTool({
       nextTokens = patched.design_tokens;
     }
 
-    if (!validateSpec?.execute) throw new Error("TOOL_NOT_AVAILABLE");
-    const validation = await validateSpec.execute(
+    const validation = await executeToolOrThrow(
+      validateSpec,
       { spec_json: nextSpec },
       { requestContext: context?.requestContext }
     );
     if (!validation.valid || validation.score < 0.8) throw new Error("INTERACTIVE_EDIT_VALIDATION_FAILED");
 
-    if (!savePreviewVersion?.execute) throw new Error("TOOL_NOT_AVAILABLE");
-    const saved = await savePreviewVersion.execute(
+    const saved = await executeToolOrThrow(
+      savePreviewVersion,
       {
         tenantId: inputData.tenantId,
         userId: inputData.userId,

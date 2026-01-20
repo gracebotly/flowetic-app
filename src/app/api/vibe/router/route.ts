@@ -15,6 +15,7 @@ import { todoAdd, todoList } from "@/mastra/tools/todo";
 import { getStyleBundles } from "@/mastra/tools/design/getStyleBundles";
 import { applyInteractiveEdits } from "@/mastra/tools/interactiveEdit";
 import { getCurrentSpec, applySpecPatch } from "@/mastra/tools/specEditor";
+import { executeToolOrThrow } from "@/mastra/lib/executeToolOrThrow";
 
 type JourneyMode =
   | "select_entity"
@@ -441,7 +442,8 @@ Journey phases:
       }
 
       // Get bundle list again, pick chosen bundle
-      const bundlesResult = await getStyleBundles.execute(
+      const bundlesResult = await executeToolOrThrow(
+        getStyleBundles,
         {
           platformType,
           outcome: journey?.selectedOutcome ?? "dashboard",
@@ -478,7 +480,8 @@ Journey phases:
 
       const nextJourney = { ...journey, selectedStoryboard: storyboardId, mode: "style" };
 
-      const bundlesResult = await getStyleBundles.execute(
+      const bundlesResult = await executeToolOrThrow(
+        getStyleBundles,
         {
           platformType,
           outcome: nextJourney?.selectedOutcome ?? "dashboard",
@@ -644,7 +647,8 @@ Journey phases:
     // Phase: style (RAG -> 4 bundles)
     // ------------------------------------------------------------------
     if (effectiveMode === "style") {
-      const bundlesResult = await getStyleBundles.execute(
+      const bundlesResult = await executeToolOrThrow(
+        getStyleBundles,
         {
           platformType,
           outcome: journey?.selectedOutcome ?? "dashboard",
@@ -735,8 +739,9 @@ Journey phases:
       }
 
       // Load the actual current spec to extract real component IDs for interactive edit.
-      const current = await getCurrentSpec.execute(
-        { tenantId, interfaceId }, // inputData
+      const current = await executeToolOrThrow(
+        getCurrentSpec,
+        { interfaceId }, // inputData - tenantId removed as it's not needed
         { requestContext } // context
       );
 
@@ -867,16 +872,17 @@ Journey phases:
         const p = paletteMap[paletteAction.paletteId];
         if (p) {
           // Apply palette tokens immediately using applySpecPatch so the interactive edit tool stays simple.
-          await applySpecPatch.execute(
+          const currentSpecForPalette = await executeToolOrThrow(
+            getCurrentSpec,
+            { interfaceId: payload.interfaceId }, // inputData - tenantId removed as it's not needed
+            { requestContext } // context
+          );
+          
+          await executeToolOrThrow(
+            applySpecPatch,
             {
-              spec_json: (await getCurrentSpec.execute(
-                { tenantId, interfaceId: payload.interfaceId }, // inputData
-                { requestContext } // context
-              )).spec_json,
-              design_tokens: (await getCurrentSpec.execute(
-                { tenantId, interfaceId: payload.interfaceId }, // inputData
-                { requestContext } // context
-              )).design_tokens,
+              spec_json: currentSpecForPalette.spec_json,
+              design_tokens: currentSpecForPalette.design_tokens,
               operations: [
                 { op: "setDesignToken", tokenPath: "theme.color.primary", tokenValue: p.primary },
                 { op: "setDesignToken", tokenPath: "theme.color.accent", tokenValue: p.accent },
@@ -890,7 +896,8 @@ Journey phases:
         }
       }
 
-      const result = await applyInteractiveEdits.execute(
+      const result = await executeToolOrThrow(
+        applyInteractiveEdits,
         {
           tenantId,
           userId,

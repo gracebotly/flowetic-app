@@ -1,6 +1,7 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { searchDesignKB, searchDesignKBLocal } from "@/mastra/tools/designAdvisor";
+import { executeToolOrThrow } from "../../lib/executeToolOrThrow";
 
 const Swatch = z.object({ name: z.string(), hex: z.string() });
 
@@ -228,8 +229,9 @@ export const getStyleBundles = createTool({
     const sources: Array<{ kind: string; note: string }> = [];
 
     try {
-      if (searchDesignKB && searchDesignKB.execute) {
-        const rag = await searchDesignKB.execute(
+      if (searchDesignKB) {
+        const rag = await executeToolOrThrow(
+          searchDesignKB,
           { query: queryText, maxResults: 8 },
           { requestContext: context?.requestContext }
         );
@@ -252,9 +254,10 @@ export const getStyleBundles = createTool({
       // ignore and fallback
     }
 
-    if (!relevantText && searchDesignKBLocal && searchDesignKBLocal.execute) {
+    if (!relevantText && searchDesignKBLocal) {
       try {
-        const local = await searchDesignKBLocal.execute(
+        const local = await executeToolOrThrow(
+          searchDesignKBLocal,
           { queryText, maxChars: 8000 },
           { requestContext: context?.requestContext }
         );
