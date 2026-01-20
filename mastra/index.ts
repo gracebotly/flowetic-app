@@ -8,9 +8,6 @@ import { designAdvisorAgent } from "./agents/designAdvisorAgent";
 import { generatePreviewWorkflow } from './workflows/generatePreview';
 
 export const mastra = new Mastra({
-  telemetry: {
-    enabled: false,
-  },
   storage: new LibSQLStore({
     id: "mastra-storage",
     url: "file:./mastra.db",
