@@ -2,7 +2,7 @@
 
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "../../lib/supabase";
 import { encryptSecret } from "@/lib/secrets";
 import { SourceMethod, SourcePlatformType, SourcePublic, SourceStatus } from "./types";
 

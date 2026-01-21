@@ -3,8 +3,7 @@
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { openai } from "@ai-sdk/openai";
-import { RuntimeContext } from "@mastra/core/runtime-context";
-import { ToolAction } from "@mastra/core/tools";
+import type { RequestContext } from "@mastra/core/request-context";
 import { searchDesignKB, searchDesignKBLocal } from "../tools/designAdvisor";
 import {
   getCurrentSpec,
@@ -19,10 +18,10 @@ export const designAdvisorAgent: Agent = new Agent({
   name: "designAdvisorAgent",
   description:
     "Design Advisor Agent (RAG): grounded UI/UX + design-system guidance. Proposes and optionally applies design token/layout improvements to make dashboards more premium.",
-  instructions: async ({ runtimeContext }: { runtimeContext: RuntimeContext }) => {
-    const mode = (runtimeContext.get("mode") as string | undefined) ?? "edit";
-    const phase = (runtimeContext.get("phase") as string | undefined) ?? "editing";
-    const platformType = (runtimeContext.get("platformType") as string | undefined) ?? "make";
+  instructions: async ({ requestContext }: { requestContext: RequestContext }) => {
+    const mode = (requestContext.get("mode") as string | undefined) ?? "edit";
+    const phase = (requestContext.get("phase") as string | undefined) ?? "editing";
+    const platformType = (requestContext.get("platformType") as string | undefined) ?? "make";
 
     return [
       {
@@ -66,7 +65,7 @@ export const designAdvisorAgent: Agent = new Agent({
     },
   }),
   tools: {
-    searchDesignKB: searchDesignKB as unknown as ToolAction,
+    searchDesignKB,
     searchDesignKBLocal,
     getStyleBundles,
     getCurrentSpec,

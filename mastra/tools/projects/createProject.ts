@@ -5,7 +5,7 @@
 
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "../../lib/supabase";
 import { ProjectPublic, ProjectStatus, ProjectType } from "./types";
 
 export const createProject = createTool({
@@ -23,7 +23,7 @@ export const createProject = createTool({
     message: z.string(),
   }),
   execute: async ({ context }) => {
-    const supabase = await createClient();
+    const supabase = createClient();
     const now = new Date().toISOString();
 
     const { data, error } = await supabase

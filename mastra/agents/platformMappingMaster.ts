@@ -2,7 +2,7 @@
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { openai } from "@ai-sdk/openai";
-import { RuntimeContext } from "@mastra/core/runtime-context";
+import type { RequestContext } from "@mastra/core/request-context";
 import { loadSkillMarkdown, PlatformType } from "../skills/loadSkill";
 import {
   appendThreadEvent,
@@ -11,6 +11,7 @@ import {
   recommendTemplates,
   proposeMapping,
   saveMapping,
+  runGeneratePreviewWorkflow,
 } from "../tools/platformMapping";
 import { todoAdd, todoList, todoUpdate, todoComplete } from "../tools/todo";
 import { getStyleBundles } from "../tools/design";
@@ -19,8 +20,8 @@ export const platformMappingMaster: Agent = new Agent({
   name: "platformMappingMaster",
   description:
     "Platform Mapping Agent: inspects event samples, recommends templates, proposes mappings, and triggers preview workflow.",
-  instructions: async ({ runtimeContext }: { runtimeContext: RuntimeContext }) => {
-    const platformType = (runtimeContext.get("platformType") as PlatformType) || "make";
+  instructions: async ({ requestContext }: { requestContext: RequestContext }) => {
+    const platformType = (requestContext.get("platformType") as PlatformType) || "make";
     const skill = await loadSkillMarkdown(platformType);
 
     return [
@@ -55,6 +56,7 @@ export const platformMappingMaster: Agent = new Agent({
     recommendTemplates,
     proposeMapping,
     saveMapping,
+    runGeneratePreviewWorkflow,
     getStyleBundles,
     todoAdd,
     todoList,

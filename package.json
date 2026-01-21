@@ -5,9 +5,9 @@
   "scripts": {
     "dev": "next dev",
     "mastra:dev": "node scripts/copy-skills.mjs && mastra dev --dir ./mastra",
-    "mastra:dev:nocache": "MASTRA_DEV_NO_CACHE=1 mastra dev --dir ./mastra",
+    "mastra:dev:nocache": "node scripts/copy-skills.mjs && MASTRA_DEV_NO_CACHE=1 mastra dev --dir ./mastra",
     "build": "next build",
-    "build:mastra": "mastra build --dir mastra",
+    "build:mastra": "node scripts/copy-skills.mjs && mastra build --dir ./mastra",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit --pretty false"
