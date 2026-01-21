@@ -33,7 +33,7 @@ export const applyInteractiveEdits = createTool({
     const current = await callTool(
       getCurrentSpec,
       { interfaceId: inputData.interfaceId },
-      { requestContext: context?.requestContext },
+      { runtimeContext: context?.runtimeContext ?? context ?? {} },
     );
 
     let nextSpec = current.spec_json ?? {};
@@ -44,7 +44,7 @@ export const applyInteractiveEdits = createTool({
       const reordered = await callTool(
         reorderComponents,
         { spec_json: nextSpec, orderedIds: reorderAction.orderedIds },
-        { requestContext: context?.requestContext },
+        { runtimeContext: context?.runtimeContext ?? context ?? {} },
       );
 
       nextSpec = reordered.spec_json;
@@ -84,7 +84,7 @@ export const applyInteractiveEdits = createTool({
       const patched = await callTool(
         applySpecPatch,
         { spec_json: nextSpec, design_tokens: nextTokens, operations: ops },
-        { requestContext: context?.requestContext },
+        { runtimeContext: context?.runtimeContext ?? context ?? {} },
       );
 
       nextSpec = patched.spec_json;
@@ -94,7 +94,7 @@ export const applyInteractiveEdits = createTool({
     const validation = await callTool(
       validateSpec,
       { spec_json: nextSpec },
-      { requestContext: context?.requestContext },
+      { runtimeContext: context?.runtimeContext ?? context ?? {} },
     );
 
     if (!validation.valid || validation.score < 0.8) throw new Error("INTERACTIVE_EDIT_VALIDATION_FAILED");
@@ -109,7 +109,7 @@ export const applyInteractiveEdits = createTool({
         design_tokens: nextTokens,
         platformType: inputData.platformType,
       },
-      { requestContext: context?.requestContext },
+      { runtimeContext: context?.runtimeContext ?? context ?? {} },
     );
 
     return { previewUrl: saved.previewUrl, previewVersionId: saved.versionId };

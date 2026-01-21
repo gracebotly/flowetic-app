@@ -24,9 +24,12 @@ export const runGeneratePreviewWorkflow = createTool({
       throw new Error("RUNTIME_CONTEXT_REQUIRED");
     }
 
-    const run = await generatePreviewWorkflow.createRun();
+    const {
+      runId,
+      start,
+    } = generatePreviewWorkflow.createRunAsync();
 
-    const result = await run.start({
+    const result = await start({
       inputData: {
         tenantId: inputData.tenantId,
         userId: inputData.userId,
@@ -34,6 +37,7 @@ export const runGeneratePreviewWorkflow = createTool({
         interfaceId: inputData.interfaceId,
         instructions: inputData.instructions,
       },
+      runtimeContext: context?.runtimeContext ?? context ?? {},
     });
 
 
@@ -45,7 +49,7 @@ export const runGeneratePreviewWorkflow = createTool({
 
 
     return {
-      runId: result.result.runId,
+      runId,
       previewVersionId: result.result.previewVersionId,
       previewUrl: result.result.previewUrl,
     };

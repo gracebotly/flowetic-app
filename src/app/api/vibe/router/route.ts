@@ -458,7 +458,7 @@ Journey phases:
         { runtimeContext } // context
       );
 
-      const bundle = bundlesResult.bundles.find((b) => b.id === selectedId);
+      const bundle = bundlesResult.bundles.find((b: any) => b.id === selectedId);
       if (!bundle) {
         return NextResponse.json({ error: "STYLE_BUNDLE_NOT_FOUND" }, { status: 400 });
       }

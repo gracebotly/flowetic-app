@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const requestContext = {
+    const runtimeContext = {
       get: (key: string) => {
         switch (key) {
           case "tenantId": return tenantId;
@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
     const analyzeResult = await callTool(
       analyzeSchema,
       { tenantId, sourceId, sampleSize: 100 },
-      { requestContext }
+      { runtimeContext }
     );
 
     // Step 2: select template
@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
         eventTypes: analyzeResult.eventTypes,
         fields: analyzeResult.fields,
       },
-      { requestContext }
+      { runtimeContext }
     );
 
     // Step 3: generate mapping
@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
         fields: analyzeResult.fields,
         platformType,
       },
-      { requestContext }
+      { runtimeContext }
     );
 
     // Step 4: generate UI spec
@@ -93,14 +93,14 @@ export async function POST(req: NextRequest) {
         mappings: mappingResult.mappings,
         platformType,
       },
-      { requestContext }
+      { runtimeContext }
     );
 
     // Step 5: validate spec
     const validationResult = await callTool(
       validateSpec,
       { spec_json: uiSpecResult.spec_json },
-      { requestContext }
+      { runtimeContext }
     );
     if (!validationResult.valid || validationResult.score < 0.8) {
       return new Response(
@@ -126,7 +126,7 @@ export async function POST(req: NextRequest) {
         design_tokens: uiSpecResult.design_tokens,
         platformType,
       },
-      { requestContext }
+      { runtimeContext }
     );
 
     return new Response(

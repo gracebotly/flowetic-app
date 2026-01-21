@@ -240,7 +240,7 @@ export const getStyleBundles = createTool({
         const rag = await callTool(
           searchDesignKB,
           { query: queryText, maxResults: 8 },
-          { requestContext: context?.requestContext },
+          { runtimeContext: context?.runtimeContext ?? context ?? {} },
         );
 
         const results = rag?.results ?? [];
@@ -265,7 +265,7 @@ export const getStyleBundles = createTool({
         const local = await callTool(
           searchDesignKBLocal,
           { queryText, maxChars: 8000 },
-          { requestContext: context?.requestContext },
+          { runtimeContext: context?.runtimeContext ?? context ?? {} },
         );
 
         relevantText = String(local?.relevantText ?? "");

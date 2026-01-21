@@ -18,10 +18,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "MISSING_REQUIRED_FIELDS" }, { status: 400 });
     }
 
+    const runtimeContext = { get: (key: string) => ({ userId, tenantId } as any)[key] };
     const current = await callTool(
       getCurrentSpec,
       { interfaceId }, // inputData - tenantId removed as it's not needed
-      { runtimeContext: { userId, tenantId } } // context
+      { runtimeContext } // context
     );
 
     return NextResponse.json({

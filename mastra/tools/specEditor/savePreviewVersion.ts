@@ -22,9 +22,9 @@ export const savePreviewVersion = createTool({
   execute: async (inputData: any, context: any) => {
     const tenantId =
       inputData.runtimeContext?.tenantId ??
-      (context?.requestContext?.get("tenantId") as string | undefined);
-    const userId = inputData.runtimeContext?.userId ?? (context?.requestContext?.get("userId") as string | undefined);
-    const platformType = inputData.runtimeContext?.platformType ?? (context?.requestContext?.get("platformType") as string | undefined) ?? "make";
+      (context?.runtimeContext?.get("tenantId") as string | undefined);
+    const userId = inputData.runtimeContext?.userId ?? (context?.runtimeContext?.get("userId") as string | undefined);
+    const platformType = inputData.runtimeContext?.platformType ?? (context?.runtimeContext?.get("platformType") as string | undefined) ?? "make";
 
     if (!tenantId || !userId) throw new Error("AUTH_REQUIRED");
 
@@ -32,7 +32,7 @@ export const savePreviewVersion = createTool({
       inputData.interfaceId ??
       inputData.interfaceId ??
       inputData.runtimeContext?.interfaceId ??
-      (context?.requestContext?.get("interfaceId") as string | undefined) ??
+      (context?.runtimeContext?.get("interfaceId") as string | undefined) ??
       undefined;
 
     const result = await callTool(
@@ -45,7 +45,7 @@ export const savePreviewVersion = createTool({
         design_tokens: inputData.design_tokens ?? {},
         platformType,
       },
-      { requestContext: context?.requestContext }
+      { runtimeContext: context?.runtimeContext ?? context ?? {} }
     );
 
     return {

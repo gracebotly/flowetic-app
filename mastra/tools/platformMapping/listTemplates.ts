@@ -80,7 +80,7 @@ export const listTemplates = createTool({
         templates: filteredTemplates,
       };
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = error instanceof Error ? (error.message || 'Unknown error') : String(error);
       throw new Error(`Failed to list templates: ${message}`);
     }
   },

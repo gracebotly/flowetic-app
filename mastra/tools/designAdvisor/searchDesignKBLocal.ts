@@ -19,12 +19,12 @@ export const searchDesignKBLocal = createTool({
       note: z.string(),
     })),
   }),
-  execute: async (inputData, context) => {
+  execute: async (inputData: any, context: any) => {
     const { queryText, maxChars } = inputData;
     const q = queryText.toLowerCase();
     const terms = q
       .split(/\s+/)
-      .filter((t) => t.length > 2)
+      .filter((t: string) => t.length > 2)
       .slice(0, 10);
 
     // Simple keyword matching logic
@@ -42,7 +42,7 @@ export const searchDesignKBLocal = createTool({
 
     for (const item of knowledgeBase) {
       const content = item.content.toLowerCase();
-      const matches = terms.filter((term) => content.includes(term));
+      const matches = terms.filter((term: string) => content.includes(term));
       if (matches.length > 0) {
         relevantText += item.content + "\n\n";
         sources.push({ kind: item.kind, note: item.note });
