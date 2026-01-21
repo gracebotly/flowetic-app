@@ -3,7 +3,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { RequestContext } from "@mastra/core/request-context";
 import { getCurrentSpec } from "@/mastra/tools/specEditor";
-import { executeToolOrThrow } from "@/mastra/lib/executeToolOrThrow";
+import { callTool } from "@/mastra/lib/callTool";
 
 export async function POST(req: NextRequest) {
   try {
@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
     requestContext.set("userId", userId);
     requestContext.set("tenantId", tenantId);
 
-    const current = await executeToolOrThrow(
+    const current = await callTool(
       getCurrentSpec,
       { interfaceId }, // inputData - tenantId removed as it's not needed
       { requestContext } // context

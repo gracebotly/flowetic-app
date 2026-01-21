@@ -3,7 +3,7 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { persistPreviewVersion } from "../persistPreviewVersion";
-import { executeToolOrThrow } from "../../lib/executeToolOrThrow";
+import { callTool } from "../../lib/callTool";
 
 export const savePreviewVersion = createTool({
   id: "savePreviewVersion",
@@ -32,7 +32,7 @@ export const savePreviewVersion = createTool({
       (requestContext?.get("interfaceId") as string | undefined) ??
       undefined;
 
-    const result = await executeToolOrThrow(
+    const result = await callTool(
       persistPreviewVersion,
       {
         tenantId,

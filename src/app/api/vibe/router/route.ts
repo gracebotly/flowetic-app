@@ -15,7 +15,7 @@ import { todoAdd, todoList } from "@/mastra/tools/todo";
 import { getStyleBundles } from "@/mastra/tools/design/getStyleBundles";
 import { applyInteractiveEdits } from "@/mastra/tools/interactiveEdit";
 import { getCurrentSpec, applySpecPatch } from "@/mastra/tools/specEditor";
-import { executeToolOrThrow } from "@/mastra/lib/executeToolOrThrow";
+import { callTool } from "@/mastra/lib/callTool";
 
 type JourneyMode =
   | "select_entity"
@@ -442,7 +442,7 @@ Journey phases:
       }
 
       // Get bundle list again, pick chosen bundle
-      const bundlesResult = await executeToolOrThrow(
+      const bundlesResult = await callTool(
         getStyleBundles,
         {
           platformType,
@@ -480,7 +480,7 @@ Journey phases:
 
       const nextJourney = { ...journey, selectedStoryboard: storyboardId, mode: "style" };
 
-      const bundlesResult = await executeToolOrThrow(
+      const bundlesResult = await callTool(
         getStyleBundles,
         {
           platformType,
@@ -647,7 +647,7 @@ Journey phases:
     // Phase: style (RAG -> 4 bundles)
     // ------------------------------------------------------------------
     if (effectiveMode === "style") {
-      const bundlesResult = await executeToolOrThrow(
+      const bundlesResult = await callTool(
         getStyleBundles,
         {
           platformType,
@@ -739,7 +739,7 @@ Journey phases:
       }
 
       // Load the actual current spec to extract real component IDs for interactive edit.
-      const current = await executeToolOrThrow(
+      const current = await callTool(
         getCurrentSpec,
         { interfaceId }, // inputData - tenantId removed as it's not needed
         { requestContext } // context
@@ -872,13 +872,13 @@ Journey phases:
         const p = paletteMap[paletteAction.paletteId];
         if (p) {
           // Apply palette tokens immediately using applySpecPatch so the interactive edit tool stays simple.
-          const currentSpecForPalette = await executeToolOrThrow(
+          const currentSpecForPalette = await callTool(
             getCurrentSpec,
             { interfaceId: payload.interfaceId }, // inputData - tenantId removed as it's not needed
             { requestContext } // context
           );
           
-          await executeToolOrThrow(
+          await callTool(
             applySpecPatch,
             {
               spec_json: currentSpecForPalette.spec_json,
@@ -896,7 +896,7 @@ Journey phases:
         }
       }
 
-      const result = await executeToolOrThrow(
+      const result = await callTool(
         applyInteractiveEdits,
         {
           tenantId,

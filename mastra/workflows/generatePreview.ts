@@ -6,13 +6,7 @@ import { generateMapping } from '../tools/generateMapping';
 import { generateUISpec } from '../tools/generateUISpec';
 import { validateSpec } from '../tools/validateSpec';
 import { persistPreviewVersion } from '../tools/persistPreviewVersion';
-
-function throwIfToolError<T>(result: T): asserts result is Exclude<T, { error: true }> {
-  if (typeof result === "object" && result !== null && "error" in result && (result as any).error) {
-    throw new Error((result as any).message ?? "Tool execution failed");
-  }
-}
-
+import { callTool } from '../lib/callTool';
 // Platform type derived from selectTemplate tool schema
 type SelectTemplatePlatformType = z.infer<typeof selectTemplate.inputSchema>['platformType'];
 
@@ -70,7 +64,8 @@ const analyzeSchemaStep = createStep({
       throw new Error('CONNECTION_NOT_CONFIGURED');
     }
     
-    const result = await analyzeSchema.execute(
+    const result = await callTool(
+      analyzeSchema,
       {
         tenantId,
         sourceId,
@@ -79,7 +74,6 @@ const analyzeSchemaStep = createStep({
       { requestContext: context?.requestContext }
     );
     
-    throwIfToolError(result);
     return result;
   },
 });
@@ -100,7 +94,8 @@ const selectTemplateStep = createStep({
       throw new Error('TEMPLATE_NOT_FOUND');
     }
     const platformType = (context?.requestContext?.get('platformType') || 'make') as SelectTemplatePlatformType;
-    const result = await selectTemplate.execute(
+    const result = await callTool(
+      selectTemplate,
       {
         platformType,
         eventTypes: analyzeResult.eventTypes,
@@ -108,7 +103,6 @@ const selectTemplateStep = createStep({
       },
       { requestContext: context?.requestContext }
     );
-    throwIfToolError(result);
     return result;
   },
 });
@@ -131,7 +125,8 @@ const generateMappingStep = createStep({
     const fields = analyzeResult.fields;
     const templateId = templateResult.templateId;
     const platformType = (context?.requestContext?.get('platformType') || 'make') as SelectTemplatePlatformType;
-    const result = await generateMapping.execute(
+    const result = await callTool(
+      generateMapping,
       {
         templateId,
         fields: analyzeResult.fields,
@@ -139,7 +134,6 @@ const generateMappingStep = createStep({
       },
       { requestContext: context?.requestContext }
     );
-    throwIfToolError(result);
     return result;
   },
 });
@@ -214,7 +208,8 @@ const generateUISpecStep = createStep({
     const mappings = mappingResult.mappings;
     const platformType = (context?.requestContext?.get('platformType') || 'make') as SelectTemplatePlatformType;
     
-    const result = await generateUISpec.execute(
+    const result = await callTool(
+      generateUISpec,
       {
         templateId,
         mappings: mappingResult.mappings,
@@ -223,7 +218,6 @@ const generateUISpecStep = createStep({
       { requestContext: context?.requestContext }
     );
     
-    throwIfToolError(result);
     return result;
   },
 });
@@ -240,11 +234,11 @@ const validateSpecStep = createStep({
   async execute(inputData, context) {
     const specResult = getStepResult(generateUISpecStep);
     const spec_json = specResult?.spec_json || {};
-    const result = await validateSpec.execute(
+    const result = await callTool(
+      validateSpec,
       { spec_json },
       { requestContext: context?.requestContext }
     );
-    throwIfToolError(result);
     if (!result.valid || result.score < 0.8) {
       throw new Error('SCORING_HARD_GATE_FAILED');
     }
@@ -271,7 +265,8 @@ const persistPreviewVersionStep = createStep({
     const userId = initData.userId;
     const interfaceId = initData.interfaceId;
     const platformType = (context?.requestContext?.get('platformType') || 'make') as SelectTemplatePlatformType;
-    const result = await persistPreviewVersion.execute(
+    const result = await callTool(
+      persistPreviewVersion,
       {
         tenantId,
         userId,
@@ -282,7 +277,6 @@ const persistPreviewVersionStep = createStep({
       },
       { requestContext: context?.requestContext }
     );
-    throwIfToolError(result);
     return result;
   },
 });

@@ -8,7 +8,7 @@ import {
 } from '@/mastra/tools';
 import { NextRequest } from 'next/server';
 import { RequestContext } from '@mastra/core/request-context';
-import { executeToolOrThrow } from '@/mastra/lib/executeToolOrThrow';
+import { callTool } from '@/mastra/lib/callTool';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -50,14 +50,14 @@ export async function POST(req: NextRequest) {
     requestContext.set('platformType', platformType);
 
     // Step 1: analyze schema
-    const analyzeResult = await executeToolOrThrow(
+    const analyzeResult = await callTool(
       analyzeSchema,
       { tenantId, sourceId, sampleSize: 100 },
       { requestContext }
     );
 
     // Step 2: select template
-    const selectResult = await executeToolOrThrow(
+    const selectResult = await callTool(
       selectTemplate,
       {
         platformType,
@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
     );
 
     // Step 3: generate mapping
-    const mappingResult = await executeToolOrThrow(
+    const mappingResult = await callTool(
       generateMapping,
       {
         templateId: selectResult.templateId,
@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
     );
 
     // Step 4: generate UI spec
-    const uiSpecResult = await executeToolOrThrow(
+    const uiSpecResult = await callTool(
       generateUISpec,
       {
         templateId: selectResult.templateId,
@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
     );
 
     // Step 5: validate spec
-    const validationResult = await executeToolOrThrow(
+    const validationResult = await callTool(
       validateSpec,
       { spec_json: uiSpecResult.spec_json },
       { requestContext }
@@ -109,7 +109,7 @@ export async function POST(req: NextRequest) {
     // Step 6: persist preview version
     const finalInterfaceId =
       interfaceId || `preview-${Date.now().toString()}`;
-    const persistResult = await executeToolOrThrow(
+    const persistResult = await callTool(
       persistPreviewVersion,
       {
         tenantId,

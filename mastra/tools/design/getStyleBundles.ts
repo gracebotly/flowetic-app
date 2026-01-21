@@ -1,6 +1,7 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { searchDesignKB, searchDesignKBLocal } from "@/mastra/tools/designAdvisor";
+import { callTool } from "../../lib/callTool";
 
 const Swatch = z.object({ name: z.string(), hex: z.string() });
 
@@ -228,25 +229,22 @@ export const getStyleBundles = createTool({
     const sources: Array<{ kind: string; note: string }> = [];
 
     try {
-      if (searchDesignKB?.execute) {
-        const rag = await searchDesignKB.execute(
+      if (searchDesignKB) {
+        const rag = await callTool(
+          searchDesignKB,
           { query: queryText, maxResults: 8 },
           { requestContext: context?.requestContext },
         );
 
-        if (typeof rag === "object" && rag !== null && "error" in rag && (rag as any).error) {
-          relevantText = "";
-        } else {
-          const results = (rag as any)?.results ?? [];
-          relevantText = Array.isArray(results)
-            ? results
-                .map((r: any) => String(r?.content ?? ""))
-                .filter(Boolean)
-                .join("\n\n")
-            : "";
-          if (results.length > 0) {
-            sources.push({ kind: "vector", note: "searchDesignKB" });
-          }
+        const results = rag?.results ?? [];
+        relevantText = Array.isArray(results)
+          ? results
+              .map((r: any) => String(r?.content ?? ""))
+              .filter(Boolean)
+              .join("\n\n")
+          : "";
+        if (results.length > 0) {
+          sources.push({ kind: "vector", note: "searchDesignKB" });
         }
       } else {
         relevantText = "";
@@ -255,25 +253,17 @@ export const getStyleBundles = createTool({
       // ignore and fallback
     }
 
-    if (!relevantText && searchDesignKBLocal?.execute) {
+    if (!relevantText) {
       try {
-        const local = await searchDesignKBLocal.execute(
+        const local = await callTool(
+          searchDesignKBLocal,
           { queryText, maxChars: 8000 },
           { requestContext: context?.requestContext },
         );
 
-        if (
-          typeof local === "object" &&
-          local !== null &&
-          "error" in local &&
-          (local as any).error
-        ) {
-          relevantText = "";
-        } else {
-          relevantText = String((local as any)?.relevantText ?? "");
-          if ((local as any)?.relevantText) {
-            sources.push({ kind: "local", note: "searchDesignKBLocal" });
-          }
+        relevantText = String(local?.relevantText ?? "");
+        if (local?.relevantText) {
+          sources.push({ kind: "local", note: "searchDesignKBLocal" });
         }
       } catch {
         // ignore and fallback
