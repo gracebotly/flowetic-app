@@ -3,27 +3,30 @@ import { z } from "zod";
 import { searchDesignKB, searchDesignKBLocal } from "@/mastra/tools/designAdvisor";
 import { callTool } from "../../lib/callTool";
 
-const Swatch = z.object({ name: z.string(), hex: z.string() });
+function hexToRgb(hex: string): [number, number, number] {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return result
+    ? [parseInt(result[1], 16), parseInt(result[2], 16), parseInt(result[3], 16)]
+    : [0, 0, 0];
+}
 
-export type StyleBundle = {
-  id: string;
-  name: string;
-  description: string;
-  previewImageUrl: string;
-  palette: {
-    name: string;
-    swatches: Array<{
-      name: string;
-      hex: string;
-      rgb: [number, number, number];
-      description?: string;
-    }>;
-  };
-  densityPreset: "compact" | "comfortable" | "spacious";
-  tags: string[];
-  // Tokens that Design Advisor / spec editor will apply
-  designTokens: Record<string, any>;
-};
+const Swatch = z.object({ name: z.string(), hex: z.string(), rgb: z.array(z.number()).length(3) });
+
+const StyleBundle = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string(),
+  previewImageUrl: z.string(),
+  palette: z.object({
+    name: z.string(),
+    swatches: z.array(Swatch.extend({ description: z.string().optional() })),
+  }),
+  densityPreset: z.enum(["compact", "comfortable", "spacious"]),
+  tags: z.array(z.string()),
+  designTokens: z.record(z.any()),
+});
+
+export type StyleBundle = z.infer<typeof StyleBundle>;
 
 function stableId(input: string) {
   return input
@@ -43,11 +46,11 @@ function fallbackBundles(): StyleBundle[] {
       palette: {
         name: "Premium Neutral",
         swatches: [
-          { name: "Primary", hex: "#2563EB" },
-          { name: "Accent", hex: "#22C55E" },
-          { name: "Background", hex: "#F8FAFC" },
-          { name: "Surface", hex: "#FFFFFF" },
-          { name: "Text", hex: "#0F172A" },
+          { name: "Primary", hex: "#2563EB", rgb: [37, 99, 235] },
+          { name: "Accent", hex: "#22C55E", rgb: [34, 197, 94] },
+          { name: "Background", hex: "#F8FAFC", rgb: [248, 250, 252] },
+          { name: "Surface", hex: "#FFFFFF", rgb: [255, 255, 255] },
+          { name: "Text", hex: "#0F172A", rgb: [15, 23, 42] },
         ],
       },
       densityPreset: "comfortable",
@@ -71,11 +74,11 @@ function fallbackBundles(): StyleBundle[] {
       palette: {
         name: "Dark SaaS",
         swatches: [
-          { name: "Primary", hex: "#60A5FA" },
-          { name: "Accent", hex: "#F472B6" },
-          { name: "Background", hex: "#0B1220" },
-          { name: "Surface", hex: "#111827" },
-          { name: "Text", hex: "#E5E7EB" },
+          { name: "Primary", hex: "#60A5FA", rgb: [96, 165, 250] },
+          { name: "Accent", hex: "#F472B6", rgb: [244, 114, 182] },
+          { name: "Background", hex: "#0B1220", rgb: [11, 18, 32] },
+          { name: "Surface", hex: "#111827", rgb: [17, 24, 39] },
+          { name: "Text", hex: "#E5E7EB", rgb: [229, 231, 235] },
         ],
       },
       densityPreset: "comfortable",
@@ -99,11 +102,11 @@ function fallbackBundles(): StyleBundle[] {
       palette: {
         name: "Slate Minimal",
         swatches: [
-          { name: "Primary", hex: "#334155" },
-          { name: "Accent", hex: "#0EA5E9" },
-          { name: "Background", hex: "#F9FAFB" },
-          { name: "Surface", hex: "#FFFFFF" },
-          { name: "Text", hex: "#111827" },
+          { name: "Primary", hex: "#334155", rgb: [51, 65, 85] },
+          { name: "Accent", hex: "#0EA5E9", rgb: [14, 165, 233] },
+          { name: "Background", hex: "#F9FAFB", rgb: [249, 250, 251] },
+          { name: "Surface", hex: "#FFFFFF", rgb: [255, 255, 255] },
+          { name: "Text", hex: "#111827", rgb: [17, 24, 39] },
         ],
       },
       densityPreset: "comfortable",
@@ -127,11 +130,11 @@ function fallbackBundles(): StyleBundle[] {
       palette: {
         name: "Startup Bold",
         swatches: [
-          { name: "Primary", hex: "#F97316" },
-          { name: "Accent", hex: "#A78BFA" },
-          { name: "Background", hex: "#0B0F19" },
-          { name: "Surface", hex: "#111827" },
-          { name: "Text", hex: "#F9FAFB" },
+          { name: "Primary", hex: "#F97316", rgb: [249, 115, 22] },
+          { name: "Accent", hex: "#A78BFA", rgb: [167, 139, 250] },
+          { name: "Background", hex: "#0B0F19", rgb: [11, 15, 25] },
+          { name: "Surface", hex: "#111827", rgb: [17, 24, 39] },
+          { name: "Text", hex: "#F9FAFB", rgb: [249, 250, 251] },
         ],
       },
       densityPreset: "comfortable",
@@ -181,11 +184,11 @@ function parseBundlesFromText(text: string): StyleBundle[] | null {
       palette: {
         name: "RAG Palette",
         swatches: [
-          { name: "Primary", hex: paletteHex[0]! },
-          { name: "Accent", hex: paletteHex[1]! },
-          { name: "Background", hex: paletteHex[2]! },
-          { name: "Surface", hex: paletteHex[3]! },
-          { name: "Text", hex: paletteHex[4]! },
+          { name: "Primary", hex: paletteHex[0]!, rgb: hexToRgb(paletteHex[0]!) },
+          { name: "Accent", hex: paletteHex[1]!, rgb: hexToRgb(paletteHex[1]!) },
+          { name: "Background", hex: paletteHex[2]!, rgb: hexToRgb(paletteHex[2]!) },
+          { name: "Surface", hex: paletteHex[3]!, rgb: hexToRgb(paletteHex[3]!) },
+          { name: "Text", hex: paletteHex[4]!, rgb: hexToRgb(paletteHex[4]!) },
         ],
       },
       densityPreset: "comfortable",
@@ -221,12 +224,12 @@ export const getStyleBundles = createTool({
     bundles: z.array(StyleBundle).length(4),
     sources: z.array(z.object({ kind: z.string(), note: z.string() })).default([]),
   }),
-  execute: async ({ context, runtimeContext }: { context: any; runtimeContext: any }) => {
+  execute: async (inputData: any, context: any) => {
     const queryText =
-      `Return 4 style+palette bundles for a ${context.dashboardKind} ` +
-      `${context.outcome} UI, audience=${context.audience}, platform=${context.platformType}. ` +
+      `Return 4 style+palette bundles for a ${inputData.dashboardKind} ` +
+      `${inputData.outcome} UI, audience=${inputData.audience}, platform=${inputData.platformType}. ` +
       `Each bundle must include: name, brief description, and a 5-color palette (hex). ` +
-      `Prefer premium client-ready styles. Notes: ${context.notes ?? ""}`;
+      `Prefer premium client-ready styles. Notes: ${inputData.notes ?? ""}`;
 
     // Try vector search; if unavailable, fallback local.
     let relevantText = "";

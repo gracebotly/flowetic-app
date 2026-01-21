@@ -32,7 +32,7 @@ export const getClientContext = createTool({
       }),
     ),
   }),
-  execute: async ({ context, runtimeContext }: { context: any; runtimeContext: any }) => {
+  execute: async (inputData: any, context: any) => {
     const supabase = await createClient();
 
     const tenantId =

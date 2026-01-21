@@ -27,20 +27,22 @@ export const getRecentEventSamples = createTool({
       }),
     ),
   }),
-  execute: async ({ context, runtimeContext }: { context: any; runtimeContext: any }) => {
+  execute: async (inputData: any, context: any) => {
     const supabase = await createClient();
 
     const tenantId =
+      inputData.tenantId ??
       context.tenantId ??
       (context?.requestContext?.get("tenantId") as string | undefined) ??
       undefined;
 
     const sourceId =
+      inputData.sourceId ??
       context.sourceId ??
       (context?.requestContext?.get("sourceId") as string | undefined) ??
       undefined;
 
-    const lastN = typeof context.lastN === "number" ? context.lastN : 50;
+    const lastN = typeof inputData.lastN === "number" ? inputData.lastN : 50;
 
     if (!tenantId) throw new Error("AUTH_REQUIRED");
     if (!sourceId) throw new Error("CONNECTION_NOT_CONFIGURED");

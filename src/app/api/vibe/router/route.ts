@@ -1,7 +1,7 @@
 
 
 import { NextRequest, NextResponse } from "next/server";
-import { createRuntimeContext, type RuntimeContextLike } from "@/mastra/lib/runtimeContext";
+import { RequestContext } from "@mastra/core/request-context";
 import { createClient } from "@/lib/supabase/server";
 import { loadSkill } from "@/mastra/skills/loadSkill";
 import { z } from "zod";
@@ -118,7 +118,7 @@ export async function POST(req: NextRequest) {
 
     const skillMD = await loadSkill(platformType);
 
-    const runtimeContext = createRuntimeContext({
+    const requestContext = RequestContext.create({
       userId,
       tenantId,
       platformType,

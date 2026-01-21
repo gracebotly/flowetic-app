@@ -17,8 +17,8 @@ export const searchDesignKB = createTool({
     })),
     retrieved: z.boolean(),
   }),
-  execute: async ({ context, runtimeContext }: { context: any; runtimeContext: any }) => {
-    const { query, maxResults } = context;
+  execute: async (inputData, context) => {
+    const { query, maxResults } = inputData;
     
     // TODO: Implement actual RAG search logic here
     // This is a placeholder implementation

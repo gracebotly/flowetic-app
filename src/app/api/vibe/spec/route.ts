@@ -1,7 +1,7 @@
 
 
 import { NextRequest, NextResponse } from "next/server";
-import { createRuntimeContext, type RuntimeContextLike } from "@/mastra/lib/runtimeContext";
+// import { createRuntimeContext, type RuntimeContextLike } from "@/mastra/lib/runtimeContext"; // Removed runtimeContext shim
 import { getCurrentSpec } from "@/mastra/tools/specEditor";
 import { callTool } from "@/mastra/lib/callTool";
 

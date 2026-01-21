@@ -1,4 +1,4 @@
-import { createWorkflow, createStep } from '@mastra/core/workflows';
+import { createWorkflow, createStep, type ExecuteParams } from '@mastra/core/workflows';
 import { z } from 'zod';
 import { analyzeSchema } from '../tools/analyzeSchema';
 import { selectTemplate } from '../tools/selectTemplate';
@@ -62,12 +62,12 @@ const analyzeSchemaStep = createStep({
     eventTypes: z.array(z.string()),
     confidence: z.number(),
   }),
-  async execute({ context, runtimeContext }: { context: any; runtimeContext: any }) {
-    // Get sourceId from runtimeContext (set when connection was established)
-    const sourceId = context?.get('sourceId') as string | undefined;
+  async execute(inputData: any, context: ExecuteParams) {
+    // Get sourceId from context (set when connection was established)
+    const sourceId = context.context?.get('sourceId') as string | undefined;
     
     // Get tenantId from workflow input
-    const { tenantId } = context;
+    const { tenantId } = inputData;
     
     const sampleSize = 100;
     
@@ -82,7 +82,7 @@ const analyzeSchemaStep = createStep({
         sourceId,
         sampleSize,
       },
-      { context }
+      { context: context.context }
     );
     
     return result;
@@ -98,7 +98,7 @@ const selectTemplateStep = createStep({
     confidence: z.number(),
     reason: z.string(),
   }),
-  async execute({ inputData, context, getStepResult }) {
+  async execute(inputData: any, { context, getStepResult }: ExecuteParams) {
     const analyzeResult = getStepResult(analyzeSchemaStep);
     
     if (!analyzeResult) {
@@ -127,7 +127,7 @@ const generateMappingStep = createStep({
     missingFields: z.array(z.string()),
     confidence: z.number(),
   }),
-  async execute({ inputData, context, getStepResult }) {
+  async execute(inputData: any, { context, getStepResult }: ExecuteParams) {
     const analyzeResult = getStepResult(analyzeSchemaStep);
     const templateResult = getStepResult(selectTemplateStep);
     if (!analyzeResult || !templateResult) {
@@ -168,7 +168,7 @@ const checkMappingCompletenessStep = createStep({
     selectedFieldKey: z.string().optional(),
     confirmed: z.boolean().optional(),
   }),
-  async execute({ inputData, context, suspend }) {
+  async execute(inputData: any, { context, suspend }: ExecuteParams) {
     const mappingResult = getStepResult(generateMappingStep);
     const missingFields = mappingResult?.missingFields || [];
     // If any required fields are missing, pause for human input
@@ -199,7 +199,7 @@ const generateUISpecStep = createStep({
     spec_json: z.record(z.any()),
     design_tokens: z.record(z.any()),
   }),
-  async execute({ inputData, context, getStepResult }) {
+  async execute(inputData: any, { context, getStepResult }: ExecuteParams) {
     // inputData contains output from checkMappingCompletenessStep
     const { shouldSuspend, missingFields, message, decision } = inputData;
     
@@ -242,7 +242,7 @@ const validateSpecStep = createStep({
     errors: z.array(z.string()),
     score: z.number(),
   }),
-  async execute({ context, runtimeContext }: { context: any; runtimeContext: any }) {
+  async execute(inputData: any, { context, getStepResult }: ExecuteParams) {
     const specResult = getStepResult(generateUISpecStep);
     const spec_json = specResult?.spec_json || {};
     const result = await callTool(
@@ -266,7 +266,7 @@ const persistPreviewVersionStep = createStep({
     versionId: z.string().uuid(),
     previewUrl: z.string(),
   }),
-  async execute({ inputData, context, getStepResult, getInitData }) {
+  async execute(inputData: any, { context, getStepResult, getInitData }: ExecuteParams) {
     const initData = getInitData() as GeneratePreviewInput;
     const specResult = getStepResult(generateUISpecStep);
     const spec_json = specResult?.spec_json || {};
@@ -297,7 +297,7 @@ const finalizeStep = createStep({
   id: 'finalize',
   inputSchema: persistPreviewVersionStep.outputSchema,
   outputSchema: GeneratePreviewOutput,
-  async execute({ inputData, context, runId }) {
+  async execute(inputData: any, { context, runId }: ExecuteParams) {
     const persistResult = getStepResult(persistPreviewVersionStep);
     return {
       runId,

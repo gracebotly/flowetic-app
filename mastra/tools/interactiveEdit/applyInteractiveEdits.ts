@@ -4,7 +4,7 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { getCurrentSpec, applySpecPatch, savePreviewVersion } from "@/mastra/tools/specEditor";
 import { validateSpec } from "@/mastra/tools/validateSpec";
-import { EditAction, DensityPreset } from "./types";
+import { EditActionSchema, EditAction, DensityPreset } from "./types";
 import { reorderComponents } from "./reorderComponents";
 import { callTool } from "../../lib/callTool";
 
@@ -23,23 +23,23 @@ export const applyInteractiveEdits = createTool({
     userId: z.string().uuid(),
     interfaceId: z.string().uuid(),
     platformType: z.string().min(1),
-    actions: z.array(EditAction).min(1).max(30),
+    actions: z.array(EditActionSchema).min(1).max(30),
   }),
   outputSchema: z.object({
     previewUrl: z.string().url(),
     previewVersionId: z.string().uuid(),
   }),
-  execute: async ({ context, runtimeContext }: { context: any; runtimeContext: any }) => {
+  execute: async (inputData: any, context: any) => {
     const current = await callTool(
       getCurrentSpec,
-      { interfaceId: context.interfaceId },
+      { interfaceId: inputData.interfaceId },
       { requestContext: context?.requestContext },
     );
 
     let nextSpec = current.spec_json ?? {};
     let nextTokens = current.design_tokens ?? {};
 
-    const reorderAction = context.actions.find((a) => a.type === "reorder_widgets") as any;
+    const reorderAction = inputData.actions.find((a: any) => a.type === "reorder_widgets") as any;
     if (reorderAction?.orderedIds?.length) {
       const reordered = await callTool(
         reorderComponents,

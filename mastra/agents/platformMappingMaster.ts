@@ -1,7 +1,7 @@
 
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
-import { createRuntimeContext, type RuntimeContextLike } from "@/mastra/lib/runtimeContext";
+import { RequestContext } from "@mastra/core/request-context";
 import { loadSkillMarkdown, PlatformType } from "../skills/loadSkill";
 import {
   appendThreadEvent,
@@ -20,8 +20,8 @@ export const platformMappingMaster = new Agent({
   name: "platformMappingMaster",
   description:
     "Platform Mapping Agent: inspects event samples, recommends templates, proposes mappings, and triggers preview workflow.",
-  instructions: async ({ runtimeContext }: { runtimeContext: any }) => {
-    const platformType = (runtimeContext.get("platformType") as PlatformType) || "make";
+  instructions: async ({ requestContext }: { requestContext: RequestContext }) => {
+    const platformType = (requestContext.get("platformType") as PlatformType) || "make";
     const skill = await loadSkillMarkdown(platformType);
 
     return [

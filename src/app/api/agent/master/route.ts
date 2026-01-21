@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createRuntimeContext, type RuntimeContextLike } from "@/mastra/lib/runtimeContext";
+import { RequestContext } from "@mastra/core/request-context";
 import { mastra } from "@/mastra";
 import { createClient } from "@/lib/supabase/server";
 
@@ -137,8 +137,8 @@ export async function POST(req: NextRequest) {
       (typeof body.threadId === "string" && body.threadId.trim()) ||
       `thread-${tenantId}`;
 
-    // 4) Build runtimeContext with real IDs
-    const runtimeContext = createRuntimeContext({
+    // 4) Build requestContext with real IDs
+    const requestContext = RequestContext.create({
       tenantId,
       userId,
       userRole,
@@ -220,12 +220,12 @@ export async function POST(req: NextRequest) {
 
       const routerResponse = await master.generate(message, {
         maxSteps: 3,
-        runtimeContext,
+        requestContext,
       });
 
       const mappingResponse = await mappingAgent.generate(message, {
         maxSteps: 8,
-        runtimeContext,
+        requestContext,
       });
 
       return new Response(
@@ -240,7 +240,7 @@ export async function POST(req: NextRequest) {
 
     const routerOnly = await master.generate(message, {
       maxSteps: 3,
-      runtimeContext,
+      requestContext,
     });
 
     return new Response(

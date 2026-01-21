@@ -44,8 +44,8 @@ export const reorderComponents = createTool({
     spec_json: z.record(z.any()),
     applied: z.string(),
   }),
-  execute: async ({ context, runtimeContext }: { context: any; runtimeContext: any }) => {
-    const spec = deepClone(context.spec_json);
+  execute: async (inputData: any, context: any) => {
+    const spec = deepClone(inputData.spec_json);
     const parsed = UISpecSchemaLoose.safeParse(spec);
     if (!parsed.success) throw new Error("SPEC_VALIDATION_FAILED");
 

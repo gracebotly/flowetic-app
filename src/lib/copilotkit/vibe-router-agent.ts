@@ -1,7 +1,7 @@
 
 import { AbstractAgent } from "@ag-ui/client";
 
-import { createRuntimeContext, type RuntimeContextLike } from "@/mastra/lib/runtimeContext";
+// import { createRuntimeContext, type RuntimeContextLike } from "@/mastra/lib/runtimeContext"; // Removed runtimeContext shim
 import { runVibeRouter } from "@/app/api/vibe/router/runner";
 import { Observable } from "rxjs";
 
