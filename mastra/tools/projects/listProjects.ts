@@ -20,7 +20,8 @@ export const listProjects = createTool({
   }),
   execute: async (inputData, context) => {
     const supabase = await createClient();
-    const { tenantId, type, status, limit } = inputData;
+    const { tenantId, type, status } = inputData;
+    const limit = typeof inputData.limit === "number" ? inputData.limit : 50;
 
     let q = supabase
       .from("projects")

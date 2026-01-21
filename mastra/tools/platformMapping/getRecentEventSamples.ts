@@ -40,6 +40,8 @@ export const getRecentEventSamples = createTool({
       (context?.requestContext?.get("sourceId") as string | undefined) ??
       undefined;
 
+    const lastN = typeof inputData.lastN === "number" ? inputData.lastN : 50;
+
     if (!tenantId) throw new Error("AUTH_REQUIRED");
     if (!sourceId) throw new Error("CONNECTION_NOT_CONFIGURED");
 
@@ -49,7 +51,7 @@ export const getRecentEventSamples = createTool({
       .eq("tenant_id", tenantId)
       .eq("source_id", sourceId)
       .order("timestamp", { ascending: false })
-      .limit(inputData.lastN);
+      .limit(lastN);
 
     if (error) throw new Error(error.message);
 
