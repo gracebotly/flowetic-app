@@ -1,7 +1,7 @@
 
 
 import { NextRequest, NextResponse } from "next/server";
-import { RequestContext } from "@mastra/core/request-context";
+// import { RequestContext } from "@mastra/core/request-context"; // Removed - invalid import
 import { createClient } from "@/lib/supabase/server";
 import { loadSkill } from "@/mastra/skills/loadSkill";
 import { z } from "zod";
@@ -118,13 +118,17 @@ export async function POST(req: NextRequest) {
 
     const skillMD = await loadSkill(platformType);
 
-    const requestContext = RequestContext.create({
+    const runtimeContext = {
       userId,
       tenantId,
       platformType,
       sourceId,
       skillMD,
-    });
+      get: (key: string) => {
+        const obj: any = { userId, tenantId, platformType, sourceId, skillMD };
+        return obj[key];
+      }
+    } as any;
 
     // Enhance system prompt with workflow context
     let workflowContext = "";
@@ -172,15 +176,15 @@ Journey phases:
 
     // Thread id: use vibeContextSnapshot/thread id if you have it; fallback to "vibe"
     const threadId = vibeContext?.threadId || "vibe";
-    runtimeContext.set("threadId", threadId);
+    (runtimeContext as any).threadId = threadId;
 
-    // Extra context for business-outcomes-advisor + platform skill reasoning
+    // Add context properties to runtimeContext object
     const workflowName = String(vibeContext?.displayName ?? vibeContext?.externalId ?? "").trim();
-    if (workflowName) runtimeContext.set("workflowName", workflowName);
-    if (vibeContext?.entityId) runtimeContext.set("workflowEntityId", String(vibeContext.entityId));
-    if (vibeContext?.sourceId) runtimeContext.set("sourceId", String(vibeContext.sourceId));
-    if (journey?.selectedOutcome) runtimeContext.set("selectedOutcome", String(journey.selectedOutcome));
-    if (journey?.selectedStoryboard) runtimeContext.set("selectedStoryboard", String(journey.selectedStoryboard));
+    if (workflowName) (runtimeContext as any).workflowName = workflowName;
+    if (vibeContext?.entityId) (runtimeContext as any).workflowEntityId = String(vibeContext.entityId);
+    if (vibeContext?.sourceId) (runtimeContext as any).sourceId = String(vibeContext.sourceId);
+    if (journey?.selectedOutcome) (runtimeContext as any).selectedOutcome = String(journey.selectedOutcome);
+    if (journey?.selectedStoryboard) (runtimeContext as any).selectedStoryboard = String(journey.selectedStoryboard);
 
     const mode: JourneyMode = journey?.mode || "select_entity";
 

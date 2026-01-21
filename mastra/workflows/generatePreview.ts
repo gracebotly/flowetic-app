@@ -1,4 +1,4 @@
-import { createWorkflow, createStep, type ExecuteParams } from '@mastra/core/workflows';
+import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { z } from 'zod';
 import { analyzeSchema } from '../tools/analyzeSchema';
 import { selectTemplate } from '../tools/selectTemplate';
@@ -7,6 +7,18 @@ import { generateUISpec } from '../tools/generateUISpec';
 import { validateSpec } from '../tools/validateSpec';
 import { persistPreviewVersion } from '../tools/persistPreviewVersion';
 import { callTool } from '../lib/callTool';
+
+// Helper function to create ToolExecutionContext from RequestContext
+function createToolExecutionContext(requestContext: any) {
+  return {
+    get: (key: string) => requestContext.get(key),
+    set: (key: string, value: any) => requestContext.set(key, value),
+    requestContext,
+    runId: requestContext.get('runId'),
+    parentId: undefined,
+    timestamp: Date.now()
+  };
+}
 // Platform type derived from selectTemplate tool schema
 type SelectTemplatePlatformType = "vapi" | "retell" | "n8n" | "mastra" | "crewai" | "activepieces" | "make";
 
@@ -62,9 +74,9 @@ const analyzeSchemaStep = createStep({
     eventTypes: z.array(z.string()),
     confidence: z.number(),
   }),
-  async execute(inputData: any, context: ExecuteParams) {
+  async execute({ inputData, requestContext }) {
     // Get sourceId from context (set when connection was established)
-    const sourceId = context.context?.get('sourceId') as string | undefined;
+    const sourceId = requestContext.get('sourceId');
     
     // Get tenantId from workflow input
     const { tenantId } = inputData;
@@ -74,6 +86,7 @@ const analyzeSchemaStep = createStep({
     if (!tenantId || !sourceId) {
       throw new Error('CONNECTION_NOT_CONFIGURED');
     }
+
     
     const result = await callTool(
       analyzeSchema,
@@ -82,7 +95,7 @@ const analyzeSchemaStep = createStep({
         sourceId,
         sampleSize,
       },
-      { context: context.context }
+      createToolExecutionContext(requestContext)
     );
     
     return result;
@@ -98,21 +111,20 @@ const selectTemplateStep = createStep({
     confidence: z.number(),
     reason: z.string(),
   }),
-  async execute(inputData: any, { context, getStepResult }: ExecuteParams) {
+  async execute({ inputData, requestContext, getStepResult }) {
     const analyzeResult = getStepResult(analyzeSchemaStep);
     
     if (!analyzeResult) {
       throw new Error('TEMPLATE_NOT_FOUND');
     }
-    const platformType = (context?.get('platformType') || 'make') as SelectTemplatePlatformType;
-    const result = await callTool(
-      selectTemplate,
+    const platformType = (requestContext.get("platformType") || 'make') as SelectTemplatePlatformType;
+    const result = await callTool(selectTemplate, 
       {
         platformType,
         eventTypes: analyzeResult.eventTypes,
         fields: analyzeResult.fields,
       },
-      { context }
+                createToolExecutionContext(requestContext)
     );
     return result;
   },
@@ -127,7 +139,7 @@ const generateMappingStep = createStep({
     missingFields: z.array(z.string()),
     confidence: z.number(),
   }),
-  async execute(inputData: any, { context, getStepResult }: ExecuteParams) {
+  async execute({ inputData, requestContext, getStepResult }) {
     const analyzeResult = getStepResult(analyzeSchemaStep);
     const templateResult = getStepResult(selectTemplateStep);
     if (!analyzeResult || !templateResult) {
@@ -135,15 +147,14 @@ const generateMappingStep = createStep({
     }
     const fields = analyzeResult.fields;
     const templateId = templateResult.templateId;
-    const platformType = (context?.get('platformType') || 'make') as SelectTemplatePlatformType;
-    const result = await callTool(
-      generateMapping,
+    const platformType = (requestContext.get("platformType") || 'make') as SelectTemplatePlatformType;
+    const result = await callTool(generateMapping, 
       {
         templateId,
         fields: analyzeResult.fields,
         platformType,
       },
-      { context }
+                createToolExecutionContext(requestContext)
     );
     return result;
   },
@@ -168,7 +179,7 @@ const checkMappingCompletenessStep = createStep({
     selectedFieldKey: z.string().optional(),
     confirmed: z.boolean().optional(),
   }),
-  async execute(inputData: any, { context, suspend }: ExecuteParams) {
+  async execute({ inputData, requestContext, suspend }) {
     const mappingResult = getStepResult(generateMappingStep);
     const missingFields = mappingResult?.missingFields || [];
     // If any required fields are missing, pause for human input
@@ -199,7 +210,7 @@ const generateUISpecStep = createStep({
     spec_json: z.record(z.any()),
     design_tokens: z.record(z.any()),
   }),
-  async execute(inputData: any, { context, getStepResult }: ExecuteParams) {
+  async execute({ inputData, requestContext, getStepResult }) {
     // inputData contains output from checkMappingCompletenessStep
     const { shouldSuspend, missingFields, message, decision } = inputData;
     
@@ -217,16 +228,15 @@ const generateUISpecStep = createStep({
     
     const templateId = templateResult.templateId;
     const mappings = mappingResult.mappings;
-    const platformType = (context?.get('platformType') || 'make') as SelectTemplatePlatformType;
+    const platformType = (requestContext.get("platformType") || 'make') as SelectTemplatePlatformType;
     
-    const result = await callTool(
-      generateUISpec,
+    const result = await callTool(generateUISpec, 
       {
         templateId,
         mappings: mappingResult.mappings,
         platformType,
       },
-      { context }
+                createToolExecutionContext(requestContext)
     );
     
     return result;
@@ -242,13 +252,12 @@ const validateSpecStep = createStep({
     errors: z.array(z.string()),
     score: z.number(),
   }),
-  async execute(inputData: any, { context, getStepResult }: ExecuteParams) {
+  async execute({ inputData, requestContext, getStepResult }) {
     const specResult = getStepResult(generateUISpecStep);
     const spec_json = specResult?.spec_json || {};
-    const result = await callTool(
-      validateSpec,
+    const result = await callTool(validateSpec, 
       { spec_json },
-      { context }
+                createToolExecutionContext(requestContext)
     );
     if (!result.valid || result.score < 0.8) {
       throw new Error('SCORING_HARD_GATE_FAILED');
@@ -266,7 +275,7 @@ const persistPreviewVersionStep = createStep({
     versionId: z.string().uuid(),
     previewUrl: z.string(),
   }),
-  async execute(inputData: any, { context, getStepResult, getInitData }: ExecuteParams) {
+  async execute({ inputData, requestContext, getStepResult, getInitData }) {
     const initData = getInitData() as GeneratePreviewInput;
     const specResult = getStepResult(generateUISpecStep);
     const spec_json = specResult?.spec_json || {};
@@ -275,9 +284,8 @@ const persistPreviewVersionStep = createStep({
     const tenantId = initData.tenantId;
     const userId = initData.userId;
     const interfaceId = initData.interfaceId;
-    const platformType = (context?.get('platformType') || 'make') as SelectTemplatePlatformType;
-    const result = await callTool(
-      persistPreviewVersion,
+    const platformType = (requestContext.get("platformType") || 'make') as SelectTemplatePlatformType;
+    const result = await callTool(persistPreviewVersion, 
       {
         tenantId,
         userId,
@@ -286,7 +294,7 @@ const persistPreviewVersionStep = createStep({
         design_tokens,
         platformType,
       },
-      { context }
+                createToolExecutionContext(requestContext)
     );
     return result;
   },
@@ -297,7 +305,7 @@ const finalizeStep = createStep({
   id: 'finalize',
   inputSchema: persistPreviewVersionStep.outputSchema,
   outputSchema: GeneratePreviewOutput,
-  async execute(inputData: any, { context, runId }: ExecuteParams) {
+  async execute({ inputData, requestContext, runId }) {
     const persistResult = getStepResult(persistPreviewVersionStep);
     return {
       runId,

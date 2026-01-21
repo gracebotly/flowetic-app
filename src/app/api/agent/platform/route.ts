@@ -44,10 +44,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Use RequestContext instead of runtimeContext shim
     const requestContext = {
-      sourceId,
-      platformType,
+      get: (key: string) => {
+        switch (key) {
+          case "tenantId": return tenantId;
+          case "userId": return userId;
+          case "sourceId": return sourceId;
+          case "platformType": return platformType;
+          default: return undefined;
+        }
+      }
     };
 
     // Step 1: analyze schema

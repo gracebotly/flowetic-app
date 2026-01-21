@@ -32,13 +32,15 @@ export const getRecentEventSamples = createTool({
 
     const tenantId =
       inputData.tenantId ??
-      context.tenantId ??
+      inputData.tenantId ??
+      (context?.runtimeContext?.tenantId as string | undefined) ??
       (context?.requestContext?.get("tenantId") as string | undefined) ??
       undefined;
 
     const sourceId =
       inputData.sourceId ??
-      context.sourceId ??
+      inputData.sourceId ??
+      (context?.runtimeContext?.sourceId as string | undefined) ??
       (context?.requestContext?.get("sourceId") as string | undefined) ??
       undefined;
 

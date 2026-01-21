@@ -1,7 +1,7 @@
 
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
-import { RequestContext } from "@mastra/core/request-context";
+// import { RequestContext } from "@mastra/core/request-context"; // Removed - invalid import
 import { loadSkillMarkdown, loadNamedSkillMarkdown, PlatformType } from "../skills/loadSkill";
 
 import { todoAdd, todoList, todoUpdate, todoComplete } from "../tools/todo";
@@ -26,13 +26,14 @@ export const masterRouterAgent = new Agent({
   name: "masterRouterAgent",
   description:
     "Master Router Agent (Copilot-connected). Enforces the VibeChat journey phases and routes to platform mapping, design advisor, and dashboard builder.",
-  instructions: async ({ requestContext }: { requestContext: RequestContext }) => {
-    const platformType = (requestContext.get("platformType") as PlatformType) || "make";
+  instructions: async ({ requestContext, mastra }: { requestContext: any, mastra?: any }) => {
+    const runtimeContext = requestContext;
+    const platformType = (runtimeContext.get ? runtimeContext.get("platformType") : undefined) as PlatformType || "make";
     const platformSkill = await loadSkillMarkdown(platformType);
     const businessSkill = await loadNamedSkillMarkdown("business-outcomes-advisor");
 
-    const workflowName = requestContext.get("workflowName") as string | undefined;
-    const selectedOutcome = requestContext.get("selectedOutcome") as string | undefined;
+    const workflowName = runtimeContext.get ? runtimeContext.get("workflowName") : undefined;
+    const selectedOutcome = runtimeContext.get ? runtimeContext.get("selectedOutcome") : undefined;
 
     return [
       {

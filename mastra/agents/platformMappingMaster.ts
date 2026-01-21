@@ -1,7 +1,7 @@
 
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
-import { RequestContext } from "@mastra/core/request-context";
+// import { RequestContext } from "@mastra/core/request-context"; // Removed - invalid import
 import { loadSkillMarkdown, PlatformType } from "../skills/loadSkill";
 import {
   appendThreadEvent,
@@ -20,8 +20,9 @@ export const platformMappingMaster = new Agent({
   name: "platformMappingMaster",
   description:
     "Platform Mapping Agent: inspects event samples, recommends templates, proposes mappings, and triggers preview workflow.",
-  instructions: async ({ requestContext }: { requestContext: RequestContext }) => {
-    const platformType = (requestContext.get("platformType") as PlatformType) || "make";
+  instructions: async ({ requestContext, mastra }: { requestContext: any, mastra?: any }) => {
+    const runtimeContext = requestContext;
+    const platformType = (runtimeContext.get ? runtimeContext.get("platformType") : undefined) as PlatformType || "make";
     const skill = await loadSkillMarkdown(platformType);
 
     return [

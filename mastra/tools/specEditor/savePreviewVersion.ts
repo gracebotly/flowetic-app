@@ -19,17 +19,20 @@ export const savePreviewVersion = createTool({
     versionId: z.string().uuid(),
     previewUrl: z.string(),
   }),
-  execute: async ({ context, runtimeContext }: { context: any; runtimeContext: any }) => {
-    const requestContext = context?.requestContext;
-    const tenantId = requestContext?.get("tenantId") as string | undefined;
-    const userId = requestContext?.get("userId") as string | undefined;
-    const platformType = (requestContext?.get("platformType") as string | undefined) ?? "make";
+  execute: async (inputData: any, context: any) => {
+    const tenantId =
+      inputData.runtimeContext?.tenantId ??
+      (context?.requestContext?.get("tenantId") as string | undefined);
+    const userId = inputData.runtimeContext?.userId ?? (context?.requestContext?.get("userId") as string | undefined);
+    const platformType = inputData.runtimeContext?.platformType ?? (context?.requestContext?.get("platformType") as string | undefined) ?? "make";
 
     if (!tenantId || !userId) throw new Error("AUTH_REQUIRED");
 
     const interfaceId =
-      context.interfaceId ??
-      (requestContext?.get("interfaceId") as string | undefined) ??
+      inputData.interfaceId ??
+      inputData.interfaceId ??
+      inputData.runtimeContext?.interfaceId ??
+      (context?.requestContext?.get("interfaceId") as string | undefined) ??
       undefined;
 
     const result = await callTool(
@@ -38,8 +41,8 @@ export const savePreviewVersion = createTool({
         tenantId,
         userId,
         interfaceId,
-        spec_json: context.spec_json,
-        design_tokens: context.design_tokens ?? {},
+        spec_json: inputData.spec_json,
+        design_tokens: inputData.design_tokens ?? {},
         platformType,
       },
       { requestContext: context?.requestContext }

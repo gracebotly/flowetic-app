@@ -164,19 +164,12 @@ class VibeRouterAgent extends AbstractAgent {
             }
           }
 
-          const runtimeContext = createRuntimeContext({
-            userId: ctx.userId,
-            tenantId: ctx.tenantId,
-            ...(ctx.vibeContext?.platformType && { platformType: ctx.vibeContext.platformType }),
-          });
-
           const result = await runVibeRouter({
             userId: ctx.userId,
             tenantId: ctx.tenantId,
             vibeContext: ctx.vibeContext,
             journey: ctx.journey,
             userMessage,
-            runtimeContext,
           });
 
           const text = String(result?.text || "").trim() || "OK.";

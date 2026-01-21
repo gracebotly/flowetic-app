@@ -16,16 +16,19 @@ export const getCurrentSpec = createTool({
     spec_json: z.record(z.any()),
     design_tokens: z.record(z.any()),
   }),
-  execute: async ({ context, runtimeContext }: { context: any; runtimeContext: any }) => {
+  execute: async (inputData: any, context: any) => {
     const supabase = await createClient();
-    const requestContext = context?.requestContext;
 
-    const tenantId = requestContext?.get("tenantId") as string | undefined;
+    const tenantId =
+      inputData.runtimeContext?.tenantId ??
+      (context?.requestContext?.get("tenantId") as string | undefined);
     if (!tenantId) throw new Error("AUTH_REQUIRED");
 
     const explicitInterfaceId =
-      context.interfaceId ??
-      (requestContext?.get("interfaceId") as string | undefined);
+      inputData.interfaceId ??
+      inputData.interfaceId ??
+      inputData.runtimeContext?.interfaceId ??
+      (context?.requestContext?.get("interfaceId") as string | undefined);
 
     let interfaceId: string | undefined = explicitInterfaceId;
 
@@ -45,13 +48,14 @@ export const getCurrentSpec = createTool({
     if (!interfaceId) {
       // No dashboard exists yet — return a safe empty spec skeleton so the agent can proceed.
       // The savePreviewVersion tool will create the interface if needed.
+      const runtimeContext = context?.runtimeContext || {};
       return {
-        interfaceId: (requestContext?.get("interfaceId") as string) || "00000000-0000-0000-0000-000000000000",
+        interfaceId: (runtimeContext?.get ? runtimeContext.get("interfaceId") : undefined) || "00000000-0000-0000-0000-000000000000",
         versionId: null,
         spec_json: {
           version: "1.0",
           templateId: "general-analytics",
-          platformType: (requestContext?.get("platformType") as string | undefined) ?? "make",
+          platformType: (runtimeContext?.get ? runtimeContext.get("platformType") : undefined) ?? "make",
           layout: { type: "grid", columns: 12, gap: 4 },
           components: [],
         },
@@ -69,13 +73,14 @@ export const getCurrentSpec = createTool({
 
     if (versionErr) throw new Error(versionErr.message);
 
+    const runtimeContext = context?.runtimeContext || {};
     return {
       interfaceId,
       versionId: version?.id ?? null,
       spec_json: (version?.spec_json as Record<string, any>) ?? {
         version: "1.0",
         templateId: "general-analytics",
-        platformType: (requestContext?.get("platformType") as string | undefined) ?? "make",
+        platformType: (runtimeContext?.get ? runtimeContext.get("platformType") : undefined) ?? "make",
         layout: { type: "grid", columns: 12, gap: 4 },
         components: [],
       },

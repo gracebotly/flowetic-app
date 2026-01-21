@@ -2,7 +2,7 @@
 
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
-import { RequestContext } from "@mastra/core/request-context";
+// import { RequestContext } from "@mastra/core/request-context"; // Removed - invalid import
 import { searchDesignKB, searchDesignKBLocal } from "../tools/designAdvisor";
 import {
   getCurrentSpec,
@@ -18,10 +18,11 @@ export const designAdvisorAgent = new Agent({
   name: "designAdvisorAgent",
   description:
     "Design Advisor Agent (RAG): grounded UI/UX + design-system guidance. Proposes and optionally applies design token/layout improvements to make dashboards more premium.",
-  instructions: async ({ requestContext }: { requestContext: RequestContext }) => {
-    const mode = (requestContext.get("mode") as string | undefined) ?? "edit";
-    const phase = (requestContext.get("phase") as string | undefined) ?? "editing";
-    const platformType = (requestContext.get("platformType") as string | undefined) ?? "make";
+  instructions: async ({ requestContext, mastra }: { requestContext: any, mastra?: any }) => {
+    const runtimeContext = requestContext;
+    const mode = (runtimeContext.get ? runtimeContext.get("mode") : undefined) ?? "edit";
+    const phase = (runtimeContext.get ? runtimeContext.get("phase") : undefined) ?? "editing";
+    const platformType = (runtimeContext.get ? runtimeContext.get("platformType") : undefined) ?? "make";
 
     return [
       {

@@ -1,10 +1,10 @@
 import { z } from "zod";
 
 export const TodoStatusSchema = z.enum(["pending", "in_progress", "completed"]);
-export type TodoStatus = z.infer<typeof TodoStatusSchema>;
+
 
 export const TodoPrioritySchema = z.enum(["low", "medium", "high"]);
-export type TodoPriority = z.infer<typeof TodoPrioritySchema>;
+
 
 export const TodoItemSchema = z.object({
   id: z.string(),
@@ -20,4 +20,4 @@ export const TodoItemSchema = z.object({
   updated_at: z.string(),
 });
 
-export type TodoItem = z.infer<typeof TodoItemSchema>;
+

@@ -28,13 +28,12 @@ export const runGeneratePreviewWorkflow = createTool({
 
     const result = await run.start({
       inputData: {
-        tenantId: context.tenantId,
-        userId: context.userId,
-        userRole: context.userRole,
-        interfaceId: context.interfaceId,
-        instructions: context.instructions,
+        tenantId: inputData.tenantId,
+        userId: inputData.userId,
+        userRole: inputData.userRole,
+        interfaceId: inputData.interfaceId,
+        instructions: inputData.instructions,
       },
-      runtimeContext,
     });
 
 

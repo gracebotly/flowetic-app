@@ -26,15 +26,15 @@ export const updateProject = createTool({
     project: ProjectPublic,
     message: z.string(),
   }),
-  execute: async ({ context, runtimeContext }: { context: any; runtimeContext: any }) => {
+  execute: async (inputData: any, context: any) => {
     const supabase = await createClient();
 
     const updates: Record<string, any> = {};
-    if (context.name !== undefined) updates.name = context.name;
-    if (context.type !== undefined) updates.type = context.type;
-    if (context.status !== undefined) updates.status = context.status;
-    if (context.description !== undefined) updates.description = context.description;
-    if (context.publicEnabled !== undefined) updates.public_enabled = context.publicEnabled;
+    if (inputData.name !== undefined) updates.name = inputData.name;
+    if (inputData.type !== undefined) updates.type = inputData.type;
+    if (inputData.status !== undefined) updates.status = inputData.status;
+    if (inputData.description !== undefined) updates.description = inputData.description;
+    if (inputData.publicEnabled !== undefined) updates.public_enabled = inputData.publicEnabled;
 
     if (Object.keys(updates).length === 0) throw new Error("NO_FIELDS_TO_UPDATE");
 
@@ -43,8 +43,8 @@ export const updateProject = createTool({
     const { data, error } = await supabase
       .from("projects")
       .update(updates)
-      .eq("id", context.projectId)
-      .eq("tenant_id", context.tenantId)
+      .eq("id", inputData.projectId)
+      .eq("tenant_id", inputData.tenantId)
       .select("id, tenant_id, name, type, status, description, public_enabled, created_at, updated_at")
       .single();
 

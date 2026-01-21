@@ -52,7 +52,7 @@ export const applyInteractiveEdits = createTool({
 
     const ops: any[] = [];
 
-    for (const a of context.actions) {
+    for (const a of inputData.actions) {
       if (a.type === "toggle_widget") {
         ops.push({
           op: "updateComponentProps",
@@ -102,12 +102,12 @@ export const applyInteractiveEdits = createTool({
     const saved = await callTool(
       savePreviewVersion,
       {
-        tenantId: context.tenantId,
-        userId: context.userId,
-        interfaceId: context.interfaceId,
+        tenantId: inputData.tenantId,
+        userId: inputData.userId,
+        interfaceId: inputData.interfaceId,
         spec_json: nextSpec,
         design_tokens: nextTokens,
-        platformType: context.platformType,
+        platformType: inputData.platformType,
       },
       { requestContext: context?.requestContext },
     );

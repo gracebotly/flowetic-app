@@ -54,7 +54,7 @@ export const reorderComponents = createTool({
     const seen = new Set<string>();
 
     const reordered: typeof components = [];
-    for (const id of context.orderedIds) {
+    for (const id of inputData.orderedIds) {
       const c = byId.get(id);
       if (!c) continue;
       if (seen.has(id)) continue;
