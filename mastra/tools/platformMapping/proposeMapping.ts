@@ -20,8 +20,8 @@ export const proposeMapping = createTool({
     missingFields: z.array(z.string()),
     confidence: z.number(),
   }),
-  execute: async ({ context }) => {
-    const { templateId, schemaFields } = context;
+  execute: async (inputData, context) => {
+    const { templateId, schemaFields } = inputData;
 
     const available = schemaFields.map((f) => f.name);
     const lower = schemaFields.map((f) => f.name.toLowerCase());

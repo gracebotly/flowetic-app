@@ -31,12 +31,12 @@ export const getRecentEventSamples = createTool({
     const supabase = await createClient();
 
     const tenantId =
-      context.tenantId ??
+      inputData.tenantId ??
       (runtimeContext?.get("tenantId") as string | undefined) ??
       undefined;
 
     const sourceId =
-      context.sourceId ??
+      inputData.sourceId ??
       (runtimeContext?.get("sourceId") as string | undefined) ??
       undefined;
 
@@ -49,7 +49,7 @@ export const getRecentEventSamples = createTool({
       .eq("tenant_id", tenantId)
       .eq("source_id", sourceId)
       .order("timestamp", { ascending: false })
-      .limit(context.lastN);
+      .limit(inputData.lastN);
 
     if (error) throw new Error(error.message);
 

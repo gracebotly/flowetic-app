@@ -70,9 +70,9 @@ export const applySpecPatch = createTool({
     design_tokens: z.record(z.any()),
     applied: z.array(z.string()),
   }),
-  execute: async ({ context }) => {
-    const spec = deepClone(context.spec_json);
-    const tokens = deepClone(context.design_tokens ?? {});
+  execute: async (inputData, context) => {
+    const spec = deepClone(inputData.spec_json);
+    const tokens = deepClone(inputData.design_tokens ?? {});
     const applied: string[] = [];
 
     // Basic shape guard to keep edits sane
@@ -85,7 +85,7 @@ export const applySpecPatch = createTool({
       if (!Array.isArray(spec.components)) spec.components = [];
     };
 
-    for (const op of context.operations) {
+    for (const op of inputData.operations) {
       if (op.op === "setDesignToken") {
         if (!op.tokenPath) throw new Error("PATCH_INVALID_TOKEN_PATH");
         setByPath(tokens, op.tokenPath, op.tokenValue);

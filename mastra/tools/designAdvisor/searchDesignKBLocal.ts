@@ -23,8 +23,8 @@ export const searchDesignKBLocal = createTool({
       }),
     ),
   }),
-  execute: async ({ context }) => {
-    const { queryText, maxChars } = context;
+  execute: async (inputData, context) => {
+    const { queryText, maxChars } = inputData;
     const q = queryText.toLowerCase();
     const terms = q
       .replace(/[^a-z0-9\s]/g, " ")

@@ -22,9 +22,9 @@ export const todoUpdate = createTool({
   outputSchema: z.object({
     todo: TodoItem,
   }),
-  execute: async ({ context }) => {
+  execute: async (inputData, context) => {
     const supabase = createClient();
-    const { tenantId, threadId, todoId, ...patch } = context;
+    const { tenantId, threadId, todoId, ...patch } = inputData;
 
     const { data, error } = await supabase
       .from("todos")

@@ -23,7 +23,7 @@ export const getCurrentSpec = createTool({
     if (!tenantId) throw new Error("AUTH_REQUIRED");
 
     const explicitInterfaceId =
-      context.interfaceId ?? (runtimeContext?.get("interfaceId") as string | undefined);
+      inputData.interfaceId ?? (runtimeContext?.get("interfaceId") as string | undefined);
 
     let interfaceId: string | undefined = explicitInterfaceId;
 

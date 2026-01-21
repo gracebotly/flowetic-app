@@ -13,13 +13,13 @@ export const runGeneratePreviewWorkflow = createTool({
     selectedStoryboardKey: z.string().describe("The selected storyboard key"),
     selectedStyleBundleId: z.string().describe("The selected style bundle ID"),
   }),
-  execute: async ({ context }) => {
+  execute: async (inputData, context) => {
     const result = await triggerGeneratePreview({
-      tenantId: context.tenantId,
-      threadId: context.threadId,
-      schemaName: context.schemaName,
-      selectedStoryboardKey: context.selectedStoryboardKey,
-      selectedStyleBundleId: context.selectedStyleBundleId,
+      tenantId: inputData.tenantId,
+      threadId: inputData.threadId,
+      schemaName: inputData.schemaName,
+      selectedStoryboardKey: inputData.selectedStoryboardKey,
+      selectedStyleBundleId: inputData.selectedStyleBundleId,
     });
     return result;
   },

@@ -23,8 +23,8 @@ export const getSchemaSummary = createTool({
     schemaComplexity: z.enum(['simple', 'moderate', 'complex']),
     confidence: z.number(),
   }),
-  execute: async ({ context }) => {
-    const { samples, includeStatistics } = context;
+  execute: async (inputData, context) => {
+    const { samples, includeStatistics } = inputData;
 
     try {
       if (!samples || samples.length === 0) {

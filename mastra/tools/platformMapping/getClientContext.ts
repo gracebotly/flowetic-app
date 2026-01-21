@@ -36,7 +36,7 @@ export const getClientContext = createTool({
     const supabase = await createClient();
 
     const tenantId =
-      context.tenantId ??
+      inputData.tenantId ??
       (runtimeContext?.get("tenantId") as string | undefined) ??
       undefined;
 
