@@ -1,7 +1,7 @@
 
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
-import { triggerGeneratePreview } from "../../../lib/workflows/triggerPreview";
+import { triggerGeneratePreview } from "../../lib/workflows/triggerPreview";
 
 export const runGeneratePreviewWorkflow = createTool({
   id: "runGeneratePreviewWorkflow",
