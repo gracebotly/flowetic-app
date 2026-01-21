@@ -25,7 +25,7 @@ export const runGeneratePreviewWorkflow = createTool({
       throw new Error("REQUEST_CONTEXT_REQUIRED");
     }
 
-    const run = await generatePreviewWorkflow.createRunAsync();
+    const run = await generatePreviewWorkflow.createRun();
 
     const result = await run.start({
       inputData: {
@@ -35,7 +35,7 @@ export const runGeneratePreviewWorkflow = createTool({
         interfaceId: inputData.interfaceId,
         instructions: inputData.instructions,
       },
-      requestContext: requestContext as RequestContext,
+      requestContext,
     });
 
 
