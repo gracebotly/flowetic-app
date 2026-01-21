@@ -19,8 +19,8 @@ export const searchDesignKBLocal = createTool({
       note: z.string(),
     })),
   }),
-  execute: async (inputData, context) => {
-    const { queryText, maxChars } = inputData;
+  execute: async ({ context, runtimeContext }: { context: any; runtimeContext: any }) => {
+    const { queryText, maxChars } = context;
     const q = queryText.toLowerCase();
     const terms = q
       .split(/\s+/)

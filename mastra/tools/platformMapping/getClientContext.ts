@@ -32,11 +32,11 @@ export const getClientContext = createTool({
       }),
     ),
   }),
-  execute: async (inputData, context) => {
+  execute: async ({ context, runtimeContext }: { context: any; runtimeContext: any }) => {
     const supabase = await createClient();
 
     const tenantId =
-      inputData.tenantId ??
+      context.tenantId ??
       (context?.requestContext?.get("tenantId") as string | undefined) ??
       undefined;
 

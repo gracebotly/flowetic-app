@@ -5,21 +5,25 @@ import { callTool } from "../../lib/callTool";
 
 const Swatch = z.object({ name: z.string(), hex: z.string() });
 
-export const StyleBundle = z.object({
-  id: z.string(),
-  name: z.string(),
-  description: z.string(),
-  previewImageUrl: z.string(),
-  palette: z.object({
-    name: z.string(),
-    swatches: z.array(Swatch).min(5).max(8),
-  }),
-  densityPreset: z.enum(["compact", "comfortable", "spacious"]),
-  tags: z.array(z.string()).max(8),
+export type StyleBundle = {
+  id: string;
+  name: string;
+  description: string;
+  previewImageUrl: string;
+  palette: {
+    name: string;
+    swatches: Array<{
+      name: string;
+      hex: string;
+      rgb: [number, number, number];
+      description?: string;
+    }>;
+  };
+  densityPreset: "compact" | "comfortable" | "spacious";
+  tags: string[];
   // Tokens that Design Advisor / spec editor will apply
-  designTokens: z.record(z.any()),
-});
-export type StyleBundle = z.infer<typeof StyleBundle>;
+  designTokens: Record<string, any>;
+};
 
 function stableId(input: string) {
   return input
@@ -217,12 +221,12 @@ export const getStyleBundles = createTool({
     bundles: z.array(StyleBundle).length(4),
     sources: z.array(z.object({ kind: z.string(), note: z.string() })).default([]),
   }),
-  execute: async (inputData, context) => {
+  execute: async ({ context, runtimeContext }: { context: any; runtimeContext: any }) => {
     const queryText =
-      `Return 4 style+palette bundles for a ${inputData.dashboardKind} ` +
-      `${inputData.outcome} UI, audience=${inputData.audience}, platform=${inputData.platformType}. ` +
+      `Return 4 style+palette bundles for a ${context.dashboardKind} ` +
+      `${context.outcome} UI, audience=${context.audience}, platform=${context.platformType}. ` +
       `Each bundle must include: name, brief description, and a 5-color palette (hex). ` +
-      `Prefer premium client-ready styles. Notes: ${inputData.notes ?? ""}`;
+      `Prefer premium client-ready styles. Notes: ${context.notes ?? ""}`;
 
     // Try vector search; if unavailable, fallback local.
     let relevantText = "";

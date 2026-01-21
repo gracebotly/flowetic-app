@@ -1,22 +1,19 @@
 import { z } from "zod";
 
-export const TodoStatus = z.enum(["pending", "in_progress", "completed"]);
-export type TodoStatus = z.infer<typeof TodoStatus>;
+export type TodoStatus = "pending" | "in_progress" | "completed";
 
-export const TodoPriority = z.enum(["low", "medium", "high"]);
-export type TodoPriority = z.infer<typeof TodoPriority>;
+export type TodoPriority = "low" | "medium" | "high";
 
-export const TodoItem = z.object({
-  id: z.string().uuid(),
-  tenant_id: z.string().uuid(),
-  thread_id: z.string(),
-  title: z.string(),
-  description: z.string().nullable(),
-  status: TodoStatus,
-  priority: TodoPriority,
-  tags: z.array(z.string()),
-  parent_id: z.string().uuid().nullable(),
-  created_at: z.string(),
-  updated_at: z.string(),
-});
-export type TodoItem = z.infer<typeof TodoItem>;
+export type TodoItem = {
+  id: string;
+  tenant_id: string;
+  thread_id: string;
+  title: string;
+  description: string | null;
+  status: TodoStatus;
+  priority: TodoPriority;
+  tags: string[];
+  parent_id: string | null;
+  created_at: string;
+  updated_at: string;
+};

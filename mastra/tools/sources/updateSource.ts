@@ -23,7 +23,7 @@ export const updateSource = createTool({
     source: SourcePublic,
     message: z.string(),
   }),
-  execute: async (inputData, context) => {
+  execute: async ({ context, runtimeContext }: { context: any; runtimeContext: any }) => {
     const supabase = await createClient();
     const { tenantId, sourceId } = inputData;
 
@@ -38,10 +38,10 @@ export const updateSource = createTool({
     if (!existing) throw new Error("SOURCE_NOT_FOUND");
 
     const updates: Record<string, any> = {};
-    if (typeof inputData.name === "string") updates.name = inputData.name;
-    if (typeof inputData.status === "string") updates.status = inputData.status;
+    if (typeof context.name === "string") updates.name = context.name;
+    if (typeof context.status === "string") updates.status = context.status;
 
-    if (inputData.credentials && typeof inputData.credentials === "object") {
+    if (context.credentials && typeof context.credentials === "object") {
       let prior: any = {};
       if (existing.secret_hash) {
         try {
@@ -52,7 +52,7 @@ export const updateSource = createTool({
       }
       const merged = {
         ...prior,
-        ...inputData.credentials,
+        ...context.credentials,
         platformType: String(existing.type ?? "other"),
         method: String(existing.method ?? "api"),
       };

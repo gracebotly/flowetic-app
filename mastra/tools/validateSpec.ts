@@ -34,7 +34,7 @@ export const validateSpec = createTool({
     errors: z.array(z.string()),
     score: z.number().min(0).max(1),
   }),
-  execute: async (inputData, context) => {
+  execute: async ({ context, runtimeContext }: { context: any; runtimeContext: any }) => {
     const { spec_json } = inputData;
     
     try {

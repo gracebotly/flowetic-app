@@ -8,7 +8,7 @@ import { validateSpec } from '../tools/validateSpec';
 import { persistPreviewVersion } from '../tools/persistPreviewVersion';
 import { callTool } from '../lib/callTool';
 // Platform type derived from selectTemplate tool schema
-type SelectTemplatePlatformType = z.infer<typeof selectTemplate.inputSchema>['platformType'];
+type SelectTemplatePlatformType = "vapi" | "retell" | "n8n" | "mastra" | "crewai" | "activepieces" | "make";
 
 // Input/Output schemas
 export const GeneratePreviewInput = z.object({
@@ -25,8 +25,19 @@ export const GeneratePreviewOutput = z.object({
   previewUrl: z.string(),
 });
 
-export type GeneratePreviewInput = z.infer<typeof GeneratePreviewInput>;
-export type GeneratePreviewOutput = z.infer<typeof GeneratePreviewOutput>;
+export type GeneratePreviewInput = {
+  tenantId: string;
+  userId: string;
+  userRole: 'admin' | 'client' | 'viewer';
+  interfaceId: string;
+  instructions?: string;
+};
+
+export type GeneratePreviewOutput = {
+  runId: string;
+  previewVersionId: string;
+  previewUrl: string;
+};
 
 // ============================================================================
 // Step Definitions
@@ -51,12 +62,12 @@ const analyzeSchemaStep = createStep({
     eventTypes: z.array(z.string()),
     confidence: z.number(),
   }),
-  async execute(inputData, context) {
+  async execute({ context, runtimeContext }: { context: any; runtimeContext: any }) {
     // Get sourceId from runtimeContext (set when connection was established)
     const sourceId = context?.get('sourceId') as string | undefined;
     
     // Get tenantId from workflow input
-    const { tenantId } = inputData;
+    const { tenantId } = context;
     
     const sampleSize = 100;
     
@@ -231,7 +242,7 @@ const validateSpecStep = createStep({
     errors: z.array(z.string()),
     score: z.number(),
   }),
-  async execute(inputData, context) {
+  async execute({ context, runtimeContext }: { context: any; runtimeContext: any }) {
     const specResult = getStepResult(generateUISpecStep);
     const spec_json = specResult?.spec_json || {};
     const result = await callTool(

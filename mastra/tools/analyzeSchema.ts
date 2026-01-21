@@ -6,9 +6,12 @@ export const analyzeSchema = createTool({
   id: 'analyze-schema',
   description: 'Analyzes event schema from a data source to detect field types and patterns',
   inputSchema: z.object({
-    tenantId: z.string().uuid(),
-    sourceId: z.string().uuid(),
-    sampleSize: z.number().default(100),
+    context: z.object({
+      tenantId: z.string().uuid(),
+      sourceId: z.string().uuid(),
+      sampleSize: z.number().default(100),
+    }),
+    runtimeContext: z.any(),
   }),
   outputSchema: z.object({
     fields: z.array(z.object({
@@ -20,8 +23,8 @@ export const analyzeSchema = createTool({
     eventTypes: z.array(z.string()),
     confidence: z.number().min(0).max(1),
   }),
-  execute: async (inputData, context) => {
-    const { tenantId, sourceId, sampleSize } = inputData;
+  execute: async ({ context, runtimeContext }: { context: any; runtimeContext: any }) => {
+    const { tenantId, sourceId, sampleSize } = context;
     
     const limit = typeof sampleSize === "number" ? sampleSize : 100;
     

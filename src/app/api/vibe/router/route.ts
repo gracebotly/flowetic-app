@@ -1,7 +1,7 @@
 
 
 import { NextRequest, NextResponse } from "next/server";
-import { RuntimeContext } from "@mastra/core/runtime-context";
+import { createRuntimeContext, type RuntimeContextLike } from "@/mastra/lib/runtimeContext";
 import { createClient } from "@/lib/supabase/server";
 import { loadSkill } from "@/mastra/skills/loadSkill";
 import { z } from "zod";
@@ -113,18 +113,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "MISSING_AUTH_CONTEXT" }, { status: 400 });
     }
 
-    const runtimeContext = new RuntimeContext({});
-    runtimeContext.set("userId", userId);
-    runtimeContext.set("tenantId", tenantId);
-
     const platformType = vibeContext?.platformType || "other";
     const sourceId = vibeContext?.sourceId;
 
-    runtimeContext.set("platformType", platformType);
-    if (sourceId) runtimeContext.set("sourceId", sourceId);
-
     const skillMD = await loadSkill(platformType);
-    runtimeContext.set("skillMD", skillMD);
+
+    const runtimeContext = createRuntimeContext({
+      userId,
+      tenantId,
+      platformType,
+      sourceId,
+      skillMD,
+    });
 
     // Enhance system prompt with workflow context
     let workflowContext = "";

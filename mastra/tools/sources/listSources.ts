@@ -13,7 +13,7 @@ export const listSources = createTool({
   outputSchema: z.object({
     sources: z.array(SourcePublic),
   }),
-  execute: async (inputData, context) => {
+  execute: async ({ context, runtimeContext }: { context: any; runtimeContext: any }) => {
     const supabase = await createClient();
     const { tenantId } = inputData;
 

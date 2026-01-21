@@ -18,10 +18,10 @@ export const listProjects = createTool({
   outputSchema: z.object({
     projects: z.array(ProjectPublic),
   }),
-  execute: async (inputData, context) => {
+  execute: async ({ context, runtimeContext }: { context: any; runtimeContext: any }) => {
     const supabase = await createClient();
     const { tenantId, type, status } = inputData;
-    const limit = typeof inputData.limit === "number" ? inputData.limit : 50;
+    const limit = typeof context.limit === "number" ? context.limit : 50;
 
     let q = supabase
       .from("projects")

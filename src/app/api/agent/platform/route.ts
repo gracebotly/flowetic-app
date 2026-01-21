@@ -7,7 +7,7 @@ import {
   persistPreviewVersion,
 } from '@/mastra/tools';
 import { NextRequest } from 'next/server';
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { createRuntimeContext, type RuntimeContextLike } from "@/mastra/lib/runtimeContext";
 import { callTool } from '@/mastra/lib/callTool';
 
 export const runtime = 'nodejs';
@@ -45,9 +45,10 @@ export async function POST(req: NextRequest) {
     }
 
     // Create runtime context with necessary values
-    const runtimeContext = new RuntimeContext({});
-    runtimeContext.set('sourceId', sourceId);
-    runtimeContext.set('platformType', platformType);
+    const runtimeContext = createRuntimeContext({
+      sourceId,
+      platformType,
+    });
 
     // Step 1: analyze schema
     const analyzeResult = await callTool(

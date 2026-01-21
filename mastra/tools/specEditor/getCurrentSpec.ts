@@ -16,7 +16,7 @@ export const getCurrentSpec = createTool({
     spec_json: z.record(z.any()),
     design_tokens: z.record(z.any()),
   }),
-  execute: async (inputData, context) => {
+  execute: async ({ context, runtimeContext }: { context: any; runtimeContext: any }) => {
     const supabase = await createClient();
     const requestContext = context?.requestContext;
 
@@ -24,7 +24,7 @@ export const getCurrentSpec = createTool({
     if (!tenantId) throw new Error("AUTH_REQUIRED");
 
     const explicitInterfaceId =
-      inputData.interfaceId ??
+      context.interfaceId ??
       (requestContext?.get("interfaceId") as string | undefined);
 
     let interfaceId: string | undefined = explicitInterfaceId;

@@ -19,7 +19,7 @@ export const savePreviewVersion = createTool({
     versionId: z.string().uuid(),
     previewUrl: z.string(),
   }),
-  execute: async (inputData, context) => {
+  execute: async ({ context, runtimeContext }: { context: any; runtimeContext: any }) => {
     const requestContext = context?.requestContext;
     const tenantId = requestContext?.get("tenantId") as string | undefined;
     const userId = requestContext?.get("userId") as string | undefined;
@@ -28,7 +28,7 @@ export const savePreviewVersion = createTool({
     if (!tenantId || !userId) throw new Error("AUTH_REQUIRED");
 
     const interfaceId =
-      inputData.interfaceId ??
+      context.interfaceId ??
       (requestContext?.get("interfaceId") as string | undefined) ??
       undefined;
 
@@ -38,8 +38,8 @@ export const savePreviewVersion = createTool({
         tenantId,
         userId,
         interfaceId,
-        spec_json: inputData.spec_json,
-        design_tokens: inputData.design_tokens ?? {},
+        spec_json: context.spec_json,
+        design_tokens: context.design_tokens ?? {},
         platformType,
       },
       { requestContext: context?.requestContext }

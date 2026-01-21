@@ -8,7 +8,7 @@ import { EditAction, DensityPreset } from "./types";
 import { reorderComponents } from "./reorderComponents";
 import { callTool } from "../../lib/callTool";
 
-function densityToSpacingBase(d: z.infer<typeof DensityPreset>) {
+function densityToSpacingBase(d: DensityPreset) {
   if (d === "compact") return 8;
   if (d === "spacious") return 14;
   return 10;
@@ -29,17 +29,17 @@ export const applyInteractiveEdits = createTool({
     previewUrl: z.string().url(),
     previewVersionId: z.string().uuid(),
   }),
-  execute: async (inputData, context) => {
+  execute: async ({ context, runtimeContext }: { context: any; runtimeContext: any }) => {
     const current = await callTool(
       getCurrentSpec,
-      { interfaceId: inputData.interfaceId },
+      { interfaceId: context.interfaceId },
       { requestContext: context?.requestContext },
     );
 
     let nextSpec = current.spec_json ?? {};
     let nextTokens = current.design_tokens ?? {};
 
-    const reorderAction = inputData.actions.find((a) => a.type === "reorder_widgets") as any;
+    const reorderAction = context.actions.find((a) => a.type === "reorder_widgets") as any;
     if (reorderAction?.orderedIds?.length) {
       const reordered = await callTool(
         reorderComponents,
@@ -52,7 +52,7 @@ export const applyInteractiveEdits = createTool({
 
     const ops: any[] = [];
 
-    for (const a of inputData.actions) {
+    for (const a of context.actions) {
       if (a.type === "toggle_widget") {
         ops.push({
           op: "updateComponentProps",
@@ -102,12 +102,12 @@ export const applyInteractiveEdits = createTool({
     const saved = await callTool(
       savePreviewVersion,
       {
-        tenantId: inputData.tenantId,
-        userId: inputData.userId,
-        interfaceId: inputData.interfaceId,
+        tenantId: context.tenantId,
+        userId: context.userId,
+        interfaceId: context.interfaceId,
         spec_json: nextSpec,
         design_tokens: nextTokens,
-        platformType: inputData.platformType,
+        platformType: context.platformType,
       },
       { requestContext: context?.requestContext },
     );

@@ -24,20 +24,20 @@ export const createSource = createTool({
     source: SourcePublic,
     message: z.string(),
   }),
-  execute: async (inputData, context) => {
+  execute: async ({ context, runtimeContext }: { context: any; runtimeContext: any }) => {
     const supabase = await createClient();
 
-    const tenantId = inputData.tenantId;
-    const type = inputData.type;
-    const method = inputData.method;
-    const status = inputData.status;
+    const tenantId = context.tenantId;
+    const type = context.type;
+    const method = context.method;
+    const status = context.status;
 
     const name =
-      (inputData.name && inputData.name.trim()) || `${type} (${method})`;
+      (context.name && context.name.trim()) || `${type} (${method})`;
 
     // Keep a tiny amount of metadata in secret to help later debugging/rotation.
     const secretPayload = {
-      ...inputData.credentials,
+      ...context.credentials,
       platformType: type,
       method,
     };

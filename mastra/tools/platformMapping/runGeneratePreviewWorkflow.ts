@@ -19,7 +19,7 @@ export const runGeneratePreviewWorkflow = createTool({
     previewVersionId: z.string().uuid(),
     previewUrl: z.string(),
   }),
-  execute: async (inputData, context) => {
+  execute: async ({ context, runtimeContext }: { context: any; runtimeContext: any }) => {
     const runtimeContext = context;
     if (!runtimeContext) {
       throw new Error("RUNTIME_CONTEXT_REQUIRED");
@@ -29,11 +29,11 @@ export const runGeneratePreviewWorkflow = createTool({
 
     const result = await run.start({
       inputData: {
-        tenantId: inputData.tenantId,
-        userId: inputData.userId,
-        userRole: inputData.userRole,
-        interfaceId: inputData.interfaceId,
-        instructions: inputData.instructions,
+        tenantId: context.tenantId,
+        userId: context.userId,
+        userRole: context.userRole,
+        interfaceId: context.interfaceId,
+        instructions: context.instructions,
       },
       runtimeContext,
     });

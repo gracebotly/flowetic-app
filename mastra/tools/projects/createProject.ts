@@ -22,19 +22,19 @@ export const createProject = createTool({
     project: ProjectPublic,
     message: z.string(),
   }),
-  execute: async (inputData, context) => {
+  execute: async ({ context, runtimeContext }: { context: any; runtimeContext: any }) => {
     const supabase = await createClient();
     const now = new Date().toISOString();
 
     const { data, error } = await supabase
       .from("projects")
       .insert({
-        tenant_id: inputData.tenantId,
-        name: inputData.name,
-        type: inputData.type,
+        tenant_id: context.tenantId,
+        name: context.name,
+        type: context.type,
         status: "draft",
-        description: inputData.description ?? null,
-        public_enabled: inputData.publicEnabled ?? false,
+        description: context.description ?? null,
+        public_enabled: context.publicEnabled ?? false,
         created_at: now,
         updated_at: now,
       })

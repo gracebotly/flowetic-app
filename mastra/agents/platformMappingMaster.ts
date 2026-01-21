@@ -1,7 +1,7 @@
 
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
-import { RuntimeContext } from "@mastra/core/runtime-context";
+import { createRuntimeContext, type RuntimeContextLike } from "@/mastra/lib/runtimeContext";
 import { loadSkillMarkdown, PlatformType } from "../skills/loadSkill";
 import {
   appendThreadEvent,

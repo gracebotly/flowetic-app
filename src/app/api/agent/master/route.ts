@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { RuntimeContext } from "@mastra/core/runtime-context";
+import { createRuntimeContext, type RuntimeContextLike } from "@/mastra/lib/runtimeContext";
 import { mastra } from "@/mastra";
 import { createClient } from "@/lib/supabase/server";
 
@@ -138,13 +138,14 @@ export async function POST(req: NextRequest) {
       `thread-${tenantId}`;
 
     // 4) Build runtimeContext with real IDs
-    const runtimeContext = new RuntimeContext({});
-    runtimeContext.set("tenantId", tenantId);
-    runtimeContext.set("userId", userId);
-    runtimeContext.set("userRole", userRole);
-    runtimeContext.set("sourceId", sourceId);
-    runtimeContext.set("platformType", platformType);
-    runtimeContext.set("threadId", threadId);
+    const runtimeContext = createRuntimeContext({
+      tenantId,
+      userId,
+      userRole,
+      sourceId,
+      platformType,
+      threadId,
+    });
 
     // 5) Always start with Master Router
     const master = mastra.getAgent("masterRouterAgent");
