@@ -1,12 +1,4 @@
-export type RuntimeContextLike = {
-  get?: (key: string) => any;
-  set?: (key: string, value: any) => void;
-  [key: string]: any;
-};
-
-export type FloweticToolContext = {
-  runtimeContext: RuntimeContextLike;
-};
+import type { ToolExecutionContext } from "@mastra/core/tools";
 
 type ValidationErrorLike = {
   error: boolean;
@@ -24,17 +16,14 @@ function isValidationErrorLike(value: unknown): value is ValidationErrorLike {
 }
 
 /**
- * Universal safe tool caller for Flowetic:
- * - Guards optional tool.execute
- * - Throws on ValidationError-like return objects
- *
- * NOTE: We intentionally use FloweticToolContext instead of Mastra ToolExecutionContext
- * because we only rely on `runtimeContext.get()` throughout this app.
+ * Safe tool caller for Mastra v1:
+ * - tool.execute may be optional in typings
+ * - tool outputs may return validation error objects
  */
 export async function callTool<TResult = any>(
-  tool: { execute?: (inputData: any, context: any) => Promise<any> },
+  tool: { execute?: (inputData: any, context: ToolExecutionContext) => Promise<any> },
   inputData: any,
-  context: FloweticToolContext,
+  context: ToolExecutionContext,
 ): Promise<TResult> {
   if (typeof tool.execute !== "function") {
     throw new Error("TOOL_EXECUTE_MISSING");

@@ -224,12 +224,12 @@ export async function POST(req: NextRequest) {
 
       const routerResponse = await master.generate(message, {
         maxSteps: 3,
-        runtimeContext,
+        requestContext: runtimeContext,
       });
 
       const mappingResponse = await mappingAgent.generate(message, {
         maxSteps: 8,
-        runtimeContext,
+        requestContext: runtimeContext,
       });
 
       return new Response(
@@ -244,7 +244,7 @@ export async function POST(req: NextRequest) {
 
     const routerOnly = await master.generate(message, {
       maxSteps: 3,
-      runtimeContext,
+      requestContext: runtimeContext,
     });
 
     return new Response(

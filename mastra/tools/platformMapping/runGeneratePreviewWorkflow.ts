@@ -20,16 +20,8 @@ export const runGeneratePreviewWorkflow = createTool({
     previewUrl: z.string(),
   }),
   execute: async (inputData: any, context: any) => {
-    if (!context) {
-      throw new Error("RUNTIME_CONTEXT_REQUIRED");
-    }
-
-    const {
-      runId,
-      start,
-    } = generatePreviewWorkflow.createRunAsync();
-
-    const result = await start({
+    const run = await generatePreviewWorkflow.createRun();
+    const result = await run.start({
       inputData: {
         tenantId: inputData.tenantId,
         userId: inputData.userId,
@@ -37,9 +29,7 @@ export const runGeneratePreviewWorkflow = createTool({
         interfaceId: inputData.interfaceId,
         instructions: inputData.instructions,
       },
-      runtimeContext: context?.runtimeContext ?? context ?? {},
     });
-
 
     // In Mastra, run.start returns a result envelope; your workflow's output schema
     // is the final output, available on result.result when status === 'success'.
@@ -47,9 +37,8 @@ export const runGeneratePreviewWorkflow = createTool({
       throw new Error("WORKFLOW_FAILED");
     }
 
-
     return {
-      runId,
+      runId: run.runId,
       previewVersionId: result.result.previewVersionId,
       previewUrl: result.result.previewUrl,
     };

@@ -45,7 +45,7 @@ export const savePreviewVersion = createTool({
         design_tokens: inputData.design_tokens ?? {},
         platformType,
       },
-      { runtimeContext: context?.runtimeContext ?? context ?? {} }
+      { requestContext: context?.requestContext ?? context ?? {} }
     );
 
     return {

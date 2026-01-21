@@ -15,7 +15,8 @@ export const dashboardBuilderAgent = new Agent({
   name: "dashboardBuilderAgent",
   description:
     "Dashboard Builder Agent: applies safe, incremental edits to an existing dashboard spec and persists validated preview versions.",
-  instructions: async ({ runtimeContext, mastra }: { runtimeContext: any; mastra?: any }) => {
+  instructions: async ({ requestContext, mastra }: { requestContext: any; mastra?: any }) => {
+    const runtimeContext = requestContext;
     const mode = (runtimeContext.get ? runtimeContext.get("mode") : undefined) ?? "edit";
     const phase = (runtimeContext.get ? runtimeContext.get("phase") : undefined) ?? "editing";
     const platformType = (runtimeContext.get ? runtimeContext.get("platformType") : undefined) ?? "make";

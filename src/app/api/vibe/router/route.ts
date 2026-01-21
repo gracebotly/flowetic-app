@@ -223,7 +223,7 @@ Journey phases:
             "",
             NO_ROADMAP_RULES,
           ].filter(Boolean).join("\n"),
-          { runtimeContext }
+          { requestContext: runtimeContext }
         );
         const agentText = String((agentRes as any)?.text ?? "").trim();
 
@@ -267,7 +267,7 @@ Journey phases:
             "",
             NO_ROADMAP_RULES,
           ].filter(Boolean).join("\n"),
-          { runtimeContext }
+          { requestContext: runtimeContext }
         );
         const agentText = String((agentRes as any)?.text ?? "").trim();
 
@@ -380,7 +380,7 @@ Journey phases:
       const agentRes = await masterRouterAgent.generate(
         "System: You are a premium agency business consultant speaking to a non-technical user. " +
         "Use plain language. Avoid technical jargon. Explain what happens next in simple terms.",
-        { runtimeContext }
+        { requestContext: runtimeContext }
       );
       const agentText = String((agentRes as any)?.text ?? "").trim();
 
@@ -423,7 +423,7 @@ Journey phases:
           "",
           NO_ROADMAP_RULES,
         ].filter(Boolean).join("\n"),
-        { runtimeContext }
+        { requestContext: runtimeContext }
       );
       const agentText = String((agentRes as any)?.text ?? "").trim();
 
@@ -455,7 +455,7 @@ Journey phases:
           dashboardKind: "workflow-activity",
           notes: "User selected a bundle; return the same set for token extraction.",
         }, // inputData
-        { runtimeContext } // context
+        { requestContext: runtimeContext } // context
       );
 
       const bundle = bundlesResult.bundles.find((b: any) => b.id === selectedId);
@@ -493,7 +493,7 @@ Journey phases:
           dashboardKind: "workflow-activity",
           notes: "Return premium style+palette bundles appropriate for agency white-label client delivery.",
         }, // inputData
-        { runtimeContext } // context
+        { requestContext: runtimeContext } // context
       );
 
       return NextResponse.json({
@@ -502,7 +502,7 @@ Journey phases:
         toolUi: {
           type: "style_bundles",
           title: "Choose your dashboard style",
-          bundles: bundlesResult.bundles.map((b) => ({
+          bundles: bundlesResult.bundles.map((b: any) => ({
             id: b.id,
             name: b.name,
             description: b.description,
@@ -582,7 +582,7 @@ Journey phases:
           "",
           NO_ROADMAP_RULES,
         ].filter(Boolean).join("\n"),
-        { runtimeContext }
+        { requestContext: runtimeContext }
       );
       const agentText = String((agentRes as any)?.text ?? "").trim();
 
@@ -635,7 +635,7 @@ Journey phases:
           "- Recommend ONE storyboard by name (ROI Proof vs Reliability Ops vs Delivery/SLA) with 1 short reason.",
           "- Do NOT list metrics (the cards already show them).",
         ].filter(Boolean).join("\n"),
-        { runtimeContext }
+        { requestContext: runtimeContext }
       );
       const agentText = String((agentRes as any)?.text ?? "").trim();
 
@@ -660,7 +660,7 @@ Journey phases:
           dashboardKind: "workflow-activity",
           notes: "Return premium style+palette bundles appropriate for agency white-label client delivery.",
         }, // inputData
-        { runtimeContext } // context
+        { requestContext: runtimeContext } // context
       );
 
       return NextResponse.json({
@@ -669,7 +669,7 @@ Journey phases:
         toolUi: {
           type: "style_bundles",
           title: "Choose your dashboard style",
-          bundles: bundlesResult.bundles.map((b) => ({
+          bundles: bundlesResult.bundles.map((b: any) => ({
             id: b.id,
             name: b.name,
             description: b.description,
@@ -746,7 +746,7 @@ Journey phases:
       const current = await callTool(
         getCurrentSpec,
         { interfaceId }, // inputData - tenantId removed as it's not needed
-        { runtimeContext } // context
+        { requestContext: runtimeContext } // context
       );
 
       const spec = current.spec_json as any;
@@ -879,7 +879,7 @@ Journey phases:
           const currentSpecForPalette = await callTool(
             getCurrentSpec,
             { interfaceId: payload.interfaceId }, // inputData - tenantId removed as it's not needed
-            { runtimeContext } // context
+            { requestContext: runtimeContext } // context
           );
           
           await callTool(
@@ -895,7 +895,7 @@ Journey phases:
                 { op: "setDesignToken", tokenPath: "theme.color.text", tokenValue: p.text },
               ],
             }, // inputData
-            { runtimeContext } // context
+            { requestContext: runtimeContext } // context
           );
         }
       }
@@ -909,7 +909,7 @@ Journey phases:
           platformType,
           actions: actions,
         }, // inputData
-        { runtimeContext } // context
+        { requestContext: runtimeContext } // context
       );
 
       return NextResponse.json({

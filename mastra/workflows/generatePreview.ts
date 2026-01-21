@@ -76,11 +76,6 @@ const analyzeSchemaStep = createStep({
       throw new Error('CONNECTION_NOT_CONFIGURED');
     }
 
-    const runtimeContext = {
-      get: (key: string) => requestContext?.get?.(key),
-      set: (key: string, value: any) => requestContext?.set?.(key, value),
-    };
-
     const result = await callTool(
       analyzeSchema,
       {
@@ -88,7 +83,7 @@ const analyzeSchemaStep = createStep({
         sourceId,
         sampleSize,
       },
-      { runtimeContext }
+      { requestContext }
     );
     
     return result;
@@ -116,18 +111,13 @@ const selectTemplateStep = createStep({
   async execute({ inputData, requestContext, getStepResult, getInitData, suspend, runId }) {
     const platformType = (requestContext.get("platformType") || 'make') as SelectTemplatePlatformType;
     
-    const runtimeContext = {
-      get: (key: string) => requestContext?.get?.(key),
-      set: (key: string, value: any) => requestContext?.set?.(key, value),
-    };
-    
     const result = await callTool(selectTemplate, 
       {
         platformType,
         eventTypes: inputData.eventTypes,
         fields: inputData.fields,
       },
-      { runtimeContext }
+      { requestContext }
     );
     return result;
   },
@@ -151,11 +141,6 @@ const generateMappingStep = createStep({
     const templateId = inputData.templateId;
     const platformType = (requestContext.get("platformType") || 'make') as SelectTemplatePlatformType;
     
-    const runtimeContext = {
-      get: (key: string) => requestContext?.get?.(key),
-      set: (key: string, value: any) => requestContext?.set?.(key, value),
-    };
-    
     if (!analyzeResult) {
       throw new Error('MAPPING_INCOMPLETE_REQUIRED_FIELDS');
     }
@@ -166,7 +151,7 @@ const generateMappingStep = createStep({
         fields: analyzeResult.fields,
         platformType,
       },
-      { runtimeContext }
+      { requestContext }
     );
     return result;
   },
@@ -245,18 +230,13 @@ const generateUISpecStep = createStep({
     const mappings = mappingResult.mappings;
     const platformType = (requestContext.get("platformType") || 'make') as SelectTemplatePlatformType;
     
-    const runtimeContext = {
-      get: (key: string) => requestContext?.get?.(key),
-      set: (key: string, value: any) => requestContext?.set?.(key, value),
-    };
-    
     const result = await callTool(generateUISpec, 
       {
         templateId,
         mappings: mappings,
         platformType,
       },
-      { runtimeContext }
+      { requestContext }
     );
     
     return result;
@@ -278,14 +258,9 @@ const validateSpecStep = createStep({
   async execute({ inputData, requestContext, getStepResult, getInitData, suspend, runId }) {
     const spec_json = inputData.spec_json;
     
-    const runtimeContext = {
-      get: (key: string) => requestContext?.get?.(key),
-      set: (key: string, value: any) => requestContext?.set?.(key, value),
-    };
-    
     const result = await callTool(validateSpec, 
       { spec_json },
-      { runtimeContext }
+      { requestContext }
     );
     if (!result.valid || result.score < 0.8) {
       throw new Error('SCORING_HARD_GATE_FAILED');
@@ -318,11 +293,6 @@ const persistPreviewVersionStep = createStep({
     const interfaceId = initData.interfaceId;
     const platformType = (requestContext.get("platformType") || 'make') as SelectTemplatePlatformType;
     
-    const runtimeContext = {
-      get: (key: string) => requestContext?.get?.(key),
-      set: (key: string, value: any) => requestContext?.set?.(key, value),
-    };
-    
     const result = await callTool(persistPreviewVersion, 
       {
         tenantId,
@@ -332,7 +302,7 @@ const persistPreviewVersionStep = createStep({
         design_tokens,
         platformType,
       },
-      { runtimeContext }
+      { requestContext }
     );
     return result;
   },

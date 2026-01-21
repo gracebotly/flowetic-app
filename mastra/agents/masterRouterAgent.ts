@@ -26,7 +26,8 @@ export const masterRouterAgent = new Agent({
   name: "masterRouterAgent",
   description:
     "Master Router Agent (Copilot-connected). Enforces the VibeChat journey phases and routes to platform mapping, design advisor, and dashboard builder.",
-  instructions: async ({ runtimeContext, mastra }: { runtimeContext: any; mastra?: any }) => {
+  instructions: async ({ requestContext, mastra }: { requestContext: any; mastra?: any }) => {
+    const runtimeContext = requestContext;
     const platformType = (runtimeContext.get ? runtimeContext.get("platformType") : undefined) as PlatformType || "make";
     const platformSkill = await loadSkillMarkdown(platformType);
     const businessSkill = await loadNamedSkillMarkdown("business-outcomes-advisor");

@@ -18,7 +18,8 @@ export const designAdvisorAgent = new Agent({
   name: "designAdvisorAgent",
   description:
     "Design Advisor Agent (RAG): grounded UI/UX + design-system guidance. Proposes and optionally applies design token/layout improvements to make dashboards more premium.",
-  instructions: async ({ runtimeContext, mastra }: { runtimeContext: any; mastra?: any }) => {
+  instructions: async ({ requestContext, mastra }: { requestContext: any; mastra?: any }) => {
+    const runtimeContext = requestContext;
     const mode = (runtimeContext.get ? runtimeContext.get("mode") : undefined) ?? "edit";
     const phase = (runtimeContext.get ? runtimeContext.get("phase") : undefined) ?? "editing";
     const platformType = (runtimeContext.get ? runtimeContext.get("platformType") : undefined) ?? "make";

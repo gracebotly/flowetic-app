@@ -1,6 +1,6 @@
 
 import { AbstractAgent } from "@ag-ui/client";
-
+import { RequestContext } from "@mastra/core/request-context";
 // import { createRuntimeContext, type RuntimeContextLike } from "@/mastra/lib/runtimeContext"; // Removed runtimeContext shim
 import { runVibeRouter } from "@/app/api/vibe/router/runner";
 import { Observable } from "rxjs";
@@ -164,12 +164,18 @@ class VibeRouterAgent extends AbstractAgent {
             }
           }
 
+          const requestContext = new RequestContext();
+          requestContext.set("userId", ctx.userId);
+          requestContext.set("tenantId", ctx.tenantId);
+          if (ctx.vibeContext?.platformType) requestContext.set("platformType", ctx.vibeContext.platformType);
+
           const result = await runVibeRouter({
             userId: ctx.userId,
             tenantId: ctx.tenantId,
             vibeContext: ctx.vibeContext,
             journey: ctx.journey,
             userMessage,
+            requestContext,
           });
 
           const text = String(result?.text || "").trim() || "OK.";
