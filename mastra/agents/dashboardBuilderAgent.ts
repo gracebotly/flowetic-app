@@ -1,6 +1,6 @@
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
-import { RequestContext } from "@mastra/core/request-context";
+import { RuntimeContext } from "@mastra/core/runtime-context";
 import {
   getCurrentSpec,
   applySpecPatch,
@@ -15,10 +15,10 @@ export const dashboardBuilderAgent = new Agent({
   name: "dashboardBuilderAgent",
   description:
     "Dashboard Builder Agent: applies safe, incremental edits to an existing dashboard spec and persists validated preview versions.",
-  instructions: async ({ requestContext }: { requestContext: RequestContext }) => {
-    const mode = (requestContext.get("mode") as string | undefined) ?? "edit";
-    const phase = (requestContext.get("phase") as string | undefined) ?? "editing";
-    const platformType = (requestContext.get("platformType") as string | undefined) ?? "make";
+  instructions: async ({ runtimeContext }: { runtimeContext: any }) => {
+    const mode = (runtimeContext.get("mode") as string | undefined) ?? "edit";
+    const phase = (runtimeContext.get("phase") as string | undefined) ?? "editing";
+    const platformType = (runtimeContext.get("platformType") as string | undefined) ?? "make";
 
     return [
       {

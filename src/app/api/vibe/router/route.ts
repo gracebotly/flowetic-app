@@ -1,7 +1,7 @@
 
 
 import { NextRequest, NextResponse } from "next/server";
-import { RequestContext } from "@mastra/core/request-context";
+import { RuntimeContext } from "@mastra/core/runtime-context";
 import { createClient } from "@/lib/supabase/server";
 import { loadSkill } from "@/mastra/skills/loadSkill";
 import { z } from "zod";
@@ -113,18 +113,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "MISSING_AUTH_CONTEXT" }, { status: 400 });
     }
 
-    const requestContext = new RequestContext();
-    requestContext.set("userId", userId);
-    requestContext.set("tenantId", tenantId);
+    const runtimeContext = new RuntimeContext({});
+    runtimeContext.set("userId", userId);
+    runtimeContext.set("tenantId", tenantId);
 
     const platformType = vibeContext?.platformType || "other";
     const sourceId = vibeContext?.sourceId;
 
-    requestContext.set("platformType", platformType);
-    if (sourceId) requestContext.set("sourceId", sourceId);
+    runtimeContext.set("platformType", platformType);
+    if (sourceId) runtimeContext.set("sourceId", sourceId);
 
     const skillMD = await loadSkill(platformType);
-    requestContext.set("skillMD", skillMD);
+    runtimeContext.set("skillMD", skillMD);
 
     // Enhance system prompt with workflow context
     let workflowContext = "";
@@ -172,15 +172,15 @@ Journey phases:
 
     // Thread id: use vibeContextSnapshot/thread id if you have it; fallback to "vibe"
     const threadId = vibeContext?.threadId || "vibe";
-    requestContext.set("threadId", threadId);
+    runtimeContext.set("threadId", threadId);
 
     // Extra context for business-outcomes-advisor + platform skill reasoning
     const workflowName = String(vibeContext?.displayName ?? vibeContext?.externalId ?? "").trim();
-    if (workflowName) requestContext.set("workflowName", workflowName);
-    if (vibeContext?.entityId) requestContext.set("workflowEntityId", String(vibeContext.entityId));
-    if (vibeContext?.sourceId) requestContext.set("sourceId", String(vibeContext.sourceId));
-    if (journey?.selectedOutcome) requestContext.set("selectedOutcome", String(journey.selectedOutcome));
-    if (journey?.selectedStoryboard) requestContext.set("selectedStoryboard", String(journey.selectedStoryboard));
+    if (workflowName) runtimeContext.set("workflowName", workflowName);
+    if (vibeContext?.entityId) runtimeContext.set("workflowEntityId", String(vibeContext.entityId));
+    if (vibeContext?.sourceId) runtimeContext.set("sourceId", String(vibeContext.sourceId));
+    if (journey?.selectedOutcome) runtimeContext.set("selectedOutcome", String(journey.selectedOutcome));
+    if (journey?.selectedStoryboard) runtimeContext.set("selectedStoryboard", String(journey.selectedStoryboard));
 
     const mode: JourneyMode = journey?.mode || "select_entity";
 
@@ -219,7 +219,7 @@ Journey phases:
             "",
             NO_ROADMAP_RULES,
           ].filter(Boolean).join("\n"),
-          { requestContext }
+          { runtimeContext }
         );
         const agentText = String((agentRes as any)?.text ?? "").trim();
 
@@ -263,7 +263,7 @@ Journey phases:
             "",
             NO_ROADMAP_RULES,
           ].filter(Boolean).join("\n"),
-          { requestContext }
+          { runtimeContext }
         );
         const agentText = String((agentRes as any)?.text ?? "").trim();
 
@@ -376,7 +376,7 @@ Journey phases:
       const agentRes = await masterRouterAgent.generate(
         "System: You are a premium agency business consultant speaking to a non-technical user. " +
         "Use plain language. Avoid technical jargon. Explain what happens next in simple terms.",
-        { requestContext }
+        { runtimeContext }
       );
       const agentText = String((agentRes as any)?.text ?? "").trim();
 
@@ -419,7 +419,7 @@ Journey phases:
           "",
           NO_ROADMAP_RULES,
         ].filter(Boolean).join("\n"),
-        { requestContext }
+        { runtimeContext }
       );
       const agentText = String((agentRes as any)?.text ?? "").trim();
 
@@ -451,7 +451,7 @@ Journey phases:
           dashboardKind: "workflow-activity",
           notes: "User selected a bundle; return the same set for token extraction.",
         }, // inputData
-        { requestContext } // context
+        { runtimeContext } // context
       );
 
       const bundle = bundlesResult.bundles.find((b) => b.id === selectedId);
@@ -489,7 +489,7 @@ Journey phases:
           dashboardKind: "workflow-activity",
           notes: "Return premium style+palette bundles appropriate for agency white-label client delivery.",
         }, // inputData
-        { requestContext } // context
+        { runtimeContext } // context
       );
 
       return NextResponse.json({
@@ -578,7 +578,7 @@ Journey phases:
           "",
           NO_ROADMAP_RULES,
         ].filter(Boolean).join("\n"),
-        { requestContext }
+        { runtimeContext }
       );
       const agentText = String((agentRes as any)?.text ?? "").trim();
 
@@ -631,7 +631,7 @@ Journey phases:
           "- Recommend ONE storyboard by name (ROI Proof vs Reliability Ops vs Delivery/SLA) with 1 short reason.",
           "- Do NOT list metrics (the cards already show them).",
         ].filter(Boolean).join("\n"),
-        { requestContext }
+        { runtimeContext }
       );
       const agentText = String((agentRes as any)?.text ?? "").trim();
 
@@ -656,7 +656,7 @@ Journey phases:
           dashboardKind: "workflow-activity",
           notes: "Return premium style+palette bundles appropriate for agency white-label client delivery.",
         }, // inputData
-        { requestContext } // context
+        { runtimeContext } // context
       );
 
       return NextResponse.json({
@@ -742,7 +742,7 @@ Journey phases:
       const current = await callTool(
         getCurrentSpec,
         { interfaceId }, // inputData - tenantId removed as it's not needed
-        { requestContext } // context
+        { runtimeContext } // context
       );
 
       const spec = current.spec_json as any;
@@ -875,7 +875,7 @@ Journey phases:
           const currentSpecForPalette = await callTool(
             getCurrentSpec,
             { interfaceId: payload.interfaceId }, // inputData - tenantId removed as it's not needed
-            { requestContext } // context
+            { runtimeContext } // context
           );
           
           await callTool(
@@ -891,7 +891,7 @@ Journey phases:
                 { op: "setDesignToken", tokenPath: "theme.color.text", tokenValue: p.text },
               ],
             }, // inputData
-            { requestContext } // context
+            { runtimeContext } // context
           );
         }
       }
@@ -905,7 +905,7 @@ Journey phases:
           platformType,
           actions: actions,
         }, // inputData
-        { requestContext } // context
+        { runtimeContext } // context
       );
 
       return NextResponse.json({

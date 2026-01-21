@@ -52,8 +52,8 @@ const analyzeSchemaStep = createStep({
     confidence: z.number(),
   }),
   async execute(inputData, context) {
-    // Get sourceId from requestContext (set when connection was established)
-    const sourceId = context?.requestContext?.get('sourceId') as string | undefined;
+    // Get sourceId from runtimeContext (set when connection was established)
+    const sourceId = context?.get('sourceId') as string | undefined;
     
     // Get tenantId from workflow input
     const { tenantId } = inputData;
@@ -71,7 +71,7 @@ const analyzeSchemaStep = createStep({
         sourceId,
         sampleSize,
       },
-      { requestContext: context?.requestContext }
+      { context }
     );
     
     return result;
@@ -93,7 +93,7 @@ const selectTemplateStep = createStep({
     if (!analyzeResult) {
       throw new Error('TEMPLATE_NOT_FOUND');
     }
-    const platformType = (context?.requestContext?.get('platformType') || 'make') as SelectTemplatePlatformType;
+    const platformType = (context?.get('platformType') || 'make') as SelectTemplatePlatformType;
     const result = await callTool(
       selectTemplate,
       {
@@ -101,7 +101,7 @@ const selectTemplateStep = createStep({
         eventTypes: analyzeResult.eventTypes,
         fields: analyzeResult.fields,
       },
-      { requestContext: context?.requestContext }
+      { context }
     );
     return result;
   },
@@ -124,7 +124,7 @@ const generateMappingStep = createStep({
     }
     const fields = analyzeResult.fields;
     const templateId = templateResult.templateId;
-    const platformType = (context?.requestContext?.get('platformType') || 'make') as SelectTemplatePlatformType;
+    const platformType = (context?.get('platformType') || 'make') as SelectTemplatePlatformType;
     const result = await callTool(
       generateMapping,
       {
@@ -132,7 +132,7 @@ const generateMappingStep = createStep({
         fields: analyzeResult.fields,
         platformType,
       },
-      { requestContext: context?.requestContext }
+      { context }
     );
     return result;
   },
@@ -206,7 +206,7 @@ const generateUISpecStep = createStep({
     
     const templateId = templateResult.templateId;
     const mappings = mappingResult.mappings;
-    const platformType = (context?.requestContext?.get('platformType') || 'make') as SelectTemplatePlatformType;
+    const platformType = (context?.get('platformType') || 'make') as SelectTemplatePlatformType;
     
     const result = await callTool(
       generateUISpec,
@@ -215,7 +215,7 @@ const generateUISpecStep = createStep({
         mappings: mappingResult.mappings,
         platformType,
       },
-      { requestContext: context?.requestContext }
+      { context }
     );
     
     return result;
@@ -237,7 +237,7 @@ const validateSpecStep = createStep({
     const result = await callTool(
       validateSpec,
       { spec_json },
-      { requestContext: context?.requestContext }
+      { context }
     );
     if (!result.valid || result.score < 0.8) {
       throw new Error('SCORING_HARD_GATE_FAILED');
@@ -264,7 +264,7 @@ const persistPreviewVersionStep = createStep({
     const tenantId = initData.tenantId;
     const userId = initData.userId;
     const interfaceId = initData.interfaceId;
-    const platformType = (context?.requestContext?.get('platformType') || 'make') as SelectTemplatePlatformType;
+    const platformType = (context?.get('platformType') || 'make') as SelectTemplatePlatformType;
     const result = await callTool(
       persistPreviewVersion,
       {
@@ -275,7 +275,7 @@ const persistPreviewVersionStep = createStep({
         design_tokens,
         platformType,
       },
-      { requestContext: context?.requestContext }
+      { context }
     );
     return result;
   },

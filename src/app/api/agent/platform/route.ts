@@ -7,7 +7,7 @@ import {
   persistPreviewVersion,
 } from '@/mastra/tools';
 import { NextRequest } from 'next/server';
-import { RequestContext } from '@mastra/core/request-context';
+import { RuntimeContext } from '@mastra/core/runtime-context';
 import { callTool } from '@/mastra/lib/callTool';
 
 export const runtime = 'nodejs';
@@ -45,15 +45,15 @@ export async function POST(req: NextRequest) {
     }
 
     // Create runtime context with necessary values
-    const requestContext = new RequestContext();
-    requestContext.set('sourceId', sourceId);
-    requestContext.set('platformType', platformType);
+    const runtimeContext = new RuntimeContext({});
+    runtimeContext.set('sourceId', sourceId);
+    runtimeContext.set('platformType', platformType);
 
     // Step 1: analyze schema
     const analyzeResult = await callTool(
       analyzeSchema,
       { tenantId, sourceId, sampleSize: 100 },
-      { requestContext }
+      { runtimeContext }
     );
 
     // Step 2: select template
@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
         eventTypes: analyzeResult.eventTypes,
         fields: analyzeResult.fields,
       },
-      { requestContext }
+      { runtimeContext }
     );
 
     // Step 3: generate mapping
@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
         fields: analyzeResult.fields,
         platformType,
       },
-      { requestContext }
+      { runtimeContext }
     );
 
     // Step 4: generate UI spec
@@ -86,14 +86,14 @@ export async function POST(req: NextRequest) {
         mappings: mappingResult.mappings,
         platformType,
       },
-      { requestContext }
+      { runtimeContext }
     );
 
     // Step 5: validate spec
     const validationResult = await callTool(
       validateSpec,
       { spec_json: uiSpecResult.spec_json },
-      { requestContext }
+      { runtimeContext }
     );
     if (!validationResult.valid || validationResult.score < 0.8) {
       return new Response(
@@ -119,7 +119,7 @@ export async function POST(req: NextRequest) {
         design_tokens: uiSpecResult.design_tokens,
         platformType,
       },
-      { requestContext }
+      { runtimeContext }
     );
 
     return new Response(

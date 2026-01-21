@@ -1,5 +1,5 @@
 import { createTool } from "@mastra/core/tools";
-import { RequestContext } from "@mastra/core/request-context";
+import { RuntimeContext } from "@mastra/core/runtime-context";
 import { z } from "zod";
 import { generatePreviewWorkflow } from "../../workflows/generatePreview";
 
@@ -20,9 +20,9 @@ export const runGeneratePreviewWorkflow = createTool({
     previewUrl: z.string(),
   }),
   execute: async (inputData, context) => {
-    const requestContext = context?.requestContext;
-    if (!requestContext) {
-      throw new Error("REQUEST_CONTEXT_REQUIRED");
+    const runtimeContext = context;
+    if (!runtimeContext) {
+      throw new Error("RUNTIME_CONTEXT_REQUIRED");
     }
 
     const run = await generatePreviewWorkflow.createRun();
@@ -35,7 +35,7 @@ export const runGeneratePreviewWorkflow = createTool({
         interfaceId: inputData.interfaceId,
         instructions: inputData.instructions,
       },
-      requestContext,
+      runtimeContext,
     });
 
 
