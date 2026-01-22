@@ -7,6 +7,7 @@ import { dashboardBuilderAgent } from "./agents/dashboardBuilderAgent";
 import { designAdvisorAgent } from "./agents/designAdvisorAgent";
 
 import { generatePreviewWorkflow } from "./workflows/generatePreview";
+import { connectionBackfillWorkflow } from "./workflows/connectionBackfill";
 
 export const mastra = new Mastra({
   telemetry: { enabled: true },
@@ -24,5 +25,6 @@ export const mastra = new Mastra({
   },
   workflows: {
     generatePreview: generatePreviewWorkflow,
+    connectionBackfill: connectionBackfillWorkflow,
   },
 });

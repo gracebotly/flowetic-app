@@ -13,6 +13,9 @@ import { designAdvisorAgent } from "./designAdvisorAgent";
 import { dashboardBuilderAgent } from "./dashboardBuilderAgent";
 import { platformMappingMaster } from "./platformMappingMaster";
 
+import { generatePreviewWorkflow } from "../workflows/generatePreview";
+import { connectionBackfillWorkflow } from "../workflows/connectionBackfill";
+
 type JourneyMode =
   | "select_entity"
   | "recommend"
@@ -112,6 +115,18 @@ export const masterRouterAgent: Agent = new Agent({
     ];
   },
   model: openai("gpt-4o"),
+
+  // REQUIRED: routing primitives for Agent.network()
+  agents: {
+    platformMappingMaster,
+    dashboardBuilderAgent,
+    designAdvisorAgent,
+  },
+  workflows: {
+    generatePreviewWorkflow,
+    connectionBackfillWorkflow,
+  },
+
   memory: new Memory({
     options: {
       lastMessages: 20,

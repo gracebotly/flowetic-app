@@ -29,3 +29,24 @@ export * as navigationTool from "./navigation";
 export * from "./sources";
 export * from "./projects";
 // Add other tool exports here as you create more tools
+
+// New tools for connection backfill workflow
+export {
+  fetchPlatformEvents,
+} from './fetchPlatformEvents';
+
+export {
+  normalizeEvents,
+} from './normalizeEvents';
+
+export {
+  storeEvents,
+} from './storeEvents';
+
+export {
+  generateSchemaSummaryFromEvents,
+} from './generateSchemaSummaryFromEvents';
+
+export {
+  updateJourneySchemaReady,
+} from './updateJourneySchemaReady';
