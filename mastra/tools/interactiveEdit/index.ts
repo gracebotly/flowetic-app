@@ -1,4 +1,4 @@
 
 export { applyInteractiveEdits } from "./applyInteractiveEdits";
 export { reorderComponents } from "./reorderComponents";
-export type { EditAction } from "./types";
+export { EditActionSchema, type EditAction } from "./types";
