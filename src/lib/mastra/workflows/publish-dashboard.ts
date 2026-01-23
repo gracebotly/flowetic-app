@@ -16,5 +16,18 @@ export const PublishOutput = z.object({
   publishedUrl: z.string(),
 });
 
-export type PublishInput = z.infer<typeof PublishInput>;
-export type PublishOutput = z.infer<typeof PublishOutput>;
+export type PublishInput = {
+  tenantId: string;
+  userId: string;
+  userRole: 'admin' | 'client' | 'viewer';
+  interfaceId: string;
+  versionId: string;
+  route: string;
+  confirm: boolean;
+};
+
+export type PublishOutput = {
+  runId: string;
+  deploymentId: string;
+  publishedUrl: string;
+};

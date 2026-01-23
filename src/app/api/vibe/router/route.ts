@@ -1,7 +1,7 @@
 
 
 import { NextRequest, NextResponse } from "next/server";
-import { RuntimeContext } from "@mastra/core/runtime-context";
+// import { RequestContext } from "@mastra/core/request-context"; // Removed - invalid import
 import { createClient } from "@/lib/supabase/server";
 import { loadSkill } from "@/mastra/skills/loadSkill";
 import { z } from "zod";
@@ -15,6 +15,7 @@ import { todoAdd, todoList } from "@/mastra/tools/todo";
 import { getStyleBundles } from "@/mastra/tools/design/getStyleBundles";
 import { applyInteractiveEdits } from "@/mastra/tools/interactiveEdit";
 import { getCurrentSpec, applySpecPatch } from "@/mastra/tools/specEditor";
+import { callTool } from "@/mastra/lib/callTool";
 
 type JourneyMode =
   | "select_entity"
@@ -112,18 +113,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "MISSING_AUTH_CONTEXT" }, { status: 400 });
     }
 
-    const runtimeContext = new RuntimeContext();
-    runtimeContext.set("userId", userId);
-    runtimeContext.set("tenantId", tenantId);
-
     const platformType = vibeContext?.platformType || "other";
     const sourceId = vibeContext?.sourceId;
 
-    runtimeContext.set("platformType", platformType);
-    if (sourceId) runtimeContext.set("sourceId", sourceId);
-
     const skillMD = await loadSkill(platformType);
-    runtimeContext.set("skillMD", skillMD);
+
+    const runtimeContext = {
+      userId,
+      tenantId,
+      platformType,
+      sourceId,
+      skillMD,
+      get: (key: string) => {
+        const obj: any = { userId, tenantId, platformType, sourceId, skillMD };
+        return obj[key];
+      }
+    } as any;
 
     // Enhance system prompt with workflow context
     let workflowContext = "";
@@ -171,15 +176,15 @@ Journey phases:
 
     // Thread id: use vibeContextSnapshot/thread id if you have it; fallback to "vibe"
     const threadId = vibeContext?.threadId || "vibe";
-    runtimeContext.set("threadId", threadId);
+    (runtimeContext as any).threadId = threadId;
 
-    // Extra context for business-outcomes-advisor + platform skill reasoning
+    // Add context properties to runtimeContext object
     const workflowName = String(vibeContext?.displayName ?? vibeContext?.externalId ?? "").trim();
-    if (workflowName) runtimeContext.set("workflowName", workflowName);
-    if (vibeContext?.entityId) runtimeContext.set("workflowEntityId", String(vibeContext.entityId));
-    if (vibeContext?.sourceId) runtimeContext.set("sourceId", String(vibeContext.sourceId));
-    if (journey?.selectedOutcome) runtimeContext.set("selectedOutcome", String(journey.selectedOutcome));
-    if (journey?.selectedStoryboard) runtimeContext.set("selectedStoryboard", String(journey.selectedStoryboard));
+    if (workflowName) (runtimeContext as any).workflowName = workflowName;
+    if (vibeContext?.entityId) (runtimeContext as any).workflowEntityId = String(vibeContext.entityId);
+    if (vibeContext?.sourceId) (runtimeContext as any).sourceId = String(vibeContext.sourceId);
+    if (journey?.selectedOutcome) (runtimeContext as any).selectedOutcome = String(journey.selectedOutcome);
+    if (journey?.selectedStoryboard) (runtimeContext as any).selectedStoryboard = String(journey.selectedStoryboard);
 
     const mode: JourneyMode = journey?.mode || "select_entity";
 
@@ -218,7 +223,7 @@ Journey phases:
             "",
             NO_ROADMAP_RULES,
           ].filter(Boolean).join("\n"),
-          { runtimeContext }
+          { requestContext: runtimeContext }
         );
         const agentText = String((agentRes as any)?.text ?? "").trim();
 
@@ -262,7 +267,7 @@ Journey phases:
             "",
             NO_ROADMAP_RULES,
           ].filter(Boolean).join("\n"),
-          { runtimeContext }
+          { requestContext: runtimeContext }
         );
         const agentText = String((agentRes as any)?.text ?? "").trim();
 
@@ -375,7 +380,7 @@ Journey phases:
       const agentRes = await masterRouterAgent.generate(
         "System: You are a premium agency business consultant speaking to a non-technical user. " +
         "Use plain language. Avoid technical jargon. Explain what happens next in simple terms.",
-        { runtimeContext }
+        { requestContext: runtimeContext }
       );
       const agentText = String((agentRes as any)?.text ?? "").trim();
 
@@ -418,7 +423,7 @@ Journey phases:
           "",
           NO_ROADMAP_RULES,
         ].filter(Boolean).join("\n"),
-        { runtimeContext }
+        { requestContext: runtimeContext }
       );
       const agentText = String((agentRes as any)?.text ?? "").trim();
 
@@ -441,18 +446,19 @@ Journey phases:
       }
 
       // Get bundle list again, pick chosen bundle
-      const bundlesResult = await getStyleBundles.execute({
-        context: {
+      const bundlesResult = await callTool(
+        getStyleBundles,
+        {
           platformType,
           outcome: journey?.selectedOutcome ?? "dashboard",
           audience: "client",
           dashboardKind: "workflow-activity",
           notes: "User selected a bundle; return the same set for token extraction.",
-        },
-        runtimeContext,
-      } as any);
+        }, // inputData
+        { requestContext: runtimeContext } // context
+      );
 
-      const bundle = bundlesResult.bundles.find((b) => b.id === selectedId);
+      const bundle = bundlesResult.bundles.find((b: any) => b.id === selectedId);
       if (!bundle) {
         return NextResponse.json({ error: "STYLE_BUNDLE_NOT_FOUND" }, { status: 400 });
       }
@@ -478,16 +484,17 @@ Journey phases:
 
       const nextJourney = { ...journey, selectedStoryboard: storyboardId, mode: "style" };
 
-      const bundlesResult = await getStyleBundles.execute({
-        context: {
+      const bundlesResult = await callTool(
+        getStyleBundles,
+        {
           platformType,
           outcome: nextJourney?.selectedOutcome ?? "dashboard",
           audience: "client",
           dashboardKind: "workflow-activity",
           notes: "Return premium style+palette bundles appropriate for agency white-label client delivery.",
-        },
-        runtimeContext,
-      } as any);
+        }, // inputData
+        { requestContext: runtimeContext } // context
+      );
 
       return NextResponse.json({
         text: "Perfect. Now choose a style bundle (required) so your preview looks premium immediately.",
@@ -495,7 +502,7 @@ Journey phases:
         toolUi: {
           type: "style_bundles",
           title: "Choose your dashboard style",
-          bundles: bundlesResult.bundles.map((b) => ({
+          bundles: bundlesResult.bundles.map((b: any) => ({
             id: b.id,
             name: b.name,
             description: b.description,
@@ -575,7 +582,7 @@ Journey phases:
           "",
           NO_ROADMAP_RULES,
         ].filter(Boolean).join("\n"),
-        { runtimeContext }
+        { requestContext: runtimeContext }
       );
       const agentText = String((agentRes as any)?.text ?? "").trim();
 
@@ -628,7 +635,7 @@ Journey phases:
           "- Recommend ONE storyboard by name (ROI Proof vs Reliability Ops vs Delivery/SLA) with 1 short reason.",
           "- Do NOT list metrics (the cards already show them).",
         ].filter(Boolean).join("\n"),
-        { runtimeContext }
+        { requestContext: runtimeContext }
       );
       const agentText = String((agentRes as any)?.text ?? "").trim();
 
@@ -644,16 +651,17 @@ Journey phases:
     // Phase: style (RAG -> 4 bundles)
     // ------------------------------------------------------------------
     if (effectiveMode === "style") {
-      const bundlesResult = await getStyleBundles.execute({
-        context: {
+      const bundlesResult = await callTool(
+        getStyleBundles,
+        {
           platformType,
           outcome: journey?.selectedOutcome ?? "dashboard",
           audience: "client",
           dashboardKind: "workflow-activity",
           notes: "Return premium style+palette bundles appropriate for agency white-label client delivery.",
-        },
-        runtimeContext,
-      } as any);
+        }, // inputData
+        { requestContext: runtimeContext } // context
+      );
 
       return NextResponse.json({
         text: "Choose a style bundle (required). This sets the look + palette so the preview feels sellable immediately.",
@@ -661,7 +669,7 @@ Journey phases:
         toolUi: {
           type: "style_bundles",
           title: "Choose your dashboard style",
-          bundles: bundlesResult.bundles.map((b) => ({
+          bundles: bundlesResult.bundles.map((b: any) => ({
             id: b.id,
             name: b.name,
             description: b.description,
@@ -735,8 +743,10 @@ Journey phases:
       }
 
       // Load the actual current spec to extract real component IDs for interactive edit.
-      const current = await getCurrentSpec.execute(
-        { context: { tenantId, interfaceId }, runtimeContext } as any
+      const current = await callTool(
+        getCurrentSpec,
+        { interfaceId }, // inputData - tenantId removed as it's not needed
+        { requestContext: runtimeContext } // context
       );
 
       const spec = current.spec_json as any;
@@ -866,39 +876,41 @@ Journey phases:
         const p = paletteMap[paletteAction.paletteId];
         if (p) {
           // Apply palette tokens immediately using applySpecPatch so the interactive edit tool stays simple.
-          await applySpecPatch.execute(
+          const currentSpecForPalette = await callTool(
+            getCurrentSpec,
+            { interfaceId: payload.interfaceId }, // inputData - tenantId removed as it's not needed
+            { requestContext: runtimeContext } // context
+          );
+          
+          await callTool(
+            applySpecPatch,
             {
-              context: {
-                spec_json: (await getCurrentSpec.execute(
-                  { context: { tenantId, interfaceId: payload.interfaceId }, runtimeContext } as any
-                )).spec_json,
-                design_tokens: (await getCurrentSpec.execute(
-                  { context: { tenantId, interfaceId: payload.interfaceId }, runtimeContext } as any
-                )).design_tokens,
-                operations: [
-                  { op: "setDesignToken", tokenPath: "theme.color.primary", tokenValue: p.primary },
-                  { op: "setDesignToken", tokenPath: "theme.color.accent", tokenValue: p.accent },
-                  { op: "setDesignToken", tokenPath: "theme.color.background", tokenValue: p.background },
-                  { op: "setDesignToken", tokenPath: "theme.color.surface", tokenValue: p.surface },
-                  { op: "setDesignToken", tokenPath: "theme.color.text", tokenValue: p.text },
-                ],
-              },
-              runtimeContext,
-            } as any
+              spec_json: currentSpecForPalette.spec_json,
+              design_tokens: currentSpecForPalette.design_tokens,
+              operations: [
+                { op: "setDesignToken", tokenPath: "theme.color.primary", tokenValue: p.primary },
+                { op: "setDesignToken", tokenPath: "theme.color.accent", tokenValue: p.accent },
+                { op: "setDesignToken", tokenPath: "theme.color.background", tokenValue: p.background },
+                { op: "setDesignToken", tokenPath: "theme.color.surface", tokenValue: p.surface },
+                { op: "setDesignToken", tokenPath: "theme.color.text", tokenValue: p.text },
+              ],
+            }, // inputData
+            { requestContext: runtimeContext } // context
           );
         }
       }
 
-      const result = await applyInteractiveEdits.execute({
-        context: {
+      const result = await callTool(
+        applyInteractiveEdits,
+        {
           tenantId,
           userId,
           interfaceId: payload.interfaceId,
           platformType,
           actions: actions,
-        },
-        runtimeContext,
-      } as any);
+        }, // inputData
+        { requestContext: runtimeContext } // context
+      );
 
       return NextResponse.json({
         text: "Done — your preview has been updated.",

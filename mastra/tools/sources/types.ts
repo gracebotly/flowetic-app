@@ -23,7 +23,18 @@ export const SourcePublic = z.object({
   createdAt: z.string(),
 });
 
-export type SourcePlatformType = z.infer<typeof SourcePlatformType>;
-export type SourceMethod = z.infer<typeof SourceMethod>;
-export type SourceStatus = z.infer<typeof SourceStatus>;
-export type SourcePublic = z.infer<typeof SourcePublic>;
+export type SourcePlatformType = "vapi" | "retell" | "n8n" | "make" | "activepieces" | "mastra" | "crewai" | "other";
+
+export type SourceMethod = "api" | "webhook";
+
+export type SourceStatus = "active" | "inactive" | "error";
+
+export type SourcePublic = {
+  id: string;
+  tenantId: string;
+  type: SourcePlatformType;
+  name: string;
+  method: SourceMethod;
+  status: SourceStatus;
+  createdAt: string;
+};

@@ -18,8 +18,18 @@ export const ProjectPublic = z.object({
   updatedAt: z.string(),
 });
 
-export type ProjectType = z.infer<typeof ProjectType>;
-export type ProjectStatus = z.infer<typeof ProjectStatus>;
-export type ProjectPublic = z.infer<typeof ProjectPublic>;
+export type ProjectType = "analytics" | "tool" | "form";
+export type ProjectStatus = "draft" | "live";
+export type ProjectPublic = {
+  id: string;
+  tenantId: string;
+  name: string;
+  type: ProjectType;
+  status: ProjectStatus;
+  description: string | null;
+  publicEnabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
 
 

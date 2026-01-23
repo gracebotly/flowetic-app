@@ -7,7 +7,8 @@ import {
   persistPreviewVersion,
 } from '@/mastra/tools';
 import { NextRequest } from 'next/server';
-import { RuntimeContext } from '@mastra/core/runtime-context';
+// import { createRuntimeContext, type RuntimeContextLike } from "@/mastra/lib/runtimeContext"; // Removed runtimeContext shim
+import { callTool } from '@/mastra/lib/callTool';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -43,52 +44,64 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Create runtime context with necessary values
-    const runtimeContext = new RuntimeContext();
-    runtimeContext.set('sourceId', sourceId);
-    runtimeContext.set('platformType', platformType);
+    const runtimeContext = {
+      get: (key: string) => {
+        switch (key) {
+          case "tenantId": return tenantId;
+          case "userId": return userId;
+          case "sourceId": return sourceId;
+          case "platformType": return platformType;
+          default: return undefined;
+        }
+      }
+    } as any;
 
     // Step 1: analyze schema
-    const analyzeResult = await analyzeSchema.execute({
-      context: { tenantId, sourceId, sampleSize: 100 },
-      runtimeContext,
-    });
+    const analyzeResult = await callTool(
+      analyzeSchema,
+      { tenantId, sourceId, sampleSize: 100 },
+      { requestContext: runtimeContext }
+    );
 
     // Step 2: select template
-    const selectResult = await selectTemplate.execute({
-      context: {
+    const selectResult = await callTool(
+      selectTemplate,
+      {
         platformType,
         eventTypes: analyzeResult.eventTypes,
         fields: analyzeResult.fields,
       },
-      runtimeContext,
-    });
+      { requestContext: runtimeContext }
+    );
 
     // Step 3: generate mapping
-    const mappingResult = await generateMapping.execute({
-      context: {
+    const mappingResult = await callTool(
+      generateMapping,
+      {
         templateId: selectResult.templateId,
         fields: analyzeResult.fields,
         platformType,
       },
-      runtimeContext,
-    });
+      { requestContext: runtimeContext }
+    );
 
     // Step 4: generate UI spec
-    const uiSpecResult = await generateUISpec.execute({
-      context: {
+    const uiSpecResult = await callTool(
+      generateUISpec,
+      {
         templateId: selectResult.templateId,
         mappings: mappingResult.mappings,
         platformType,
       },
-      runtimeContext,
-    });
+      { requestContext: runtimeContext }
+    );
 
     // Step 5: validate spec
-    const validationResult = await validateSpec.execute({
-      context: { spec_json: uiSpecResult.spec_json },
-      runtimeContext,
-    });
+    const validationResult = await callTool(
+      validateSpec,
+      { spec_json: uiSpecResult.spec_json },
+      { requestContext: runtimeContext }
+    );
     if (!validationResult.valid || validationResult.score < 0.8) {
       return new Response(
         JSON.stringify({
@@ -103,8 +116,9 @@ export async function POST(req: NextRequest) {
     // Step 6: persist preview version
     const finalInterfaceId =
       interfaceId || `preview-${Date.now().toString()}`;
-    const persistResult = await persistPreviewVersion.execute({
-      context: {
+    const persistResult = await callTool(
+      persistPreviewVersion,
+      {
         tenantId,
         userId,
         interfaceId: finalInterfaceId,
@@ -112,8 +126,8 @@ export async function POST(req: NextRequest) {
         design_tokens: uiSpecResult.design_tokens,
         platformType,
       },
-      runtimeContext,
-    });
+      { requestContext: runtimeContext }
+    );
 
     return new Response(
       JSON.stringify({
