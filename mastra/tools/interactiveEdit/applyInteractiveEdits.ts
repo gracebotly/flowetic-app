@@ -4,10 +4,11 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { getCurrentSpec, applySpecPatch, savePreviewVersion } from "@/mastra/tools/specEditor";
 import { validateSpec } from "@/mastra/tools/validateSpec";
-import { EditAction, DensityPreset } from "./types";
+import type { EditAction } from "./types";
+import { DensityPresetSchema } from "./types";
 import { reorderComponents } from "./reorderComponents";
 
-function densityToSpacingBase(d: z.infer<typeof DensityPreset>) {
+function densityToSpacingBase(d: z.infer<typeof DensityPresetSchema>) {
   if (d === "compact") return 8;
   if (d === "spacious") return 14;
   return 10;

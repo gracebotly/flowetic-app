@@ -7,30 +7,20 @@ export type DensityPreset = z.infer<typeof DensityPresetSchema>;
 export const EditActionSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("toggle_widget"),
-    widgetId: z.string(),
+    id: z.string(),
     enabled: z.boolean(),
   }),
   z.object({
-    type: z.literal("rename_widget"),
-    widgetId: z.string(),
+    type: z.literal("set_title"),
     title: z.string(),
-  }),
-  z.object({
-    type: z.literal("reorder_widgets"),
-    orderedIds: z.array(z.string()).min(1),
-  }),
-  z.object({
-    type: z.literal("switch_chart_type"),
-    widgetId: z.string(),
-    chartType: z.enum(["line", "area", "bar"]),
   }),
   z.object({
     type: z.literal("set_density"),
     density: DensityPresetSchema,
   }),
   z.object({
-    type: z.literal("set_palette"),
-    paletteId: z.string(),
+    type: z.literal("reorder_widgets"),
+    orderedIds: z.array(z.string()).min(1),
   }),
 ]);
 

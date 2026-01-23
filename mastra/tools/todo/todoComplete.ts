@@ -5,7 +5,7 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { createClient } from "../../lib/supabase";
-import { TodoItem } from "./types";
+import type { TodoItem } from "./types";
 
 export const todoComplete = createTool({
   id: "todo.complete",
