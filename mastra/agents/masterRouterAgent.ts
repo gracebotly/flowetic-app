@@ -27,6 +27,7 @@ type JourneyMode =
   | "deploy";
 
 export const masterRouterAgent: Agent = new Agent({
+  id: "masterRouterAgent",
   name: "masterRouterAgent",
   description:
     "Master Router Agent (Copilot-connected). Enforces the VibeChat journey phases and routes to platform mapping, design advisor, and dashboard builder.",

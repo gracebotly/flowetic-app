@@ -14,6 +14,7 @@ import { todoAdd, todoList, todoUpdate, todoComplete } from "../tools/todo";
 import { getStyleBundles } from "../tools/design";
 
 export const dashboardBuilderAgent: Agent = new Agent({
+  id: "dashboardBuilderAgent",
   name: "dashboardBuilderAgent",
   description:
     "Dashboard Builder Agent: applies safe, incremental edits to an existing dashboard spec and persists validated preview versions.",
