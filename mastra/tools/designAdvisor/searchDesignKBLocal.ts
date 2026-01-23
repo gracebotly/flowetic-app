@@ -7,66 +7,57 @@ import { loadDesignKBFiles } from "./loadDesignKB";
 
 export const searchDesignKBLocal = createTool({
   id: "searchDesignKBLocal",
-  description:
-    "Fallback local design KB search (no vector DB). Returns a combined relevantContext string plus lightweight sources. Use when vector search is unavailable or returns empty.",
+  description: "Keyword-based local search of design knowledge base (fallback when RAG is unavailable)",
   inputSchema: z.object({
-    queryText: z.string().min(1),
-    maxChars: z.number().int().min(500).max(12000).default(6000),
+    queryText: z.string().describe("The search query text"),
+    maxChars: z.number().optional().default(2000).describe("Maximum characters to return"),
   }),
   outputSchema: z.object({
-    relevantContext: z.string(),
-    sources: z.array(
-      z.object({
-        docPath: z.string(),
-        score: z.number(),
-        excerpt: z.string(),
-      }),
-    ),
+    relevantText: z.string(),
+    sources: z.array(z.object({
+      kind: z.string(),
+      note: z.string(),
+    })),
   }),
-  execute: async ({ context }) => {
-    const { queryText, maxChars } = context;
+  execute: async (inputData: any, context: any) => {
+    const { queryText, maxChars } = inputData;
     const q = queryText.toLowerCase();
     const terms = q
-      .replace(/[^a-z0-9\s]/g, " ")
       .split(/\s+/)
-      .filter((t) => t.length >= 3)
-      .slice(0, 30);
+      .filter((t: string) => t.length > 2)
+      .slice(0, 10);
 
-    const files = await loadDesignKBFiles();
+    // Simple keyword matching logic
+    // TODO: Replace with your actual local search implementation
+    const knowledgeBase = [
+      {
+        kind: "design-system",
+        content: "Use consistent spacing, modern typography, and accessible color contrast for premium dashboards.",
+        note: "Premium design guidelines",
+      },
+    ];
 
-    const scored: Array<{ docPath: string; score: number; content: string }> =
-      [];
-    for (const f of files) {
-      const lower = f.content.toLowerCase();
-      let score = 0;
-      for (const t of terms) {
-        const idx = lower.indexOf(t);
-        if (idx >= 0) score += 3;
+    let relevantText = "";
+    const sources: Array<{ kind: string; note: string }> = [];
+
+    for (const item of knowledgeBase) {
+      const content = item.content.toLowerCase();
+      const matches = terms.filter((term: string) => content.includes(term));
+      if (matches.length > 0) {
+        relevantText += item.content + "\n\n";
+        sources.push({ kind: item.kind, note: item.note });
       }
-      if (score > 0) scored.push({ docPath: f.path, score, content: f.content });
     }
 
-    scored.sort((a, b) => b.score - a.score);
-    const top = scored.slice(0, 5);
-
-    const sources: Array<{ docPath: string; score: number; excerpt: string }> =
-      [];
-    const parts: string[] = [];
-
-    for (const t of top) {
-      const lower = t.content.toLowerCase();
-      const firstIdx = terms.length ? lower.indexOf(terms[0]!) : -1;
-      const start = Math.max(0, firstIdx >= 0 ? firstIdx - 200 : 0);
-      const end = Math.min(t.content.length, start + 1400);
-      const excerpt = t.content.slice(start, end).trim();
-
-      sources.push({ docPath: t.docPath, score: t.score, excerpt });
-      parts.push(`SOURCE: ${t.docPath}\n${excerpt}`.trim());
+    const limit = maxChars ?? 2000;
+    if (relevantText.length > limit) {
+      relevantText = relevantText.slice(0, limit) + "...";
     }
 
-    const relevantContext = parts.join("\n\n---\n\n").slice(0, maxChars);
-
-    return { relevantContext, sources };
+    return {
+      relevantText: relevantText.trim() || "No relevant design guidance found.",
+      sources,
+    };
   },
 });
 

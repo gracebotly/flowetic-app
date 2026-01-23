@@ -27,18 +27,24 @@ export const getRecentEventSamples = createTool({
       }),
     ),
   }),
-  execute: async ({ context, runtimeContext }) => {
+  execute: async (inputData: any, context: any) => {
     const supabase = await createClient();
 
     const tenantId =
-      context.tenantId ??
-      (runtimeContext?.get("tenantId") as string | undefined) ??
+      inputData.tenantId ??
+      inputData.tenantId ??
+      (context?.runtimeContext?.tenantId as string | undefined) ??
+      (context?.requestContext?.get("tenantId") as string | undefined) ??
       undefined;
 
     const sourceId =
-      context.sourceId ??
-      (runtimeContext?.get("sourceId") as string | undefined) ??
+      inputData.sourceId ??
+      inputData.sourceId ??
+      (context?.runtimeContext?.sourceId as string | undefined) ??
+      (context?.requestContext?.get("sourceId") as string | undefined) ??
       undefined;
+
+    const lastN = typeof inputData.lastN === "number" ? inputData.lastN : 50;
 
     if (!tenantId) throw new Error("AUTH_REQUIRED");
     if (!sourceId) throw new Error("CONNECTION_NOT_CONFIGURED");
@@ -49,7 +55,7 @@ export const getRecentEventSamples = createTool({
       .eq("tenant_id", tenantId)
       .eq("source_id", sourceId)
       .order("timestamp", { ascending: false })
-      .limit(context.lastN);
+      .limit(lastN);
 
     if (error) throw new Error(error.message);
 

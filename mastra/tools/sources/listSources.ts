@@ -13,9 +13,9 @@ export const listSources = createTool({
   outputSchema: z.object({
     sources: z.array(SourcePublic),
   }),
-  execute: async ({ context }) => {
+  execute: async (inputData: any, context: any) => {
     const supabase = await createClient();
-    const { tenantId } = context;
+    const { tenantId } = inputData;
 
     const { data, error } = await supabase
       .from("sources")

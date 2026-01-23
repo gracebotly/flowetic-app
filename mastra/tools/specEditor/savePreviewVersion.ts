@@ -3,11 +3,12 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { persistPreviewVersion } from "../persistPreviewVersion";
+import { callTool } from "../../lib/callTool";
 
 export const savePreviewVersion = createTool({
   id: "savePreviewVersion",
   description:
-    "Persist a validated spec_json + design_tokens as a new preview interface version. Reads tenantId/userId/interfaceId/platformType from runtimeContext when available.",
+    "Persist a validated spec_json + design_tokens as a new preview interface version. Reads tenantId/userId/interfaceId/platformType from requestContext when available.",
   inputSchema: z.object({
     spec_json: z.record(z.any()),
     design_tokens: z.record(z.any()).default({}),
@@ -18,29 +19,34 @@ export const savePreviewVersion = createTool({
     versionId: z.string().uuid(),
     previewUrl: z.string(),
   }),
-  execute: async ({ context, runtimeContext }) => {
-    const tenantId = runtimeContext?.get("tenantId") as string | undefined;
-    const userId = runtimeContext?.get("userId") as string | undefined;
-    const platformType = (runtimeContext?.get("platformType") as string | undefined) ?? "make";
+  execute: async (inputData: any, context: any) => {
+    const tenantId =
+      inputData.runtimeContext?.tenantId ??
+      (context?.runtimeContext?.get("tenantId") as string | undefined);
+    const userId = inputData.runtimeContext?.userId ?? (context?.runtimeContext?.get("userId") as string | undefined);
+    const platformType = inputData.runtimeContext?.platformType ?? (context?.runtimeContext?.get("platformType") as string | undefined) ?? "make";
 
     if (!tenantId || !userId) throw new Error("AUTH_REQUIRED");
 
     const interfaceId =
-      context.interfaceId ??
-      (runtimeContext?.get("interfaceId") as string | undefined) ??
+      inputData.interfaceId ??
+      inputData.interfaceId ??
+      inputData.runtimeContext?.interfaceId ??
+      (context?.runtimeContext?.get("interfaceId") as string | undefined) ??
       undefined;
 
-    const result = await persistPreviewVersion.execute({
-      context: {
+    const result = await callTool(
+      persistPreviewVersion,
+      {
         tenantId,
         userId,
         interfaceId,
-        spec_json: context.spec_json,
-        design_tokens: context.design_tokens ?? {},
+        spec_json: inputData.spec_json,
+        design_tokens: inputData.design_tokens ?? {},
         platformType,
       },
-      runtimeContext,
-    });
+      { requestContext: context?.requestContext ?? context ?? {} }
+    );
 
     return {
       interfaceId: result.interfaceId,

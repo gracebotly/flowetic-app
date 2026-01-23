@@ -4,9 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "dev:mastra": "mastra dev --dir mastra",
+    "dev:mastra": "mastra dev --dir ./mastra",
+    "mastra:dev": "mastra dev --dir ./mastra",
+    "mastra:dev:nocache": "MASTRA_DEV_NO_CACHE=1 mastra dev --dir ./mastra",
     "build": "next build",
-    "build:mastra": "mastra build --dir mastra",
+    "build:mastra": "mastra build --dir ./mastra",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit --pretty false"
@@ -20,9 +22,12 @@
     "@copilotkit/runtime": "^1.50.1",
     "@langchain/core": "^1.1.8",
     "@langchain/openai": "^1.2.0",
-    "@mastra/core": "^0.19.0",
-    "@mastra/mcp": "^0.14.5",
-    "@mastra/pg": "^0.1.0",
+    "@mastra/core": "1.0.4",
+    "@mastra/libsql": "1.0.0",
+    "@mastra/memory": "1.0.0",
+
+    "@mastra/mcp": "1.0.0",
+    "@mastra/pg": "1.0.0",
     "@mastra/rag": "^0.1.0",
     "@radix-ui/react-dialog": "^1.0.5",
     "@radix-ui/react-dropdown-menu": "^2.0.6",
@@ -54,5 +59,12 @@
     "eslint-config-next": "16.1.1",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "overrides": {
+    "@mastra/core": "1.0.4",
+    "@mastra/libsql": "1.0.0", 
+    "@mastra/memory": "1.0.0",
+    "@mastra/mcp": "1.0.0",
+    "@mastra/pg": "1.0.0"
   }
 }

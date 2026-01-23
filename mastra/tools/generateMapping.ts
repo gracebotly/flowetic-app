@@ -17,8 +17,8 @@ export const generateMapping = createTool({
     missingFields: z.array(z.string()),
     confidence: z.number().min(0).max(1),
   }),
-  execute: async ({ context }) => {
-    const { templateId, fields, platformType } = context;
+  execute: async (inputData: any, context: any) => {
+    const { templateId, fields, platformType } = inputData;
     
     // Template requirements (simplified for MVP)
     const templateRequirements: Record<string, string[]> = {
@@ -30,7 +30,7 @@ export const generateMapping = createTool({
     };
     
     const required = templateRequirements[templateId] || templateRequirements['default'];
-    const fieldNames = fields.map(f => f.name.toLowerCase());
+    const fieldNames = fields.map((f: any) => f.name.toLowerCase());
     
     const mappings: Record<string, string> = {};
     const missingFields: string[] = [];
@@ -40,11 +40,11 @@ export const generateMapping = createTool({
       const normalized = reqField.toLowerCase().replace(/_/g, '');
       
       // Exact match
-      let found = fieldNames.find(f => f === reqField);
+      let found = fieldNames.find((f: any) => f === reqField);
       
       // Fuzzy match (remove underscores, check contains)
       if (!found) {
-        found = fieldNames.find(f => 
+        found = fieldNames.find((f: any) => 
           f.replace(/_/g, '').includes(normalized) ||
           normalized.includes(f.replace(/_/g, ''))
         );

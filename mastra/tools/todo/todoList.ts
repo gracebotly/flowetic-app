@@ -1,9 +1,11 @@
 
 
+
+
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { TodoItem, TodoStatus } from "./types";
+import { TodoItemSchema } from "./types";
 
 export const todoList = createTool({
   id: "todo.list",
@@ -11,28 +13,24 @@ export const todoList = createTool({
   inputSchema: z.object({
     tenantId: z.string().uuid(),
     threadId: z.string().min(1),
-    status: z.union([TodoStatus, z.literal("all")]).default("all"),
   }),
   outputSchema: z.object({
-    todos: z.array(TodoItem),
+    todos: z.array(TodoItemSchema),
   }),
-  execute: async ({ context }) => {
+  execute: async (inputData: any, context: any) => {
+    const { tenantId, threadId } = inputData;
     const supabase = await createClient();
-    const { tenantId, threadId, status } = context;
 
-    let q = supabase
+    const { data: todos, error } = await supabase
       .from("todos")
       .select("*")
       .eq("tenant_id", tenantId)
       .eq("thread_id", threadId)
-      .order("created_at", { ascending: true });
+      .order("created_at", { ascending: false });
 
-    if (status !== "all") q = q.eq("status", status);
+    if (error) throw new Error(error.message);
 
-    const { data, error } = await q;
-    if (error || !data) throw new Error(error?.message ?? "TODO_LIST_FAILED");
-
-    return { todos: data };
+    return { todos: todos || [] };
   },
 });
 

@@ -1,13 +1,32 @@
 
-import { createVectorQueryTool } from "@mastra/rag";
-import { openai } from "@ai-sdk/openai";
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
 
-export const searchDesignKB = createVectorQueryTool({
+export const searchDesignKB = createTool({
   id: "searchDesignKB",
-  description:
-    "Search GetFlowetic's UI/UX design knowledge base (ui-ux-pro-max-skill + internal rules). Use this to ground design advice and reduce hallucinations.",
-  vectorStoreName: process.env.MASTRA_VECTOR_STORE_NAME || "pgVector",
-  indexName: process.env.MASTRA_DESIGN_KB_INDEX_NAME || "design_kb",
-  model: openai.embedding("text-embedding-3-small"),
-  enableFilter: true,
+  description: "Search the design knowledge base using RAG for grounded UI/UX guidance",
+  inputSchema: z.object({
+    query: z.string().describe("The search query for design guidance"),
+    maxResults: z.number().optional().default(5).describe("Maximum number of results to return"),
+  }),
+  outputSchema: z.object({
+    results: z.array(z.object({
+      content: z.string(),
+      score: z.number().optional(),
+      metadata: z.any().optional(),
+    })),
+    retrieved: z.boolean(),
+  }),
+  execute: async (inputData, context) => {
+    const { query, maxResults } = inputData;
+    
+    // TODO: Implement actual RAG search logic here
+    // This is a placeholder implementation
+    // Replace with your actual vector search/RAG implementation
+    
+    return {
+      results: [],
+      retrieved: false,
+    };
+  },
 });

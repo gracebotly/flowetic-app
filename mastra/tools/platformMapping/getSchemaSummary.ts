@@ -5,10 +5,10 @@ import { z } from 'zod';
 export const getSchemaSummary = createTool({
   id: 'getSchemaSummary',
   description: 'Summarize event schema and field types from samples',
-  inputSchema: z.object({
-    samples: z.array(z.any()).describe('Event samples to analyze'),
-    includeStatistics: z.boolean().default(true).describe('Include field statistics'),
-  }),
+  // inputSchema: z.object({
+  //   samples: z.array(z.any()).describe('Event samples to analyze'),
+  //   includeStatistics: z.boolean().default(true).describe('Include field statistics'),
+  // }),
   outputSchema: z.object({
     fields: z.array(z.object({
       name: z.string(),
@@ -23,8 +23,8 @@ export const getSchemaSummary = createTool({
     schemaComplexity: z.enum(['simple', 'moderate', 'complex']),
     confidence: z.number(),
   }),
-  execute: async ({ context }) => {
-    const { samples, includeStatistics } = context;
+  execute: async (inputData: any, context: any) => {
+    const { samples, includeStatistics } = inputData;
 
     try {
       if (!samples || samples.length === 0) {

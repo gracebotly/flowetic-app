@@ -1,8 +1,9 @@
 
 
 import { NextRequest, NextResponse } from "next/server";
-import { RuntimeContext } from "@mastra/core/runtime-context";
+// import { createRuntimeContext, type RuntimeContextLike } from "@/mastra/lib/runtimeContext"; // Removed runtimeContext shim
 import { getCurrentSpec } from "@/mastra/tools/specEditor";
+import { callTool } from "@/mastra/lib/callTool";
 
 export async function POST(req: NextRequest) {
   try {
@@ -17,12 +18,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "MISSING_REQUIRED_FIELDS" }, { status: 400 });
     }
 
-    const runtimeContext = new RuntimeContext();
-    runtimeContext.set("userId", userId);
-    runtimeContext.set("tenantId", tenantId);
-
-    const current = await getCurrentSpec.execute(
-      { context: { tenantId, interfaceId }, runtimeContext } as any
+    const runtimeContext = { get: (key: string) => ({ userId, tenantId } as any)[key] } as any;
+    const current = await callTool(
+      getCurrentSpec,
+      { interfaceId }, // inputData - tenantId removed as it's not needed
+      { requestContext: runtimeContext } // context
     );
 
     return NextResponse.json({

@@ -9,10 +9,10 @@ import { z } from 'zod';
 export const listTemplates = createTool({
   id: 'listTemplates',
   description: 'List available dashboard templates',
-  inputSchema: z.object({
-    platformType: z.string().optional().describe('Filter by platform type'),
-    category: z.string().optional().describe('Filter by template category'),
-  }),
+  // inputSchema: z.object({
+  //   platformType: z.string().optional().describe('Filter by platform type'),
+  //   category: z.string().optional().describe('Filter by template category'),
+  // }),
   outputSchema: z.object({
     templates: z.array(z.object({
       id: z.string(),
@@ -26,8 +26,8 @@ export const listTemplates = createTool({
       preview: z.string().optional(),
     })),
   }),
-  execute: async ({ context }) => {
-    const { platformType, category } = context;
+  execute: async (inputData: any, context: any) => {
+    const { platformType, category } = inputData || {};
 
     try {
       // Mock templates data
@@ -80,7 +80,7 @@ export const listTemplates = createTool({
         templates: filteredTemplates,
       };
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = error instanceof Error ? (error.message || 'Unknown error') : String(error);
       throw new Error(`Failed to list templates: ${message}`);
     }
   },

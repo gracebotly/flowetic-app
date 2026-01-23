@@ -7,7 +7,7 @@ function nowIso() {
   return new Date().toISOString();
 }
 
-export async function runGeneratePreview(input: z.infer<typeof GeneratePreviewInput>) {
+export async function runGeneratePreview(input: GeneratePreviewInput) {
   const parsed = GeneratePreviewInput.parse(input);
   const supabase = await createClient();
 
@@ -67,7 +67,7 @@ export async function runGeneratePreview(input: z.infer<typeof GeneratePreviewIn
   return GeneratePreviewOutput.parse({ runId, previewVersionId, previewUrl });
 }
 
-export async function runPublishDashboard(input: z.infer<typeof PublishInput>) {
+export async function runPublishDashboard(input: PublishInput) {
   const parsed = PublishInput.parse(input);
 
   if (parsed.userRole !== "admin") {

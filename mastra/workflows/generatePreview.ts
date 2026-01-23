@@ -6,9 +6,10 @@ import { generateMapping } from '../tools/generateMapping';
 import { generateUISpec } from '../tools/generateUISpec';
 import { validateSpec } from '../tools/validateSpec';
 import { persistPreviewVersion } from '../tools/persistPreviewVersion';
+import { callTool } from '../lib/callTool';
 
 // Platform type derived from selectTemplate tool schema
-type SelectTemplatePlatformType = z.infer<typeof selectTemplate.inputSchema>['platformType'];
+type SelectTemplatePlatformType = "vapi" | "retell" | "n8n" | "mastra" | "crewai" | "activepieces" | "make";
 
 // Input/Output schemas
 export const GeneratePreviewInput = z.object({
@@ -25,8 +26,19 @@ export const GeneratePreviewOutput = z.object({
   previewUrl: z.string(),
 });
 
-export type GeneratePreviewInput = z.infer<typeof GeneratePreviewInput>;
-export type GeneratePreviewOutput = z.infer<typeof GeneratePreviewOutput>;
+export type GeneratePreviewInput = {
+  tenantId: string;
+  userId: string;
+  userRole: 'admin' | 'client' | 'viewer';
+  interfaceId: string;
+  instructions?: string;
+};
+
+export type GeneratePreviewOutput = {
+  runId: string;
+  previewVersionId: string;
+  previewUrl: string;
+};
 
 // ============================================================================
 // Step Definitions
@@ -51,9 +63,9 @@ const analyzeSchemaStep = createStep({
     eventTypes: z.array(z.string()),
     confidence: z.number(),
   }),
-  async execute({ inputData, runtimeContext }) {
-    // Get sourceId from runtimeContext (set when connection was established)
-    const sourceId = runtimeContext?.get('sourceId') as string | undefined;
+  async execute({ inputData, requestContext, getStepResult, getInitData, suspend, runId }) {
+    // Get sourceId from context (set when connection was established)
+    const sourceId = requestContext.get('sourceId');
     
     // Get tenantId from workflow input
     const { tenantId } = inputData;
@@ -63,15 +75,16 @@ const analyzeSchemaStep = createStep({
     if (!tenantId || !sourceId) {
       throw new Error('CONNECTION_NOT_CONFIGURED');
     }
-    
-    const result = await analyzeSchema.execute({
-      context: {
+
+    const result = await callTool(
+      analyzeSchema,
+      {
         tenantId,
         sourceId,
         sampleSize,
       },
-      runtimeContext,
-    });
+      { requestContext }
+    );
     
     return result;
   },
@@ -80,27 +93,32 @@ const analyzeSchemaStep = createStep({
 // Step 2: selectTemplate
 const selectTemplateStep = createStep({
   id: 'selectTemplate',
-  inputSchema: analyzeSchemaStep.outputSchema,
+  inputSchema: z.object({
+    fields: z.array(z.object({
+      name: z.string(),
+      type: z.string(),
+      nullable: z.boolean(),
+      sample: z.any().optional(),
+    })),
+    eventTypes: z.array(z.string()),
+    confidence: z.number(),
+  }),
   outputSchema: z.object({
     templateId: z.string(),
     confidence: z.number(),
     reason: z.string(),
   }),
-  async execute({ runtimeContext, getStepResult }) {
-    const analyzeResult = getStepResult(analyzeSchemaStep);
+  async execute({ inputData, requestContext, getStepResult, getInitData, suspend, runId }) {
+    const platformType = (requestContext.get("platformType") || 'make') as SelectTemplatePlatformType;
     
-    if (!analyzeResult) {
-      throw new Error('TEMPLATE_NOT_FOUND');
-    }
-    const platformType = (runtimeContext?.get('platformType') || 'make') as SelectTemplatePlatformType;
-    const result = await selectTemplate.execute({
-      context: {
+    const result = await callTool(selectTemplate, 
+      {
         platformType,
-        eventTypes: analyzeResult.eventTypes,
-        fields: analyzeResult.fields,
+        eventTypes: inputData.eventTypes,
+        fields: inputData.fields,
       },
-      runtimeContext,
-    });
+      { requestContext }
+    );
     return result;
   },
 });
@@ -108,29 +126,33 @@ const selectTemplateStep = createStep({
 // Step 3: generateMapping
 const generateMappingStep = createStep({
   id: 'generateMapping',
-  inputSchema: selectTemplateStep.outputSchema,
+  inputSchema: z.object({
+    templateId: z.string(),
+    confidence: z.number(),
+    reason: z.string(),
+  }),
   outputSchema: z.object({
     mappings: z.record(z.string()),
     missingFields: z.array(z.string()),
     confidence: z.number(),
   }),
-  async execute({ runtimeContext, getStepResult }) {
+  async execute({ inputData, requestContext, getStepResult, getInitData, suspend, runId }) {
     const analyzeResult = getStepResult(analyzeSchemaStep);
-    const templateResult = getStepResult(selectTemplateStep);
-    if (!analyzeResult || !templateResult) {
+    const templateId = inputData.templateId;
+    const platformType = (requestContext.get("platformType") || 'make') as SelectTemplatePlatformType;
+    
+    if (!analyzeResult) {
       throw new Error('MAPPING_INCOMPLETE_REQUIRED_FIELDS');
     }
-    const fields = analyzeResult.fields;
-    const templateId = templateResult.templateId;
-    const platformType = (runtimeContext?.get('platformType') || 'make') as SelectTemplatePlatformType;
-    const result = await generateMapping.execute({
-      context: {
+    
+    const result = await callTool(generateMapping, 
+      {
         templateId,
         fields: analyzeResult.fields,
         platformType,
       },
-      runtimeContext,
-    });
+      { requestContext }
+    );
     return result;
   },
 });
@@ -138,7 +160,11 @@ const generateMappingStep = createStep({
 // Step 4: Check Mapping Completeness (HITL)
 const checkMappingCompletenessStep = createStep({
   id: 'checkMappingCompleteness',
-  inputSchema: generateMappingStep.outputSchema,
+  inputSchema: z.object({
+    mappings: z.record(z.string()),
+    missingFields: z.array(z.string()),
+    confidence: z.number(),
+  }),
   outputSchema: z.object({
     shouldSuspend: z.boolean(),
     missingFields: z.array(z.string()).optional(),
@@ -154,9 +180,8 @@ const checkMappingCompletenessStep = createStep({
     selectedFieldKey: z.string().optional(),
     confirmed: z.boolean().optional(),
   }),
-  async execute({ getStepResult, suspend }) {
-    const mappingResult = getStepResult(generateMappingStep);
-    const missingFields = mappingResult?.missingFields || [];
+  async execute({ inputData, requestContext, getStepResult, getInitData, suspend, runId }) {
+    const missingFields = inputData.missingFields || [];
     // If any required fields are missing, pause for human input
     if (missingFields.length > 0) {
       await suspend({
@@ -185,7 +210,7 @@ const generateUISpecStep = createStep({
     spec_json: z.record(z.any()),
     design_tokens: z.record(z.any()),
   }),
-  async execute({ inputData, runtimeContext, getStepResult }) {
+  async execute({ inputData, requestContext, getStepResult, getInitData, suspend, runId }) {
     // inputData contains output from checkMappingCompletenessStep
     const { shouldSuspend, missingFields, message, decision } = inputData;
     
@@ -203,16 +228,16 @@ const generateUISpecStep = createStep({
     
     const templateId = templateResult.templateId;
     const mappings = mappingResult.mappings;
-    const platformType = (runtimeContext?.get('platformType') || 'make') as SelectTemplatePlatformType;
+    const platformType = (requestContext.get("platformType") || 'make') as SelectTemplatePlatformType;
     
-    const result = await generateUISpec.execute({
-      context: {
+    const result = await callTool(generateUISpec, 
+      {
         templateId,
-        mappings: mappingResult.mappings,
+        mappings: mappings,
         platformType,
       },
-      runtimeContext,
-    });
+      { requestContext }
+    );
     
     return result;
   },
@@ -221,21 +246,22 @@ const generateUISpecStep = createStep({
 // Step 6: Validate Spec
 const validateSpecStep = createStep({
   id: 'validateSpec',
-  inputSchema: generateUISpecStep.outputSchema,
+  inputSchema: z.object({
+    spec_json: z.record(z.any()),
+    design_tokens: z.record(z.any()),
+  }),
   outputSchema: z.object({
     valid: z.boolean(),
     errors: z.array(z.string()),
     score: z.number(),
   }),
-  async execute({ getStepResult, runtimeContext }) {
-    const specResult = getStepResult(generateUISpecStep);
-    const spec_json = specResult?.spec_json || {};
-    const result = await validateSpec.execute({
-      context: {
-        spec_json,
-      },
-      runtimeContext,
-    });
+  async execute({ inputData, requestContext, getStepResult, getInitData, suspend, runId }) {
+    const spec_json = inputData.spec_json;
+    
+    const result = await callTool(validateSpec, 
+      { spec_json },
+      { requestContext }
+    );
     if (!result.valid || result.score < 0.8) {
       throw new Error('SCORING_HARD_GATE_FAILED');
     }
@@ -246,13 +272,17 @@ const validateSpecStep = createStep({
 // Step 7: persistPreviewVersion
 const persistPreviewVersionStep = createStep({
   id: 'persistPreviewVersion',
-  inputSchema: validateSpecStep.outputSchema,
+  inputSchema: z.object({
+    valid: z.boolean(),
+    errors: z.array(z.string()),
+    score: z.number(),
+  }),
   outputSchema: z.object({
     interfaceId: z.string().uuid(),
     versionId: z.string().uuid(),
     previewUrl: z.string(),
   }),
-  async execute({ runtimeContext, getStepResult, getInitData }) {
+  async execute({ inputData, requestContext, getStepResult, getInitData, suspend, runId }) {
     const initData = getInitData() as GeneratePreviewInput;
     const specResult = getStepResult(generateUISpecStep);
     const spec_json = specResult?.spec_json || {};
@@ -261,9 +291,10 @@ const persistPreviewVersionStep = createStep({
     const tenantId = initData.tenantId;
     const userId = initData.userId;
     const interfaceId = initData.interfaceId;
-    const platformType = (runtimeContext?.get('platformType') || 'make') as SelectTemplatePlatformType;
-    const result = await persistPreviewVersion.execute({
-      context: {
+    const platformType = (requestContext.get("platformType") || 'make') as SelectTemplatePlatformType;
+    
+    const result = await callTool(persistPreviewVersion, 
+      {
         tenantId,
         userId,
         interfaceId,
@@ -271,8 +302,8 @@ const persistPreviewVersionStep = createStep({
         design_tokens,
         platformType,
       },
-      runtimeContext,
-    });
+      { requestContext }
+    );
     return result;
   },
 });
@@ -280,10 +311,14 @@ const persistPreviewVersionStep = createStep({
 // Step 8: finalize
 const finalizeStep = createStep({
   id: 'finalize',
-  inputSchema: persistPreviewVersionStep.outputSchema,
+  inputSchema: z.object({
+    interfaceId: z.string().uuid(),
+    versionId: z.string().uuid(),
+    previewUrl: z.string(),
+  }),
   outputSchema: GeneratePreviewOutput,
-  async execute({ getStepResult, runId }) {
-    const persistResult = getStepResult(persistPreviewVersionStep);
+  async execute({ inputData, requestContext, getStepResult, getInitData, suspend, runId }) {
+    const persistResult = inputData;
     return {
       runId,
       previewVersionId: persistResult.versionId,

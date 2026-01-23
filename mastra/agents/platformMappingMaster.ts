@@ -1,7 +1,7 @@
 
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
-import { RuntimeContext } from "@mastra/core/runtime-context";
+// import { RequestContext } from "@mastra/core/request-context"; // Removed - invalid import
 import { loadSkillMarkdown, PlatformType } from "../skills/loadSkill";
 import {
   appendThreadEvent,
@@ -15,12 +15,14 @@ import {
 import { todoAdd, todoList, todoUpdate, todoComplete } from "../tools/todo";
 import { getStyleBundles } from "../tools/design";
 
-export const platformMappingMaster: Agent = new Agent({
+export const platformMappingMaster = new Agent({
+  id: "platform-mapping-master",
   name: "platformMappingMaster",
   description:
     "Platform Mapping Agent: inspects event samples, recommends templates, proposes mappings, and triggers preview workflow.",
-  instructions: async ({ runtimeContext }: { runtimeContext: RuntimeContext }) => {
-    const platformType = (runtimeContext.get("platformType") as PlatformType) || "make";
+  instructions: async ({ requestContext, mastra }: { requestContext: any; mastra?: any }) => {
+    const runtimeContext = requestContext;
+    const platformType = (runtimeContext.get ? runtimeContext.get("platformType") : undefined) as PlatformType || "make";
     const skill = await loadSkillMarkdown(platformType);
 
     return [

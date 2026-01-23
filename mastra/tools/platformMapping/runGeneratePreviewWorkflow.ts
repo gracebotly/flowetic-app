@@ -1,7 +1,7 @@
 import { createTool } from "@mastra/core/tools";
-import { RuntimeContext } from "@mastra/core/runtime-context";
+// import { RuntimeContext } from "@mastra/core/runtime-context"; // Migrated to v1 - no longer needed
 import { z } from "zod";
-import { mastra } from "../../index";
+import { generatePreviewWorkflow } from "../../workflows/generatePreview";
 
 export const runGeneratePreviewWorkflow = createTool({
   id: "runGeneratePreviewWorkflow",
@@ -19,29 +19,17 @@ export const runGeneratePreviewWorkflow = createTool({
     previewVersionId: z.string().uuid(),
     previewUrl: z.string(),
   }),
-  execute: async ({ context, runtimeContext }) => {
-    if (!runtimeContext) {
-      throw new Error("RUNTIME_CONTEXT_REQUIRED");
-    }
-
-    const workflow = mastra.getWorkflow("generatePreview");
-    if (!workflow) {
-      throw new Error("WORKFLOW_NOT_FOUND");
-    }
-
-    const run = await workflow.createRunAsync();
-
+  execute: async (inputData: any, context: any) => {
+    const run = await generatePreviewWorkflow.createRun();
     const result = await run.start({
       inputData: {
-        tenantId: context.tenantId,
-        userId: context.userId,
-        userRole: context.userRole,
-        interfaceId: context.interfaceId,
-        instructions: context.instructions,
+        tenantId: inputData.tenantId,
+        userId: inputData.userId,
+        userRole: inputData.userRole,
+        interfaceId: inputData.interfaceId,
+        instructions: inputData.instructions,
       },
-      runtimeContext: runtimeContext as RuntimeContext,
     });
-
 
     // In Mastra, run.start returns a result envelope; your workflow's output schema
     // is the final output, available on result.result when status === 'success'.
@@ -49,9 +37,8 @@ export const runGeneratePreviewWorkflow = createTool({
       throw new Error("WORKFLOW_FAILED");
     }
 
-
     return {
-      runId: result.result.runId,
+      runId: run.runId,
       previewVersionId: result.result.previewVersionId,
       previewUrl: result.result.previewUrl,
     };

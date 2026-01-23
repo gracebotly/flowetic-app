@@ -1,45 +1,43 @@
 
 
 
+
+
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { TodoItem, TodoPriority, TodoStatus } from "./types";
+import { TodoItemSchema } from "./types";
 
 export const todoUpdate = createTool({
   id: "todo.update",
-  description: "Update a todo item (status/title/description/priority/tags).",
+  description: "Update todo fields (title, description, priority, status).",
   inputSchema: z.object({
     tenantId: z.string().uuid(),
-    threadId: z.string().min(1),
     todoId: z.string().uuid(),
-    status: TodoStatus.optional(),
     title: z.string().min(1).max(160).optional(),
-    description: z.string().max(2000).optional().nullable(),
-    priority: TodoPriority.optional(),
-    tags: z.array(z.string()).optional(),
+    description: z.string().max(2000).optional(),
+    status: z.enum(["pending", "in_progress", "completed"]).optional(),
+    priority: z.enum(["low", "medium", "high"]).optional(),
   }),
   outputSchema: z.object({
-    todo: TodoItem,
+    todo: TodoItemSchema,
   }),
-  execute: async ({ context }) => {
+  execute: async (inputData: any, context: any) => {
+    const { tenantId, todoId, ...updates } = inputData;
     const supabase = await createClient();
-    const { tenantId, threadId, todoId, ...patch } = context;
 
-    const { data, error } = await supabase
+    const { data: todo, error } = await supabase
       .from("todos")
-      .update({
-        ...patch,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("tenant_id", tenantId)
-      .eq("thread_id", threadId)
+      .update(updates)
       .eq("id", todoId)
-      .select("*")
+      .eq("tenant_id", tenantId)
+      .select()
       .single();
 
-    if (error || !data) throw new Error(error?.message ?? "TODO_UPDATE_FAILED");
-    return { todo: data };
+    if (error) throw new Error(error.message);
+    if (!todo) throw new Error("TODO_NOT_FOUND");
+
+    return { todo };
   },
 });
 

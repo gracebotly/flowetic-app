@@ -21,10 +21,10 @@ export const appendThreadEvent = createTool({
   outputSchema: z.object({
     eventId: z.string().uuid(),
   }),
-  execute: async ({ context }) => {
+  execute: async (inputData: any, context: any) => {
     const supabase = await createClient();
 
-    const { tenantId, threadId, interfaceId, runId, type, message, metadata } = context;
+    const { tenantId, threadId, interfaceId, runId, type, message, metadata } = inputData;
 
     const { data, error } = await supabase
       .from("events")

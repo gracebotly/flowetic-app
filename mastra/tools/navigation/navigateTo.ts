@@ -25,8 +25,8 @@ export const navigateTo = createTool({
     url: z.string(),
     message: z.string(),
   }),
-  execute: async ({ context }) => {
-    const { page, resourceId, params } = context;
+  execute: async (inputData: any, context: any) => {
+    const { page, resourceId, params } = inputData;
 
     let url = "/";
     switch (page) {

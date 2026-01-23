@@ -1,4 +1,3 @@
-// Import Mastra from the submodule in v0.19.  
 import { Mastra } from '@mastra/core/mastra';
 
 import { masterRouterAgent } from './agents/masterRouterAgent';
@@ -8,9 +7,6 @@ import { designAdvisorAgent } from "./agents/designAdvisorAgent";
 import { generatePreviewWorkflow } from './workflows/generatePreview';
 
 export const mastra = new Mastra({
-  telemetry: {
-    enabled: false,
-  },
   agents: {
     masterRouterAgent: masterRouterAgent,
     default: masterRouterAgent,

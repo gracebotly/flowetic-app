@@ -2,8 +2,7 @@
 
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
-import { RuntimeContext } from "@mastra/core/runtime-context";
-import { ToolAction } from "@mastra/core/tools";
+// import { RequestContext } from "@mastra/core/request-context"; // Removed - invalid import
 import { searchDesignKB, searchDesignKBLocal } from "../tools/designAdvisor";
 import {
   getCurrentSpec,
@@ -14,14 +13,16 @@ import { validateSpec } from "../tools/validateSpec";
 import { todoAdd, todoList, todoUpdate, todoComplete } from "../tools/todo";
 import { getStyleBundles } from "../tools/design";
 
-export const designAdvisorAgent: Agent = new Agent({
+export const designAdvisorAgent = new Agent({
+  id: "design-advisor-agent",
   name: "designAdvisorAgent",
   description:
     "Design Advisor Agent (RAG): grounded UI/UX + design-system guidance. Proposes and optionally applies design token/layout improvements to make dashboards more premium.",
-  instructions: async ({ runtimeContext }: { runtimeContext: RuntimeContext }) => {
-    const mode = (runtimeContext.get("mode") as string | undefined) ?? "edit";
-    const phase = (runtimeContext.get("phase") as string | undefined) ?? "editing";
-    const platformType = (runtimeContext.get("platformType") as string | undefined) ?? "make";
+  instructions: async ({ requestContext, mastra }: { requestContext: any; mastra?: any }) => {
+    const runtimeContext = requestContext;
+    const mode = (runtimeContext.get ? runtimeContext.get("mode") : undefined) ?? "edit";
+    const phase = (runtimeContext.get ? runtimeContext.get("phase") : undefined) ?? "editing";
+    const platformType = (runtimeContext.get ? runtimeContext.get("platformType") : undefined) ?? "make";
 
     return [
       {
@@ -60,7 +61,7 @@ export const designAdvisorAgent: Agent = new Agent({
   },
   model: openai("gpt-4o"),
   tools: {
-    searchDesignKB: searchDesignKB as unknown as ToolAction,
+    searchDesignKB,
     searchDesignKBLocal,
     getStyleBundles,
     getCurrentSpec,

@@ -10,25 +10,25 @@ export const proposeMapping = createTool({
   id: "proposeMapping",
   description:
     "Propose a mapping from observed schema fields to template-required keys. Returns missing required fields and confidence.",
-  inputSchema: z.object({
-    platformType: z.enum(["vapi", "retell", "n8n", "mastra", "crewai", "activepieces", "make"]),
-    templateId: z.string(),
-    schemaFields: z.array(z.object({ name: z.string(), type: z.string(), nullable: z.boolean() })),
-  }),
+  // inputSchema: z.object({
+  //   platformType: z.enum(["vapi", "retell", "n8n", "mastra", "crewai", "activepieces", "make"]),
+  //   templateId: z.string(),
+  //   schemaFields: z.array(z.object({ name: z.string(), type: z.string(), nullable: z.boolean() })),
+  // }),
   outputSchema: z.object({
     mappings: z.record(z.string()),
     missingFields: z.array(z.string()),
     confidence: z.number(),
   }),
-  execute: async ({ context }) => {
-    const { templateId, schemaFields } = context;
+  execute: async (inputData: any, context: any) => {
 
-    const available = schemaFields.map((f) => f.name);
-    const lower = schemaFields.map((f) => f.name.toLowerCase());
+    const { platformType, templateId, schemaFields } = inputData;
+    const available = schemaFields.map((f: any) => f.name);
+    const lower = schemaFields.map((f: any) => f.name.toLowerCase());
 
     const findFirst = (candidates: string[]) => {
       for (const c of candidates) {
-        const idx = lower.findIndex((n) => n === c || n.includes(c));
+        const idx = lower.findIndex((n: any) => n === c || n.includes(c));
         if (idx >= 0) return available[idx];
       }
       return null;

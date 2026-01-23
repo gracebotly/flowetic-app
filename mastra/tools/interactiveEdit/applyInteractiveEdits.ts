@@ -4,10 +4,11 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { getCurrentSpec, applySpecPatch, savePreviewVersion } from "@/mastra/tools/specEditor";
 import { validateSpec } from "@/mastra/tools/validateSpec";
-import { EditAction, DensityPreset } from "./types";
+import { EditActionSchema, EditAction, DensityPreset } from "./types";
 import { reorderComponents } from "./reorderComponents";
+import { callTool } from "../../lib/callTool";
 
-function densityToSpacingBase(d: z.infer<typeof DensityPreset>) {
+function densityToSpacingBase(d: DensityPreset) {
   if (d === "compact") return 8;
   if (d === "spacious") return 14;
   return 10;
@@ -22,31 +23,36 @@ export const applyInteractiveEdits = createTool({
     userId: z.string().uuid(),
     interfaceId: z.string().uuid(),
     platformType: z.string().min(1),
-    actions: z.array(EditAction).min(1).max(30),
+    actions: z.array(EditActionSchema).min(1).max(30),
   }),
   outputSchema: z.object({
     previewUrl: z.string().url(),
     previewVersionId: z.string().uuid(),
   }),
-  execute: async ({ context, runtimeContext }) => {
-    const current = await getCurrentSpec.execute(
-      { context: { tenantId: context.tenantId, interfaceId: context.interfaceId }, runtimeContext } as any
+  execute: async (inputData: any, context: any) => {
+    const current = await callTool(
+      getCurrentSpec,
+      { interfaceId: inputData.interfaceId },
+      { requestContext: context?.requestContext ?? context ?? {} },
     );
 
     let nextSpec = current.spec_json ?? {};
     let nextTokens = current.design_tokens ?? {};
 
-    const reorderAction = context.actions.find((a) => a.type === "reorder_widgets") as any;
+    const reorderAction = inputData.actions.find((a: any) => a.type === "reorder_widgets") as any;
     if (reorderAction?.orderedIds?.length) {
-      const reordered = await reorderComponents.execute(
-        { context: { spec_json: nextSpec, orderedIds: reorderAction.orderedIds }, runtimeContext } as any
+      const reordered = await callTool(
+        reorderComponents,
+        { spec_json: nextSpec, orderedIds: reorderAction.orderedIds },
+        { requestContext: context?.requestContext ?? context ?? {} },
       );
+
       nextSpec = reordered.spec_json;
     }
 
     const ops: any[] = [];
 
-    for (const a of context.actions) {
+    for (const a of inputData.actions) {
       if (a.type === "toggle_widget") {
         ops.push({
           op: "updateComponentProps",
@@ -75,30 +81,35 @@ export const applyInteractiveEdits = createTool({
     }
 
     if (ops.length) {
-      const patched = await applySpecPatch.execute(
-        { context: { spec_json: nextSpec, design_tokens: nextTokens, operations: ops }, runtimeContext } as any
+      const patched = await callTool(
+        applySpecPatch,
+        { spec_json: nextSpec, design_tokens: nextTokens, operations: ops },
+        { requestContext: context?.requestContext ?? context ?? {} },
       );
+
       nextSpec = patched.spec_json;
       nextTokens = patched.design_tokens;
     }
 
-    const validation = await validateSpec.execute(
-      { context: { spec_json: nextSpec }, runtimeContext } as any
+    const validation = await callTool(
+      validateSpec,
+      { spec_json: nextSpec },
+      { requestContext: context?.requestContext ?? context ?? {} },
     );
+
     if (!validation.valid || validation.score < 0.8) throw new Error("INTERACTIVE_EDIT_VALIDATION_FAILED");
 
-    const saved = await savePreviewVersion.execute(
+    const saved = await callTool(
+      savePreviewVersion,
       {
-        context: {
-          tenantId: context.tenantId,
-          userId: context.userId,
-          interfaceId: context.interfaceId,
-          spec_json: nextSpec,
-          design_tokens: nextTokens,
-          platformType: context.platformType,
-        },
-        runtimeContext,
-      } as any
+        tenantId: inputData.tenantId,
+        userId: inputData.userId,
+        interfaceId: inputData.interfaceId,
+        spec_json: nextSpec,
+        design_tokens: nextTokens,
+        platformType: inputData.platformType,
+      },
+      { requestContext: context?.requestContext ?? context ?? {} },
     );
 
     return { previewUrl: saved.previewUrl, previewVersionId: saved.versionId };

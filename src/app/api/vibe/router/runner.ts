@@ -1,5 +1,5 @@
 
-import { RuntimeContext } from "@mastra/core/runtime-context";
+// import { RequestContext } from "@mastra/core/request-context"; // Removed - invalid import
 import { POST as vibeRouterPOST } from "./route";
 
 // This runner reuses the existing route handler without HTTP.
@@ -10,7 +10,7 @@ export async function runVibeRouter(args: {
   vibeContext: any;
   journey: any;
   userMessage: string;
-  runtimeContext: RuntimeContext;
+  requestContext: any;
 }) {
   const body = {
     userId: args.userId,

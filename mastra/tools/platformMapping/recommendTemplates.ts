@@ -10,19 +10,19 @@ import { z } from "zod";
 export const recommendTemplates = createTool({
   id: "recommendTemplates",
   description: "Recommend up to 3 dashboard templates deterministically based on platform type and schema.",
-  inputSchema: z.object({
-    platformType: z.enum(["vapi", "retell", "n8n", "mastra", "crewai", "activepieces", "make"]),
-    schemaSummary: z.object({
-      eventTypes: z.array(z.string()),
-      fields: z.array(
-        z.object({
-          name: z.string(),
-          type: z.string(),
-          nullable: z.boolean(),
-        }),
-      ),
-    }),
-  }),
+  // inputSchema: z.object({
+  //   platformType: z.enum(["vapi", "retell", "n8n", "mastra", "crewai", "activepieces", "make"]),
+  //   schemaSummary: z.object({
+  //     eventTypes: z.array(z.string()),
+  //     fields: z.array(
+  //       z.object({
+  //         name: z.string(),
+  //         type: z.string(),
+  //         nullable: z.boolean(),
+  //       }),
+  //     ),
+  //   }),
+  // }),
   outputSchema: z.object({
     recommendations: z.array(
       z.object({
@@ -32,10 +32,10 @@ export const recommendTemplates = createTool({
       }),
     ),
   }),
-  execute: async ({ context }) => {
-    const { platformType, schemaSummary } = context;
+  execute: async (inputData: any, context: any) => {
+    const { platformType, schemaSummary } = inputData;
 
-    const fields = new Set(schemaSummary.fields.map((f) => f.name.toLowerCase()));
+    const fields = new Set(schemaSummary.fields.map((f: any) => f.name.toLowerCase()));
 
     const templatesByPlatform: Record<
       string,
@@ -55,7 +55,7 @@ export const recommendTemplates = createTool({
     const scored = candidates.map((t) => {
       const matched = t.required.filter((r) => {
         for (const f of fields) {
-          if (f.includes(r)) return true;
+          if ((f as string).includes(r)) return true;
         }
         return false;
       }).length;

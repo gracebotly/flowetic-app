@@ -1,6 +1,6 @@
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
-import { RuntimeContext } from "@mastra/core/runtime-context";
+// import { RequestContext } from "@mastra/core/request-context"; // Removed - invalid import
 import {
   getCurrentSpec,
   applySpecPatch,
@@ -10,14 +10,16 @@ import { validateSpec } from "../tools/validateSpec";
 import { todoAdd, todoList, todoUpdate, todoComplete } from "../tools/todo";
 import { getStyleBundles } from "../tools/design";
 
-export const dashboardBuilderAgent: Agent = new Agent({
+export const dashboardBuilderAgent = new Agent({
+  id: "dashboard-builder-agent",
   name: "dashboardBuilderAgent",
   description:
     "Dashboard Builder Agent: applies safe, incremental edits to an existing dashboard spec and persists validated preview versions.",
-  instructions: async ({ runtimeContext }: { runtimeContext: RuntimeContext }) => {
-    const mode = (runtimeContext.get("mode") as string | undefined) ?? "edit";
-    const phase = (runtimeContext.get("phase") as string | undefined) ?? "editing";
-    const platformType = (runtimeContext.get("platformType") as string | undefined) ?? "make";
+  instructions: async ({ requestContext, mastra }: { requestContext: any; mastra?: any }) => {
+    const runtimeContext = requestContext;
+    const mode = (runtimeContext.get ? runtimeContext.get("mode") : undefined) ?? "edit";
+    const phase = (runtimeContext.get ? runtimeContext.get("phase") : undefined) ?? "editing";
+    const platformType = (runtimeContext.get ? runtimeContext.get("platformType") : undefined) ?? "make";
 
     return [
       {
