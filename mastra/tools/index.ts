@@ -50,3 +50,7 @@ export {
 export {
   updateJourneySchemaReady,
 } from './updateJourneySchemaReady';
+
+// New journey tools
+export { getJourneySession } from "./journey/getJourneySession";
+export { setSchemaReady } from "./journey/setSchemaReady";
