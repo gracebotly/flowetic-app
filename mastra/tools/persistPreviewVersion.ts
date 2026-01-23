@@ -1,6 +1,6 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '../lib/supabase';
 
 export const persistPreviewVersion = createTool({
   id: 'persist-preview-version',
@@ -18,7 +18,7 @@ export const persistPreviewVersion = createTool({
     versionId: z.string().uuid(),
     previewUrl: z.string(),
   }),
-  execute: async (inputData: any, context: any) => {
+  execute: async (inputData, context) => {
     const { tenantId, userId, interfaceId, spec_json, design_tokens, platformType } = inputData;
     
     const supabase = await createClient();

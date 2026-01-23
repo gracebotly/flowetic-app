@@ -1,25 +1,26 @@
 import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
 import { openai } from "@ai-sdk/openai";
-// import { RequestContext } from "@mastra/core/request-context"; // Removed - invalid import
+import type { RequestContext } from "@mastra/core/request-context";
 import {
   getCurrentSpec,
   applySpecPatch,
   savePreviewVersion,
 } from "../tools/specEditor";
 import { validateSpec } from "../tools/validateSpec";
+import { applyInteractiveEdits } from "../tools/interactiveEdit/applyInteractiveEdits";
+import { reorderComponents } from "../tools/interactiveEdit/reorderComponents";
 import { todoAdd, todoList, todoUpdate, todoComplete } from "../tools/todo";
 import { getStyleBundles } from "../tools/design";
 
-export const dashboardBuilderAgent = new Agent({
-  id: "dashboard-builder-agent",
+export const dashboardBuilderAgent: Agent = new Agent({
   name: "dashboardBuilderAgent",
   description:
     "Dashboard Builder Agent: applies safe, incremental edits to an existing dashboard spec and persists validated preview versions.",
-  instructions: async ({ requestContext, mastra }: { requestContext: any; mastra?: any }) => {
-    const runtimeContext = requestContext;
-    const mode = (runtimeContext.get ? runtimeContext.get("mode") : undefined) ?? "edit";
-    const phase = (runtimeContext.get ? runtimeContext.get("phase") : undefined) ?? "editing";
-    const platformType = (runtimeContext.get ? runtimeContext.get("platformType") : undefined) ?? "make";
+  instructions: async ({ requestContext }: { requestContext: RequestContext }) => {
+    const mode = (requestContext.get("mode") as string | undefined) ?? "edit";
+    const phase = (requestContext.get("phase") as string | undefined) ?? "editing";
+    const platformType = (requestContext.get("platformType") as string | undefined) ?? "make";
 
     return [
       {
@@ -54,11 +55,18 @@ export const dashboardBuilderAgent = new Agent({
     ];
   },
   model: openai("gpt-4o"),
+  memory: new Memory({
+    options: {
+      lastMessages: 20,
+    },
+  }),
   tools: {
     getCurrentSpec,
     applySpecPatch,
     validateSpec,
     savePreviewVersion,
+    applyInteractiveEdits,
+    reorderComponents,
     getStyleBundles,
     todoAdd,
     todoList,

@@ -1,7 +1,8 @@
 
 import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
 import { openai } from "@ai-sdk/openai";
-// import { RequestContext } from "@mastra/core/request-context"; // Removed - invalid import
+import type { RequestContext } from "@mastra/core/request-context";
 import { loadSkillMarkdown, loadNamedSkillMarkdown, PlatformType } from "../skills/loadSkill";
 
 import { todoAdd, todoList, todoUpdate, todoComplete } from "../tools/todo";
@@ -12,6 +13,10 @@ import { designAdvisorAgent } from "./designAdvisorAgent";
 import { dashboardBuilderAgent } from "./dashboardBuilderAgent";
 import { platformMappingMaster } from "./platformMappingMaster";
 
+import { generatePreviewWorkflow } from "../workflows/generatePreview";
+import { connectionBackfillWorkflow } from "../workflows/connectionBackfill";
+import { deployDashboardWorkflow } from "../workflows/deployDashboard";
+
 type JourneyMode =
   | "select_entity"
   | "recommend"
@@ -21,19 +26,17 @@ type JourneyMode =
   | "interactive_edit"
   | "deploy";
 
-export const masterRouterAgent = new Agent({
-  id: "master-router-agent",
+export const masterRouterAgent: Agent = new Agent({
   name: "masterRouterAgent",
   description:
     "Master Router Agent (Copilot-connected). Enforces the VibeChat journey phases and routes to platform mapping, design advisor, and dashboard builder.",
-  instructions: async ({ requestContext, mastra }: { requestContext: any; mastra?: any }) => {
-    const runtimeContext = requestContext;
-    const platformType = (runtimeContext.get ? runtimeContext.get("platformType") : undefined) as PlatformType || "make";
+  instructions: async ({ requestContext }: { requestContext: RequestContext }) => {
+    const platformType = (requestContext.get("platformType") as PlatformType) || "make";
     const platformSkill = await loadSkillMarkdown(platformType);
     const businessSkill = await loadNamedSkillMarkdown("business-outcomes-advisor");
 
-    const workflowName = runtimeContext.get ? runtimeContext.get("workflowName") : undefined;
-    const selectedOutcome = runtimeContext.get ? runtimeContext.get("selectedOutcome") : undefined;
+    const workflowName = requestContext.get("workflowName") as string | undefined;
+    const selectedOutcome = requestContext.get("selectedOutcome") as string | undefined;
 
     return [
       {
@@ -113,6 +116,24 @@ export const masterRouterAgent = new Agent({
     ];
   },
   model: openai("gpt-4o"),
+
+  // REQUIRED: routing primitives for Agent.network()
+  agents: {
+    platformMappingMaster,
+    dashboardBuilderAgent,
+    designAdvisorAgent,
+  },
+  workflows: {
+    generatePreviewWorkflow,
+    connectionBackfillWorkflow,
+    deployDashboardWorkflow,
+  },
+
+  memory: new Memory({
+    options: {
+      lastMessages: 20,
+    },
+  }),
   tools: {
     todoAdd,
     todoList,

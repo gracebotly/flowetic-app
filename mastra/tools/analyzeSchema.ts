@@ -1,6 +1,6 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '../lib/supabase';
 
 export const analyzeSchema = createTool({
   id: 'analyze-schema',
@@ -23,8 +23,6 @@ export const analyzeSchema = createTool({
   execute: async (inputData, context) => {
     const { tenantId, sourceId, sampleSize } = inputData;
     
-    const limit = typeof sampleSize === "number" ? sampleSize : 100;
-    
     const supabase = await createClient();
     
     // Fetch sample events
@@ -34,7 +32,7 @@ export const analyzeSchema = createTool({
       .eq('tenant_id', tenantId)
       .eq('source_id', sourceId)
       .order('created_at', { ascending: false })
-      .limit(limit);
+      .limit(sampleSize);
     
     if (error || !events || events.length === 0) {
       throw new Error('NO_EVENTS_AVAILABLE');
