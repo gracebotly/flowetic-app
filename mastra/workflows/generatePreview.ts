@@ -5,7 +5,7 @@ import { selectTemplate } from '../tools/selectTemplate';
 import { generateMapping } from '../tools/generateMapping';
 import { generateUISpec } from '../tools/generateUISpec';
 import { validateSpec } from '../tools/validateSpec';
-import { savePreviewVersion } from "../tools/specEditor/savePreviewVersion";
+import { persistPreviewVersion } from '../tools/persistPreviewVersion';
 import { callTool } from '../lib/callTool';
 
 // Platform type derived from selectTemplate tool schema
@@ -293,7 +293,7 @@ const persistPreviewVersionStep = createStep({
     const interfaceId = initData.interfaceId;
     const platformType = (requestContext.get("platformType") || 'make') as SelectTemplatePlatformType;
     
-    const result = await callTool(savePreviewVersion, 
+    const result = await callTool(persistPreviewVersion, 
       {
         tenantId,
         userId,

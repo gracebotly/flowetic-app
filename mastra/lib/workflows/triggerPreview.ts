@@ -16,7 +16,7 @@ export async function triggerGeneratePreview(params: {
   requestContext.set("tenantId", params.tenantId);
   requestContext.set("threadId", params.threadId);
 
-  const run = workflow.createRun();
+  const run = await workflow.createRunAsync();
 
   const result = await run.start({
     inputData: {
