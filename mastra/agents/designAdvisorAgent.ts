@@ -11,19 +11,30 @@ import {
   savePreviewVersion,
 } from "../tools/specEditor";
 import { validateSpec } from "../tools/validateSpec";
+import { applyInteractiveEdits } from "../tools/interactiveEdit/applyInteractiveEdits";
+import { reorderComponents } from "../tools/interactiveEdit/reorderComponents";
 import { todoAdd, todoList, todoUpdate, todoComplete } from "../tools/todo";
 import { getStyleBundles } from "../tools/design";
+
+import { loadNamedSkillMarkdown } from "../skills/loadSkill";
 
 export const designAdvisorAgent: Agent = new Agent({
   name: "designAdvisorAgent",
   description:
-    "Design Advisor Agent (RAG): grounded UI/UX + design-system guidance. Proposes and optionally applies design token/layout improvements to make dashboards more premium.",
+    "Design Advisor Agent (RAG): Frontend-design powered UI/UX guidance. Generates style bundles (Phase 3), applies interactive edits (Phase 5), follows frontend-design principles for distinctive dashboards.",
   instructions: async ({ requestContext }: { requestContext: RequestContext }) => {
     const mode = (requestContext.get("mode") as string | undefined) ?? "edit";
     const phase = (requestContext.get("phase") as string | undefined) ?? "editing";
     const platformType = (requestContext.get("platformType") as string | undefined) ?? "make";
 
+    // Load frontend-design skill
+    const frontendDesignSkill = await loadNamedSkillMarkdown("frontend-design");
+
     return [
+      {
+        role: "system",
+        content: `Frontend-Design Skill.md:\n\n${frontendDesignSkill}`,
+      },
       {
         role: "system",
         content:
@@ -36,6 +47,11 @@ export const designAdvisorAgent: Agent = new Agent({
           "- Never invent a design system. If retrieval is empty or low-quality, give conservative, broadly safe guidance and say it's a best-practice default.\n" +
           "- Prefer concrete edits: design tokens (colors, radius, spacing, typography), component prop defaults, and light layout tweaks.\n" +
           "- Do not show raw spec JSON unless explicitly requested.\n\n" +
+          "PHASE GATING:\n" +
+          "- Phase 3: Generate 4 style bundles using getStyleBundles tool\n" +
+          "- Phase 5: Apply minimal token/layout tweaks (getCurrentSpec → applySpecPatch → validateSpec → savePreviewVersion)\n" +
+          "- Never change template/platform without router direction\n" +
+          "- Never produce raw JSON unless asked\n\n" +
           "When the user asks to 'make it look more premium' or similar:\n" +
           "1) Call searchDesignKB to retrieve relevant guidance.\n" +
           "2) Summarize recommendations in 5–10 bullets max.\n" +
@@ -72,6 +88,8 @@ export const designAdvisorAgent: Agent = new Agent({
     applySpecPatch,
     validateSpec,
     savePreviewVersion,
+    applyInteractiveEdits,
+    reorderComponents,
     todoAdd,
     todoList,
     todoUpdate,

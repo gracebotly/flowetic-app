@@ -7,7 +7,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, '..');
 
 // Skills to copy
-const skills = ['make', 'n8n', 'activepieces', 'retell', 'vapi', 'todo'];
+const skills = ['make', 'n8n', 'activepieces', 'retell', 'vapi', 'todo', 'frontend-design'];
 
 // Source and destination
 const sourceBase = join(projectRoot, 'mastra', 'public', 'skills');

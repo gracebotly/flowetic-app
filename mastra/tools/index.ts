@@ -28,6 +28,7 @@ export * from "./specEditor";
 export * as navigationTool from "./navigation";
 export * from "./sources";
 export * from "./projects";
+export * from "./interactiveEdit";
 // Add other tool exports here as you create more tools
 
 // New tools for connection backfill workflow
