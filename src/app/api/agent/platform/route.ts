@@ -4,7 +4,6 @@ import {
   generateMapping,
   generateUISpec,
   validateSpec,
-  persistPreviewVersion,
 } from '@/mastra/tools';
 import { NextRequest } from 'next/server';
 // import { createRuntimeContext, type RuntimeContextLike } from "@/mastra/lib/runtimeContext"; // Removed runtimeContext shim
@@ -117,7 +116,7 @@ export async function POST(req: NextRequest) {
     const finalInterfaceId =
       interfaceId || `preview-${Date.now().toString()}`;
     const persistResult = await callTool(
-      persistPreviewVersion,
+      (await import('@/mastra/tools/specEditor')).savePreviewVersion,
       {
         tenantId,
         userId,

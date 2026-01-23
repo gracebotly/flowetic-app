@@ -2,8 +2,6 @@
 
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
-import { getCurrentSpec, applySpecPatch, savePreviewVersion } from "@/mastra/tools/specEditor";
-import { validateSpec } from "@/mastra/tools/validateSpec";
 import type { EditAction } from "./types";
 import { DensityPresetSchema } from "./types";
 import { reorderComponents } from "./reorderComponents";
@@ -30,24 +28,28 @@ export const applyInteractiveEdits = createTool({
     previewVersionId: z.string().uuid(),
   }),
   execute: async ({ context, runtimeContext }) => {
+    // Import tools at the top level inside execute
+    const { getCurrentSpec, applySpecPatch, savePreviewVersion } = await import("@/mastra/tools/specEditor");
+    const { validateSpec } = await import("@/mastra/tools/validateSpec");
+
     const current = await getCurrentSpec.execute(
-      { context: { tenantId: inputData.tenantId, interfaceId: inputData.interfaceId }, runtimeContext } as any
+      { context: { tenantId: context.tenantId, interfaceId: context.interfaceId }, runtimeContext }
     );
 
     let nextSpec = current.spec_json ?? {};
     let nextTokens = current.design_tokens ?? {};
 
-    const reorderAction = inputData.actions.find((a) => a.type === "reorder_widgets") as any;
+    const reorderAction = context.actions.find((a) => a.type === "reorder_widgets") as any;
     if (reorderAction?.orderedIds?.length) {
       const reordered = await reorderComponents.execute(
-        { context: { spec_json: nextSpec, orderedIds: reorderAction.orderedIds }, runtimeContext } as any
+        { context: { spec_json: nextSpec, orderedIds: reorderAction.orderedIds }, runtimeContext }
       );
       nextSpec = reordered.spec_json;
     }
 
     const ops: any[] = [];
 
-    for (const a of inputData.actions) {
+    for (const a of context.actions) {
       if (a.type === "toggle_widget") {
         ops.push({
           op: "updateComponentProps",
@@ -77,29 +79,29 @@ export const applyInteractiveEdits = createTool({
 
     if (ops.length) {
       const patched = await applySpecPatch.execute(
-        { context: { spec_json: nextSpec, design_tokens: nextTokens, operations: ops }, runtimeContext } as any
+        { context: { spec_json: nextSpec, design_tokens: nextTokens, operations: ops }, runtimeContext }
       );
       nextSpec = patched.spec_json;
       nextTokens = patched.design_tokens;
     }
 
     const validation = await validateSpec.execute(
-      { context: { spec_json: nextSpec }, runtimeContext } as any
+      { context: { spec_json: nextSpec }, runtimeContext }
     );
     if (!validation.valid || validation.score < 0.8) throw new Error("INTERACTIVE_EDIT_VALIDATION_FAILED");
 
     const saved = await savePreviewVersion.execute(
       {
         context: {
-          tenantId: inputData.tenantId,
-          userId: inputData.userId,
-          interfaceId: inputData.interfaceId,
+          tenantId: context.tenantId,
+          userId: context.userId,
+          interfaceId: context.interfaceId,
           spec_json: nextSpec,
           design_tokens: nextTokens,
-          platformType: inputData.platformType,
+          platformType: context.platformType,
         },
         runtimeContext,
-      } as any
+      }
     );
 
     return { previewUrl: saved.previewUrl, previewVersionId: saved.versionId };

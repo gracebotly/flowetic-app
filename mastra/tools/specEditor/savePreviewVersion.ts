@@ -2,50 +2,52 @@
 
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
-import { persistPreviewVersion } from "../persistPreviewVersion";
+import { createClient } from "../../lib/supabase";
 
 export const savePreviewVersion = createTool({
   id: "savePreviewVersion",
-  description:
-    "Persist a validated spec_json + design_tokens as a new preview interface version. Reads tenantId/userId/interfaceId/platformType from runtimeContext when available.",
+  description: "Persist spec_json + design_tokens as a new preview interface_version and return preview URL.",
   inputSchema: z.object({
+    tenantId: z.string().min(1),
+    userId: z.string().min(1),
+    interfaceId: z.string().min(1),
+    platformType: z.string().min(1),
     spec_json: z.record(z.any()),
-    design_tokens: z.record(z.any()).default({}),
-    interfaceId: z.string().uuid().optional(),
+    design_tokens: z.record(z.any()).optional(),
   }),
   outputSchema: z.object({
-    interfaceId: z.string().uuid(),
-    versionId: z.string().uuid(),
+    interfaceId: z.string(),
+    versionId: z.string(),
     previewUrl: z.string(),
   }),
-  execute: async ({ context, runtimeContext }) => {
-    const tenantId = runtimeContext?.get("tenantId") as string | undefined;
-    const userId = runtimeContext?.get("userId") as string | undefined;
-    const platformType = (runtimeContext?.get("platformType") as string | undefined) ?? "make";
+  execute: async (inputData) => {
+    const supabase = createClient();
 
-    if (!tenantId || !userId) throw new Error("AUTH_REQUIRED");
-
-    const interfaceId =
-      inputData.interfaceId ??
-      (runtimeContext?.get("interfaceId") as string | undefined) ??
-      undefined;
-
-    const result = await persistPreviewVersion.execute({
-      context: {
-        tenantId,
-        userId,
-        interfaceId,
+    const now = new Date().toISOString();
+    const { data, error } = await supabase
+      .from("interface_versions")
+      .insert({
+        tenant_id: inputData.tenantId,
+        interface_id: inputData.interfaceId,
         spec_json: inputData.spec_json,
         design_tokens: inputData.design_tokens ?? {},
-        platformType,
-      },
-      runtimeContext,
-    });
+        platform_type: inputData.platformType,
+        created_by: inputData.userId,
+        created_at: now,
+      })
+      .select("id, interface_id")
+      .single();
+
+    if (error) throw new Error(error.message);
+
+    const base =
+      process.env.NEXT_PUBLIC_APP_URL ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
 
     return {
-      interfaceId: result.interfaceId,
-      versionId: result.versionId,
-      previewUrl: result.previewUrl,
+      interfaceId: String(data.interface_id),
+      versionId: String(data.id),
+      previewUrl: `${base}/preview/${encodeURIComponent(String(data.id))}`,
     };
   },
 });

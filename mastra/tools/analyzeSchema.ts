@@ -32,7 +32,7 @@ export const analyzeSchema = createTool({
       .eq('tenant_id', tenantId)
       .eq('source_id', sourceId)
       .order('created_at', { ascending: false })
-      .limit(sampleSize);
+      .limit(sampleSize ?? 50);
     
     if (error || !events || events.length === 0) {
       throw new Error('NO_EVENTS_AVAILABLE');
