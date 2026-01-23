@@ -15,6 +15,7 @@ import { platformMappingMaster } from "./platformMappingMaster";
 
 import { generatePreviewWorkflow } from "../workflows/generatePreview";
 import { connectionBackfillWorkflow } from "../workflows/connectionBackfill";
+import { deployDashboardWorkflow } from "../workflows/deployDashboard";
 
 type JourneyMode =
   | "select_entity"
@@ -125,6 +126,7 @@ export const masterRouterAgent: Agent = new Agent({
   workflows: {
     generatePreviewWorkflow,
     connectionBackfillWorkflow,
+    deployDashboardWorkflow,
   },
 
   memory: new Memory({

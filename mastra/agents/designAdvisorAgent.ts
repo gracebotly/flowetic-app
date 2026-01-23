@@ -5,14 +5,6 @@ import { Memory } from "@mastra/memory";
 import { openai } from "@ai-sdk/openai";
 import type { RequestContext } from "@mastra/core/request-context";
 import { searchDesignKB, searchDesignKBLocal } from "../tools/designAdvisor";
-import {
-  getCurrentSpec,
-  applySpecPatch,
-  savePreviewVersion,
-} from "../tools/specEditor";
-import { validateSpec } from "../tools/validateSpec";
-import { applyInteractiveEdits } from "../tools/interactiveEdit/applyInteractiveEdits";
-import { reorderComponents } from "../tools/interactiveEdit/reorderComponents";
 import { todoAdd, todoList, todoUpdate, todoComplete } from "../tools/todo";
 import { getStyleBundles } from "../tools/design";
 
@@ -84,12 +76,6 @@ export const designAdvisorAgent: Agent = new Agent({
     searchDesignKB,
     searchDesignKBLocal,
     getStyleBundles,
-    getCurrentSpec,
-    applySpecPatch,
-    validateSpec,
-    savePreviewVersion,
-    applyInteractiveEdits,
-    reorderComponents,
     todoAdd,
     todoList,
     todoUpdate,
