@@ -117,8 +117,12 @@ export const generateSchemaSummaryFromEvents = createTool({
 
     if (upsertError) throw new Error(upsertError.message);
 
-    // Remove 'confidence' from return - it's not in outputSchema
-    return { fields, eventTypes, eventCounts };
+    return {
+      fields,
+      eventTypes,
+      eventCounts,
+      confidence: 0.8, // Default confidence score based on schema analysis
+    };
   },
 });
 
