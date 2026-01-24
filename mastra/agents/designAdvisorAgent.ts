@@ -11,7 +11,6 @@ import { getStyleBundles } from "../tools/design";
 import { loadNamedSkillMarkdown } from "../skills/loadSkill";
 
 export const designAdvisorAgent: Agent = new Agent({
-  id: "designAdvisorAgent",
   name: "designAdvisorAgent",
   description:
     "Design Advisor Agent (RAG): Frontend-design powered UI/UX guidance. Generates style bundles (Phase 3), applies interactive edits (Phase 5), follows frontend-design principles for distinctive dashboards.",

@@ -3,7 +3,7 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { createClient } from "../../lib/supabase";
-import type { TodoItem, TodoStatus } from "./types";
+import { TodoItem, TodoStatus } from "./types";
 
 export const todoList = createTool({
   id: "todo.list",

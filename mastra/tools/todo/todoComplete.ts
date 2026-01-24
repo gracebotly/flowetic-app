@@ -5,7 +5,7 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { createClient } from "../../lib/supabase";
-import type { TodoItem } from "./types";
+import { TodoItem } from "./types";
 
 export const todoComplete = createTool({
   id: "todo.complete",
@@ -24,7 +24,7 @@ export const todoComplete = createTool({
 
     const { data, error } = await supabase
       .from("todos")
-      .update({ status: "done", updated_at: new Date().toISOString() })
+      .update({ status: "completed", updated_at: new Date().toISOString() })
       .eq("tenant_id", tenantId)
       .eq("thread_id", threadId)
       .eq("id", todoId)

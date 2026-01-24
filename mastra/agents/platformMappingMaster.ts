@@ -22,7 +22,6 @@ import { setSchemaReady } from "../tools/journey/setSchemaReady";
 import { connectionBackfillWorkflow } from "../workflows/connectionBackfill";
 
 export const platformMappingMaster: Agent = new Agent({
-  id: "platformMappingMaster",
   name: "platformMappingMaster",
   description:
     "Platform Mapping Agent: inspects event samples, recommends templates, proposes mappings, and triggers preview workflow. Triggers connection backfill when schema is not ready.",

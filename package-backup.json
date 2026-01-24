@@ -1,0 +1,71 @@
+{
+  "name": "flowetic-app",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "mastra:dev": "mastra dev --dir ./mastra",
+    "mastra:dev:nocache": "MASTRA_DEV_NO_CACHE=1 mastra dev --dir ./mastra",
+    "build": "next build",
+    "build:mastra": "mastra build --dir ./mastra",
+    "start": "next start",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit --pretty false"
+  },
+  "dependencies": {
+    "@ag-ui/mastra": "^0.2.0",
+    "@copilotkit/react-core": "^1.50.1",
+    "@copilotkit/react-ui": "^1.50.1",
+    "@copilotkit/runtime": "^1.50.1",
+    "@langchain/core": "^1.1.8",
+    "@langchain/openai": "^1.2.0",
+    "@mastra/core": "1.0.4",
+    "@mastra/libsql": "1.0.0",
+    "@mastra/memory": "1.0.0",
+    "@mastra/mcp": "1.0.0",
+    "@mastra/pg": "1.0.0",
+    "@mastra/rag": "^0.1.0",
+    "@radix-ui/react-dialog": "^1.0.5",
+    "@radix-ui/react-dropdown-menu": "^2.0.6",
+    "@radix-ui/react-popover": "^1.0.7",
+    "@radix-ui/react-slot": "^1.0.2",
+    "@radix-ui/react-tabs": "^1.0.7",
+    "@radix-ui/react-tooltip": "^1.0.7",
+    "@supabase/ssr": "^0.8.0",
+    "@supabase/supabase-js": "^2.89.0",
+    "@types/bcrypt": "^5.0.2",
+    "ai": "^4.0.0",
+    "bcrypt": "^5.1.1",
+    "class-variance-authority": "^0.7.0",
+    "clsx": "^2.1.0",
+    "framer-motion": "^11.11.11",
+    "lucide-react": "^0.453.0",
+    "next": "16.1.1",
+    "openai": "^4.93.0",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "rxjs": "^7.8.1",
+    "tailwind-merge": "^2.2.1",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3",
+    "@types/node": "^22",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.1.1",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  },
+  "overrides": {
+    "@mastra/core": "1.0.4",
+    "@mastra/libsql": "1.0.0",
+    "@mastra/memory": "1.0.0",
+    "@mastra/mcp": "1.0.0",
+    "@mastra/pg": "1.0.0"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}

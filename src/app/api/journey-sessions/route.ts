@@ -89,3 +89,33 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ ok: true, session: data });
 }
 
+export async function PATCH(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const tenantId = String(body.tenantId || "");
+    const threadId = String(body.threadId || "");
+    const schemaReady = Boolean(body.schemaReady);
+
+    if (!tenantId || !threadId) {
+      return NextResponse.json({ ok: false, error: "MISSING_REQUIRED_FIELDS" }, { status: 400 });
+    }
+
+    const supabase = await createClient();
+
+    const { data, error } = await supabase
+      .from("journey_sessions")
+      .update({ schema_ready: schemaReady, updated_at: new Date().toISOString() })
+      .eq("tenant_id", tenantId)
+      .eq("thread_id", threadId)
+      .select("*")
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!data) return NextResponse.json({ ok: false, error: "SESSION_NOT_FOUND" }, { status: 404 });
+
+    return NextResponse.json({ ok: true, session: data });
+  } catch (e: any) {
+    return NextResponse.json({ ok: false, error: e?.message || "UNKNOWN_ERROR" }, { status: 500 });
+  }
+}
+

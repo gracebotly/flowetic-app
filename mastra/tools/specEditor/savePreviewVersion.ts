@@ -26,7 +26,7 @@ export const savePreviewVersion = createTool({
     if (!tenantId || !userId) throw new Error("AUTH_REQUIRED");
 
     const interfaceId =
-      context.interfaceId ??
+      inputData.interfaceId ??
       (runtimeContext?.get("interfaceId") as string | undefined) ??
       undefined;
 

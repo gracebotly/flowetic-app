@@ -11,6 +11,7 @@ import { connectionBackfillWorkflow } from "./workflows/connectionBackfill";
 import { deployDashboardWorkflow } from "./workflows/deployDashboard";
 
 export const mastra = new Mastra({
+  telemetry: { enabled: true },
   storage: new LibSQLStore({
     id: "mastra-storage",
     url: process.env.MASTRA_STORAGE_URL || "file:./mastra.db",
