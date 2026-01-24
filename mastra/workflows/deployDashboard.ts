@@ -436,6 +436,7 @@ export const deployDashboardWorkflow = createWorkflow({
         const result = await setJourneyDeployed.execute(
           {
             tenantId: inputData.tenantId,
+            threadId: inputData.threadId,
             interfaceId: inputData.interfaceId,
             deploymentId: inputData.deploymentId,
             previewVersionId: inputData.previewVersionId
