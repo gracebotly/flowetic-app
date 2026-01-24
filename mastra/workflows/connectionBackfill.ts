@@ -296,8 +296,8 @@ export const connectionBackfillWorkflow = createWorkflow({
         );
         const unwrapped = unwrapToolResult(result);
         
-        // Get stored/skipped from previous step
-        const storeResult = getStepResult("storeEventsStep");
+        // Get stored/skipped from previous step with type safety
+        const storeResult = getStepResult("storeEventsStep") as { stored?: number; skipped?: number } | undefined;
         
         return {
           ...unwrapped,
