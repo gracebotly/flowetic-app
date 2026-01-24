@@ -554,8 +554,6 @@ Journey phases:
           `User message: ${userMessage}`,
         ].join("\n"),
         {
-          requestContext: runtimeContext,
-          threadId,
           structuredOutput: {
             schema: AgentDecisionSchema,
           },
@@ -632,8 +630,6 @@ Journey phases:
           `User message: ${userMessage}`,
         ].join("\n"),
         {
-          requestContext: runtimeContext,
-          threadId,
           structuredOutput: {
             schema: AgentDecisionSchema,
           },
