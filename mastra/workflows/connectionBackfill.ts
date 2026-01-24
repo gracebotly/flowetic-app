@@ -1,6 +1,7 @@
 
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
+import { RuntimeContext } from '@mastra/core/runtime-context';
 
 import { fetchPlatformEvents } from "../tools/fetchPlatformEvents";
 import { normalizeEvents } from "../tools/normalizeEvents";
@@ -91,7 +92,7 @@ export const connectionBackfillWorkflow = createWorkflow({
             sourceId: inputData.sourceId, 
             eventCount 
           },
-          requestContext
+          new RuntimeContext()
         );
         return unwrapToolResult(result);
       },
@@ -119,11 +120,11 @@ export const connectionBackfillWorkflow = createWorkflow({
         const result = await normalizeEvents.execute(
           { 
             tenantId: inputData.tenantId,
-            platformType: inputData.platformType,
+            platformType: inputData.platformType as 'vapi' | 'n8n' | 'make' | 'retell',
             sourceId: inputData.sourceId,
             rawEvents: inputData.events
           },
-          requestContext
+          new RuntimeContext()
         );
         const unwrapped = unwrapToolResult(result);
         return {
@@ -158,7 +159,7 @@ export const connectionBackfillWorkflow = createWorkflow({
             sourceId: inputData.sourceId,
             events: inputData.normalizedEvents
           },
-          requestContext
+          new RuntimeContext()
         );
         const unwrapped = unwrapToolResult(result);
         return {
@@ -203,7 +204,7 @@ export const connectionBackfillWorkflow = createWorkflow({
             sourceId: inputData.sourceId,
             sampleSize
           },
-          requestContext
+          new RuntimeContext()
         );
         const unwrapped = unwrapToolResult(result);
         return {
@@ -239,7 +240,7 @@ export const connectionBackfillWorkflow = createWorkflow({
             threadId: inputData.threadId,
             schemaReady: true
           },
-          requestContext
+          new RuntimeContext()
         );
         const unwrapped = unwrapToolResult(result);
         return {
@@ -268,8 +269,8 @@ export const connectionBackfillWorkflow = createWorkflow({
           {
             tenantId: inputData.tenantId,
             threadId: inputData.threadId,
-            userId: null,
-            role: null,
+            // userId removed - not in appendThreadEvent schema
+            // role: null, // also removed - not in appendThreadEvent schema
             type: "state",
             message: "Connection backfill completed successfully",
             metadata: {
@@ -277,7 +278,7 @@ export const connectionBackfillWorkflow = createWorkflow({
               sourceId: inputData.sourceId,
             }
           },
-          requestContext
+          new RuntimeContext()
         );
         return unwrapToolResult(result);
       },

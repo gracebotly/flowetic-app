@@ -1,6 +1,7 @@
 
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
+import { RuntimeContext } from '@mastra/core/runtime-context';
 
 import { validateSpec } from "../tools/validateSpec";
 import { appendThreadEvent } from "../tools/platformMapping/appendThreadEvent";
@@ -71,12 +72,12 @@ export const deployDashboardWorkflow = createWorkflow({
       execute: async ({ inputData, requestContext }) => {
         const pv = await getPreviewVersionSpec.execute(
           { tenantId: inputData.tenantId, previewVersionId: inputData.previewVersionId },
-          requestContext
+          new RuntimeContext()
         );
 
         const v = await validateSpec.execute(
           { spec_json: pv.spec_json },
-          requestContext
+          new RuntimeContext()
         );
 
         if (!v.valid || v.score < 0.8) {
@@ -140,7 +141,7 @@ export const deployDashboardWorkflow = createWorkflow({
             interfaceId: inputData.interfaceId,
             previewVersionId: inputData.previewVersionId
           },
-          requestContext
+          new RuntimeContext()
         );
         const unwrapped = unwrapToolResult(result);
         return {
@@ -174,7 +175,7 @@ export const deployDashboardWorkflow = createWorkflow({
             interfaceId: inputData.interfaceId,
             keepDeploymentId: inputData.keepDeploymentId
           },
-          requestContext
+          new RuntimeContext()
         );
         const unwrapped = unwrapToolResult(result);
         return {
@@ -208,7 +209,7 @@ export const deployDashboardWorkflow = createWorkflow({
             interfaceId: inputData.interfaceId,
             previewVersionId: inputData.previewVersionId
           },
-          requestContext
+          new RuntimeContext()
         );
         const unwrapped = unwrapToolResult(result);
         return {
@@ -242,7 +243,7 @@ export const deployDashboardWorkflow = createWorkflow({
             interfaceId: inputData.interfaceId,
             deploymentId: inputData.deploymentId
           },
-          requestContext
+          new RuntimeContext()
         );
         const unwrapped = unwrapToolResult(result);
         return {
@@ -278,8 +279,7 @@ export const deployDashboardWorkflow = createWorkflow({
           {
             tenantId: inputData.tenantId,
             threadId: inputData.threadId,
-            userId: inputData.interfaceId,
-            role: null,
+            // userId and role removed - not in appendThreadEvent schema
             type: "state",
             message: `Deployed successfully. Portal URL ready.`,
             metadata: {
@@ -287,7 +287,7 @@ export const deployDashboardWorkflow = createWorkflow({
               deployedUrl: inputData.deployedUrl,
             }
           },
-          requestContext
+          new RuntimeContext()
         );
         const unwrapped = unwrapToolResult(result);
         return {
@@ -325,7 +325,7 @@ export const deployDashboardWorkflow = createWorkflow({
             interfaceId: inputData.interfaceId,
             previewVersionId: inputData.previewVersionId
           },
-          requestContext
+          new RuntimeContext()
         );
         const unwrapped = unwrapToolResult(result);
         return {
@@ -359,7 +359,7 @@ export const deployDashboardWorkflow = createWorkflow({
               threadId: inputData.threadId,
               todoId: "deploy" // placeholder convention; update later when you have real todo ids
             },
-            requestContext
+            new RuntimeContext()
           );
           unwrapToolResult(result);
         } catch {

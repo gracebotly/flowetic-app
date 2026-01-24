@@ -3,7 +3,7 @@
 import { Card, CardContent, CardTitle } from "@/components/ui/card"
 import { Alert as AlertBox } from "@/components/ui/alert"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTrigger } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table"
 import { AreaChart, BarChart as TremorBar } from "@tremor/react"
@@ -156,9 +156,13 @@ export function Modal({ title, description, triggerLabel, content }: ModalProps)
         <Button variant="outline">{triggerLabel}</Button>
       </DialogTrigger>
       <DialogContent>
-        <DialogHeader title={title} description={description} />
-        <div>{content}</div>
-        <DialogFooter />
+        <div className="space-y-4">
+          <div>
+            <h3 className="text-lg font-semibold">{title}</h3>
+            {description && <p className="text-sm text-muted-foreground">{description}</p>}
+          </div>
+          <div>{content}</div>
+        </div>
       </DialogContent>
     </Dialog>
   )

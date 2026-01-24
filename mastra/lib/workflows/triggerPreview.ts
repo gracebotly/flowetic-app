@@ -19,18 +19,24 @@ export async function triggerGeneratePreview(params: {
 
   try {
     const result = await workflow.execute({
-    tenantId: params.tenantId,
-    userId: params.tenantId, // Using tenantId as userId for now
-    userRole: 'admin' as const,
-    interfaceId: params.schemaName, // schemaName maps to interfaceId
-    requestContext: requestContext,
-  });
+      inputData: {
+        tenantId: params.tenantId,
+        userId: params.tenantId, // Using tenantId as userId for now
+        userRole: 'admin' as const,
+        interfaceId: params.schemaName, // schemaName maps to interfaceId
+        instructions: params.instructions,
+      }
+    });
 
+    if (!result) {
+      throw new Error('Workflow execution returned no result');
+    }
+    
     // The workflow returns the result directly (not wrapped in a status object)
     return {
-      runId: result.runId,
-      previewVersionId: result.previewVersionId,
-      previewUrl: result.previewUrl,
+      runId: result.runId || '',
+      previewVersionId: result.previewVersionId || '',
+      previewUrl: result.previewUrl || '',
     };
   } catch (error) {
     throw new Error(`WORKFLOW_FAILED: ${error}`);

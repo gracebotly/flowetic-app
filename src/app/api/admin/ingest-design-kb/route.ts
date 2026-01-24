@@ -97,7 +97,7 @@ export async function POST(req: Request) {
   });
 
   // OpenAI text-embedding-3-small is 1536 dims by default
-  await store.createIndex({ indexName });
+  await store.createIndex({ indexName, dimension: 1536 });
 
   const files = (await listFiles(root)).filter(shouldInclude);
   if (files.length === 0) {
@@ -138,7 +138,7 @@ export async function POST(req: Request) {
   await store.upsert({
     vectors,
     metadata,
-    embeddingModel: openai.embedding("text-embedding-3-small") as any,
+    indexName,
   });
 
   return NextResponse.json({
