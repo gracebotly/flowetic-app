@@ -85,6 +85,9 @@ export const connectionBackfillWorkflow = createWorkflow({
       }),
       execute: async ({ inputData, requestContext }) => {
         const eventCount = inputData.eventCount ?? 10;
+        if (!fetchPlatformEvents.execute) {
+          throw new Error("fetchPlatformEvents.execute is not available");
+        }
         const result = await fetchPlatformEvents.execute(
           { 
             tenantId: inputData.tenantId,
