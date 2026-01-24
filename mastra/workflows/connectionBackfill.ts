@@ -25,11 +25,11 @@ function isValidationErrorLike(error: unknown): error is ValidationErrorLike {
 }
 
 // Helper to unwrap tool results and handle ValidationErrors properly
-function unwrapToolResult<T>(result: T): T {
+function unwrapToolResult<T>(result: T): Exclude<T, ValidationErrorLike> {
   if (isValidationErrorLike(result)) {
     throw new Error(`VALIDATION_ERROR: ${result.message}`);
   }
-  return result;
+  return result as Exclude<T, ValidationErrorLike>;
 }
 
 export const connectionBackfillWorkflow = createWorkflow({
