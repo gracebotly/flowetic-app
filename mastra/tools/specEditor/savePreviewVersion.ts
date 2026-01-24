@@ -18,29 +18,31 @@ export const savePreviewVersion = createTool({
     versionId: z.string().uuid(),
     previewUrl: z.string(),
   }),
-  execute: async ({ context, runtimeContext }) => {
-    const tenantId = runtimeContext?.get("tenantId") as string | undefined;
-    const userId = runtimeContext?.get("userId") as string | undefined;
-    const platformType = (runtimeContext?.get("platformType") as string | undefined) ?? "make";
+  execute: async (inputData, context) => {
+    // FIXED: Correct parameter destructuring
+    const { spec_json, design_tokens, interfaceId } = inputData;
+
+    // FIXED: Use context.get() instead of runtimeContext.get()
+    const tenantId = context.get?.("tenantId") as string | undefined;
+    const userId = context.get?.("userId") as string | undefined;
+    const platformType = (context.get?.("platformType") as string | undefined) ?? "make";
 
     if (!tenantId || !userId) throw new Error("AUTH_REQUIRED");
 
-    const interfaceId =
-      context.interfaceId ??
-      (runtimeContext?.get("interfaceId") as string | undefined) ??
-      undefined;
+    const finalInterfaceId =
+      interfaceId ?? (context.get?.("interfaceId") as string | undefined) ?? undefined;
 
-    const result = await persistPreviewVersion.execute({
-      context: {
+    const result = await persistPreviewVersion.execute(
+      {
         tenantId,
         userId,
-        interfaceId,
-        spec_json: context.spec_json,
-        design_tokens: context.design_tokens ?? {},
+        interfaceId: finalInterfaceId,
+        spec_json,
+        design_tokens: design_tokens ?? {},
         platformType,
-      },
-      runtimeContext,
-    });
+      },  // FIXED: All parameters flat
+      context
+    );
 
     return {
       interfaceId: result.interfaceId,

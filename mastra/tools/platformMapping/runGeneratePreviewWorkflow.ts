@@ -14,6 +14,9 @@ export const runGeneratePreviewWorkflow = createTool({
     selectedStyleBundleId: z.string().describe("The selected style bundle ID"),
   }),
   execute: async (inputData, context) => {
+    // FIXED: Correct parameter destructuring
+    const { tenantId, threadId, schemaName, selectedStoryboardKey, selectedStyleBundleId } = inputData;
+
     const result = await triggerGeneratePreview({
       tenantId: inputData.tenantId,
       threadId: inputData.threadId,
@@ -21,6 +24,7 @@ export const runGeneratePreviewWorkflow = createTool({
       selectedStoryboardKey: inputData.selectedStoryboardKey,
       selectedStyleBundleId: inputData.selectedStyleBundleId,
     });
+
     return result;
   },
 });

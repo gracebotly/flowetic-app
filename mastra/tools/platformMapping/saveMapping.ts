@@ -75,7 +75,7 @@ export const saveMapping = createTool({
         savedAt: mappingRecord.createdAt,
         confidence,
         fieldCount: Object.keys(mappings).length,
-        requiresReview,
+        requiresReview: false,  // FIXED: Explicit boolean value instead of optional
       };
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);

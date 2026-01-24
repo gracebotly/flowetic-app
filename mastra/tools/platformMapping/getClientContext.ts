@@ -32,14 +32,13 @@ export const getClientContext = createTool({
       }),
     ),
   }),
-  execute: async ({ context, runtimeContext }) => {
+  execute: async (inputData, context) => {
+    // FIXED: Correct parameter destructuring - tenantId comes from inputData
+    const { tenantId } = inputData;
+
     const supabase = await createClient();
 
-    const tenantId =
-      inputData.tenantId ??
-      (runtimeContext?.get("tenantId") as string | undefined) ??
-      undefined;
-
+    // FIXED: Remove incorrect runtimeContext usage - context already has needed data
     if (!tenantId) {
       throw new Error("AUTH_REQUIRED");
     }

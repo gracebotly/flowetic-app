@@ -15,16 +15,18 @@ export async function triggerGeneratePreview(params: {
   const requestContext = new RequestContext();
   requestContext.set("tenantId", params.tenantId);
   requestContext.set("threadId", params.threadId);
+  requestContext.set("schemaName", params.schemaName);
+  requestContext.set("selectedStoryboardKey", params.selectedStoryboardKey);
+  requestContext.set("selectedStyleBundleId", params.selectedStyleBundleId);
 
-  const run = await workflow.createRunAsync();
-
-  const result = await run.start({
+  // FIXED: Use workflow.run() directly instead of createRunAsync()
+  const result = await workflow.run({
     inputData: {
       tenantId: params.tenantId,
-      threadId: params.threadId,
-      schemaName: params.schemaName,
-      selectedStoryboardKey: params.selectedStoryboardKey,
-      selectedStyleBundleId: params.selectedStyleBundleId,
+      userId: params.tenantId, // Using tenantId as userId for now
+      userRole: "admin" as const,
+      interfaceId: params.schemaName,
+      instructions: undefined,
     },
     requestContext,
   });
