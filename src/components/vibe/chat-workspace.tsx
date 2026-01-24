@@ -988,7 +988,7 @@ return (
                           bundles={toolUi.bundles}
                           selectedBundleId={selectedStyleBundleId ?? undefined}
                           onSelect={(bundleId) => {
-                            void handleSend(`__ACTION__:select_style_bundle:${bundleId}`);
+                            void sendMessage(`__ACTION__:select_style_bundle:${bundleId}`);
                           }}
                         />
                       )}
