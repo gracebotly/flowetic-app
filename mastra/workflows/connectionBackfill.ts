@@ -68,11 +68,11 @@ export const connectionBackfillWorkflow = createWorkflow({
       id: "fetchPlatformEventsStep",
       description: "Fetch historical events from the connected platform API.",
       inputSchema: z.object({
-        tenantId: z.string(),
-        sourceId: z.string(),
-        platformType: z.enum(["vapi", "n8n", "make", "retell"]),
+        tenantId: z.string().min(1),
         threadId: z.string().uuid(),
-        eventCount: z.number().int().optional(),
+        sourceId: z.string().min(1),
+        platformType: z.enum(["vapi", "n8n", "make", "retell"]),
+        eventCount: z.number().int().min(1).max(500).default(100),
       }),
       outputSchema: z.object({
         events: z.array(z.any()),
