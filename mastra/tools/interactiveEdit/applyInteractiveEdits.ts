@@ -46,7 +46,7 @@ export const applyInteractiveEdits = createTool({
 
     const ops: any[] = [];
 
-    for (const a of inputData.actions) {
+    for (const a of context.actions) {
       if (a.type === "toggle_widget") {
         ops.push({
           op: "updateComponentProps",

@@ -39,3 +39,15 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Mastra Studio / local dev artifacts (never commit)
+.mastra/
+**/.mastra/
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+*.log
+
+# OS/editor junk
+.DS_Store
