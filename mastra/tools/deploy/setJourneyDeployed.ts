@@ -17,6 +17,7 @@ export const setJourneyDeployed = createTool({
     threadId: z.string().min(1),
     interfaceId: z.string().min(1),
     previewVersionId: z.string().min(1),
+    deploymentId: z.string().min(1),
   }),
   outputSchema: z.object({ ok: z.boolean() }),
   execute: async (inputData) => {
