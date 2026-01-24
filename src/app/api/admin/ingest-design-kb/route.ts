@@ -119,7 +119,7 @@ export async function POST(req: Request) {
     if (chunks.length === 0) continue;
 
     const { embeddings } = await embedMany({
-      model: openai.embedding("text-embedding-3-small"),
+      model: openai.textEmbeddingModel("text-embedding-3-small"),
       values: chunks,
       maxRetries: 2,
     });
