@@ -103,7 +103,7 @@ class VibeRouterAgent extends AbstractAgent {
 
   // IMPORTANT: run() returns Observable (not Promise) to satisfy CopilotKit Agent typing
   public run(input: any): Observable<any> {
-    return new Observable((subscriber) => {
+    return new Observable((subscriber: any) => {
       (async () => {
         const base = {
           threadId: getOrCreateThreadId(input),
@@ -220,4 +220,4 @@ class VibeRouterAgent extends AbstractAgent {
   }
 }
 
-export const vibeRouterAgent = new VibeRouterAgent();
+export const vibeRouterAgent = new VibeRouterAgent() as any;

@@ -77,7 +77,7 @@ export function TimeseriesChart({ series }: TimeseriesChartProps) {
           index="date"
           categories={categories}
           colors={["blue", "violet", "emerald", "rose", "amber"]}
-          valueFormatter={(n) => Intl.NumberFormat("en-US").format(Number(n))}
+          valueFormatter={(n: any) => Intl.NumberFormat("en-US").format(Number(n))}
         />
       </CardContent>
     </Card>
@@ -97,7 +97,7 @@ export function BarChart({ series }: BarChartProps) {
           index="name"
           categories={["value"]}
           colors={["blue"]}
-          valueFormatter={(n) => Intl.NumberFormat("en-US").format(Number(n))}
+          valueFormatter={(n: any) => Intl.NumberFormat("en-US").format(Number(n))}
         />
       </CardContent>
     </Card>

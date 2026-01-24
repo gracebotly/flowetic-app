@@ -13,6 +13,30 @@ import { setInterfacePublished } from "../tools/deploy/setInterfacePublished";
 import { generatePortalUrl } from "../tools/deploy/generatePortalUrl";
 import { setJourneyDeployed } from "../tools/deploy/setJourneyDeployed";
 
+// Type guard for handling tool execution errors
+type ValidationErrorLike = {
+  code?: string;
+  path?: string | string[];
+  message: string;
+};
+
+function isValidationErrorLike(error: unknown): error is ValidationErrorLike {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof (error as ValidationErrorLike).message === "string"
+  );
+}
+
+// Helper to unwrap tool results and handle ValidationErrors properly
+function unwrapToolResult<T>(result: T): T {
+  if (isValidationErrorLike(result)) {
+    throw new Error(`VALIDATION_ERROR: ${result.message}`);
+  }
+  return result;
+}
+
 export const deployDashboardWorkflow = createWorkflow({
   id: "deployDashboard",
   description:
@@ -42,6 +66,7 @@ export const deployDashboardWorkflow = createWorkflow({
         interfaceId: z.string().min(1),
         spec_json: z.record(z.any()),
         design_tokens: z.record(z.any()),
+        tenantId: z.string(),
       }),
       execute: async ({ inputData, requestContext }) => {
         const pv = await getPreviewVersionSpec.execute(
@@ -58,7 +83,11 @@ export const deployDashboardWorkflow = createWorkflow({
           throw new Error("DEPLOY_SPEC_VALIDATION_FAILED");
         }
 
-        return pv;
+        const unwrapped = unwrapToolResult(pv);
+        return {
+          ...unwrapped,
+          tenantId: inputData.tenantId,
+        };
       },
     }),
   )
@@ -68,11 +97,24 @@ export const deployDashboardWorkflow = createWorkflow({
       description: "Verify user confirmation (HITL gate).",
       inputSchema: z.object({
         confirmed: z.boolean(),
+        tenantId: z.string(),
+        interfaceId: z.string(),
+        previewVersionId: z.string(),
       }),
-      outputSchema: z.object({ ok: z.boolean() }),
+      outputSchema: z.object({ 
+        ok: z.boolean(),
+        tenantId: z.string(),
+        interfaceId: z.string(),
+        previewVersionId: z.string(),
+      }),
       execute: async ({ inputData }) => {
         if (!inputData.confirmed) throw new Error("DEPLOY_CONFIRMATION_REQUIRED");
-        return { ok: true };
+        return { 
+          ok: true,
+          tenantId: inputData.tenantId,
+          interfaceId: inputData.interfaceId,
+          previewVersionId: inputData.previewVersionId,
+        };
       },
     }),
   )
@@ -87,9 +129,12 @@ export const deployDashboardWorkflow = createWorkflow({
       }),
       outputSchema: z.object({
         deploymentId: z.string().min(1),
+        tenantId: z.string(),
+        interfaceId: z.string(),
+        previewVersionId: z.string(),
       }),
       execute: async ({ inputData, requestContext }) => {
-        return await createDeploymentRecord.execute(
+        const result = await createDeploymentRecord.execute(
           {
             tenantId: inputData.tenantId,
             interfaceId: inputData.interfaceId,
@@ -97,6 +142,13 @@ export const deployDashboardWorkflow = createWorkflow({
           },
           requestContext
         );
+        const unwrapped = unwrapToolResult(result);
+        return {
+          ...unwrapped,
+          tenantId: inputData.tenantId,
+          interfaceId: inputData.interfaceId,
+          previewVersionId: inputData.previewVersionId,
+        };
       },
     }),
   )
@@ -109,9 +161,14 @@ export const deployDashboardWorkflow = createWorkflow({
         interfaceId: z.string(),
         keepDeploymentId: z.string(),
       }),
-      outputSchema: z.object({ ok: z.boolean() }),
+      outputSchema: z.object({ 
+        ok: z.boolean(),
+        tenantId: z.string(),
+        interfaceId: z.string(),
+        previewVersionId: z.string(),
+      }),
       execute: async ({ inputData, requestContext }) => {
-        return await markPreviousDeploymentsInactive.execute(
+        const result = await markPreviousDeploymentsInactive.execute(
           {
             tenantId: inputData.tenantId,
             interfaceId: inputData.interfaceId,
@@ -119,6 +176,13 @@ export const deployDashboardWorkflow = createWorkflow({
           },
           requestContext
         );
+        const unwrapped = unwrapToolResult(result);
+        return {
+          ...unwrapped,
+          tenantId: inputData.tenantId,
+          interfaceId: inputData.interfaceId,
+          previewVersionId: inputData.previewVersionId,
+        };
       },
     }),
   )
@@ -131,9 +195,14 @@ export const deployDashboardWorkflow = createWorkflow({
         interfaceId: z.string(),
         previewVersionId: z.string(),
       }),
-      outputSchema: z.object({ ok: z.boolean() }),
+      outputSchema: z.object({ 
+        ok: z.boolean(),
+        tenantId: z.string(),
+        interfaceId: z.string(),
+        previewVersionId: z.string(),
+      }),
       execute: async ({ inputData, requestContext }) => {
-        return await setInterfacePublished.execute(
+        const result = await setInterfacePublished.execute(
           {
             tenantId: inputData.tenantId,
             interfaceId: inputData.interfaceId,
@@ -141,6 +210,13 @@ export const deployDashboardWorkflow = createWorkflow({
           },
           requestContext
         );
+        const unwrapped = unwrapToolResult(result);
+        return {
+          ...unwrapped,
+          tenantId: inputData.tenantId,
+          interfaceId: inputData.interfaceId,
+          previewVersionId: inputData.previewVersionId,
+        };
       },
     }),
   )
@@ -155,9 +231,12 @@ export const deployDashboardWorkflow = createWorkflow({
       }),
       outputSchema: z.object({
         deployedUrl: z.string().min(1),
+        tenantId: z.string(),
+        interfaceId: z.string(),
+        deploymentId: z.string(),
       }),
       execute: async ({ inputData, requestContext }) => {
-        return await generatePortalUrl.execute(
+        const result = await generatePortalUrl.execute(
           {
             tenantId: inputData.tenantId,
             interfaceId: inputData.interfaceId,
@@ -165,6 +244,13 @@ export const deployDashboardWorkflow = createWorkflow({
           },
           requestContext
         );
+        const unwrapped = unwrapToolResult(result);
+        return {
+          ...unwrapped,
+          tenantId: inputData.tenantId,
+          interfaceId: inputData.interfaceId,
+          deploymentId: inputData.deploymentId,
+        };
       },
     }),
   )
@@ -179,9 +265,16 @@ export const deployDashboardWorkflow = createWorkflow({
         deploymentId: z.string(),
         deployedUrl: z.string(),
       }),
-      outputSchema: z.object({ ok: z.boolean() }),
+      outputSchema: z.object({ 
+        ok: z.boolean(),
+        tenantId: z.string(),
+        interfaceId: z.string(),
+        previewVersionId: z.string(),
+        deploymentId: z.string(),
+        deployedUrl: z.string(),
+      }),
       execute: async ({ inputData, requestContext }) => {
-        await appendThreadEvent.execute(
+        const result = await appendThreadEvent.execute(
           {
             tenantId: inputData.tenantId,
             threadId: inputData.threadId,
@@ -196,7 +289,15 @@ export const deployDashboardWorkflow = createWorkflow({
           },
           requestContext
         );
-        return { ok: true };
+        const unwrapped = unwrapToolResult(result);
+        return {
+          ok: true,
+          tenantId: inputData.tenantId,
+          interfaceId: inputData.interfaceId,
+          previewVersionId: inputData.previewVersionId,
+          deploymentId: inputData.deploymentId,
+          deployedUrl: inputData.deployedUrl,
+        };
       },
     }),
   )
@@ -211,9 +312,13 @@ export const deployDashboardWorkflow = createWorkflow({
         interfaceId: z.string(),
         previewVersionId: z.string(),
       }),
-      outputSchema: z.object({ ok: z.boolean() }),
+      outputSchema: z.object({ 
+        ok: z.boolean(),
+        deploymentId: z.string(),
+        deployedUrl: z.string(),
+      }),
       execute: async ({ inputData, requestContext }) => {
-        return await setJourneyDeployed.execute(
+        const result = await setJourneyDeployed.execute(
           {
             tenantId: inputData.tenantId,
             threadId: inputData.threadId,
@@ -222,6 +327,12 @@ export const deployDashboardWorkflow = createWorkflow({
           },
           requestContext
         );
+        const unwrapped = unwrapToolResult(result);
+        return {
+          ...unwrapped,
+          deploymentId: inputData.deploymentId,
+          deployedUrl: inputData.deployedUrl,
+        };
       },
     }),
   )
@@ -233,12 +344,16 @@ export const deployDashboardWorkflow = createWorkflow({
         tenantId: z.string(),
         threadId: z.string(),
       }),
-      outputSchema: z.object({ ok: z.boolean() }),
+      outputSchema: z.object({ 
+        ok: z.boolean(),
+        deploymentId: z.string(),
+        deployedUrl: z.string(),
+      }),
       execute: async ({ inputData, requestContext }) => {
         // Best-effort: if you don't have a specific deploy todo id yet, skip silently.
         // This keeps workflow safe while preserving V2 step slot.
         try {
-          await todoComplete.execute(
+          const result = await todoComplete.execute(
             {
               tenantId: inputData.tenantId,
               threadId: inputData.threadId,
@@ -246,10 +361,15 @@ export const deployDashboardWorkflow = createWorkflow({
             },
             requestContext
           );
+          unwrapToolResult(result);
         } catch {
           // ignore
         }
-        return { ok: true };
+        return {
+          ok: true,
+          deploymentId: inputData.deploymentId,
+          deployedUrl: inputData.deployedUrl,
+        };
       },
     }),
   )

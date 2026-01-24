@@ -9,6 +9,30 @@ import { generateSchemaSummaryFromEvents } from "../tools/generateSchemaSummaryF
 import { updateJourneySchemaReady } from "../tools/updateJourneySchemaReady";
 import { appendThreadEvent } from "../tools/platformMapping/appendThreadEvent";
 
+// Type guard for handling tool execution errors
+type ValidationErrorLike = {
+  code?: string;
+  path?: string | string[];
+  message: string;
+};
+
+function isValidationErrorLike(error: unknown): error is ValidationErrorLike {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof (error as ValidationErrorLike).message === "string"
+  );
+}
+
+// Helper to unwrap tool results and handle ValidationErrors properly
+function unwrapToolResult<T>(result: T): T {
+  if (isValidationErrorLike(result)) {
+    throw new Error(`VALIDATION_ERROR: ${result.message}`);
+  }
+  return result;
+}
+
 export const connectionBackfillWorkflow = createWorkflow({
   id: "connectionBackfill",
   description:
@@ -59,7 +83,7 @@ export const connectionBackfillWorkflow = createWorkflow({
       }),
       execute: async ({ inputData, requestContext }) => {
         const eventCount = inputData.eventCount ?? 10;
-        return await fetchPlatformEvents.execute(
+        const result = await fetchPlatformEvents.execute(
           { 
             tenantId: inputData.tenantId,
             threadId: inputData.threadId,
@@ -69,6 +93,7 @@ export const connectionBackfillWorkflow = createWorkflow({
           },
           requestContext
         );
+        return unwrapToolResult(result);
       },
     }),
   )
@@ -87,9 +112,11 @@ export const connectionBackfillWorkflow = createWorkflow({
       outputSchema: z.object({
         normalizedEvents: z.array(z.record(z.any())),
         count: z.number().int(),
+        tenantId: z.string(),
+        sourceId: z.string(),
       }),
       execute: async ({ inputData, requestContext }) => {
-        return await normalizeEvents.execute(
+        const result = await normalizeEvents.execute(
           { 
             tenantId: inputData.tenantId,
             platformType: inputData.platformType,
@@ -98,6 +125,12 @@ export const connectionBackfillWorkflow = createWorkflow({
           },
           requestContext
         );
+        const unwrapped = unwrapToolResult(result);
+        return {
+          ...unwrapped,
+          tenantId: inputData.tenantId,
+          sourceId: inputData.sourceId,
+        };
       },
     }),
   )
@@ -115,9 +148,11 @@ export const connectionBackfillWorkflow = createWorkflow({
         stored: z.number().int(),
         skipped: z.number().int(),
         errors: z.array(z.string()),
+        tenantId: z.string(),
+        sourceId: z.string(),
       }),
       execute: async ({ inputData, requestContext }) => {
-        return await storeEvents.execute(
+        const result = await storeEvents.execute(
           { 
             tenantId: inputData.tenantId,
             sourceId: inputData.sourceId,
@@ -125,6 +160,12 @@ export const connectionBackfillWorkflow = createWorkflow({
           },
           requestContext
         );
+        const unwrapped = unwrapToolResult(result);
+        return {
+          ...unwrapped,
+          tenantId: inputData.tenantId,
+          sourceId: inputData.sourceId,
+        };
       },
     }),
   )
@@ -151,10 +192,12 @@ export const connectionBackfillWorkflow = createWorkflow({
         eventTypes: z.array(z.string()),
         eventCounts: z.record(z.number()),
         confidence: z.number().min(0).max(1),
+        tenantId: z.string(),
+        sourceId: z.string(),
       }),
       execute: async ({ inputData, requestContext }) => {
         const sampleSize = 100; // Default sample size
-        return await generateSchemaSummaryFromEvents.execute(
+        const result = await generateSchemaSummaryFromEvents.execute(
           { 
             tenantId: inputData.tenantId,
             sourceId: inputData.sourceId,
@@ -162,6 +205,12 @@ export const connectionBackfillWorkflow = createWorkflow({
           },
           requestContext
         );
+        const unwrapped = unwrapToolResult(result);
+        return {
+          ...unwrapped,
+          tenantId: inputData.tenantId,
+          sourceId: inputData.sourceId,
+        };
       },
     }),
   )
@@ -179,9 +228,12 @@ export const connectionBackfillWorkflow = createWorkflow({
       }),
       outputSchema: z.object({
         ok: z.boolean(),
+        tenantId: z.string(),
+        threadId: z.string(),
+        sourceId: z.string(),
       }),
       execute: async ({ inputData, requestContext }) => {
-        return await updateJourneySchemaReady.execute(
+        const result = await updateJourneySchemaReady.execute(
           { 
             tenantId: inputData.tenantId,
             threadId: inputData.threadId,
@@ -189,6 +241,12 @@ export const connectionBackfillWorkflow = createWorkflow({
           },
           requestContext
         );
+        const unwrapped = unwrapToolResult(result);
+        return {
+          ...unwrapped,
+          tenantId: inputData.tenantId,
+          threadId: inputData.threadId,
+        };
       },
     }),
   )
@@ -206,7 +264,7 @@ export const connectionBackfillWorkflow = createWorkflow({
         eventId: z.string().uuid(),
       }),
       execute: async ({ inputData, requestContext }) => {
-        return await appendThreadEvent.execute(
+        const result = await appendThreadEvent.execute(
           {
             tenantId: inputData.tenantId,
             threadId: inputData.threadId,
@@ -221,6 +279,7 @@ export const connectionBackfillWorkflow = createWorkflow({
           },
           requestContext
         );
+        return unwrapToolResult(result);
       },
     }),
   )

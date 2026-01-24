@@ -93,12 +93,11 @@ export async function POST(req: Request) {
   const indexName = process.env.MASTRA_DESIGN_KB_INDEX_NAME || "design_kb";
   const store = new PgVector({
     connectionString,
-    dimensions: 1536,
     indexName,
   });
 
   // OpenAI text-embedding-3-small is 1536 dims by default
-  await store.createIndex({ dimension: 1536 });
+  await store.createIndex({ indexName });
 
   const files = (await listFiles(root)).filter(shouldInclude);
   if (files.length === 0) {
@@ -139,6 +138,7 @@ export async function POST(req: Request) {
   await store.upsert({
     vectors,
     metadata,
+    embeddingModel: openai.embedding("text-embedding-3-small") as any,
   });
 
   return NextResponse.json({
