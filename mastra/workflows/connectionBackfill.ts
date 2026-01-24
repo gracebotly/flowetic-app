@@ -1,4 +1,3 @@
-
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -39,6 +38,7 @@ export const connectionBackfillWorkflow = createWorkflow({
     "Pulls historical events from a connected platform source, normalizes and stores them in Supabase, generates a schema summary, and marks the journey session schemaReady=true.",
   inputSchema: z.object({
     tenantId: z.string().min(1),
+    threadId: z.string().uuid(),
     sourceId: z.string().min(1),
     platformType: z.enum(["vapi", "n8n", "make", "retell"]),
     eventCount: z.number().int().min(1).max(500).default(100),
@@ -69,9 +69,9 @@ export const connectionBackfillWorkflow = createWorkflow({
       description: "Fetch historical events from the connected platform API.",
       inputSchema: z.object({
         tenantId: z.string(),
+        threadId: z.string().uuid(),
         sourceId: z.string(),
         platformType: z.enum(["vapi", "n8n", "make", "retell"]),
-        threadId: z.string().uuid(),
         eventCount: z.number().int().optional(),
       }),
       outputSchema: z.object({
@@ -79,6 +79,9 @@ export const connectionBackfillWorkflow = createWorkflow({
         count: z.number().int(),
         platformType: z.string(),
         fetchedAt: z.string(),
+        tenantId: z.string(),
+        threadId: z.string(),
+        sourceId: z.string(),
       }),
       execute: async ({ inputData, requestContext }) => {
         const eventCount = inputData.eventCount ?? 10;
@@ -89,9 +92,15 @@ export const connectionBackfillWorkflow = createWorkflow({
             sourceId: inputData.sourceId, 
             eventCount 
           },
-          requestContext
+          { requestContext }
         );
-        return unwrapToolResult(result);
+        const unwrapped = unwrapToolResult(result);
+        return {
+          ...unwrapped,
+          tenantId: inputData.tenantId,
+          threadId: inputData.threadId,
+          sourceId: inputData.sourceId,
+        };
       },
     }),
   )
@@ -104,13 +113,15 @@ export const connectionBackfillWorkflow = createWorkflow({
         count: z.number().int(),
         platformType: z.string(),
         fetchedAt: z.string(),
-        sourceId: z.string(),
         tenantId: z.string(),
+        threadId: z.string(),
+        sourceId: z.string(),
       }),
       outputSchema: z.object({
         normalizedEvents: z.array(z.record(z.any())),
         count: z.number().int(),
         tenantId: z.string(),
+        threadId: z.string(),
         sourceId: z.string(),
       }),
       execute: async ({ inputData, requestContext }) => {
@@ -121,12 +132,13 @@ export const connectionBackfillWorkflow = createWorkflow({
             sourceId: inputData.sourceId,
             rawEvents: inputData.events
           },
-          new RuntimeContext()
+          { requestContext }
         );
         const unwrapped = unwrapToolResult(result);
         return {
           ...unwrapped,
           tenantId: inputData.tenantId,
+          threadId: inputData.threadId,
           sourceId: inputData.sourceId,
         };
       },
@@ -139,14 +151,16 @@ export const connectionBackfillWorkflow = createWorkflow({
       inputSchema: z.object({
         normalizedEvents: z.array(z.record(z.any())),
         count: z.number().int(),
-        sourceId: z.string(),
         tenantId: z.string(),
+        threadId: z.string(),
+        sourceId: z.string(),
       }),
       outputSchema: z.object({
         stored: z.number().int(),
         skipped: z.number().int(),
         errors: z.array(z.string()),
         tenantId: z.string(),
+        threadId: z.string(),
         sourceId: z.string(),
       }),
       execute: async ({ inputData, requestContext }) => {
@@ -156,12 +170,13 @@ export const connectionBackfillWorkflow = createWorkflow({
             sourceId: inputData.sourceId,
             events: inputData.normalizedEvents
           },
-          new RuntimeContext()
+          { requestContext }
         );
         const unwrapped = unwrapToolResult(result);
         return {
           ...unwrapped,
           tenantId: inputData.tenantId,
+          threadId: inputData.threadId,
           sourceId: inputData.sourceId,
         };
       },
@@ -176,6 +191,7 @@ export const connectionBackfillWorkflow = createWorkflow({
         skipped: z.number().int(),
         errors: z.array(z.string()),
         tenantId: z.string(),
+        threadId: z.string(),
         sourceId: z.string(),
       }),
       outputSchema: z.object({
@@ -191,6 +207,7 @@ export const connectionBackfillWorkflow = createWorkflow({
         eventCounts: z.record(z.number()),
         confidence: z.number().min(0).max(1),
         tenantId: z.string(),
+        threadId: z.string(),
         sourceId: z.string(),
       }),
       execute: async ({ inputData, requestContext }) => {
@@ -201,12 +218,13 @@ export const connectionBackfillWorkflow = createWorkflow({
             sourceId: inputData.sourceId,
             sampleSize
           },
-          requestContext
+          { requestContext }
         );
         const unwrapped = unwrapToolResult(result);
         return {
           ...unwrapped,
           tenantId: inputData.tenantId,
+          threadId: inputData.threadId,
           sourceId: inputData.sourceId,
         };
       },
@@ -222,26 +240,45 @@ export const connectionBackfillWorkflow = createWorkflow({
         eventCounts: z.record(z.number()),
         confidence: z.number(),
         tenantId: z.string(),
+        threadId: z.string(),
         sourceId: z.string(),
       }),
       outputSchema: z.object({
         ok: z.boolean(),
         tenantId: z.string(),
+        threadId: z.string(),
         sourceId: z.string(),
+        stored: z.number().int(),
+        skipped: z.number().int(),
+        fields: z.array(z.any()),
+        eventTypes: z.array(z.string()),
+        eventCounts: z.record(z.number()),
+        confidence: z.number(),
       }),
-      execute: async ({ inputData, requestContext }) => {
+      execute: async ({ inputData, requestContext, getStepResult }) => {
         const result = await updateJourneySchemaReady.execute(
           { 
             tenantId: inputData.tenantId,
             schemaReady: true
           },
-          requestContext
+          { requestContext }
         );
         const unwrapped = unwrapToolResult(result);
+        
+        // Get stored/skipped from previous step
+        const storeResult = getStepResult("storeEventsStep");
+        
         return {
           ...unwrapped,
           tenantId: inputData.tenantId,
+          threadId: inputData.threadId,
           sourceId: inputData.sourceId,
+          stored: storeResult?.stored ?? 0,
+          skipped: storeResult?.skipped ?? 0,
+          fields: inputData.fields,
+          eventTypes: inputData.eventTypes,
+          eventCounts: inputData.eventCounts,
+          confidence: inputData.confidence,
         };
       },
     }),
@@ -255,17 +292,27 @@ export const connectionBackfillWorkflow = createWorkflow({
         tenantId: z.string(),
         threadId: z.string(),
         sourceId: z.string(),
+        stored: z.number().int(),
+        skipped: z.number().int(),
+        fields: z.array(z.any()),
+        eventTypes: z.array(z.string()),
+        eventCounts: z.record(z.number()),
+        confidence: z.number(),
       }),
       outputSchema: z.object({
         eventId: z.string().uuid(),
+        stored: z.number().int(),
+        skipped: z.number().int(),
+        fields: z.array(z.any()),
+        eventTypes: z.array(z.string()),
+        eventCounts: z.record(z.number()),
+        confidence: z.number(),
       }),
       execute: async ({ inputData, requestContext }) => {
         const result = await appendThreadEvent.execute(
           {
             tenantId: inputData.tenantId,
             threadId: inputData.threadId,
-            // userId removed - not in appendThreadEvent schema
-            // role: null, // also removed - not in appendThreadEvent schema
             type: "state",
             message: "Connection backfill completed successfully",
             metadata: {
@@ -273,9 +320,69 @@ export const connectionBackfillWorkflow = createWorkflow({
               sourceId: inputData.sourceId,
             }
           },
-          new RuntimeContext()
+          { requestContext }
         );
-        return unwrapToolResult(result);
+        const unwrapped = unwrapToolResult(result);
+        return {
+          ...unwrapped,
+          stored: inputData.stored,
+          skipped: inputData.skipped,
+          fields: inputData.fields,
+          eventTypes: inputData.eventTypes,
+          eventCounts: inputData.eventCounts,
+          confidence: inputData.confidence,
+        };
+      },
+    }),
+  )
+  .then(
+    createStep({
+      id: "finalizeOutput",
+      description: "Format final workflow output.",
+      inputSchema: z.object({
+        eventId: z.string().uuid(),
+        stored: z.number().int(),
+        skipped: z.number().int(),
+        fields: z.array(z.any()),
+        eventTypes: z.array(z.string()),
+        eventCounts: z.record(z.number()),
+        confidence: z.number(),
+      }),
+      outputSchema: z.object({
+        fetched: z.number().int().min(0),
+        normalized: z.number().int().min(0),
+        stored: z.number().int().min(0),
+        skipped: z.number().int().min(0),
+        schema: z.object({
+          fields: z.array(
+            z.object({
+              name: z.string(),
+              type: z.string(),
+              sample: z.any().optional(),
+              nullable: z.boolean().optional(),
+            }),
+          ),
+          eventTypes: z.array(z.string()),
+          eventCounts: z.record(z.number()),
+          confidence: z.number().min(0).max(1),
+        }),
+      }),
+      execute: async ({ inputData, getStepResult }) => {
+        const fetchResult = getStepResult("fetchPlatformEventsStep");
+        const normalizeResult = getStepResult("normalizeEventsStep");
+        
+        return {
+          fetched: fetchResult?.count ?? 0,
+          normalized: normalizeResult?.count ?? 0,
+          stored: inputData.stored,
+          skipped: inputData.skipped,
+          schema: {
+            fields: inputData.fields,
+            eventTypes: inputData.eventTypes,
+            eventCounts: inputData.eventCounts,
+            confidence: inputData.confidence,
+          },
+        };
       },
     }),
   )
