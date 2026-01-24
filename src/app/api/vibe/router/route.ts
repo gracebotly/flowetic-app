@@ -17,6 +17,16 @@ import { applyInteractiveEdits } from "@/mastra/tools/interactiveEdit";
 import { getCurrentSpec, applySpecPatch } from "@/mastra/tools/specEditor";
 import { callTool } from "@/mastra/lib/callTool";
 
+// Agent response schemas using Zod
+const AgentDecisionSchema = z.object({
+  action: z.enum(['show_cards', 'ask_question', 'proceed']).describe('What the agent wants to do next'),
+  phase: z.enum(['recommend', 'align', 'style', 'build_preview', 'interactive_edit']).optional().describe('If showing cards, which phase'),
+  question: z.string().optional().describe('If asking a question, what to ask'),
+  reasoning: z.string().optional().describe('Why this action was chosen'),
+});
+
+type AgentDecision = z.infer<typeof AgentDecisionSchema>;
+
 type JourneyMode =
   | "select_entity"
   | "recommend"
@@ -529,156 +539,200 @@ Journey phases:
     }
 
     // ------------------------------------------------------------------
-    // Phase: recommend (Phase 1 — deterministic 2 cards)
+    // Phase: recommend (Phase 1 — outcome recommendation with agent decision)
     // ------------------------------------------------------------------
-    if (effectiveMode === "recommend") {
-      const toolUi: ToolUi = {
-        type: "outcome_cards",
-        title: "Outcome + Monetization Strategy",
-        options: [
-          {
-            id: "dashboard",
-            title: "Client ROI Dashboard (Retention)",
-            description:
-              "Helps renew retainers, makes automation value visible weekly, and proves ROI to clients.",
-          },
-          {
-            id: "product",
-            title: "Workflow Product (SaaS wrapper)",
-            description:
-              "Sell access monthly, hide the underlying workflow, and provide a form/button UI to run it.",
-          },
-        ],
-      };
-
-      const workflowName = String(vibeContext?.displayName ?? vibeContext?.externalId ?? "").trim();
-
-      const agentRes = await masterRouterAgent.generate(
+    if (effectiveMode === "recommend" && !journey?.selectedOutcome) {
+      // Let agent decide: show cards now, or ask clarifying questions first?
+      const decision = await masterRouterAgent.generate(
         [
-          "System: Phase 1 outcome selection. You are a premium business consultant.",
-          workflowName ? `System: User's workflow name: "${workflowName}".` : "",
+          enhancedSystemPrompt,
           "",
-          "TONE REQUIREMENTS:",
-          "- Warm and consultative (not robotic)",
-          "- Use plain business language",
-          "- Reference the workflow naturally in context",
-          "- Make the user feel understood",
+          "TASK: Decide if you have enough information to recommend dashboard vs product.",
+          "If you're confident, respond with action='show_cards' and phase='recommend'.",
+          "If you need more info, respond with action='ask_question' and provide the question.",
           "",
-          "OUTPUT STRUCTURE (exactly 4 parts):",
-          "1. Greeting: 'Hey! I see you're working with [workflow name/type].'",
-          "2. Recommendation: 'I recommend starting with a [Dashboard/Product].'",
-          "3. Reasons: Exactly 2 bullet points explaining WHY (tie to the workflow's purpose)",
-          "4. CTA: 'Pick one of the cards below, or click \"I'm not sure\" if you want help deciding.'",
+          `User message: ${userMessage}`,
+        ].join("\n"),
+        {
+          requestContext: runtimeContext,
+          threadId,
+          structuredOutput: {
+            schema: AgentDecisionSchema,
+          },
+        }
+      );
+
+      const agentDecision = decision.object as AgentDecision;
+
+      // Agent wants to ask questions first
+      if (agentDecision.action === 'ask_question') {
+        return NextResponse.json({
+          text: agentDecision.question || "Can you tell me more about who will use this dashboard?",
+          journey: { ...journey, mode: "recommend" },
+          toolUi: null, // No cards yet
+          vibeContext: { ...(vibeContext ?? {}), skillMD },
+        });
+      }
+
+      // Agent is confident - generate outcome cards response
+      const cardsResponse = await masterRouterAgent.generate(
+        [
+          enhancedSystemPrompt,
           "",
-          "EXAMPLE:",
-          "Hey! I see you're working with your WooCommerce Support Agent.",
-          "",
-          "I recommend starting with a **Dashboard**.",
-          "",
-          "• It will help you easily track how well your support agent is handling customer queries",
-          "• You'll be able to quickly identify any issues and improve response times",
-          "",
-          "Pick one of the cards below, or click \"I'm not sure\" if you want help deciding.",
+          "TASK: Explain why you're recommending dashboard or product.",
+          "Be consultative and reference the workflow's actual capabilities.",
           "",
           NO_ROADMAP_RULES,
-        ].filter(Boolean).join("\n"),
-        { requestContext: runtimeContext }
+        ].join("\n"),
+        {
+          requestContext: runtimeContext,
+          threadId,
+        }
       );
-      const agentText = String((agentRes as any)?.text ?? "").trim();
 
       return NextResponse.json({
-        text: agentText || "Hey! Let's figure out what you want to build first. Pick one of the cards below, or click \"I'm not sure\" if you want help deciding.",
+        text: cardsResponse.text,
         journey: { ...journey, mode: "recommend" },
-        toolUi,
+        toolUi: {
+          type: "outcome_cards",
+          title: "Choose your dashboard type",
+          options: [
+            {
+              id: "dashboard",
+              title: "Client ROI Dashboard",
+              description: "Prove value to clients with clear metrics and ROI tracking",
+            },
+            {
+              id: "product",
+              title: "Workflow Product",
+              description: "Turn your automation into a standalone product experience",
+            },
+          ],
+        },
         vibeContext: { ...(vibeContext ?? {}), skillMD },
       });
     }
 
     // ------------------------------------------------------------------
-    // Phase: align (Phase 2 — storyboard cards)
+    // Phase: align (Phase 2 — storyboard alignment with agent decision)
     // ------------------------------------------------------------------
-    if (effectiveMode === "align") {
-      const toolUi: ToolUi = {
-        type: "storyboard_cards",
-        title: "Choose your KPI Storyboard",
-        options: [
-          {
-            id: "roi_proof",
-            title: "ROI Proof (Client-facing)",
-            description: "Prove automation value and time saved to drive renewals.",
-            kpis: ["Tasks automated", "Time saved", "Success rate", "Executions over time", "Most recent runs"],
-          },
-          {
-            id: "reliability_ops",
-            title: "Reliability Ops (Agency-facing)",
-            description: "Operate and debug reliability across workflows quickly.",
-            kpis: ["Failure count", "Success rate", "Recent errors", "Avg runtime", "Slowest runs"],
-          },
-          {
-            id: "delivery_sla",
-            title: "Delivery / SLA (Client-facing)",
-            description: "Show delivery health and turnaround time trends.",
-            kpis: ["Runs completed", "Avg turnaround time", "Incidents this week", "Last successful run", "Status trend"],
-          },
-        ],
-      };
+    if (effectiveMode === "align" && !journey?.selectedStoryboard) {
+      const selectedOutcome = journey?.selectedOutcome || "dashboard";
 
-      const workflowName = String(vibeContext?.displayName ?? vibeContext?.externalId ?? "").trim();
-
-      const agentRes = await masterRouterAgent.generate(
+      // Let agent decide if ready to show storyboards
+      const decision = await masterRouterAgent.generate(
         [
-          "System: Phase 2 storyboard selection (KPI story).",
-          workflowName ? `System: Selected workflow name: "${workflowName}".` : "",
-          NO_ROADMAP_RULES,
-          "Output requirements:",
-          "- 1 sentence: 'Now we pick the story this will tell.'",
-          "- Recommend ONE storyboard by name (ROI Proof vs Reliability Ops vs Delivery/SLA) with 1 short reason.",
-          "- Do NOT list metrics (the cards already show them).",
-        ].filter(Boolean).join("\n"),
-        { requestContext: runtimeContext }
+          enhancedSystemPrompt,
+          "",
+          `User selected: ${selectedOutcome}`,
+          "TASK: Decide if you're ready to recommend a visual story style.",
+          "If confident, respond with action='show_cards' and phase='align'.",
+          "If you need workflow clarification, respond with action='ask_question'.",
+          "",
+          `User message: ${userMessage}`,
+        ].join("\n"),
+        {
+          requestContext: runtimeContext,
+          threadId,
+          structuredOutput: {
+            schema: AgentDecisionSchema,
+          },
+        }
       );
-      const agentText = String((agentRes as any)?.text ?? "").trim();
+
+      const agentDecision = decision.object as AgentDecision;
+
+      if (agentDecision.action === 'ask_question') {
+        return NextResponse.json({
+          text: agentDecision.question || "What metrics are most important to track in this workflow?",
+          journey: { ...journey, mode: "align" },
+          toolUi: null,
+          vibeContext: { ...(vibeContext ?? {}), skillMD },
+        });
+      }
+
+      // Agent ready - generate storyboard recommendation
+      const cardsResponse = await masterRouterAgent.generate(
+        [
+          enhancedSystemPrompt,
+          "",
+          "TASK: Recommend a visual story style based on the workflow's purpose.",
+          "Explain which style fits best and why.",
+          "",
+          NO_ROADMAP_RULES,
+        ].join("\n"),
+        {
+          requestContext: runtimeContext,
+          threadId,
+        }
+      );
 
       return NextResponse.json({
-        text: agentText || "Now let's pick the story this will tell. Choose the option that matches what you want to prove first.",
+        text: cardsResponse.text,
         journey: { ...journey, mode: "align" },
-        toolUi,
+        toolUi: {
+          type: "storyboard_cards",
+          title: "Choose your visual story",
+          options: [
+            {
+              id: "roi_proof",
+              title: "ROI Proof",
+              description: "Focus on cost savings and efficiency gains",
+              kpis: ["Cost per call", "Time saved", "Conversion rate"],
+            },
+            {
+              id: "reliability_ops",
+              title: "Reliability & Ops",
+              description: "Highlight system uptime and operational health",
+              kpis: ["Success rate", "Response time", "Error rate"],
+            },
+            {
+              id: "delivery_sla",
+              title: "Delivery & SLA",
+              description: "Track service delivery and performance commitments",
+              kpis: ["Completed tasks", "SLA compliance", "Throughput"],
+            },
+          ],
+        },
         vibeContext: { ...(vibeContext ?? {}), skillMD },
       });
     }
 
     // ------------------------------------------------------------------
-    // Phase: style (RAG -> 4 bundles)
+    // Phase: style (Phase 3 — style bundle selection)
     // ------------------------------------------------------------------
-    if (effectiveMode === "style") {
+    if (effectiveMode === "style" && !journey?.selectedStyleBundle) {
+      // Fetch style bundles from tool
       const bundlesResult = await callTool(
         getStyleBundles,
+        {},
+        { requestContext: runtimeContext }
+      );
+
+      // Agent explains style choices
+      const styleResponse = await masterRouterAgent.generate(
+        [
+          enhancedSystemPrompt,
+          "",
+          "TASK: Briefly explain what each style bundle communicates.",
+          "Help the user pick the right visual tone for their client.",
+          "",
+          NO_ROADMAP_RULES,
+        ].join("\n"),
         {
-          platformType,
-          outcome: journey?.selectedOutcome ?? "dashboard",
-          audience: "client",
-          dashboardKind: "workflow-activity",
-          notes: "Return premium style+palette bundles appropriate for agency white-label client delivery.",
-        }, // inputData
-        { requestContext: runtimeContext } // context
+          requestContext: runtimeContext,
+          threadId,
+        }
       );
 
       return NextResponse.json({
-        text: "Choose a style bundle (required). This sets the look + palette so the preview feels sellable immediately.",
+        text: styleResponse.text,
         journey: { ...journey, mode: "style" },
         toolUi: {
           type: "style_bundles",
-          title: "Choose your dashboard style",
-          bundles: bundlesResult.bundles.map((b: any) => ({
-            id: b.id,
-            name: b.name,
-            description: b.description,
-            previewImageUrl: b.previewImageUrl,
-            palette: b.palette,
-            tags: b.tags,
-          })),
+          title: "Choose your style",
+          bundles: bundlesResult.bundles,
         },
-        debug: { sources: bundlesResult.sources },
         vibeContext: { ...(vibeContext ?? {}), skillMD },
       });
     }
@@ -806,10 +860,24 @@ Journey phases:
         },
       ];
 
-      // At this point you should have a previewUrl from your preview workflow; return it if available.
-      // If not yet wired, keep previewUrl null and the UI will still show the editor panel.
+      // Agent explains what user can refine
+      const editResponse = await masterRouterAgent.generate(
+        [
+          enhancedSystemPrompt,
+          "",
+          "TASK: Explain that the preview is ready and what the user can refine.",
+          "Be brief and encouraging.",
+          "",
+          NO_ROADMAP_RULES,
+        ].join("\n"),
+        {
+          requestContext: runtimeContext,
+          threadId,
+        }
+      );
+
       return NextResponse.json({
-        text: "Preview is ready. Use the controls below to refine it before deploying.",
+        text: editResponse.text,
         journey: { ...journey, mode: "interactive_edit" },
         toolUi: {
           type: "interactive_edit_panel",
@@ -822,7 +890,13 @@ Journey phases:
         interfaceId,
         previewUrl: vibeContext?.previewUrl ?? null,
         previewVersionId: vibeContext?.previewVersionId ?? null,
-        vibeContext: { ...(vibeContext ?? {}), skillMD, interfaceId, previewUrl: vibeContext?.previewUrl ?? null, previewVersionId: vibeContext?.previewVersionId ?? null },
+        vibeContext: {
+          ...(vibeContext ?? {}),
+          skillMD,
+          interfaceId,
+          previewUrl: vibeContext?.previewUrl ?? null,
+          previewVersionId: vibeContext?.previewVersionId ?? null,
+        },
       });
     }
 
