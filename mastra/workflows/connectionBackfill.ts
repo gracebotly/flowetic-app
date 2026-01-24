@@ -49,7 +49,7 @@ export const connectionBackfillWorkflow = createWorkflow({
         sourceId: z.string(),
         platformType: z.enum(["vapi", "n8n", "make", "retell"]),
         threadId: z.string().uuid(),
-        eventCount: z.number().int(),
+        eventCount: z.number().int().optional(),
       }),
       outputSchema: z.object({
         events: z.array(z.any()),
@@ -58,7 +58,17 @@ export const connectionBackfillWorkflow = createWorkflow({
         fetchedAt: z.string(),
       }),
       execute: async ({ inputData, requestContext }) => {
-        return await fetchPlatformEvents(inputData.platformType, inputData.sourceId, inputData.eventCount);
+        const eventCount = inputData.eventCount ?? 10;
+        return await fetchPlatformEvents.execute(
+          { 
+            tenantId: inputData.tenantId,
+            threadId: inputData.threadId,
+            platformType: inputData.platformType, 
+            sourceId: inputData.sourceId, 
+            eventCount 
+          },
+          requestContext
+        );
       },
     }),
   )
@@ -67,8 +77,10 @@ export const connectionBackfillWorkflow = createWorkflow({
       id: "normalizeEventsStep",
       description: "Normalize raw platform events into Flowetic events row shape.",
       inputSchema: z.object({
-        rawEvents: z.array(z.any()),
-        platformType: z.enum(["vapi", "n8n", "make", "retell"]),
+        events: z.array(z.any()),
+        count: z.number().int(),
+        platformType: z.string(),
+        fetchedAt: z.string(),
         sourceId: z.string(),
         tenantId: z.string(),
       }),
@@ -77,7 +89,15 @@ export const connectionBackfillWorkflow = createWorkflow({
         count: z.number().int(),
       }),
       execute: async ({ inputData, requestContext }) => {
-        return await normalizeEvents(inputData.rawEvents, inputData.platformType);
+        return await normalizeEvents.execute(
+          { 
+            tenantId: inputData.tenantId,
+            platformType: inputData.platformType,
+            sourceId: inputData.sourceId,
+            rawEvents: inputData.events
+          },
+          requestContext
+        );
       },
     }),
   )
@@ -86,9 +106,10 @@ export const connectionBackfillWorkflow = createWorkflow({
       id: "storeEventsStep",
       description: "Store normalized events into Supabase events table (idempotent).",
       inputSchema: z.object({
-        events: z.array(z.record(z.any())),
-        tenantId: z.string(),
+        normalizedEvents: z.array(z.record(z.any())),
+        count: z.number().int(),
         sourceId: z.string(),
+        tenantId: z.string(),
       }),
       outputSchema: z.object({
         stored: z.number().int(),
@@ -96,7 +117,14 @@ export const connectionBackfillWorkflow = createWorkflow({
         errors: z.array(z.string()),
       }),
       execute: async ({ inputData, requestContext }) => {
-        return await storeEvents(inputData.events, inputData.tenantId, inputData.sourceId);
+        return await storeEvents.execute(
+          { 
+            tenantId: inputData.tenantId,
+            sourceId: inputData.sourceId,
+            events: inputData.normalizedEvents
+          },
+          requestContext
+        );
       },
     }),
   )
@@ -105,9 +133,11 @@ export const connectionBackfillWorkflow = createWorkflow({
       id: "generateSchemaSummaryStep",
       description: "Generate schema summary from stored events in Supabase.",
       inputSchema: z.object({
+        stored: z.number().int(),
+        skipped: z.number().int(),
+        errors: z.array(z.string()),
         tenantId: z.string(),
         sourceId: z.string(),
-        sampleSize: z.number().int().min(1).max(500).default(100),
       }),
       outputSchema: z.object({
         fields: z.array(
@@ -123,7 +153,15 @@ export const connectionBackfillWorkflow = createWorkflow({
         confidence: z.number().min(0).max(1),
       }),
       execute: async ({ inputData, requestContext }) => {
-        return await generateSchemaSummaryFromEvents(inputData.tenantId, inputData.sourceId, inputData.sampleSize);
+        const sampleSize = 100; // Default sample size
+        return await generateSchemaSummaryFromEvents.execute(
+          { 
+            tenantId: inputData.tenantId,
+            sourceId: inputData.sourceId,
+            sampleSize
+          },
+          requestContext
+        );
       },
     }),
   )
@@ -132,15 +170,25 @@ export const connectionBackfillWorkflow = createWorkflow({
       id: "updateJourneyStateStep",
       description: "Mark journey_sessions.schemaReady = true for this tenant/thread.",
       inputSchema: z.object({
+        fields: z.array(z.any()),
+        eventTypes: z.array(z.string()),
+        eventCounts: z.record(z.number()),
+        confidence: z.number(),
         tenantId: z.string(),
         threadId: z.string(),
-        schemaReady: z.boolean(),
       }),
       outputSchema: z.object({
         ok: z.boolean(),
       }),
       execute: async ({ inputData, requestContext }) => {
-        return await updateJourneySchemaReady(inputData.tenantId, inputData.threadId, inputData.schemaReady);
+        return await updateJourneySchemaReady.execute(
+          { 
+            tenantId: inputData.tenantId,
+            threadId: inputData.threadId,
+            schemaReady: true
+          },
+          requestContext
+        );
       },
     }),
   )
@@ -149,26 +197,29 @@ export const connectionBackfillWorkflow = createWorkflow({
       id: "logConnectionEventStep",
       description: "Append a thread event that connection backfill is complete.",
       inputSchema: z.object({
+        ok: z.boolean(),
         tenantId: z.string(),
         threadId: z.string(),
         sourceId: z.string(),
-        message: z.string(),
       }),
       outputSchema: z.object({
         eventId: z.string().uuid(),
       }),
       execute: async ({ inputData, requestContext }) => {
-        return await appendThreadEvent(
-          inputData.tenantId,
-          inputData.threadId,
-          null,
-          null,
-          "state",
-          inputData.message,
+        return await appendThreadEvent.execute(
           {
-            kind: "connectionBackfill",
-            sourceId: inputData.sourceId,
-          }
+            tenantId: inputData.tenantId,
+            threadId: inputData.threadId,
+            userId: null,
+            role: null,
+            type: "state",
+            message: "Connection backfill completed successfully",
+            metadata: {
+              kind: "connectionBackfill",
+              sourceId: inputData.sourceId,
+            }
+          },
+          requestContext
         );
       },
     }),

@@ -44,7 +44,7 @@ export const applyInteractiveEdits = createTool({
     const { validateSpec } = await import("@/mastra/tools/validateSpec");
 
     // Call getCurrentSpec directly (no destructuring needed)
-    const current = await getCurrentSpec.execute({ interfaceId });
+    const current = await getCurrentSpec.execute!({ interfaceId }, context);
 
     if (current instanceof Error) {
       throw current;
@@ -89,8 +89,9 @@ export const applyInteractiveEdits = createTool({
     }
 
     if (ops.length) {
-      const patched = await applySpecPatch.execute(
-        { spec_json: nextSpec, design_tokens: nextTokens, operations: ops }
+      const patched = await applySpecPatch.execute!(
+        { spec_json: nextSpec, design_tokens: nextTokens, operations: ops },
+        context
       );
 
       if (patched instanceof Error) {
@@ -101,7 +102,7 @@ export const applyInteractiveEdits = createTool({
       nextTokens = (patched as any).design_tokens;
     }
 
-    const validation = await validateSpec.execute({ spec_json: nextSpec });
+    const validation = await validateSpec.execute!({ spec_json: nextSpec }, context);
 
     if (validation instanceof Error) {
       throw validation;
@@ -112,7 +113,7 @@ export const applyInteractiveEdits = createTool({
       throw new Error("Validation score below threshold");
     }
 
-    const saved = await savePreviewVersion.execute({ spec_json: nextSpec, design_tokens: nextTokens });
+    const saved = await savePreviewVersion.execute!({ spec_json: nextSpec, design_tokens: nextTokens }, context);
 
     if (saved instanceof Error) {
       throw saved;

@@ -20,11 +20,15 @@ export const getCurrentSpec = createTool({
   execute: async (inputData, context) => {
     const { interfaceId } = inputData;
 
+    if (!interfaceId) {
+      throw new Error("interfaceId is required");
+    }
+
     const supabase = await createClient();
 
     const { data: versions, error: versionError } = await supabase
       .from("interface_versions")
-      .select("spec_json, design_tokens")
+      .select("id, spec_json, design_tokens")
       .eq("interface_id", interfaceId)
       .eq("is_preview", true)
       .order("created_at", { ascending: false })
@@ -49,7 +53,6 @@ export const getCurrentSpec = createTool({
       versionId: versions[0].id,
       spec_json: versions[0].spec_json,
       design_tokens: versions[0].design_tokens,
-      schemaName: interfaceData?.schema_name,
     };
   },
 });
