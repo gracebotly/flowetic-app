@@ -403,8 +403,8 @@ export const connectionBackfillWorkflow = createWorkflow({
         }),
       }),
       execute: async ({ inputData, getStepResult }) => {
-        const fetchResult = getStepResult("fetchPlatformEventsStep");
-        const normalizeResult = getStepResult("normalizeEventsStep");
+        const fetchResult = getStepResult("fetchPlatformEventsStep") as { count?: number } | undefined;
+        const normalizeResult = getStepResult("normalizeEventsStep") as { count?: number } | undefined;
         
         return {
           fetched: fetchResult?.count ?? 0,
