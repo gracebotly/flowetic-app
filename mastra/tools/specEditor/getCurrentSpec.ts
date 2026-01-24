@@ -1,12 +1,13 @@
 
+
+
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { createClient } from "../../lib/supabase";
 
 export const getCurrentSpec = createTool({
   id: "getCurrentSpec",
-  description:
-    "Fetch the latest dashboard UI spec and design tokens for the current interface (dashboard). Uses runtimeContext.interfaceId if provided; otherwise finds most recent interface for tenant.",
+  description: "Fetch latest dashboard UI spec and design tokens for current interface (dashboard)",
   inputSchema: z.object({
     interfaceId: z.string().uuid().optional(),
   }),
@@ -16,68 +17,41 @@ export const getCurrentSpec = createTool({
     spec_json: z.record(z.any()),
     design_tokens: z.record(z.any()),
   }),
-  execute: async ({ context, runtimeContext }) => {
+  execute: async (inputData, context) => {
+    const { interfaceId } = inputData;
+
     const supabase = await createClient();
 
-    const tenantId = runtimeContext?.get("tenantId") as string | undefined;
-    if (!tenantId) throw new Error("AUTH_REQUIRED");
-
-    const explicitInterfaceId =
-      inputData.interfaceId ?? (runtimeContext?.get("interfaceId") as string | undefined);
-
-    let interfaceId: string | undefined = explicitInterfaceId;
-
-    if (!interfaceId) {
-      const { data: iface, error: ifaceErr } = await supabase
-        .from("interfaces")
-        .select("id")
-        .eq("tenant_id", tenantId)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (ifaceErr) throw new Error(ifaceErr.message);
-      interfaceId = iface?.id ?? undefined;
-    }
-
-    if (!interfaceId) {
-      // No dashboard exists yet — return a safe empty spec skeleton so the agent can proceed.
-      // The savePreviewVersion tool will create the interface if needed.
-      return {
-        interfaceId: (runtimeContext?.get("interfaceId") as string) || "00000000-0000-0000-0000-000000000000",
-        versionId: null,
-        spec_json: {
-          version: "1.0",
-          templateId: "general-analytics",
-          platformType: (runtimeContext?.get("platformType") as string | undefined) ?? "make",
-          layout: { type: "grid", columns: 12, gap: 4 },
-          components: [],
-        },
-        design_tokens: {},
-      };
-    }
-
-    const { data: version, error: versionErr } = await supabase
+    const { data: versions, error: versionError } = await supabase
       .from("interface_versions")
-      .select("id,spec_json,design_tokens,created_at")
+      .select("spec_json, design_tokens")
       .eq("interface_id", interfaceId)
+      .eq("is_preview", true)
       .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .limit(1);
 
-    if (versionErr) throw new Error(versionErr.message);
+    if (versionError) throw new Error(versionError.message);
+
+    if (!versions || versions.length === 0) {
+      throw new Error("NO_PREVIEW_VERSION_FOUND");
+    }
+
+    const { data: interfaceData, error: interfaceError } = await supabase
+      .from("interfaces")
+      .select("id, schema_name")
+      .eq("id", interfaceId)
+      .single();
+
+    if (interfaceError) throw new Error(interfaceError.message);
 
     return {
       interfaceId,
-      versionId: version?.id ?? null,
-      spec_json: (version?.spec_json as Record<string, any>) ?? {
-        version: "1.0",
-        templateId: "general-analytics",
-        platformType: (runtimeContext?.get("platformType") as string | undefined) ?? "make",
-        layout: { type: "grid", columns: 12, gap: 4 },
-        components: [],
-      },
-      design_tokens: (version?.design_tokens as Record<string, any>) ?? {},
+      versionId: versions[0].version_id,
+      spec_json: versions[0].spec_json,
+      design_tokens: versions[0].design_tokens,
+      schemaName: interfaceData?.schema_name,
     };
   },
 });
+
+

@@ -3,52 +3,71 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import type { EditAction } from "./types";
-import { DensityPresetSchema } from "./types";
-import { reorderComponents } from "./reorderComponents";
 
-function densityToSpacingBase(d: z.infer<typeof DensityPresetSchema>) {
-  if (d === "compact") return 8;
-  if (d === "spacious") return 14;
-  return 10;
-}
+const densityToSpacingBase = (density: "compact" | "normal" | "relaxed") => {
+  switch (density) {
+    case "compact":
+      return 4;
+    case "normal":
+      return 8;
+    case "relaxed":
+      return 12;
+  }
+};
 
 export const applyInteractiveEdits = createTool({
-  id: "interactive.applyEdits",
-  description:
-    "Apply interactive edit actions (toggle/rename/switch chart type + density) to current preview spec and persist a new preview version.",
+  id: "applyInteractiveEdits",
+  description: "Applies interactive edits to dashboard spec and saves preview version",
   inputSchema: z.object({
-    tenantId: z.string().uuid(),
-    userId: z.string().uuid(),
-    interfaceId: z.string().uuid(),
-    platformType: z.string().min(1),
-    actions: z.array(EditAction).min(1).max(30),
+    tenantId: z.string().uuid().describe("The tenant ID"),
+    userId: z.string().uuid().describe("The user ID"),
+    interfaceId: z.string().uuid().describe("The interface ID"),
+    platformType: z.string().default("make").describe("The platform type"),
+    actions: z.array(
+      z.object({
+        type: z.enum(["toggle_widget", "rename_widget", "switch_chart_type", "set_density"]),
+        widgetId: z.string().optional(),
+        title: z.string().optional(),
+        chartType: z.enum(["bar", "line", "pie", "area", "scatter"]).optional(),
+        density: z.enum(["compact", "normal", "relaxed"]).optional(),
+      })
+    ).describe("The edit actions to apply"),
   }),
   outputSchema: z.object({
     previewUrl: z.string().url(),
     previewVersionId: z.string().uuid(),
   }),
   execute: async (inputData, context) => {
-    // FIXED: Correct parameter destructuring - use inputData, not { context, runtimeContext }
     const { tenantId, userId, interfaceId, platformType, actions } = inputData;
 
-    // Import tools at the top level inside execute
     const { getCurrentSpec, applySpecPatch, savePreviewVersion } = await import("@/mastra/tools/specEditor");
     const { validateSpec } = await import("@/mastra/tools/validateSpec");
 
+    // Call getCurrentSpec directly (no destructuring needed)
     const current = await getCurrentSpec.execute(
-      { tenantId, interfaceId },  // FIXED: Pass parameters directly, not wrapped in context
+      { interfaceId },
       context
     );
+
+    if (current.__type === 'ValidationError') {
+      throw new Error(`Failed to get current spec: ${current.message}`);
+    }
 
     let nextSpec = current.spec_json ?? {};
     let nextTokens = current.design_tokens ?? {};
 
     const reorderAction = actions.find((a) => a.type === "reorder_widgets") as any;
     if (reorderAction?.orderedIds?.length) {
+      const { reorderComponents } = await import("@/mastra/tools/componentOperations");
       const reordered = await reorderComponents.execute(
-        { spec_json: nextSpec, orderedIds: reorderAction.orderedIds },  // FIXED: Direct parameters
+        { spec_json: nextSpec, orderedIds: reorderAction.orderedIds },
         context
       );
+
+      if (reordered.__type === 'ValidationError') {
+        throw new Error(`Failed to reorder: ${reordered.message}`);
+      }
+
       nextSpec = reordered.spec_json;
     }
 
@@ -83,19 +102,30 @@ export const applyInteractiveEdits = createTool({
 
     if (ops.length) {
       const patched = await applySpecPatch.execute(
-        { spec_json: nextSpec, design_tokens: nextTokens, operations: ops },  // FIXED: Direct parameters
+        { spec_json: nextSpec, design_tokens: nextTokens, operations: ops },
         context
       );
+
+      if (patched.__type === 'ValidationError') {
+        throw new Error(`Failed to apply patch: ${patched.message}`);
+      }
+
       nextSpec = patched.spec_json;
       nextTokens = patched.design_tokens;
     }
 
     const validation = await validateSpec.execute(
-      { spec_json: nextSpec },  // FIXED: Direct parameters
+      { spec_json: nextSpec },
       context
     );
 
-    if (!validation.valid || validation.score < 0.8) throw new Error("INTERACTIVE_EDIT_VALIDATION_FAILED");
+    if (validation.__type === 'ValidationError') {
+      throw new Error("Validation failed");
+    }
+
+    if (!validation.valid || validation.score < 0.8) {
+      throw new Error("Validation score below threshold");
+    }
 
     const saved = await savePreviewVersion.execute(
       {
@@ -105,9 +135,13 @@ export const applyInteractiveEdits = createTool({
         spec_json: nextSpec,
         design_tokens: nextTokens,
         platformType,
-      },  // FIXED: All parameters flat
+      },
       context
     );
+
+    if (saved.__type === 'ValidationError') {
+      throw new Error(`Failed to save: ${saved.message}`);
+    }
 
     return { previewUrl: saved.previewUrl, previewVersionId: saved.versionId };
   },

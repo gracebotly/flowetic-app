@@ -19,35 +19,42 @@ export const savePreviewVersion = createTool({
     previewUrl: z.string(),
   }),
   execute: async (inputData, context) => {
-    // FIXED: Correct parameter destructuring
     const { spec_json, design_tokens, interfaceId } = inputData;
 
-    // FIXED: Use context.get() instead of runtimeContext.get()
-    const tenantId = context.get?.("tenantId") as string | undefined;
-    const userId = context.get?.("userId") as string | undefined;
-    const platformType = (context.get?.("platformType") as string | undefined) ?? "make";
+    const supabase = await createClient();
+
+    // Get tenantId and userId from request context, not from context.get()
+    const requestContext = (context as any).requestContext;
+    const tenantId = requestContext?.get("tenantId") as string | undefined;
+    const userId = requestContext?.get("userId") as string | undefined;
+    const platformType = (requestContext?.get("platformType") as string | undefined) ?? "make";
 
     if (!tenantId || !userId) throw new Error("AUTH_REQUIRED");
 
-    const finalInterfaceId =
-      interfaceId ?? (context.get?.("interfaceId") as string | undefined) ?? undefined;
+    const finalInterfaceId = interfaceId ?? (requestContext?.get("interfaceId") as string | undefined) ?? undefined;
 
-    const result = await persistPreviewVersion.execute(
-      {
-        tenantId,
-        userId,
-        interfaceId: finalInterfaceId,
+    const { data: version, error: versionError } = await supabase
+      .from("interface_versions")
+      .insert({
+        interface_id: finalInterfaceId,
+        tenant_id: tenantId,
+        user_id: userId,
         spec_json,
         design_tokens: design_tokens ?? {},
-        platformType,
-      },  // FIXED: All parameters flat
-      context
-    );
+        is_preview: true,
+        created_at: new Date().toISOString(),
+      })
+      .select("id, interface_id, preview_url")
+      .single();
+
+    if (versionError) throw new Error(versionError.message);
+
+    const previewUrl = version?.preview_url ?? `https://flowetic.com/preview/${version.id}`;
 
     return {
-      interfaceId: result.interfaceId,
-      versionId: result.versionId,
-      previewUrl: result.previewUrl,
+      interfaceId: finalInterfaceId ?? version.interface_id,
+      versionId: version.id,
+      previewUrl,
     };
   },
 });

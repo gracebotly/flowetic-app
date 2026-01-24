@@ -21,25 +21,25 @@ export const runGeneratePreviewWorkflow = createTool({
   execute: async (inputData, context) => {
     const { tenantId, userId, interfaceId, userRole, instructions } = inputData;
 
-    // Get the workflow from mastra instance
+    const { mastra } = await import("../../index");
     const workflow = mastra.getWorkflow("generatePreview");
+    
     if (!workflow) throw new Error("WORKFLOW_NOT_FOUND");
 
-    // Use RequestContext for workflow execution
     const { RequestContext } = await import("@mastra/core/request-context");
     const requestContext = new RequestContext();
     requestContext.set("tenantId", tenantId);
     requestContext.set("userId", userId);
     requestContext.set("interfaceId", interfaceId);
 
-    // Check if workflow has execute() method - the direct way to run workflows
-    if (typeof workflow.execute === "function") {
+    // Try direct execution approach
+    try {
       const result = await workflow.execute({
         inputData: {
           tenantId,
           userId,
-          userRole,
           interfaceId,
+          userRole,
           instructions,
         },
         requestContext,
@@ -54,10 +54,8 @@ export const runGeneratePreviewWorkflow = createTool({
         previewVersionId: result.result.previewVersionId,
         previewUrl: result.result.previewUrl,
       };
+    } catch (error) {
+      throw new Error(`WORKFLOW_EXECUTION_UNSUPPORTED: ${error instanceof Error ? error.message : String(error)}`);
     }
-
-    // Fallback: If execute doesn't exist, this workflow needs to be called differently
-    // For now, return a structured error to indicate what's needed
-    throw new Error("WORKFLOW_EXECUTION_UNSUPPORTED: The workflow API has changed. Please use direct tool calls instead of workflow.run() or workflow.execute().");
   },
 });

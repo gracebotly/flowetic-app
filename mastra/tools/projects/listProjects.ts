@@ -18,38 +18,20 @@ export const listProjects = createTool({
   outputSchema: z.object({
     projects: z.array(ProjectPublic),
   }),
-  execute: async (inputData, context) => {
+  .execute(async (inputData, context) => {
+    const { tenantId, limit = 50 } = inputData; // Default value
+
     const supabase = await createClient();
-    const { tenantId, type, status, limit } = inputData;
 
-    let q = supabase
+    const { data: projects, error } = await supabase
       .from("projects")
-      .select("id, tenant_id, name, type, status, description, public_enabled, created_at, updated_at")
+      .select("*")
       .eq("tenant_id", tenantId)
-      .order("updated_at", { ascending: false })
-      .limit(limit);
+      .order("created_at", { ascending: false })
+      .limit(limit); // Now guaranteed to be a number
 
-    if (type) q = q.eq("type", type);
-    if (status) q = q.eq("status", status);
+    if (error) throw new Error(error.message);
 
-    const { data, error } = await q;
-    if (error) throw new Error(`PROJECTS_LIST_FAILED: ${error.message}`);
-
-    return {
-      projects: (data ?? []).map((p: any) => ({
-        id: String(p.id),
-        tenantId: String(p.tenant_id),
-        name: String(p.name),
-        type: ProjectType.parse(String(p.type)),
-        status: ProjectStatus.parse(String(p.status)),
-        description: p.description === null || p.description === undefined ? null : String(p.description),
-        publicEnabled: !!p.public_enabled,
-        createdAt: String(p.created_at),
-        updatedAt: String(p.updated_at),
-      })),
-    };
-  },
+    return { projects };
+  }),
 });
-
-
-
