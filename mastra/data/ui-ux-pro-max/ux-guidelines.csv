@@ -1,0 +1,29 @@
+
+
+id,guideline_name,description,rule,rationale,category,applies_to,tags
+ux-001,WCAG AA Text Contrast,Text must have 4.5:1 contrast ratio minimum,Ensure text color against background meets WCAG AA (4.5:1 for normal text; 3:1 for large text),Accessibility requirement for readability,accessibility;color,all-products,wcag;contrast;accessibility
+ux-002,Touch Target Size,Interactive elements must be at least 44x44px,All buttons/links/controls must be minimum 44x44px tap target,Prevents mis-taps on mobile devices,accessibility;mobile,mobile;touch-devices,mobile;touch;accessibility
+ux-003,Keyboard Navigation,All interactive elements must be keyboard accessible,Every button/link/form must work with Tab + Enter/Space keys,Required for keyboard-only users and screen readers,accessibility;interaction,all-products,keyboard;accessibility;a11y
+ux-004,Focus Indicators,Visible focus states required for keyboard navigation,Show clear visual indicator (outline/border) on focused elements,Users need to see where keyboard focus is,accessibility;visual,all-products,focus;keyboard;accessibility
+ux-005,Reduced Motion,Respect prefers-reduced-motion media query,Disable/simplify animations when user has reduced motion preference,Prevents motion sickness and cognitive overload,accessibility;animation,all-products,animation;accessibility;motion
+ux-006,Loading States,Show loading indicators for >200ms operations,Display spinner/skeleton for any operation taking >200ms,Prevents user confusion about system status,ux;feedback,all-products,loading;feedback;performance
+ux-007,Error Messages,Errors must be specific and actionable,Avoid "Error occurred" - say "Email format invalid" with fix suggestion,Generic errors frustrate users,ux;content,all-products,errors;content;helpful
+ux-008,Mobile-First Breakpoints,Design for mobile then scale up,Use breakpoints: 375px; 768px (tablet); 1024px (laptop); 1440px (desktop),Majority of traffic is mobile,responsive;layout,all-products,mobile;responsive;breakpoints
+ux-009,Readable Line Length,Limit text lines to 60-80 characters,Use max-width on text blocks to prevent overly long lines,Improves reading comprehension and speed,typography;readability,content-heavy,typography;readability;ux
+ux-010,Consistent Navigation,Navigation structure must be consistent across pages,Same nav location/structure on every page,Reduces cognitive load; users learn once,navigation;consistency,multi-page,navigation;consistency;ux
+ux-011,Button Hierarchy,Primary action must be visually dominant,Use filled button for primary; outline for secondary; text for tertiary,Guides user to most important action,visual-hierarchy;interaction,all-products,buttons;hierarchy;cta
+ux-012,Form Validation,Validate inline on blur; show errors immediately,Don't wait until submit - validate fields as user completes them,Faster feedback loop; better UX,forms;validation,form-heavy,forms;validation;feedback
+ux-013,Empty States,Show helpful empty states instead of blank space,Empty state should explain why empty + suggest action,Prevents user confusion,ux;content,data-driven,empty-states;helpful;ux
+ux-014,Confirmation Dialogs,Require confirmation for destructive actions,Show modal dialog for delete/archive/permanent changes,Prevents accidental data loss,ux;safety,all-products,confirmation;safety;destructive
+ux-015,Pagination vs Infinite Scroll,Use pagination for search results; infinite scroll for feeds,Pagination for goal-oriented browsing; infinite for casual exploration,Different use cases require different patterns,navigation;patterns,data-heavy,pagination;scrolling;patterns
+ux-016,Skeleton Screens,Use skeleton loaders instead of spinners for content,Show layout structure while loading (gray boxes),Perceived performance improvement,loading;performance,data-driven,loading;skeleton;performance
+ux-017,Hover States,Interactive elements need hover feedback (150-300ms),Change color/shadow/cursor on hover within 150-300ms,Visual feedback confirms interactivity,interaction;feedback,desktop,hover;feedback;interaction
+ux-018,Color Not Sole Indicator,Don't rely on color alone for information,Use icons + text + color for status (not just red/green),Supports colorblind users,accessibility;color,all-products,accessibility;color-blind;inclusive
+ux-019,Alt Text for Images,All images need descriptive alt text,Provide meaningful alt text describing image purpose/content,Required for screen readers,accessibility;content,image-heavy,accessibility;alt-text;screen-readers
+ux-020,Search Autocomplete,Search should show suggestions after 2-3 characters,Display relevant suggestions/autocomplete after minimal typing,Speeds up common searches,search;interaction,search-heavy,search;autocomplete;ux
+ux-021,Date Format Consistency,Use consistent date format throughout app,Pick one format (e.g. "Jan 15, 2024") and use everywhere,Reduces cognitive load,consistency;formatting,all-products,dates;formatting;consistency
+ux-022,Notification Timing,Toast notifications should auto-dismiss after 3-5 seconds,Success/info toasts disappear automatically; errors stay until dismissed,Balances visibility with annoyance,notifications;timing,all-products,notifications;toasts;timing
+ux-023,Table Sorting,Tables with >10 rows should be sortable,Allow clicking column headers to sort ascending/descending,Essential for scanning large datasets,tables;interaction,data-heavy,tables;sorting;ux
+ux-024,Search Result Count,Show total results count above results,Display "Showing 1-10 of 247 results" above list,Sets expectations for result set size,search;feedback,search-heavy,search;feedback;ux
+ux-025,Disabled State Clarity,Disabled elements must look obviously disabled,Use reduced opacity (40-60%) + cursor: not-allowed,Prevents confusion about why action isn't working,interaction;visual,all-products,disabled;visual;feedback
+

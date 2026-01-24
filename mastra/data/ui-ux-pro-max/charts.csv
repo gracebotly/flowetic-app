@@ -1,0 +1,27 @@
+
+id,chart_type,name,description,best_for,avoid_for,data_requirements,tags
+chart-001,line,Time Series Line Chart,Line chart showing trends over time,Call volume trends;Performance over time;Continuous metrics,Discrete categories;Comparisons,timestamp;numeric_value,temporal;trends;continuous
+chart-002,bar,Horizontal Bar Chart,Horizontal bars for comparing categories,Top agents;Success rates by type;Ranked lists,Time series;Too many categories (>15),category;numeric_value,comparison;ranking;categorical
+chart-003,gauge,Gauge / Radial Progress,Semi-circle gauge showing single metric progress,Success rate %;Uptime %;Capacity usage,Multiple metrics;Trends over time,current_value;max_value;thresholds,kpi;status;single-metric
+chart-004,number,Big Number Stat,Large number with optional +/- change indicator,Total calls;Revenue today;Active users,Detailed breakdowns;Trends,numeric_value;previous_value(optional),hero;kpi;summary
+chart-005,donut,Donut Chart,Ring chart showing part-to-whole relationships,Call outcome distribution;Status breakdown;Category %,Too many slices (>6);Precise comparisons,category;percentage,distribution;part-to-whole;categorical
+chart-006,area,Stacked Area Chart,Area chart with multiple series stacked,Call volume by type over time;Multi-source trends,Precise value reading;Negative values,timestamp;multiple_series;numeric_values,temporal;multi-series;cumulative
+chart-007,heatmap,Time-based Heatmap,Grid showing intensity by time period,Hourly activity patterns;Day-of-week trends;Call volume by hour,Detailed values;Few data points,timestamp;category;intensity_value,patterns;temporal;intensity
+chart-008,sparkline,Inline Sparkline,Tiny line chart embedded in table/card,Trend indicator in metric card;Table column trends,Primary visualization;Detailed analysis,timestamp;numeric_value(minimal),embedded;micro;trends
+chart-009,table,Data Table,Sortable/filterable table with rows and columns,Detailed records;Call logs;Transaction lists,High-level overview;Trends,multiple_columns;rows,detailed;records;searchable
+chart-010,scatter,Scatter Plot,Dots showing relationship between two variables,Call duration vs satisfaction;Cost vs performance,Simple distributions;Time series,x_value;y_value;optional_size,correlation;relationship;analytical
+chart-011,funnel,Conversion Funnel,Stages with decreasing widths showing drop-off,Lead to customer journey;Multi-step processes,Single metrics;Time series,stages;counts;conversion_rates,conversion;process;sequential
+chart-012,bullet,Bullet Chart,Linear gauge with target/range indicators,Performance vs target;Budget vs actual,Multiple unrelated metrics;Trends,current_value;target;ranges,comparison;target;kpi
+chart-013,waterfall,Waterfall Chart,Sequential bars showing positive/negative changes,Revenue buildup;Cost breakdown;Change analysis,Simple totals;Distributions,sequential_values;increases;decreases,sequential;breakdown;analytical
+chart-014,sankey,Sankey Diagram,Flow diagram showing quantity flows between nodes,Call routing paths;Workflow transitions;Traffic sources,Simple metrics;Time series,source;target;flow_value,flow;relationships;complex
+chart-015,treemap,Treemap,Nested rectangles sized by value,Resource usage breakdown;Category hierarchies,Precise comparisons;Trends,category;subcategory;value,hierarchy;part-to-whole;dense
+chart-016,calendar,Calendar Heatmap,Grid calendar with intensity coloring,Daily activity patterns;Streak tracking;Attendance,Hour-level detail;Non-daily data,date;intensity_value,temporal;patterns;overview
+chart-017,polar,Polar Area Chart,Radial chart with variable radius segments,Multi-dimensional comparison;Skill ratings,Time series;Too many dimensions (>8),dimension;value,multi-dimensional;comparison;radar
+chart-018,boxplot,Box Plot,Distribution summary with quartiles,Response time distribution;Performance variance,Individual values;Trends,value_array;quartiles,distribution;statistics;variance
+chart-019,violin,Violin Plot,Distribution shape showing density,Call duration distribution;Score density,Simple comparisons;Small datasets,value_array;density,distribution;statistics;detailed
+chart-020,network,Network Graph,Nodes and edges showing relationships,Agent collaboration;Workflow dependencies;Entity relationships,Hierarchies;Simple lists,nodes;edges;relationships,relationships;network;complex
+chart-021,progress-bar,Progress Bar,Horizontal bar showing completion percentage,Task completion;Upload progress;Goal progress,Multiple metrics;Trends,current_value;max_value;percentage,progress;linear;simple
+chart-022,status-indicator,Status Dot/Badge,Colored dot or badge showing status,Agent online/offline;System health;Connection status,Metrics;Detailed data,status_value;color_mapping,status;indicator;simple
+chart-023,multi-line,Multi-Line Comparison,Multiple line series on same chart,Compare agents;A/B test results;Multi-source trends,Too many lines (>5);Unrelated metrics,timestamp;multiple_series,comparison;temporal;multi-series
+chart-024,stacked-bar,Stacked Bar Chart,Bars with segments showing composition,Call outcomes by agent;Revenue by source over time,Precise segment comparison;Negative values,category;segments;values,composition;categorical;stacked
+chart-025,combined,Combo Chart,Line + bar on same chart with dual Y-axis,Volume (bar) + conversion rate (line);Quantity + percentage,Unrelated scales;Too complex,timestamp;bar_values;line_values,hybrid;multi-metric;temporal

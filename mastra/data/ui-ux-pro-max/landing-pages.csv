@@ -1,0 +1,12 @@
+
+id,pattern_name,description,layout,hero_style,use_cases,tags
+landing-001,Hero + 3-Column Grid,Large hero metric followed by 3-column KPI grid,hero-top;three-column-grid,Single large number + context,Performance snapshot;Quick glance dashboards,simple;scannable;client-facing
+landing-002,Side Nav + Dense Grid,Left sidebar navigation with dense 3-4 column grid,sidebar-left;multi-column-grid,Multiple small charts,Deep analytics;Internal ops,technical;detailed;ops
+landing-003,Single Column Report,Narrative flow with sequential sections,single-column;vertical-flow,Story-driven sections,Executive reports;Client presentations,report;narrative;executive
+landing-004,Tabbed Dashboard,Top navigation tabs with different views per tab,tabbed;horizontal-nav,Tab-specific layouts,Multi-view dashboards;Complex products,organized;scalable;saas
+landing-005,Split Screen,Left panel (filters/controls) + right panel (visualization),split-screen;two-panel,Interactive controls + results,Data exploration;Filter-heavy dashboards,interactive;analytical;technical
+landing-006,Timeline View,Vertical timeline with event cards,vertical-timeline;chronological,Time-based event cards,Workflow execution;Activity logs,chronological;narrative;ops
+landing-007,Kanban Board,Column-based card layout (like Trello),kanban;column-based,Draggable status columns,Project management;Workflow states,interactive;status-tracking;ops
+landing-008,Metric Cards Grid,4x2 grid of metric cards with charts,card-grid;balanced,Equal-sized metric cards,Balanced overview;Multi-metric monitoring,balanced;overview;monitoring
+landing-009,Hero Metric + Timeline,Single KPI at top with activity timeline below,hero-top;timeline-bottom,Primary metric + supporting events,Focus on one KPI;Activity context,focused;narrative;client-facing
+landing-010,Dashboard + Sidebar Detail,Main dashboard with expandable right sidebar for details,main-content;sidebar-detail,Contextual detail panel,Click-through exploration;Drill-down analysis,interactive;detailed;analytical

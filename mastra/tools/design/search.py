@@ -103,28 +103,65 @@ class DesignSearchEngine:
     
     def design_system_generator(self, query: str, project_name: str) -> Dict[str, Any]:
         """Generate complete design system from query"""
-        # Search across key domains
+        # Search across all key domains
+        product_results = self.search(query, domain='product', max_results=3)
         style_results = self.search(query, domain='style', max_results=3)
         color_results = self.search(query, domain='color', max_results=3)
         typography_results = self.search(query, domain='typography', max_results=3)
+        landing_results = self.search(query, domain='landing', max_results=3)
+        chart_results = self.search(query, domain='chart', max_results=5)
+        ux_results = self.search(query, domain='ux', max_results=5)
         
-        # Format output
+        # Format output with complete recommendations
         output = {
             "project_name": project_name,
             "query": query,
             "recommendations": {
+                "product": product_results[0].metadata if product_results else {},
                 "style": style_results[0].metadata if style_results else {},
                 "color_palette": color_results[0].metadata if color_results else {},
                 "typography": typography_results[0].metadata if typography_results else {},
+                "landing_pattern": landing_results[0].metadata if landing_results else {},
+                "charts": [r.metadata for r in chart_results[:3]],
+                "ux_guidelines": [r.metadata for r in ux_results[:5]],
             },
             "alternatives": {
+                "products": [r.metadata for r in product_results[1:3]],
                 "styles": [r.metadata for r in style_results[1:3]],
                 "colors": [r.metadata for r in color_results[1:3]],
                 "typography": [r.metadata for r in typography_results[1:3]],
-            }
+                "landing_patterns": [r.metadata for r in landing_results[1:3]],
+            },
+            "anti_patterns": self._extract_anti_patterns(product_results, style_results),
+            "checklist": self._generate_checklist(ux_results),
         }
         
         return output
+    
+    def _extract_anti_patterns(self, product_results: List[SearchResult], style_results: List[SearchResult]) -> List[str]:
+        """Extract anti-patterns from product and style recommendations"""
+        anti_patterns = []
+        
+        for result in product_results[:2]:
+            if 'anti_patterns' in result.metadata:
+                patterns = result.metadata['anti_patterns'].split(';')
+                anti_patterns.extend(patterns)
+        
+        return list(set(anti_patterns))[:5]  # Top 5 unique anti-patterns
+
+    def _generate_checklist(self, ux_results: List[SearchResult]) -> List[Dict[str, str]]:
+        """Generate pre-delivery checklist from UX guidelines"""
+        checklist = []
+        
+        for result in ux_results[:10]:
+            if result.metadata.get('guideline_name') and result.metadata.get('rule'):
+                checklist.append({
+                    "item": result.metadata['guideline_name'],
+                    "rule": result.metadata['rule'],
+                    "category": result.metadata.get('category', 'general'),
+                })
+        
+        return checklist
 
 def main():
     parser = argparse.ArgumentParser(description='Search UI/UX Pro Max design databases')
