@@ -188,8 +188,14 @@ export const deployDashboardWorkflow = createWorkflow({
         );
         const unwrapped = unwrapToolResult(result);
         
+        // Check if it's an error first
+        if ('message' in unwrapped) {
+          throw new Error(`Deployment failed: ${unwrapped.message}`);
+        }
+
+        // Now TypeScript knows it's the success type
         if (!unwrapped.deploymentId) {
-          throw new Error("Deployment record creation failed");
+          throw new Error("Deployment record creation failed: No deploymentId returned");
         }
         
         return {
@@ -239,6 +245,12 @@ export const deployDashboardWorkflow = createWorkflow({
         );
         const unwrapped = unwrapToolResult(result);
         
+        // Check if it's an error first
+        if ('message' in unwrapped) {
+          throw new Error(`Failed to mark previous deployments inactive: ${unwrapped.message}`);
+        }
+
+        // Now TypeScript knows it's the success type
         if (!unwrapped.ok) {
           throw new Error("Failed to mark previous deployments inactive");
         }
@@ -292,6 +304,12 @@ export const deployDashboardWorkflow = createWorkflow({
         );
         const unwrapped = unwrapToolResult(result);
         
+        // Check if it's an error first
+        if ('message' in unwrapped) {
+          throw new Error(`Failed to set interface as published: ${unwrapped.message}`);
+        }
+
+        // Now TypeScript knows it's the success type
         if (!unwrapped.ok) {
           throw new Error("Failed to set interface as published");
         }
