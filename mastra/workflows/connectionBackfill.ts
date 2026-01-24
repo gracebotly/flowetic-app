@@ -289,6 +289,7 @@ export const connectionBackfillWorkflow = createWorkflow({
         const result = await updateJourneySchemaReady.execute(
           { 
             tenantId: inputData.tenantId,
+            threadId: inputData.threadId,
             schemaReady: true
           },
           { requestContext }
