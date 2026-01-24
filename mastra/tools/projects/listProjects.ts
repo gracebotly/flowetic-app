@@ -33,5 +33,5 @@ export const listProjects = createTool({
     if (error) throw new Error(error.message);
 
     return { projects };
-  }),
+  },
 });
