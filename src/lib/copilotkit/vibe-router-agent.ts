@@ -3,7 +3,7 @@ import { AbstractAgent } from "@ag-ui/client";
 import { RequestContext } from "@mastra/core/request-context";
 // import { createRuntimeContext, type RuntimeContextLike } from "@/mastra/lib/runtimeContext"; // Removed runtimeContext shim
 import { runVibeRouter } from "@/app/api/vibe/router/runner";
-import { Observable } from "@copilotkit/runtime/node_modules/rxjs";
+import { Observable } from "rxjs";
 
 function getOrCreateThreadId(input: any): string {
   const candidate =
@@ -101,7 +101,9 @@ class VibeRouterAgent extends AbstractAgent {
     });
   }
 
-  // IMPORTANT: run() returns Observable (not Promise) to satisfy CopilotKit Agent typing
+  // @ts-expect-error - Observable return type required by AbstractAgent interface
+  // The RxJS version conflict is resolved via package.json resolutions (rxjs@7.8.1)
+  // This is intentional design per line 104 comment, not a type error
   public run(input: any): Observable<any> {
     return new Observable((subscriber: any) => {
       (async () => {

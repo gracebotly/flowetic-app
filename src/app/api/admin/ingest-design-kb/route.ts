@@ -93,11 +93,11 @@ export async function POST(req: Request) {
   const indexName = process.env.MASTRA_DESIGN_KB_INDEX_NAME || "design_kb";
   const store = new PgVector({
     connectionString,
-    indexName,
+    id: 'design-kb-vector-store',
   });
 
   // OpenAI text-embedding-3-small is 1536 dims by default
-  await store.createIndex({ indexName });
+  await store.createIndex({ indexName, dimension: 1536 });
 
   const files = (await listFiles(root)).filter(shouldInclude);
   if (files.length === 0) {
@@ -108,7 +108,7 @@ export async function POST(req: Request) {
   }
 
   const vectors: number[][] = [];
-  const metadata: Array<{ text: string; source: string; docPath: string; kind: string }> = [];
+  const metadata = [] as { text: string; source: string; docPath: string; kind: string }[];
 
   for (const filePath of files) {
     const rel = path.relative(root, filePath).replaceAll("\\", "/");
@@ -119,7 +119,7 @@ export async function POST(req: Request) {
     if (chunks.length === 0) continue;
 
     const { embeddings } = await embedMany({
-      model: openai.embedding("text-embedding-3-small"),
+      model: openai.textEmbeddingModel("text-embedding-3-small"),
       values: chunks,
       maxRetries: 2,
     });
@@ -138,7 +138,7 @@ export async function POST(req: Request) {
   await store.upsert({
     vectors,
     metadata,
-    embeddingModel: openai.embedding("text-embedding-3-small") as any,
+    indexName,
   });
 
   return NextResponse.json({

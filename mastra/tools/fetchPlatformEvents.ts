@@ -19,6 +19,7 @@ export const fetchPlatformEvents = createTool({
   inputSchema: z.object({
     tenantId: z.string().min(1),
     sourceId: z.string().min(1),
+    threadId: z.string().min(1),
     platformType: PlatformType,
     eventCount: z.number().int().min(1).max(500).default(100),
   }),
@@ -29,7 +30,7 @@ export const fetchPlatformEvents = createTool({
     fetchedAt: z.string(),
   }),
   execute: async (inputData) => {
-    const { platformType, eventCount } = inputData;
+    const { platformType, eventCount, threadId } = inputData;
 
     // Studio-first credential strategy (explicit, deterministic)
     // Set per-platform env vars in Mastra Studio:

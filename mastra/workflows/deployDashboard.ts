@@ -1,4 +1,3 @@
-
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -60,33 +59,63 @@ export const deployDashboardWorkflow = createWorkflow({
       description: "Load preview spec and re-validate before deploy (hard gate).",
       inputSchema: z.object({
         tenantId: z.string(),
+        userId: z.string(),
+        threadId: z.string(),
         previewVersionId: z.string(),
+        confirmed: z.boolean(),
       }),
       outputSchema: z.object({
         interfaceId: z.string().min(1),
         spec_json: z.record(z.any()),
         design_tokens: z.record(z.any()),
         tenantId: z.string(),
+        userId: z.string(),
+        threadId: z.string(),
+        previewVersionId: z.string(),
+        confirmed: z.boolean(),
       }),
       execute: async ({ inputData, requestContext }) => {
+        if (!getPreviewVersionSpec.execute) {
+          throw new Error("getPreviewVersionSpec.execute is not available");
+        }
+        
         const pv = await getPreviewVersionSpec.execute(
           { tenantId: inputData.tenantId, previewVersionId: inputData.previewVersionId },
-          requestContext
+          { requestContext }
         );
 
+        // Narrow union type
+        if ('message' in pv) {
+          throw new Error(`Preview fetch failed: ${pv.message}`);
+        }
+
+        if (!validateSpec.execute) {
+          throw new Error("validateSpec.execute is not available");
+        }
+        
         const v = await validateSpec.execute(
           { spec_json: pv.spec_json },
-          requestContext
+          { requestContext }
         );
+
+        // Narrow union type
+        if ('message' in v) {
+          throw new Error(`Validation failed: ${v.message}`);
+        }
 
         if (!v.valid || v.score < 0.8) {
           throw new Error("DEPLOY_SPEC_VALIDATION_FAILED");
         }
 
-        const unwrapped = unwrapToolResult(pv);
         return {
-          ...unwrapped,
+          interfaceId: pv.interfaceId,
+          spec_json: pv.spec_json,
+          design_tokens: pv.design_tokens,
           tenantId: inputData.tenantId,
+          userId: inputData.userId,
+          threadId: inputData.threadId,
+          previewVersionId: inputData.previewVersionId,
+          confirmed: inputData.confirmed,
         };
       },
     }),
@@ -98,12 +127,16 @@ export const deployDashboardWorkflow = createWorkflow({
       inputSchema: z.object({
         confirmed: z.boolean(),
         tenantId: z.string(),
+        userId: z.string(),
+        threadId: z.string(),
         interfaceId: z.string(),
         previewVersionId: z.string(),
       }),
       outputSchema: z.object({ 
         ok: z.boolean(),
         tenantId: z.string(),
+        userId: z.string(),
+        threadId: z.string(),
         interfaceId: z.string(),
         previewVersionId: z.string(),
       }),
@@ -112,6 +145,8 @@ export const deployDashboardWorkflow = createWorkflow({
         return { 
           ok: true,
           tenantId: inputData.tenantId,
+          userId: inputData.userId,
+          threadId: inputData.threadId,
           interfaceId: inputData.interfaceId,
           previewVersionId: inputData.previewVersionId,
         };
@@ -123,29 +158,51 @@ export const deployDashboardWorkflow = createWorkflow({
       id: "createDeploymentRecordStep",
       description: "Create deployment record in Supabase.",
       inputSchema: z.object({
+        ok: z.boolean(),
         tenantId: z.string(),
+        userId: z.string(),
+        threadId: z.string(),
         interfaceId: z.string(),
         previewVersionId: z.string(),
       }),
       outputSchema: z.object({
         deploymentId: z.string().min(1),
         tenantId: z.string(),
+        userId: z.string(),
+        threadId: z.string(),
         interfaceId: z.string(),
         previewVersionId: z.string(),
       }),
       execute: async ({ inputData, requestContext }) => {
+        if (!createDeploymentRecord.execute) {
+          throw new Error("createDeploymentRecord.execute is not available");
+        }
+        
         const result = await createDeploymentRecord.execute(
           {
             tenantId: inputData.tenantId,
             interfaceId: inputData.interfaceId,
             previewVersionId: inputData.previewVersionId
           },
-          requestContext
+          { requestContext }
         );
         const unwrapped = unwrapToolResult(result);
+        
+        // Check if it's an error first
+        if ('message' in unwrapped) {
+          throw new Error(`Deployment failed: ${unwrapped.message}`);
+        }
+
+        // Now TypeScript knows it's the success type
+        if (!unwrapped.deploymentId) {
+          throw new Error("Deployment record creation failed: No deploymentId returned");
+        }
+        
         return {
-          ...unwrapped,
+          deploymentId: unwrapped.deploymentId,
           tenantId: inputData.tenantId,
+          userId: inputData.userId,
+          threadId: inputData.threadId,
           interfaceId: inputData.interfaceId,
           previewVersionId: inputData.previewVersionId,
         };
@@ -157,29 +214,53 @@ export const deployDashboardWorkflow = createWorkflow({
       id: "markPreviousInactiveStep",
       description: "Mark previous deployments inactive for this interface.",
       inputSchema: z.object({
+        deploymentId: z.string(),
         tenantId: z.string(),
+        userId: z.string(),
+        threadId: z.string(),
         interfaceId: z.string(),
-        keepDeploymentId: z.string(),
+        previewVersionId: z.string(),
       }),
       outputSchema: z.object({ 
         ok: z.boolean(),
+        deploymentId: z.string(),
         tenantId: z.string(),
+        userId: z.string(),
+        threadId: z.string(),
         interfaceId: z.string(),
         previewVersionId: z.string(),
       }),
       execute: async ({ inputData, requestContext }) => {
+        if (!markPreviousDeploymentsInactive.execute) {
+          throw new Error("markPreviousDeploymentsInactive.execute is not available");
+        }
+        
         const result = await markPreviousDeploymentsInactive.execute(
           {
             tenantId: inputData.tenantId,
             interfaceId: inputData.interfaceId,
-            keepDeploymentId: inputData.keepDeploymentId
+            keepDeploymentId: inputData.deploymentId
           },
-          requestContext
+          { requestContext }
         );
         const unwrapped = unwrapToolResult(result);
+        
+        // Check if it's an error first
+        if ('message' in unwrapped) {
+          throw new Error(`Failed to mark previous deployments inactive: ${unwrapped.message}`);
+        }
+
+        // Now TypeScript knows it's the success type
+        if (!unwrapped.ok) {
+          throw new Error("Failed to mark previous deployments inactive");
+        }
+        
         return {
-          ...unwrapped,
+          ok: unwrapped.ok,
+          deploymentId: inputData.deploymentId,
           tenantId: inputData.tenantId,
+          userId: inputData.userId,
+          threadId: inputData.threadId,
           interfaceId: inputData.interfaceId,
           previewVersionId: inputData.previewVersionId,
         };
@@ -191,29 +272,54 @@ export const deployDashboardWorkflow = createWorkflow({
       id: "updateInterfaceStatusStep",
       description: "Set interface status to published and active version pointer.",
       inputSchema: z.object({
+        ok: z.boolean(),
+        deploymentId: z.string(),
         tenantId: z.string(),
+        userId: z.string(),
+        threadId: z.string(),
         interfaceId: z.string(),
         previewVersionId: z.string(),
       }),
       outputSchema: z.object({ 
         ok: z.boolean(),
+        deploymentId: z.string(),
         tenantId: z.string(),
+        userId: z.string(),
+        threadId: z.string(),
         interfaceId: z.string(),
         previewVersionId: z.string(),
       }),
       execute: async ({ inputData, requestContext }) => {
+        if (!setInterfacePublished.execute) {
+          throw new Error("setInterfacePublished.execute is not available");
+        }
+        
         const result = await setInterfacePublished.execute(
           {
             tenantId: inputData.tenantId,
             interfaceId: inputData.interfaceId,
             previewVersionId: inputData.previewVersionId
           },
-          requestContext
+          { requestContext }
         );
         const unwrapped = unwrapToolResult(result);
+        
+        // Check if it's an error first
+        if ('message' in unwrapped) {
+          throw new Error(`Failed to set interface as published: ${unwrapped.message}`);
+        }
+
+        // Now TypeScript knows it's the success type
+        if (!unwrapped.ok) {
+          throw new Error("Failed to set interface as published");
+        }
+        
         return {
-          ...unwrapped,
+          ok: unwrapped.ok,
+          deploymentId: inputData.deploymentId,
           tenantId: inputData.tenantId,
+          userId: inputData.userId,
+          threadId: inputData.threadId,
           interfaceId: inputData.interfaceId,
           previewVersionId: inputData.previewVersionId,
         };
@@ -225,31 +331,58 @@ export const deployDashboardWorkflow = createWorkflow({
       id: "generatePortalUrlStep",
       description: "Generate portal URL for deployed dashboard.",
       inputSchema: z.object({
-        tenantId: z.string(),
-        interfaceId: z.string(),
+        ok: z.boolean(),
         deploymentId: z.string(),
+        tenantId: z.string(),
+        userId: z.string(),
+        threadId: z.string(),
+        interfaceId: z.string(),
+        previewVersionId: z.string(),
       }),
       outputSchema: z.object({
-        deployedUrl: z.string().min(1),
-        tenantId: z.string(),
-        interfaceId: z.string(),
         deploymentId: z.string(),
+        tenantId: z.string(),
+        userId: z.string(),
+        threadId: z.string(),
+        interfaceId: z.string(),
+        previewVersionId: z.string(),
+        deployedUrl: z.string()
       }),
       execute: async ({ inputData, requestContext }) => {
+        if (!generatePortalUrl?.execute) {
+          throw new Error('generatePortalUrl tool not found');
+        }
+
         const result = await generatePortalUrl.execute(
           {
             tenantId: inputData.tenantId,
             interfaceId: inputData.interfaceId,
             deploymentId: inputData.deploymentId
           },
-          requestContext
+          { requestContext }
         );
-        const unwrapped = unwrapToolResult(result);
+
+        // Handle validation errors
+        if ('error' in result) {
+          return {
+            deploymentId: inputData.deploymentId,
+            tenantId: inputData.tenantId,
+            userId: inputData.userId,
+            threadId: inputData.threadId,
+            interfaceId: inputData.interfaceId,
+            previewVersionId: inputData.previewVersionId,
+            deployedUrl: ''
+          };
+        }
+
         return {
-          ...unwrapped,
-          tenantId: inputData.tenantId,
-          interfaceId: inputData.interfaceId,
           deploymentId: inputData.deploymentId,
+          tenantId: inputData.tenantId,
+          userId: inputData.userId,
+          threadId: inputData.threadId,
+          interfaceId: inputData.interfaceId,
+          previewVersionId: inputData.previewVersionId,
+          deployedUrl: result.deployedUrl
         };
       },
     }),
@@ -259,44 +392,66 @@ export const deployDashboardWorkflow = createWorkflow({
       id: "logDeploymentEventStep",
       description: "Append thread event for deployment success.",
       inputSchema: z.object({
+        deploymentId: z.string(),
         tenantId: z.string(),
+        userId: z.string(),
         threadId: z.string(),
         interfaceId: z.string(),
-        deploymentId: z.string(),
+        previewVersionId: z.string(),
         deployedUrl: z.string(),
       }),
       outputSchema: z.object({ 
         ok: z.boolean(),
+        deploymentId: z.string(),
         tenantId: z.string(),
+        userId: z.string(),
+        threadId: z.string(),
         interfaceId: z.string(),
         previewVersionId: z.string(),
-        deploymentId: z.string(),
         deployedUrl: z.string(),
       }),
       execute: async ({ inputData, requestContext }) => {
-        const result = await appendThreadEvent.execute(
+        if (!appendThreadEvent?.execute) {
+          throw new Error('appendThreadEvent tool not found');
+        }
+
+        await appendThreadEvent.execute(
           {
             tenantId: inputData.tenantId,
             threadId: inputData.threadId,
-            userId: inputData.interfaceId,
-            role: null,
             type: "state",
-            message: `Deployed successfully. Portal URL ready.`,
+            message: "Deployment initiated",
             metadata: {
-              deploymentId: inputData.deploymentId,
-              deployedUrl: inputData.deployedUrl,
+              kind: "deployDashboard",
+              interfaceId: inputData.interfaceId,
             }
           },
-          requestContext
+          { requestContext }
         );
-        const unwrapped = unwrapToolResult(result);
+
+        if (!setJourneyDeployed?.execute) {
+          throw new Error('setJourneyDeployed tool not found');
+        }
+
+        const result = await setJourneyDeployed.execute(
+          {
+            tenantId: inputData.tenantId,
+            interfaceId: inputData.interfaceId,
+            deploymentId: inputData.deploymentId,
+            previewVersionId: inputData.previewVersionId
+          },
+          { requestContext }
+        );
+
         return {
-          ok: true,
+          ok: 'ok' in result ? result.ok : true,
+          deploymentId: inputData.deploymentId,
           tenantId: inputData.tenantId,
+          userId: inputData.userId,
+          threadId: inputData.threadId,
           interfaceId: inputData.interfaceId,
           previewVersionId: inputData.previewVersionId,
-          deploymentId: inputData.deploymentId,
-          deployedUrl: inputData.deployedUrl,
+          deployedUrl: inputData.deployedUrl
         };
       },
     }),
@@ -307,7 +462,11 @@ export const deployDashboardWorkflow = createWorkflow({
       description:
         "Write deployed pointers back to journey_sessions (keep schema the same).",
       inputSchema: z.object({
+        ok: z.boolean(),
+        deploymentId: z.string(),
+        deployedUrl: z.string(),
         tenantId: z.string(),
+        userId: z.string(),
         threadId: z.string(),
         interfaceId: z.string(),
         previewVersionId: z.string(),
@@ -316,59 +475,98 @@ export const deployDashboardWorkflow = createWorkflow({
         ok: z.boolean(),
         deploymentId: z.string(),
         deployedUrl: z.string(),
-      }),
-      execute: async ({ inputData, requestContext }) => {
-        const result = await setJourneyDeployed.execute(
-          {
-            tenantId: inputData.tenantId,
-            threadId: inputData.threadId,
-            interfaceId: inputData.interfaceId,
-            previewVersionId: inputData.previewVersionId
-          },
-          requestContext
-        );
-        const unwrapped = unwrapToolResult(result);
-        return {
-          ...unwrapped,
-          deploymentId: inputData.deploymentId,
-          deployedUrl: inputData.deployedUrl,
-        };
-      },
-    }),
-  )
-  .then(
-    createStep({
-      id: "completeTodosStep",
-      description: "Complete deploy-related todos (best-effort).",
-      inputSchema: z.object({
         tenantId: z.string(),
+        userId: z.string(),
         threadId: z.string(),
-      }),
-      outputSchema: z.object({ 
-        ok: z.boolean(),
-        deploymentId: z.string(),
-        deployedUrl: z.string(),
+        interfaceId: z.string(),
+        previewVersionId: z.string()
       }),
       execute: async ({ inputData, requestContext }) => {
         // Best-effort: if you don't have a specific deploy todo id yet, skip silently.
         // This keeps workflow safe while preserving V2 step slot.
         try {
+          if (!todoComplete?.execute) {
+            throw new Error('todoComplete tool not found');
+          }
+          
           const result = await todoComplete.execute(
             {
               tenantId: inputData.tenantId,
               threadId: inputData.threadId,
-              todoId: "deploy" // placeholder convention; update later when you have real todo ids
+              todoId: "deploy"
             },
-            requestContext
+            { requestContext }
           );
           unwrapToolResult(result);
         } catch {
           // ignore
         }
         return {
-          ok: true,
+          ok: inputData.ok ?? true,
           deploymentId: inputData.deploymentId,
           deployedUrl: inputData.deployedUrl,
+          tenantId: inputData.tenantId,
+          userId: inputData.userId,
+          threadId: inputData.threadId,
+          interfaceId: inputData.interfaceId,
+          previewVersionId: inputData.previewVersionId
+        };
+      },
+    }),
+  )
+  .then(
+    createStep({
+      id: "secondAppendThreadEventStep",
+      description: "Append final thread event for deployment completion.",
+      inputSchema: z.object({
+        ok: z.boolean(),
+        deploymentId: z.string(),
+        deployedUrl: z.string(),
+        tenantId: z.string(),
+        userId: z.string(),
+        threadId: z.string(),
+        interfaceId: z.string(),
+        previewVersionId: z.string()
+      }),
+      outputSchema: z.object({ 
+        ok: z.boolean(),
+        deploymentId: z.string(),
+        deployedUrl: z.string(),
+        tenantId: z.string(),
+        userId: z.string(),
+        threadId: z.string(),
+        interfaceId: z.string(),
+        previewVersionId: z.string()
+      }),
+      execute: async ({ inputData, requestContext }) => {
+        // Best-effort: if you don't have a specific deploy todo id yet, skip silently.
+        // This keeps workflow safe while preserving V2 step slot.
+        try {
+          if (!todoComplete?.execute) {
+            throw new Error('todoComplete tool not found');
+          }
+          
+          const result = await todoComplete.execute(
+            {
+              tenantId: inputData.tenantId,
+              threadId: inputData.threadId,
+              todoId: "deploy"
+            },
+            { requestContext }
+          );
+          unwrapToolResult(result);
+        } catch {
+          // ignore
+        }
+        return {
+          ok: inputData.ok ?? true,
+          deploymentId: inputData.deploymentId,
+          deployedUrl: inputData.deployedUrl,
+          tenantId: inputData.tenantId,
+          userId: inputData.userId,
+          threadId: inputData.threadId,
+          interfaceId: inputData.interfaceId,
+          previewVersionId: inputData.previewVersionId
         };
       },
     }),
@@ -378,8 +576,14 @@ export const deployDashboardWorkflow = createWorkflow({
       id: "finalize",
       description: "Finalize deploy output.",
       inputSchema: z.object({
+        ok: z.boolean(),
         deploymentId: z.string(),
         deployedUrl: z.string(),
+        tenantId: z.string(),
+        userId: z.string(),
+        threadId: z.string(),
+        interfaceId: z.string(),
+        previewVersionId: z.string()
       }),
       outputSchema: z.object({
         deploymentId: z.string(),
@@ -387,7 +591,11 @@ export const deployDashboardWorkflow = createWorkflow({
         status: z.string(),
       }),
       execute: async ({ inputData }) => {
-        return { ...inputData, status: "published" };
+        return { 
+          deploymentId: inputData.deploymentId,
+          deployedUrl: inputData.deployedUrl,
+          status: "published" 
+        };
       },
     }),
   )

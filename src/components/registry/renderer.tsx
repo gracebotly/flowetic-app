@@ -3,7 +3,7 @@
 import { Card, CardContent, CardTitle } from "@/components/ui/card"
 import { Alert as AlertBox } from "@/components/ui/alert"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTrigger } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table"
 import { AreaChart, BarChart as TremorBar } from "@tremor/react"
@@ -66,7 +66,7 @@ export function TimeseriesChart({ series }: TimeseriesChartProps) {
     return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date))
   }, [series])
 
-  const categories = series.map((s) => s.name)
+  const categories = series.map((s: any) => s.name)
   return (
     <Card>
       <CardTitle>Timeseries</CardTitle>
@@ -86,7 +86,7 @@ export function TimeseriesChart({ series }: TimeseriesChartProps) {
 
 // BarChart → Tremor BarChart
 export function BarChart({ series }: BarChartProps) {
-  const data = series.map((s) => ({ name: s.name, value: s.value }))
+  const data = series.map((s: any) => ({ name: s.name, value: s.value }))
   return (
     <Card>
       <CardTitle>BarChart</CardTitle>
@@ -112,7 +112,7 @@ export function DataTable<T extends object>({ columns, rows }: DataTableProps<T>
       columns.map((c) => ({
         header: c.header,
         accessorKey: c.key as string,
-        cell: ({ row }) => (c.cell ? c.cell(row.original) : (row.original as any)[c.key]),
+        cell: ({ row }: any) => (c.cell ? c.cell(row.original) : (row.original as any)[c.key]),
       })),
     [columns]
   )
@@ -125,18 +125,18 @@ export function DataTable<T extends object>({ columns, rows }: DataTableProps<T>
       <CardContent>
         <Table>
           <THead>
-            {table.getHeaderGroups().map((hg) => (
+            {table.getHeaderGroups().map((hg: any) => (
               <TR key={hg.id}>
-                {hg.headers.map((h) => (
+                {hg.headers.map((h: any) => (
                   <TH key={h.id}>{flexRender(h.column.columnDef.header, h.getContext())}</TH>
                 ))}
               </TR>
             ))}
           </THead>
           <TBody>
-            {table.getRowModel().rows.map((r) => (
+            {table.getRowModel().rows.map((r: any) => (
               <TR key={r.id}>
-                {r.getVisibleCells().map((c) => (
+                {r.getVisibleCells().map((c: any) => (
                   <TD key={c.id}>{flexRender(c.column.columnDef.cell, c.getContext())}</TD>
                 ))}
               </TR>
@@ -156,9 +156,13 @@ export function Modal({ title, description, triggerLabel, content }: ModalProps)
         <Button variant="outline">{triggerLabel}</Button>
       </DialogTrigger>
       <DialogContent>
-        <DialogHeader title={title} description={description} />
-        <div>{content}</div>
-        <DialogFooter />
+        <div className="space-y-4">
+          <div>
+            <h3 className="text-lg font-semibold">{title}</h3>
+            {description && <p className="text-sm text-muted-foreground">{description}</p>}
+          </div>
+          <div>{content}</div>
+        </div>
       </DialogContent>
     </Dialog>
   )
@@ -169,13 +173,13 @@ export function TabsView({ items, defaultValue }: TabsProps) {
   return (
     <Tabs defaultValue={defaultValue ?? items[0]?.id}>
       <TabsList>
-        {items.map((i) => (
+        {items.map((i: any) => (
           <TabsTrigger key={i.id} value={i.id}>
             {i.label}
           </TabsTrigger>
         ))}
       </TabsList>
-      {items.map((i) => (
+      {items.map((i: any) => (
         <TabsContent key={i.id} value={i.id}>
           {i.content}
         </TabsContent>
