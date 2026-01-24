@@ -59,6 +59,9 @@
     "tailwindcss": "^4",
     "typescript": "^5.9.3"
   },
+  "resolutions": {
+    "rxjs": "7.8.1"
+  },
   "overrides": {
     "@mastra/core": "1.0.4",
     "@mastra/libsql": "1.0.0",

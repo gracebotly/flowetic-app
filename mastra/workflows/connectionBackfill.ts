@@ -1,7 +1,6 @@
 
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
-import { RuntimeContext } from '@mastra/core/runtime-context';
 
 import { fetchPlatformEvents } from "../tools/fetchPlatformEvents";
 import { normalizeEvents } from "../tools/normalizeEvents";

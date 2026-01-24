@@ -1,7 +1,6 @@
 
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
-import { RuntimeContext } from '@mastra/core/runtime-context';
 
 import { validateSpec } from "../tools/validateSpec";
 import { appendThreadEvent } from "../tools/platformMapping/appendThreadEvent";
@@ -307,6 +306,9 @@ export const deployDashboardWorkflow = createWorkflow({
       description:
         "Write deployed pointers back to journey_sessions (keep schema the same).",
       inputSchema: z.object({
+        ok: z.boolean(),
+        deploymentId: z.string(),
+        deployedUrl: z.string(),
         tenantId: z.string(),
         threadId: z.string(),
         interfaceId: z.string(),
@@ -318,6 +320,10 @@ export const deployDashboardWorkflow = createWorkflow({
         deployedUrl: z.string(),
       }),
       execute: async ({ inputData, requestContext }) => {
+        if (!setJourneyDeployed?.execute) {
+          throw new Error('setJourneyDeployed tool not found');
+        }
+        
         const result = await setJourneyDeployed.execute(
           {
             tenantId: inputData.tenantId,
@@ -325,13 +331,13 @@ export const deployDashboardWorkflow = createWorkflow({
             interfaceId: inputData.interfaceId,
             previewVersionId: inputData.previewVersionId
           },
-          new RuntimeContext()
+          { runtimeContext: requestContext }
         );
         const unwrapped = unwrapToolResult(result);
         return {
-          ...unwrapped,
-          deploymentId: inputData.deploymentId,
-          deployedUrl: inputData.deployedUrl,
+          ok: unwrapped?.ok ?? true,
+          deploymentId: unwrapped?.deploymentId ?? '',
+          deployedUrl: unwrapped?.deployedUrl ?? ''
         };
       },
     }),
@@ -341,6 +347,9 @@ export const deployDashboardWorkflow = createWorkflow({
       id: "completeTodosStep",
       description: "Complete deploy-related todos (best-effort).",
       inputSchema: z.object({
+        ok: z.boolean(),
+        deploymentId: z.string(),
+        deployedUrl: z.string(),
         tenantId: z.string(),
         threadId: z.string(),
       }),
@@ -353,22 +362,26 @@ export const deployDashboardWorkflow = createWorkflow({
         // Best-effort: if you don't have a specific deploy todo id yet, skip silently.
         // This keeps workflow safe while preserving V2 step slot.
         try {
+          if (!todoComplete?.execute) {
+            throw new Error('todoComplete tool not found');
+          }
+          
           const result = await todoComplete.execute(
             {
               tenantId: inputData.tenantId,
               threadId: inputData.threadId,
               todoId: "deploy" // placeholder convention; update later when you have real todo ids
             },
-            new RuntimeContext()
+            { runtimeContext: requestContext }
           );
           unwrapToolResult(result);
         } catch {
           // ignore
         }
         return {
-          ok: true,
-          deploymentId: inputData.deploymentId,
-          deployedUrl: inputData.deployedUrl,
+          ok: inputData.ok ?? true,
+          deploymentId: inputData.deploymentId ?? '',
+          deployedUrl: inputData.deployedUrl ?? ''
         };
       },
     }),

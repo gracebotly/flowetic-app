@@ -112,7 +112,7 @@ export function DataTable<T extends object>({ columns, rows }: DataTableProps<T>
       columns.map((c) => ({
         header: c.header,
         accessorKey: c.key as string,
-        cell: ({ row }) => (c.cell ? c.cell(row.original) : (row.original as any)[c.key]),
+        cell: ({ row }: any) => (c.cell ? c.cell(row.original) : (row.original as any)[c.key]),
       })),
     [columns]
   )
@@ -125,18 +125,18 @@ export function DataTable<T extends object>({ columns, rows }: DataTableProps<T>
       <CardContent>
         <Table>
           <THead>
-            {table.getHeaderGroups().map((hg) => (
+            {table.getHeaderGroups().map((hg: any) => (
               <TR key={hg.id}>
-                {hg.headers.map((h) => (
+                {hg.headers.map((h: any) => (
                   <TH key={h.id}>{flexRender(h.column.columnDef.header, h.getContext())}</TH>
                 ))}
               </TR>
             ))}
           </THead>
           <TBody>
-            {table.getRowModel().rows.map((r) => (
+            {table.getRowModel().rows.map((r: any) => (
               <TR key={r.id}>
-                {r.getVisibleCells().map((c) => (
+                {r.getVisibleCells().map((c: any) => (
                   <TD key={c.id}>{flexRender(c.column.columnDef.cell, c.getContext())}</TD>
                 ))}
               </TR>
