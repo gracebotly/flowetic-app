@@ -112,7 +112,7 @@ export const generateSchemaSummaryFromEvents = createTool({
 
     if (upsertError) throw new Error(upsertError.message);
 
-    return { schema: schemaJson, eventCounts, eventTypes };
+    return { fields, eventTypes, eventCounts, confidence };
   },
 });
 
