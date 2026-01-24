@@ -243,7 +243,12 @@ export const connectionBackfillWorkflow = createWorkflow({
           tenantId: inputData.tenantId,
           threadId: inputData.threadId,
           sourceId: inputData.sourceId,
-          fields: unwrapped.fields as Array,
+          fields: unwrapped.fields as Array<{
+                            type: string;
+                            name: string;
+                            nullable?: boolean;
+                            sample?: any;
+                          }>,
           eventTypes: unwrapped.eventTypes,
           eventCounts: unwrapped.eventCounts,
           confidence: unwrapped.confidence,

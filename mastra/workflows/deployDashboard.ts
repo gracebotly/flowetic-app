@@ -84,6 +84,11 @@ export const deployDashboardWorkflow = createWorkflow({
           { requestContext }
         );
 
+        // Narrow union type
+        if ('message' in pv) {
+          throw new Error(`Preview fetch failed: ${pv.message}`);
+        }
+
         if (!validateSpec.execute) {
           throw new Error("validateSpec.execute is not available");
         }
@@ -93,18 +98,19 @@ export const deployDashboardWorkflow = createWorkflow({
           { requestContext }
         );
 
-        // ← ADD TYPE NARROWING
+        // Narrow union type
         if ('message' in v) {
-          throw new Error(`VALIDATION_ERROR: ${v.message}`);
+          throw new Error(`Validation failed: ${v.message}`);
         }
 
         if (!v.valid || v.score < 0.8) {
           throw new Error("DEPLOY_SPEC_VALIDATION_FAILED");
         }
 
-        const unwrapped = unwrapToolResult(pv);
         return {
-          ...unwrapped,
+          interfaceId: pv.interfaceId,
+          spec_json: pv.spec_json,
+          design_tokens: pv.design_tokens,
           tenantId: inputData.tenantId,
           userId: inputData.userId,
           threadId: inputData.threadId,
@@ -181,8 +187,13 @@ export const deployDashboardWorkflow = createWorkflow({
           { requestContext }
         );
         const unwrapped = unwrapToolResult(result);
+        
+        if (!unwrapped.deploymentId) {
+          throw new Error("Deployment record creation failed");
+        }
+        
         return {
-          ...unwrapped,
+          deploymentId: unwrapped.deploymentId,
           tenantId: inputData.tenantId,
           userId: inputData.userId,
           threadId: inputData.threadId,
@@ -227,8 +238,13 @@ export const deployDashboardWorkflow = createWorkflow({
           { requestContext }
         );
         const unwrapped = unwrapToolResult(result);
+        
+        if (!unwrapped.ok) {
+          throw new Error("Failed to mark previous deployments inactive");
+        }
+        
         return {
-          ...unwrapped,
+          ok: unwrapped.ok,
           deploymentId: inputData.deploymentId,
           tenantId: inputData.tenantId,
           userId: inputData.userId,
@@ -275,8 +291,13 @@ export const deployDashboardWorkflow = createWorkflow({
           { requestContext }
         );
         const unwrapped = unwrapToolResult(result);
+        
+        if (!unwrapped.ok) {
+          throw new Error("Failed to set interface as published");
+        }
+        
         return {
-          ...unwrapped,
+          ok: unwrapped.ok,
           deploymentId: inputData.deploymentId,
           tenantId: inputData.tenantId,
           userId: inputData.userId,
