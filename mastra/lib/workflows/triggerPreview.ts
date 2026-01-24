@@ -1,5 +1,3 @@
-
-
 import { mastra } from "../../index";
 import { RequestContext } from "@mastra/core/request-context";
 
@@ -18,27 +16,41 @@ export async function triggerGeneratePreview(params: {
   requestContext.set("threadId", params.threadId);
 
   try {
-    // Use the workflow's trigger method which handles the complex context internally
-    const result = await workflow.trigger({
-      tenantId: params.tenantId,
-      userId: params.tenantId, // Using tenantId as userId for now
-      userRole: 'admin' as const,
-      interfaceId: params.schemaName, // schemaName maps to interfaceId
-      instructions: "",
+    // Mastra v1.0: Use createRun() + start() instead of trigger()
+    const run = await workflow.createRun();
+    
+    const result = await run.start({
+      inputData: {
+        tenantId: params.tenantId,
+        userId: params.tenantId, // Using tenantId as userId for now
+        userRole: 'admin' as const,
+        interfaceId: params.schemaName, // schemaName maps to interfaceId
+        instructions: "",
+      },
     });
 
-    if (!result) {
-      throw new Error('Workflow execution returned no result');
+    // Check workflow execution status
+    if (result.status === 'failed') {
+      throw new Error(`Workflow execution failed: ${result.error?.message || 'Unknown error'}`);
     }
     
-    // The workflow returns the result directly (not wrapped in a status object)
+    if (result.status === 'suspended') {
+      throw new Error('Workflow execution suspended - requires manual intervention');
+    }
+
+    if (result.status !== 'success') {
+      throw new Error(`Workflow execution returned unexpected status: ${result.status}`);
+    }
+
+    // Extract result from successful execution
+    const output = result.result;
+    
     return {
-      runId: result.runId || '',
-      previewVersionId: result.previewVersionId || '',
-      previewUrl: result.previewUrl || '',
+      runId: output.runId || '',
+      previewVersionId: output.previewVersionId || '',
+      previewUrl: output.previewUrl || '',
     };
   } catch (error) {
     throw new Error(`WORKFLOW_FAILED: ${error}`);
   }
 }
-
