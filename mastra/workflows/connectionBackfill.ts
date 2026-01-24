@@ -72,7 +72,7 @@ export const connectionBackfillWorkflow = createWorkflow({
         threadId: z.string().uuid(),
         sourceId: z.string().min(1),
         platformType: z.enum(["vapi", "n8n", "make", "retell"]),
-        eventCount: z.number().int().min(1).max(500).default(100),
+        eventCount: z.number().int().min(1).max(500).optional(),
       }),
       outputSchema: z.object({
         events: z.array(z.any()),
