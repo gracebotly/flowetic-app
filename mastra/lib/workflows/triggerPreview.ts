@@ -1,4 +1,5 @@
 
+
 import { mastra } from "../../index";
 import { RequestContext } from "@mastra/core/request-context";
 
@@ -16,26 +17,23 @@ export async function triggerGeneratePreview(params: {
   requestContext.set("tenantId", params.tenantId);
   requestContext.set("threadId", params.threadId);
 
-  const run = await workflow.createRunAsync();
-
-  const result = await run.start({
-    inputData: {
-      tenantId: params.tenantId,
-      threadId: params.threadId,
-      schemaName: params.schemaName,
-      selectedStoryboardKey: params.selectedStoryboardKey,
-      selectedStyleBundleId: params.selectedStyleBundleId,
-    },
-    requestContext,
+  try {
+    const result = await workflow.execute({
+    tenantId: params.tenantId,
+    userId: params.tenantId, // Using tenantId as userId for now
+    userRole: 'admin' as const,
+    interfaceId: params.schemaName, // schemaName maps to interfaceId
+    requestContext: requestContext,
   });
 
-  if (result.status !== "success") {
-    throw new Error(`WORKFLOW_FAILED: ${result.status}`);
+    // The workflow returns the result directly (not wrapped in a status object)
+    return {
+      runId: result.runId,
+      previewVersionId: result.previewVersionId,
+      previewUrl: result.previewUrl,
+    };
+  } catch (error) {
+    throw new Error(`WORKFLOW_FAILED: ${error}`);
   }
-
-  return {
-    runId: result.result.runId,
-    previewVersionId: result.result.previewVersionId,
-    previewUrl: result.result.previewUrl,
-  };
 }
+

@@ -878,13 +878,13 @@ Journey phases:
           // Apply palette tokens immediately using applySpecPatch so the interactive edit tool stays simple.
           const currentSpecForPalette = await callTool(
             getCurrentSpec,
-            { interfaceId: payload.interfaceId }, // inputData - tenantId removed as it's not needed
-            { requestContext: runtimeContext } // context
+            { interfaceId: payload.interfaceId },  // FIXED: Direct parameters, no tenantId
+            { requestContext: runtimeContext }
           );
           
           await callTool(
             applySpecPatch,
-            {
+            { 
               spec_json: currentSpecForPalette.spec_json,
               design_tokens: currentSpecForPalette.design_tokens,
               operations: [
@@ -894,22 +894,22 @@ Journey phases:
                 { op: "setDesignToken", tokenPath: "theme.color.surface", tokenValue: p.surface },
                 { op: "setDesignToken", tokenPath: "theme.color.text", tokenValue: p.text },
               ],
-            }, // inputData
-            { requestContext: runtimeContext } // context
+            },  // FIXED: Direct parameters
+            { requestContext: runtimeContext }
           );
         }
       }
 
       const result = await callTool(
         applyInteractiveEdits,
-        {
+        { 
           tenantId,
           userId,
           interfaceId: payload.interfaceId,
           platformType,
           actions: actions,
-        }, // inputData
-        { requestContext: runtimeContext } // context
+        },  // FIXED: Direct parameters, not wrapped
+        { requestContext: runtimeContext }
       );
 
       return NextResponse.json({

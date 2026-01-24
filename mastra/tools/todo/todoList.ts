@@ -11,10 +11,22 @@ export const todoList = createTool({
   inputSchema: z.object({
     tenantId: z.string().uuid(),
     threadId: z.string().min(1),
-    status: z.union([TodoStatus, z.literal("all")]).default("all"),
+    status: z.enum(["open", "in_progress", "done"]),
   }),
   outputSchema: z.object({
-    todos: z.array(TodoItem),
+    todos: z.array(
+      z.object({
+        id: z.string().uuid(),
+        title: z.string(),
+        priority: z.enum(["low", "medium", "high", "urgent"]),
+        status: z.enum(["pending", "in_progress", "completed"]),
+        dueDate: z.string().optional(),
+        createdAt: z.string(),
+        completedAt: z.string().nullable(),
+      })
+    ),
+    total: z.number(),
+    completed: z.number(),
   }),
   execute: async (inputData, context) => {
     const supabase = createClient();
@@ -27,7 +39,7 @@ export const todoList = createTool({
       .eq("thread_id", threadId)
       .order("created_at", { ascending: true });
 
-    if (status !== "all") q = q.eq("status", status);
+    if (status) q = q.eq("status", status);
 
     const { data, error } = await q;
     if (error || !data) throw new Error(error?.message ?? "TODO_LIST_FAILED");

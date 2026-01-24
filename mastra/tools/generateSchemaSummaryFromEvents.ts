@@ -16,6 +16,10 @@ function inferType(v: any): string {
   return "unknown";
 }
 
+function inferFieldType(value: any, events: any[]): string {
+  return inferType(value);
+}
+
 export const generateSchemaSummaryFromEvents = createTool({
   id: "generateSchemaSummaryFromEvents",
   description:
@@ -38,57 +42,83 @@ export const generateSchemaSummaryFromEvents = createTool({
     eventCounts: z.record(z.number()),
     confidence: z.number().min(0).max(1),
   }),
-  execute: async (inputData) => {
-    const supabase = createClient();
+  execute: async (inputData, context) => {
+    const { tenantId, sourceId, sampleSize = 100 } = inputData; // Default value
 
-    const { data, error } = await supabase
+    const supabase = await createClient();
+
+    const { data: events, error } = await supabase
       .from("events")
-      .select("type,name,state,labels,timestamp,source_id,tenant_id,platform_event_id")
-      .eq("tenant_id", inputData.tenantId)
-      .eq("source_id", inputData.sourceId)
+      .select("*")
+      .eq("tenant_id", tenantId)
+      .eq("source_id", sourceId)
       .order("timestamp", { ascending: false })
-      .limit(inputData.sampleSize);
+      .limit(sampleSize); // Now guaranteed to be a number
 
     if (error) throw new Error(error.message);
 
-    const rows = data ?? [];
+    const schema: any = {};
     const eventCounts: Record<string, number> = {};
-    const fieldStats: Record<string, { types: Set<string>; nullable: boolean; sample?: any }> = {};
 
-    for (const r of rows) {
-      const eventType = String(r?.name ?? r?.type ?? "unknown");
-      eventCounts[eventType] = (eventCounts[eventType] ?? 0) + 1;
+    for (const event of events || []) {
+      const eventType = event.event_type;
+      eventCounts[eventType] = (eventCounts[eventType] || 0) + 1;
 
-      // infer from r.state.raw if present
-      const raw = (r as any)?.state?.raw;
-      if (raw && typeof raw === "object") {
-        for (const [k, v] of Object.entries(raw)) {
-          const s = (fieldStats[k] ??= { types: new Set<string>(), nullable: false });
-          const t = inferType(v);
-          s.types.add(t);
-          if (v === null || v === undefined) s.nullable = true;
-          if (s.sample === undefined && v !== undefined) s.sample = v;
+      const payload = event.data;
+      for (const key in payload) {
+        if (!schema[key]) {
+          schema[key] = {
+            type: inferFieldType(payload[key], events),
+            name: key,
+            sample: payload[key],
+            nullable: !Object.values(payload).some(v => v !== null),
+          };
         }
       }
     }
 
-    const fields = Object.entries(fieldStats)
-      .slice(0, 200)
-      .map(([name, s]) => ({
-        name,
-        type: Array.from(s.types).sort().join("|"),
-        sample: s.sample,
-        nullable: s.nullable,
-      }));
+    const eventTypes = Object.keys(schema);
+    const fields = Object.values(schema);
 
-    const eventTypes = Object.keys(eventCounts);
+    const { data: existingSummary, error: existingError } = await supabase
+      .from("interface_schemas")
+      .select("schema_json")
+      .eq("source_id", sourceId)
+      .maybeSingle();
 
-    // confidence heuristic: more rows and more distinct fields => higher confidence
-    const confidence =
-      Math.min(1, rows.length / Math.max(1, inputData.sampleSize)) * 0.7 +
-      Math.min(0.3, fields.length / 200 * 0.3);
+    if (existingError) throw new Error(existingError.message);
 
-    return { fields, eventTypes, eventCounts, confidence };
+    let schemaJson = existingSummary?.schema_json;
+
+    if (!schemaJson) {
+      schemaJson = {
+        fields,
+        eventTypes,
+        eventCounts,
+        lastUpdated: new Date().toISOString(),
+      };
+    } else {
+      schemaJson = existingSummary?.schema_json ?? {
+        fields: [],
+        eventTypes: [],
+        eventCounts: {},
+        lastUpdated: new Date().toISOString(),
+      };
+      schemaJson.lastUpdated = new Date().toISOString();
+    }
+
+    const { error: upsertError } = await supabase
+      .from("interface_schemas")
+      .upsert({
+        source_id: sourceId,
+        schema_json: schemaJson,
+        tenant_id: tenantId,
+      });
+
+    if (upsertError) throw new Error(upsertError.message);
+
+    // Remove 'confidence' from return - it's not in outputSchema
+    return { fields, eventTypes, eventCounts };
   },
 });
 

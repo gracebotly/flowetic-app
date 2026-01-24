@@ -3,7 +3,7 @@ import { AbstractAgent } from "@ag-ui/client";
 import { RequestContext } from "@mastra/core/request-context";
 // import { createRuntimeContext, type RuntimeContextLike } from "@/mastra/lib/runtimeContext"; // Removed runtimeContext shim
 import { runVibeRouter } from "@/app/api/vibe/router/runner";
-import { Observable } from "rxjs";
+import { Observable } from "@copilotkit/runtime/node_modules/rxjs";
 
 function getOrCreateThreadId(input: any): string {
   const candidate =
@@ -103,7 +103,7 @@ class VibeRouterAgent extends AbstractAgent {
 
   // IMPORTANT: run() returns Observable (not Promise) to satisfy CopilotKit Agent typing
   public run(input: any): Observable<any> {
-    return new Observable((subscriber) => {
+    return new Observable((subscriber: any) => {
       (async () => {
         const base = {
           threadId: getOrCreateThreadId(input),
@@ -220,4 +220,4 @@ class VibeRouterAgent extends AbstractAgent {
   }
 }
 
-export const vibeRouterAgent = new VibeRouterAgent();
+export const vibeRouterAgent = new VibeRouterAgent() as any;

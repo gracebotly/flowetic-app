@@ -16,7 +16,16 @@ export const todoComplete = createTool({
     todoId: z.string().uuid(),
   }),
   outputSchema: z.object({
-    todo: TodoItem,
+    id: z.string().uuid(),
+    todo: z.object({
+      id: z.string().uuid(),
+      title: z.string(),
+      priority: z.enum(["low", "medium", "high", "urgent"]),
+      status: z.enum(["pending", "in_progress", "completed"]),
+      dueDate: z.string().optional(),
+      createdAt: z.string(),
+      completedAt: z.string(),
+    }),
   }),
   execute: async (inputData, context) => {
     const supabase = createClient();

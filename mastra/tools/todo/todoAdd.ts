@@ -12,12 +12,21 @@ export const todoAdd = createTool({
     threadId: z.string().min(1),
     title: z.string().min(1).max(160),
     description: z.string().max(2000).optional(),
-    priority: TodoPriority.optional().default("medium"),
+    priority: z.enum(["low", "medium", "high", "urgent"]).describe("Priority"),
     tags: z.array(z.string()).optional().default([]),
     parentId: z.string().uuid().optional().nullable(),
   }),
   outputSchema: z.object({
-    todo: TodoItem,
+    id: z.string().uuid(),
+    todo: z.object({
+      id: z.string().uuid(),
+      title: z.string(),
+      priority: z.enum(["low", "medium", "high", "urgent"]),
+      status: z.enum(["pending", "in_progress", "completed"]),
+      dueDate: z.string().optional(),
+      createdAt: z.string(),
+      completedAt: z.string().nullable(),
+    }),
   }),
   execute: async (inputData, context) => {
     const supabase = createClient();

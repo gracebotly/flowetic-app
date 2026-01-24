@@ -90,6 +90,11 @@ export const fetchPlatformEvents = createTool({
       }
     }
 
-    return { events: [], count: Math.min(eventCount, 0), platformType, fetchedAt: nowIso() };
+    return { 
+      events: [], 
+      count: Math.min(eventCount ?? 0, 0),  // FIXED: Explicit null coalescing
+      platformType, 
+      fetchedAt: nowIso() 
+    };
   },
 });
