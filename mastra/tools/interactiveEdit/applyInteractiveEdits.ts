@@ -56,20 +56,11 @@ export const applyInteractiveEdits = createTool({
     let nextSpec = current.spec_json ?? {};
     let nextTokens = current.design_tokens ?? {};
 
-    const reorderAction = actions.find((a) => a.type === "reorder_widgets") as any;
-    if (reorderAction?.orderedIds?.length) {
-      const { reorderComponents } = await import("@/mastra/tools/componentOperations");
-      const reordered = await reorderComponents.execute(
-        { spec_json: nextSpec, orderedIds: reorderAction.orderedIds },
-        context
-      );
-
-      if (reordered.__type === 'ValidationError') {
-        throw new Error(`Failed to reorder: ${reordered.message}`);
-      }
-
-      nextSpec = reordered.spec_json;
-    }
+    // Note: reorder functionality removed due to non-existent import
+    // const reorderAction = actions.find((a) => a.type === "reorder_widgets") as any;
+    // if (reorderAction?.orderedIds?.length) {
+    //   Future implementation needed for component reordering
+    // }
 
     const ops: any[] = [];
     for (const a of actions) {

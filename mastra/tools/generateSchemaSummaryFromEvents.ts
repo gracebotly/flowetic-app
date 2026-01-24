@@ -42,7 +42,7 @@ export const generateSchemaSummaryFromEvents = createTool({
     eventCounts: z.record(z.number()),
     confidence: z.number().min(0).max(1),
   }),
-  .execute(async (inputData, context) => {
+  execute: async (inputData, context) => {
     const { tenantId, sourceId, sampleSize = 100 } = inputData; // Default value
 
     const supabase = await createClient();
