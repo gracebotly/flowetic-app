@@ -67,8 +67,8 @@ const analyzeSchemaStep = createStep({
     // Get sourceId from context (set when connection was established)
     const sourceId = requestContext.get('sourceId');
     
-    // Get tenantId from workflow input
-    const { tenantId } = inputData;
+    // Extract specific properties from inputData (NOT the whole object)
+    const { tenantId, userId, interfaceId, userRole, instructions } = inputData;
     
     const sampleSize = 100;
     
@@ -82,6 +82,8 @@ const analyzeSchemaStep = createStep({
         tenantId,
         sourceId,
         sampleSize,
+        // Include platformType as required
+        platformType: requestContext.get('platformType') || 'make',
       },
       { requestContext }
     );

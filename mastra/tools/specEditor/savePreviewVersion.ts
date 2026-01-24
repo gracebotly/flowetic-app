@@ -2,52 +2,50 @@
 
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
-import { createClient } from "../../lib/supabase";
+import { persistPreviewVersion } from "../persistPreviewVersion";
 
 export const savePreviewVersion = createTool({
   id: "savePreviewVersion",
-  description: "Persist spec_json + design_tokens as a new preview interface_version and return preview URL.",
+  description:
+    "Persist a validated spec_json + design_tokens as a new preview interface version. Reads tenantId/userId/interfaceId/platformType from runtimeContext when available.",
   inputSchema: z.object({
-    tenantId: z.string().min(1),
-    userId: z.string().min(1),
-    interfaceId: z.string().min(1),
-    platformType: z.string().min(1),
     spec_json: z.record(z.any()),
-    design_tokens: z.record(z.any()).optional(),
+    design_tokens: z.record(z.any()).default({}),
+    interfaceId: z.string().uuid().optional(),
   }),
   outputSchema: z.object({
-    interfaceId: z.string(),
-    versionId: z.string(),
+    interfaceId: z.string().uuid(),
+    versionId: z.string().uuid(),
     previewUrl: z.string(),
   }),
-  execute: async (inputData) => {
-    const supabase = createClient();
+  execute: async ({ context, runtimeContext }) => {
+    const tenantId = runtimeContext?.get("tenantId") as string | undefined;
+    const userId = runtimeContext?.get("userId") as string | undefined;
+    const platformType = (runtimeContext?.get("platformType") as string | undefined) ?? "make";
 
-    const now = new Date().toISOString();
-    const { data, error } = await supabase
-      .from("interface_versions")
-      .insert({
-        tenant_id: inputData.tenantId,
-        interface_id: inputData.interfaceId,
-        spec_json: inputData.spec_json,
-        design_tokens: inputData.design_tokens ?? {},
-        platform_type: inputData.platformType,
-        created_by: inputData.userId,
-        created_at: now,
-      })
-      .select("id, interface_id")
-      .single();
+    if (!tenantId || !userId) throw new Error("AUTH_REQUIRED");
 
-    if (error) throw new Error(error.message);
+    const interfaceId =
+      context.interfaceId ??
+      (runtimeContext?.get("interfaceId") as string | undefined) ??
+      undefined;
 
-    const base =
-      process.env.NEXT_PUBLIC_APP_URL ||
-      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+    const result = await persistPreviewVersion.execute({
+      context: {
+        tenantId,
+        userId,
+        interfaceId,
+        spec_json: context.spec_json,
+        design_tokens: context.design_tokens ?? {},
+        platformType,
+      },
+      runtimeContext,
+    });
 
     return {
-      interfaceId: String(data.interface_id),
-      versionId: String(data.id),
-      previewUrl: `${base}/preview/${encodeURIComponent(String(data.id))}`,
+      interfaceId: result.interfaceId,
+      versionId: result.versionId,
+      previewUrl: result.previewUrl,
     };
   },
 });
