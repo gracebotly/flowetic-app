@@ -45,7 +45,7 @@ export const generateSchemaSummaryFromEvents = createTool({
   execute: async (inputData, context) => {
     const { tenantId, sourceId, sampleSize = 100 } = inputData; // Default value
 
-    const supabase = await createClient();
+    const supabase = createClient();
 
     const { data: events, error } = await supabase
       .from("events")

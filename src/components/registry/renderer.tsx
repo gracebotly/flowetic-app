@@ -173,13 +173,13 @@ export function TabsView({ items, defaultValue }: TabsProps) {
   return (
     <Tabs defaultValue={defaultValue ?? items[0]?.id}>
       <TabsList>
-        {items.map((i) => (
+        {items.map((i: any) => (
           <TabsTrigger key={i.id} value={i.id}>
             {i.label}
           </TabsTrigger>
         ))}
       </TabsList>
-      {items.map((i) => (
+      {items.map((i: any) => (
         <TabsContent key={i.id} value={i.id}>
           {i.content}
         </TabsContent>

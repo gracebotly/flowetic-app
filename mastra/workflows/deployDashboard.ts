@@ -71,12 +71,12 @@ export const deployDashboardWorkflow = createWorkflow({
       execute: async ({ inputData, requestContext }) => {
         const pv = await getPreviewVersionSpec.execute(
           { tenantId: inputData.tenantId, previewVersionId: inputData.previewVersionId },
-          new RuntimeContext()
+          requestContext
         );
 
         const v = await validateSpec.execute(
           { spec_json: pv.spec_json },
-          new RuntimeContext()
+          requestContext
         );
 
         if (!v.valid || v.score < 0.8) {
@@ -140,7 +140,7 @@ export const deployDashboardWorkflow = createWorkflow({
             interfaceId: inputData.interfaceId,
             previewVersionId: inputData.previewVersionId
           },
-          new RuntimeContext()
+          requestContext
         );
         const unwrapped = unwrapToolResult(result);
         return {
@@ -208,7 +208,7 @@ export const deployDashboardWorkflow = createWorkflow({
             interfaceId: inputData.interfaceId,
             previewVersionId: inputData.previewVersionId
           },
-          new RuntimeContext()
+          requestContext
         );
         const unwrapped = unwrapToolResult(result);
         return {
@@ -286,7 +286,7 @@ export const deployDashboardWorkflow = createWorkflow({
               deployedUrl: inputData.deployedUrl,
             }
           },
-          new RuntimeContext()
+          requestContext
         );
         const unwrapped = unwrapToolResult(result);
         return {
@@ -316,8 +316,10 @@ export const deployDashboardWorkflow = createWorkflow({
       }),
       outputSchema: z.object({ 
         ok: z.boolean(),
-        deploymentId: z.string(),
-        deployedUrl: z.string(),
+        tenantId: z.string(),
+        threadId: z.string(),
+        interfaceId: z.string(),
+        previewVersionId: z.string()
       }),
       execute: async ({ inputData, requestContext }) => {
         if (!setJourneyDeployed?.execute) {
@@ -333,11 +335,13 @@ export const deployDashboardWorkflow = createWorkflow({
           },
           { runtimeContext: requestContext }
         );
-        const unwrapped = unwrapToolResult(result);
+        
         return {
-          ok: unwrapped?.ok ?? true,
-          deploymentId: unwrapped?.deploymentId ?? '',
-          deployedUrl: unwrapped?.deployedUrl ?? ''
+          ok: result?.ok ?? true,
+          tenantId: inputData.tenantId,
+          threadId: inputData.threadId,
+          interfaceId: inputData.interfaceId,
+          previewVersionId: inputData.previewVersionId
         };
       },
     }),
@@ -348,15 +352,17 @@ export const deployDashboardWorkflow = createWorkflow({
       description: "Complete deploy-related todos (best-effort).",
       inputSchema: z.object({
         ok: z.boolean(),
-        deploymentId: z.string(),
-        deployedUrl: z.string(),
         tenantId: z.string(),
         threadId: z.string(),
+        interfaceId: z.string(),
+        previewVersionId: z.string()
       }),
       outputSchema: z.object({ 
         ok: z.boolean(),
-        deploymentId: z.string(),
-        deployedUrl: z.string(),
+        tenantId: z.string(),
+        threadId: z.string(),
+        interfaceId: z.string(),
+        previewVersionId: z.string()
       }),
       execute: async ({ inputData, requestContext }) => {
         // Best-effort: if you don't have a specific deploy todo id yet, skip silently.
@@ -380,8 +386,10 @@ export const deployDashboardWorkflow = createWorkflow({
         }
         return {
           ok: inputData.ok ?? true,
-          deploymentId: inputData.deploymentId ?? '',
-          deployedUrl: inputData.deployedUrl ?? ''
+          tenantId: inputData.tenantId,
+          threadId: inputData.threadId,
+          interfaceId: inputData.interfaceId,
+          previewVersionId: inputData.previewVersionId
         };
       },
     }),
@@ -391,12 +399,18 @@ export const deployDashboardWorkflow = createWorkflow({
       id: "finalize",
       description: "Finalize deploy output.",
       inputSchema: z.object({
-        deploymentId: z.string(),
-        deployedUrl: z.string(),
+        ok: z.boolean(),
+        tenantId: z.string(),
+        threadId: z.string(),
+        interfaceId: z.string(),
+        previewVersionId: z.string()
       }),
       outputSchema: z.object({
-        deploymentId: z.string(),
-        deployedUrl: z.string(),
+        ok: z.boolean(),
+        tenantId: z.string(),
+        threadId: z.string(),
+        interfaceId: z.string(),
+        previewVersionId: z.string(),
         status: z.string(),
       }),
       execute: async ({ inputData }) => {

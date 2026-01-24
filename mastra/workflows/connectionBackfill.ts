@@ -39,7 +39,6 @@ export const connectionBackfillWorkflow = createWorkflow({
     "Pulls historical events from a connected platform source, normalizes and stores them in Supabase, generates a schema summary, and marks the journey session schemaReady=true.",
   inputSchema: z.object({
     tenantId: z.string().min(1),
-    threadId: z.string().min(1),
     sourceId: z.string().min(1),
     platformType: z.enum(["vapi", "n8n", "make", "retell"]),
     eventCount: z.number().int().min(1).max(500).default(100),
@@ -86,12 +85,11 @@ export const connectionBackfillWorkflow = createWorkflow({
         const result = await fetchPlatformEvents.execute(
           { 
             tenantId: inputData.tenantId,
-            threadId: inputData.threadId,
             platformType: inputData.platformType, 
             sourceId: inputData.sourceId, 
             eventCount 
           },
-          new RuntimeContext()
+          requestContext
         );
         return unwrapToolResult(result);
       },
@@ -224,28 +222,26 @@ export const connectionBackfillWorkflow = createWorkflow({
         eventCounts: z.record(z.number()),
         confidence: z.number(),
         tenantId: z.string(),
-        threadId: z.string(),
+        sourceId: z.string(),
       }),
       outputSchema: z.object({
         ok: z.boolean(),
         tenantId: z.string(),
-        threadId: z.string(),
         sourceId: z.string(),
       }),
       execute: async ({ inputData, requestContext }) => {
         const result = await updateJourneySchemaReady.execute(
           { 
             tenantId: inputData.tenantId,
-            threadId: inputData.threadId,
             schemaReady: true
           },
-          new RuntimeContext()
+          requestContext
         );
         const unwrapped = unwrapToolResult(result);
         return {
           ...unwrapped,
           tenantId: inputData.tenantId,
-          threadId: inputData.threadId,
+          sourceId: inputData.sourceId,
         };
       },
     }),
