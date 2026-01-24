@@ -101,9 +101,8 @@ class VibeRouterAgent extends AbstractAgent {
     });
   }
 
-  // @ts-expect-error - Observable return type required by AbstractAgent interface
-  // The RxJS version conflict is resolved via package.json resolutions (rxjs@7.8.1)
-  // This is intentional design per line 104 comment, not a type error
+  // Observable return type required by AbstractAgent interface
+  // RxJS version pinned to 7.8.1 in package.json resolutions
   public run(input: any): Observable<any> {
     return new Observable((subscriber: any) => {
       (async () => {
