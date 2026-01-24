@@ -380,7 +380,9 @@ export const getStyleBundles = createTool({
       const scriptPath = path.join(__dirname, 'search.py');
       const projectName = context?.requestContext?.get?.("tenantId") || "Project";
       
-      const cmd = `python3 "${scriptPath}" "${queryText}" --design-system -p "${projectName}"`;
+      // Detect OS and use correct Python command
+      const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+      const cmd = `${pythonCmd} "${scriptPath}" "${queryText}" --design-system -p "${projectName}"`;
       
       console.log(`[getStyleBundles] Executing: ${cmd}`);
       
