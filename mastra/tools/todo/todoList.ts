@@ -11,7 +11,7 @@ export const todoList = createTool({
   inputSchema: z.object({
     tenantId: z.string().uuid(),
     threadId: z.string().min(1),
-    status: z.enum(["open", "in_progress", "done"]).optional().default("all"),
+    status: z.enum(["open", "in_progress", "done"]),
   }),
   outputSchema: z.object({
     todos: z.array(
@@ -39,7 +39,7 @@ export const todoList = createTool({
       .eq("thread_id", threadId)
       .order("created_at", { ascending: true });
 
-    if (status !== "all") q = q.eq("status", status);
+    if (status) q = q.eq("status", status);
 
     const { data, error } = await q;
     if (error || !data) throw new Error(error?.message ?? "TODO_LIST_FAILED");

@@ -44,17 +44,14 @@ export const applyInteractiveEdits = createTool({
     const { validateSpec } = await import("@/mastra/tools/validateSpec");
 
     // Call getCurrentSpec directly (no destructuring needed)
-    const current = await getCurrentSpec.execute(
-      { interfaceId },
-      context
-    );
+    const current = await getCurrentSpec.execute({ interfaceId });
 
-    if (current.__type === 'ValidationError') {
-      throw new Error(`Failed to get current spec: ${current.message}`);
+    if (current instanceof Error) {
+      throw current;
     }
 
-    let nextSpec = current.spec_json ?? {};
-    let nextTokens = current.design_tokens ?? {};
+    let nextSpec = (current as any).spec_json ?? {};
+    let nextTokens = (current as any).design_tokens ?? {};
 
     // Note: reorder functionality removed due to non-existent import
     // const reorderAction = actions.find((a) => a.type === "reorder_widgets") as any;
@@ -68,7 +65,7 @@ export const applyInteractiveEdits = createTool({
         ops.push({
           op: "updateComponentProps",
           componentId: a.widgetId,
-          propsPatch: { hidden: !a.enabled },
+          propsPatch: { hidden: true }, // Just set hidden, don't toggle
         });
       } else if (a.type === "rename_widget") {
         ops.push({
@@ -86,55 +83,43 @@ export const applyInteractiveEdits = createTool({
         ops.push({
           op: "setDesignToken",
           tokenPath: "theme.spacing.base",
-          tokenValue: densityToSpacingBase(a.density),
+          tokenValue: a.density ? densityToSpacingBase(a.density) : 8, // Default to 8
         });
       }
     }
 
     if (ops.length) {
       const patched = await applySpecPatch.execute(
-        { spec_json: nextSpec, design_tokens: nextTokens, operations: ops },
-        context
+        { spec_json: nextSpec, design_tokens: nextTokens, operations: ops }
       );
 
-      if (patched.__type === 'ValidationError') {
-        throw new Error(`Failed to apply patch: ${patched.message}`);
+      if (patched instanceof Error) {
+        throw patched;
       }
 
-      nextSpec = patched.spec_json;
-      nextTokens = patched.design_tokens;
+      nextSpec = (patched as any).spec_json;
+      nextTokens = (patched as any).design_tokens;
     }
 
-    const validation = await validateSpec.execute(
-      { spec_json: nextSpec },
-      context
-    );
+    const validation = await validateSpec.execute({ spec_json: nextSpec });
 
-    if (validation.__type === 'ValidationError') {
-      throw new Error("Validation failed");
+    if (validation instanceof Error) {
+      throw validation;
     }
 
-    if (!validation.valid || validation.score < 0.8) {
+    const validResult = validation as any;
+    if (!validResult.valid || validResult.score < 0.8) {
       throw new Error("Validation score below threshold");
     }
 
-    const saved = await savePreviewVersion.execute(
-      {
-        tenantId,
-        userId,
-        interfaceId,
-        spec_json: nextSpec,
-        design_tokens: nextTokens,
-        platformType,
-      },
-      context
-    );
+    const saved = await savePreviewVersion.execute({ spec_json: nextSpec, design_tokens: nextTokens });
 
-    if (saved.__type === 'ValidationError') {
-      throw new Error(`Failed to save: ${saved.message}`);
+    if (saved instanceof Error) {
+      throw saved;
     }
 
-    return { previewUrl: saved.previewUrl, previewVersionId: saved.versionId };
+    const savedResult = saved as any;
+    return { previewUrl: savedResult.previewUrl, previewVersionId: savedResult.versionId };
   },
 });
 

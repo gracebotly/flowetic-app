@@ -32,30 +32,8 @@ export const runGeneratePreviewWorkflow = createTool({
     requestContext.set("userId", userId);
     requestContext.set("interfaceId", interfaceId);
 
-    // Try direct execution approach
-    try {
-      const result = await workflow.execute({
-        inputData: {
-          tenantId,
-          userId,
-          interfaceId,
-          userRole,
-          instructions,
-        },
-        requestContext,
-      });
-
-      if (result.status !== "success") {
-        throw new Error(`WORKFLOW_FAILED: ${result.status}`);
-      }
-
-      return {
-        runId: result.result.runId,
-        previewVersionId: result.result.previewVersionId,
-        previewUrl: result.result.previewUrl,
-      };
-    } catch (error) {
-      throw new Error(`WORKFLOW_EXECUTION_UNSUPPORTED: ${error instanceof Error ? error.message : String(error)}`);
-    }
+    // The workflow API doesn't support direct execution like this.
+    // Return an error to disable this tool for now:
+    throw new Error("WORKFLOW_EXECUTION_NOT_SUPPORTED: The generatePreview workflow cannot be executed directly. Use the agent workflow tools instead.");
   },
 });

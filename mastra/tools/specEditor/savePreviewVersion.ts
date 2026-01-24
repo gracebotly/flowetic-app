@@ -3,6 +3,7 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { persistPreviewVersion } from "../persistPreviewVersion";
+import { createClient } from '@/lib/supabase/client';
 
 export const savePreviewVersion = createTool({
   id: "savePreviewVersion",

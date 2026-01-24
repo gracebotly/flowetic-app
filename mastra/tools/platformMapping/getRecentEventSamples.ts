@@ -43,7 +43,16 @@ export const getRecentEventSamples = createTool({
 
     if (error) throw new Error(error.message);
 
-    return { events, count: events.length };
+    const samples = events.map(e => ({
+      id: e.id,
+      type: e.event_type || 'unknown',
+      name: null,
+      timestamp: e.timestamp || new Date().toISOString(),
+      text: e.data?.message || null,
+      state: undefined,
+      labels: undefined,
+    }));
+    return { samples, count: samples.length };
   },
 });
 

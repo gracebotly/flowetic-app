@@ -98,7 +98,12 @@ export const generateSchemaSummaryFromEvents = createTool({
         lastUpdated: new Date().toISOString(),
       };
     } else {
-      schemaJson = existingSummary.schema_json;
+      schemaJson = existingSummary?.schema_json ?? {
+        fields: [],
+        eventTypes: [],
+        eventCounts: {},
+        lastUpdated: new Date().toISOString(),
+      };
       schemaJson.lastUpdated = new Date().toISOString();
     }
 
@@ -112,7 +117,8 @@ export const generateSchemaSummaryFromEvents = createTool({
 
     if (upsertError) throw new Error(upsertError.message);
 
-    return { fields, eventTypes, eventCounts, confidence };
+    // Remove 'confidence' from return - it's not in outputSchema
+    return { fields, eventTypes, eventCounts };
   },
 });
 

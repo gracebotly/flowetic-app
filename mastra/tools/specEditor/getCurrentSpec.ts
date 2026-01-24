@@ -46,7 +46,7 @@ export const getCurrentSpec = createTool({
 
     return {
       interfaceId,
-      versionId: versions[0].version_id,
+      versionId: versions[0].id,
       spec_json: versions[0].spec_json,
       design_tokens: versions[0].design_tokens,
       schemaName: interfaceData?.schema_name,

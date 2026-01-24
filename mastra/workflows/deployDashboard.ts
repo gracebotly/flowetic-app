@@ -44,14 +44,9 @@ export const deployDashboardWorkflow = createWorkflow({
         design_tokens: z.record(z.any()),
       }),
       execute: async ({ inputData, requestContext }) => {
-        const pv = await getPreviewVersionSpec.execute(inputData, {
-          requestContext,
-        } as any);
+        const pv = await getPreviewVersionSpec(inputData.previewVersionId);
 
-        const v = await validateSpec.execute(
-          { spec_json: pv.spec_json } as any,
-          { requestContext } as any,
-        );
+        const v = await validateSpec(pv.spec_json);
 
         if (!v.valid || v.score < 0.8) {
           throw new Error("DEPLOY_SPEC_VALIDATION_FAILED");
@@ -88,9 +83,11 @@ export const deployDashboardWorkflow = createWorkflow({
         deploymentId: z.string().min(1),
       }),
       execute: async ({ inputData, requestContext }) => {
-        return createDeploymentRecord.execute(inputData, {
-          requestContext,
-        } as any);
+        return await createDeploymentRecord(
+          inputData.tenantId,
+          inputData.interfaceId,
+          inputData.previewVersionId
+        );
       },
     }),
   )
@@ -105,9 +102,11 @@ export const deployDashboardWorkflow = createWorkflow({
       }),
       outputSchema: z.object({ ok: z.boolean() }),
       execute: async ({ inputData, requestContext }) => {
-        return markPreviousDeploymentsInactive.execute(inputData, {
-          requestContext,
-        } as any);
+        return await markPreviousDeploymentsInactive(
+          inputData.tenantId,
+          inputData.interfaceId,
+          inputData.keepDeploymentId
+        );
       },
     }),
   )
@@ -122,9 +121,11 @@ export const deployDashboardWorkflow = createWorkflow({
       }),
       outputSchema: z.object({ ok: z.boolean() }),
       execute: async ({ inputData, requestContext }) => {
-        return setInterfacePublished.execute(inputData, {
-          requestContext,
-        } as any);
+        return await setInterfacePublished(
+          inputData.tenantId,
+          inputData.interfaceId,
+          inputData.previewVersionId
+        );
       },
     }),
   )
@@ -141,7 +142,11 @@ export const deployDashboardWorkflow = createWorkflow({
         deployedUrl: z.string().min(1),
       }),
       execute: async ({ inputData, requestContext }) => {
-        return generatePortalUrl.execute(inputData, { requestContext } as any);
+        return await generatePortalUrl(
+          inputData.tenantId,
+          inputData.interfaceId,
+          inputData.deploymentId
+        );
       },
     }),
   )
@@ -158,20 +163,17 @@ export const deployDashboardWorkflow = createWorkflow({
       }),
       outputSchema: z.object({ ok: z.boolean() }),
       execute: async ({ inputData, requestContext }) => {
-        await appendThreadEvent.execute(
+        await appendThreadEvent(
+          inputData.tenantId,
+          inputData.threadId,
+          inputData.interfaceId,
+          null,
+          "state",
+          `Deployed successfully. Portal URL ready.`,
           {
-            tenantId: inputData.tenantId,
-            threadId: inputData.threadId,
-            interfaceId: inputData.interfaceId,
-            runId: null,
-            type: "state",
-            message: `Deployed successfully. Portal URL ready.`,
-            metadata: {
-              deploymentId: inputData.deploymentId,
-              deployedUrl: inputData.deployedUrl,
-            },
-          } as any,
-          { requestContext } as any,
+            deploymentId: inputData.deploymentId,
+            deployedUrl: inputData.deployedUrl,
+          }
         );
         return { ok: true };
       },
@@ -190,7 +192,12 @@ export const deployDashboardWorkflow = createWorkflow({
       }),
       outputSchema: z.object({ ok: z.boolean() }),
       execute: async ({ inputData, requestContext }) => {
-        return setJourneyDeployed.execute(inputData, { requestContext } as any);
+        return await setJourneyDeployed(
+          inputData.tenantId,
+          inputData.threadId,
+          inputData.interfaceId,
+          inputData.previewVersionId
+        );
       },
     }),
   )
@@ -207,13 +214,10 @@ export const deployDashboardWorkflow = createWorkflow({
         // Best-effort: if you don't have a specific deploy todo id yet, skip silently.
         // This keeps workflow safe while preserving V2 step slot.
         try {
-          await todoComplete.execute(
-            {
-              tenantId: inputData.tenantId,
-              threadId: inputData.threadId,
-              todoId: "deploy", // placeholder convention; update later when you have real todo ids
-            } as any,
-            { requestContext } as any,
+          await todoComplete(
+            inputData.tenantId,
+            inputData.threadId,
+            "deploy" // placeholder convention; update later when you have real todo ids
           );
         } catch {
           // ignore

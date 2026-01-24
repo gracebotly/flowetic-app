@@ -102,7 +102,7 @@ class VibeRouterAgent extends AbstractAgent {
   }
 
   // IMPORTANT: run() returns Observable (not Promise) to satisfy CopilotKit Agent typing
-  public run(input: any): Observable<any> {
+  private run(input: any): Observable<any> {
     return new Observable((subscriber) => {
       (async () => {
         const base = {

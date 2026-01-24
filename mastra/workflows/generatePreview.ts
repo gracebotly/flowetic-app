@@ -213,7 +213,6 @@ const generateUISpecStep = createStep({
     design_tokens: z.record(z.any()),
   }),
   async execute({ inputData, requestContext, getStepResult, getInitData, suspend, runId }) {
-    // inputData contains output from checkMappingCompletenessStep
     const { shouldSuspend, missingFields, message, decision } = inputData;
     
     // If the previous step decided we should suspend, handle it
