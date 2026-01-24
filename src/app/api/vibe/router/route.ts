@@ -584,7 +584,6 @@ Journey phases:
         ].join("\n"),
         {
           requestContext: runtimeContext,
-          threadId,
         }
       );
 
@@ -659,7 +658,6 @@ Journey phases:
         ].join("\n"),
         {
           requestContext: runtimeContext,
-          threadId,
         }
       );
 
@@ -717,7 +715,6 @@ Journey phases:
         ].join("\n"),
         {
           requestContext: runtimeContext,
-          threadId,
         }
       );
 
@@ -868,7 +865,6 @@ Journey phases:
         ].join("\n"),
         {
           requestContext: runtimeContext,
-          threadId,
         }
       );
 
