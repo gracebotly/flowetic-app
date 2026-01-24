@@ -91,6 +91,7 @@ export const connectionBackfillWorkflow = createWorkflow({
         const result = await fetchPlatformEvents.execute(
           { 
             tenantId: inputData.tenantId,
+            threadId: inputData.threadId,
             platformType: inputData.platformType, 
             sourceId: inputData.sourceId, 
             eventCount 
@@ -128,6 +129,10 @@ export const connectionBackfillWorkflow = createWorkflow({
         sourceId: z.string(),
       }),
       execute: async ({ inputData, requestContext }) => {
+        if (!normalizeEvents.execute) {
+          throw new Error("normalizeEvents.execute is not available");
+        }
+        
         const result = await normalizeEvents.execute(
           { 
             tenantId: inputData.tenantId,
@@ -167,6 +172,10 @@ export const connectionBackfillWorkflow = createWorkflow({
         sourceId: z.string(),
       }),
       execute: async ({ inputData, requestContext }) => {
+        if (!storeEvents.execute) {
+          throw new Error("storeEvents.execute is not available");
+        }
+        
         const result = await storeEvents.execute(
           { 
             tenantId: inputData.tenantId,
@@ -215,6 +224,11 @@ export const connectionBackfillWorkflow = createWorkflow({
       }),
       execute: async ({ inputData, requestContext }) => {
         const sampleSize = 100; // Default sample size
+        
+        if (!generateSchemaSummaryFromEvents.execute) {
+          throw new Error("generateSchemaSummaryFromEvents.execute is not available");
+        }
+        
         const result = await generateSchemaSummaryFromEvents.execute(
           { 
             tenantId: inputData.tenantId,
@@ -259,6 +273,10 @@ export const connectionBackfillWorkflow = createWorkflow({
         confidence: z.number(),
       }),
       execute: async ({ inputData, requestContext, getStepResult }) => {
+        if (!updateJourneySchemaReady.execute) {
+          throw new Error("updateJourneySchemaReady.execute is not available");
+        }
+        
         const result = await updateJourneySchemaReady.execute(
           { 
             tenantId: inputData.tenantId,
@@ -312,6 +330,10 @@ export const connectionBackfillWorkflow = createWorkflow({
         confidence: z.number(),
       }),
       execute: async ({ inputData, requestContext }) => {
+        if (!appendThreadEvent.execute) {
+          throw new Error("appendThreadEvent.execute is not available");
+        }
+        
         const result = await appendThreadEvent.execute(
           {
             tenantId: inputData.tenantId,

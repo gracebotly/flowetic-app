@@ -75,15 +75,28 @@ export const deployDashboardWorkflow = createWorkflow({
         confirmed: z.boolean(),
       }),
       execute: async ({ inputData, requestContext }) => {
+        if (!getPreviewVersionSpec.execute) {
+          throw new Error("getPreviewVersionSpec.execute is not available");
+        }
+        
         const pv = await getPreviewVersionSpec.execute(
           { tenantId: inputData.tenantId, previewVersionId: inputData.previewVersionId },
           { requestContext }
         );
 
+        if (!validateSpec.execute) {
+          throw new Error("validateSpec.execute is not available");
+        }
+        
         const v = await validateSpec.execute(
           { spec_json: pv.spec_json },
           { requestContext }
         );
+
+        // ← ADD TYPE NARROWING
+        if ('message' in v) {
+          throw new Error(`VALIDATION_ERROR: ${v.message}`);
+        }
 
         if (!v.valid || v.score < 0.8) {
           throw new Error("DEPLOY_SPEC_VALIDATION_FAILED");
@@ -155,6 +168,10 @@ export const deployDashboardWorkflow = createWorkflow({
         previewVersionId: z.string(),
       }),
       execute: async ({ inputData, requestContext }) => {
+        if (!createDeploymentRecord.execute) {
+          throw new Error("createDeploymentRecord.execute is not available");
+        }
+        
         const result = await createDeploymentRecord.execute(
           {
             tenantId: inputData.tenantId,
@@ -197,6 +214,10 @@ export const deployDashboardWorkflow = createWorkflow({
         previewVersionId: z.string(),
       }),
       execute: async ({ inputData, requestContext }) => {
+        if (!markPreviousDeploymentsInactive.execute) {
+          throw new Error("markPreviousDeploymentsInactive.execute is not available");
+        }
+        
         const result = await markPreviousDeploymentsInactive.execute(
           {
             tenantId: inputData.tenantId,
@@ -241,6 +262,10 @@ export const deployDashboardWorkflow = createWorkflow({
         previewVersionId: z.string(),
       }),
       execute: async ({ inputData, requestContext }) => {
+        if (!setInterfacePublished.execute) {
+          throw new Error("setInterfacePublished.execute is not available");
+        }
+        
         const result = await setInterfacePublished.execute(
           {
             tenantId: inputData.tenantId,
