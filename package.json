@@ -11,7 +11,9 @@
     "build:mastra": "mastra build --dir ./mastra",
     "start": "next start",
     "lint": "eslint",
-    "typecheck": "tsc --noEmit --pretty false"
+    "typecheck": "tsc --noEmit --pretty false",
+    "setup:python": "cd mastra/tools/design && pip3 install -r requirements.txt",
+    "postinstall": "npm run setup:python || echo 'Warning: Python dependencies not installed. Run: npm run setup:python'"
   },
   "dependencies": {
     "@ag-ui/mastra": "^0.2.0",

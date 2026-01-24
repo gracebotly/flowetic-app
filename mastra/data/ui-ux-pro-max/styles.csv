@@ -1,0 +1,7 @@
+
+csvid,name,description,tags,mood,industry,hex_colors
+glass-001,Glassmorphism,Frosted glass effects with soft depth,premium;modern;soft,professional,saas;fintech,#2563EB;#22C55E;#F8FAFC;#FFFFFF;#0F172A
+dark-001,Modern SaaS Dark,Sleek high contrast dark mode,ops;technical;modern,efficient,tech;operations,#60A5FA;#F472B6;#0B1220;#111827;#E5E7EB
+minimal-001,Minimalism,Clean executive report style,client;report;minimal,calm,consulting;finance,#334155;#0EA5E9;#F9FAFB;#FFFFFF;#111827
+bold-001,Neobrutalism,Punchy high-energy startup aesthetic,saas;bold;energetic,exciting,startup;tech,#F97316;#A78BFA;#0B0F19;#111827;#F9FAFB
+

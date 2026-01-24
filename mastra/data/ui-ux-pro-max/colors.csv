@@ -1,0 +1,9 @@
+
+
+csvid,name,hex_primary,hex_secondary,hex_accent,hex_background,hex_text,industry,mood
+blue-professional,Professional Blue,#2563EB,#3B82F6,#22C55E,#F8FAFC,#0F172A,saas;fintech,trustworthy
+dark-saas,Dark SaaS,#60A5FA,#F472B6,#10B981,#0B1220,#E5E7EB,tech;operations,efficient
+slate-minimal,Slate Minimal,#334155,#475569,#0EA5E9,#F9FAFB,#111827,consulting;finance,calm
+startup-bold,Startup Bold,#F97316,#FB923C,#A78BFA,#0B0F19,#F9FAFB,startup;tech,energetic
+
+
