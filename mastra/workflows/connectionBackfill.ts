@@ -201,7 +201,7 @@ export const connectionBackfillWorkflow = createWorkflow({
             sourceId: inputData.sourceId,
             sampleSize
           },
-          new RuntimeContext()
+          requestContext
         );
         const unwrapped = unwrapToolResult(result);
         return {

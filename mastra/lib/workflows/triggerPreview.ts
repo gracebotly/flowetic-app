@@ -18,14 +18,13 @@ export async function triggerGeneratePreview(params: {
   requestContext.set("threadId", params.threadId);
 
   try {
-    const result = await workflow.execute({
-      inputData: {
-        tenantId: params.tenantId,
-        userId: params.tenantId, // Using tenantId as userId for now
-        userRole: 'admin' as const,
-        interfaceId: params.schemaName, // schemaName maps to interfaceId
-        instructions: params.instructions,
-      }
+    // Use the workflow's trigger method which handles the complex context internally
+    const result = await workflow.trigger({
+      tenantId: params.tenantId,
+      userId: params.tenantId, // Using tenantId as userId for now
+      userRole: 'admin' as const,
+      interfaceId: params.schemaName, // schemaName maps to interfaceId
+      instructions: "",
     });
 
     if (!result) {

@@ -66,7 +66,7 @@ export function TimeseriesChart({ series }: TimeseriesChartProps) {
     return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date))
   }, [series])
 
-  const categories = series.map((s) => s.name)
+  const categories = series.map((s: any) => s.name)
   return (
     <Card>
       <CardTitle>Timeseries</CardTitle>
@@ -86,7 +86,7 @@ export function TimeseriesChart({ series }: TimeseriesChartProps) {
 
 // BarChart → Tremor BarChart
 export function BarChart({ series }: BarChartProps) {
-  const data = series.map((s) => ({ name: s.name, value: s.value }))
+  const data = series.map((s: any) => ({ name: s.name, value: s.value }))
   return (
     <Card>
       <CardTitle>BarChart</CardTitle>

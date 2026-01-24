@@ -93,6 +93,7 @@ export async function POST(req: Request) {
   const indexName = process.env.MASTRA_DESIGN_KB_INDEX_NAME || "design_kb";
   const store = new PgVector({
     connectionString,
+    id: 'design-kb-vector-store',
   });
 
   // OpenAI text-embedding-3-small is 1536 dims by default
@@ -107,7 +108,7 @@ export async function POST(req: Request) {
   }
 
   const vectors: number[][] = [];
-  const metadata: Array<{ text: string; source: string; docPath: string; kind: string }> = [];
+  const metadata = [] as { text: string; source: string; docPath: string; kind: string }[];
 
   for (const filePath of files) {
     const rel = path.relative(root, filePath).replaceAll("\\", "/");
