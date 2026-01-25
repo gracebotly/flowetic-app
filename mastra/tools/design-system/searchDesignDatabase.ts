@@ -74,7 +74,7 @@ export const searchDesignDatabase = createTool({
           used: {
             domain: inputData.domain,
             stack: inputData.stack,
-            maxResults: inputData.maxResults,
+            maxResults: inputData.maxResults ?? 3,
           },
         },
       };
@@ -88,7 +88,7 @@ export const searchDesignDatabase = createTool({
           used: {
             domain: inputData.domain,
             stack: inputData.stack,
-            maxResults: inputData.maxResults,
+            maxResults: inputData.maxResults ?? 3,
           },
         },
       };
