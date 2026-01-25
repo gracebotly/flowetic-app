@@ -1,6 +1,7 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
-import { searchDesignKB, searchDesignKBLocal } from "@/mastra/tools/designAdvisor";
+import { searchDesignKBLocal } from "@/mastra/tools/designAdvisor";
+import { generateDesignSystem, searchDesignDatabase } from "@/mastra/tools/design-system";
 import { callTool } from "../../lib/callTool";
 
 function hexToRgb(hex: string): [number, number, number] {
@@ -34,6 +35,62 @@ function stableId(input: string) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "")
     .slice(0, 64);
+}
+
+function extractHexes(text: string): string[] {
+  return text.match(/#[0-9a-fA-F]{6}/g) ?? [];
+}
+
+function pickPreviewImage(styleText: string): string {
+  const t = styleText.toLowerCase();
+  if (t.includes("glass")) return "/style-previews/glassmorphism.png";
+  if (t.includes("brutal")) return "/style-previews/brutalism.png";
+  if (t.includes("neo") || t.includes("neumorph") || t.includes("soft ui")) return "/style-previews/neumorphism.png";
+  if (t.includes("minimal")) return "/style-previews/minimalism.png";
+  if (t.includes("dark")) return "/style-previews/dark-mode.png";
+  return "/style-previews/minimalism.png";
+}
+
+function bundleFromHexes(opts: {
+  idSeed: string;
+  name: string;
+  description: string;
+  tags: string[];
+  styleTextForPreview: string;
+  hexes: string[];
+}): StyleBundle {
+  const paletteHex = (opts.hexes.length >= 5 ? opts.hexes.slice(0, 5) : []).concat(
+    ["#2563EB", "#22C55E", "#F8FAFC", "#FFFFFF", "#0F172A"].slice(Math.max(0, 5 - opts.hexes.length)),
+  );
+
+  return {
+    id: stableId(opts.idSeed),
+    name: opts.name,
+    description: opts.description,
+    previewImageUrl: pickPreviewImage(opts.styleTextForPreview),
+    palette: {
+      name: "UI/UX Pro Max",
+      swatches: [
+        { name: "Primary", hex: paletteHex[0]!, rgb: hexToRgb(paletteHex[0]!) },
+        { name: "Accent", hex: paletteHex[1]!, rgb: hexToRgb(paletteHex[1]!) },
+        { name: "Background", hex: paletteHex[2]!, rgb: hexToRgb(paletteHex[2]!) },
+        { name: "Surface", hex: paletteHex[3]!, rgb: hexToRgb(paletteHex[3]!) },
+        { name: "Text", hex: paletteHex[4]!, rgb: hexToRgb(paletteHex[4]!) },
+      ],
+    },
+    densityPreset: "comfortable",
+    tags: opts.tags,
+    designTokens: {
+      "theme.color.primary": paletteHex[0]!,
+      "theme.color.accent": paletteHex[1]!,
+      "theme.color.background": paletteHex[2]!,
+      "theme.color.surface": paletteHex[3]!,
+      "theme.color.text": paletteHex[4]!,
+      "theme.spacing.base": 10,
+      "theme.radius.md": 12,
+      "theme.shadow.card": "soft",
+    },
+  };
 }
 
 function fallbackBundles(): StyleBundle[] {
@@ -225,63 +282,155 @@ export const getStyleBundles = createTool({
     sources: z.array(z.object({ kind: z.string(), note: z.string() })).default([]),
   }),
   execute: async (inputData: any, context: any) => {
-    const queryText =
-      `Return 4 style+palette bundles for a ${inputData.dashboardKind} ` +
-      `${inputData.outcome} UI, audience=${inputData.audience}, platform=${inputData.platformType}. ` +
-      `Each bundle must include: name, brief description, and a 5-color palette (hex). ` +
-      `Prefer premium client-ready styles. Notes: ${inputData.notes ?? ""}`;
+    console.log("[TOOL][design.getStyleBundles] hybrid inputs:", inputData);
 
-    // Try vector search; if unavailable, fallback local.
-    let relevantText = "";
+    const bundles: StyleBundle[] = [];
     const sources: Array<{ kind: string; note: string }> = [];
 
+    // Primary: Generate design system
     try {
-      if (searchDesignKB) {
-        const rag = await callTool(
-          searchDesignKB,
-          { query: queryText, maxResults: 8 },
-          { requestContext: context?.requestContext ?? context ?? {} },
-        );
+      const primaryResult = await callTool(
+        generateDesignSystem,
+        { 
+          query: `${inputData.platformType} ${inputData.dashboardKind} ${inputData.audience} ${inputData.outcome} premium`,
+          format: "markdown"
+        },
+        { requestContext: context?.requestContext ?? context ?? {} }
+      );
 
-        const results = rag?.results ?? [];
-        relevantText = Array.isArray(results)
-          ? results
-              .map((r: any) => String(r?.content ?? ""))
-              .filter(Boolean)
-              .join("\n\n")
-          : "";
-        if (results.length > 0) {
-          sources.push({ kind: "vector", note: "searchDesignKB" });
+      const primaryOut = String(primaryResult?.output ?? "");
+      console.log("[TOOL][design.getStyleBundles] generateDesignSystem output chars:", primaryOut.length);
+
+      if (primaryOut) {
+        const hexes = extractHexes(primaryOut);
+        if (hexes.length >= 5) {
+          bundles.push(bundleFromHexes({
+            idSeed: "primary-generate",
+            name: "AI-Generated Design System",
+            description: `Primary design system for ${inputData.platformType} ${inputData.dashboardKind}`,
+            tags: [inputData.audience, inputData.outcome, "Generated"],
+            styleTextForPreview: primaryOut,
+            hexes
+          }));
+          sources.push({ kind: "python-generate", note: "generateDesignSystem" });
         }
-      } else {
-        relevantText = "";
       }
     } catch {
-      // ignore and fallback
+      // Handle errors silently, fall back to safe bundle later
     }
 
-    if (!relevantText) {
-      try {
-        const local = await callTool(
-          searchDesignKBLocal,
-          { queryText, maxChars: 8000 },
-          { requestContext: context?.requestContext ?? context ?? {} },
-        );
+    // Alternative 1: Style domain search
+    try {
+      const alt1Result = await callTool(
+        searchDesignDatabase,
+        { 
+          query: `${inputData.platformType} ${inputData.dashboardKind} premium`,
+          domain: "style",
+          maxResults: 3
+        },
+        { requestContext: context?.requestContext ?? context ?? {} }
+      );
 
-        relevantText = String(local?.relevantText ?? "");
-        if (local?.relevantText) {
-          sources.push({ kind: "local", note: "searchDesignKBLocal" });
+      const alt1Out = String(alt1Result?.output ?? "");
+      if (alt1Out) {
+        const hexes = extractHexes(alt1Out);
+        if (hexes.length >= 3) {
+          bundles.push(bundleFromHexes({
+            idSeed: "alt-style-premium",
+            name: "Premium Style Alternative",
+            description: `Alternative style for ${inputData.dashboardKind}`,
+            tags: [inputData.audience, "Style"],
+            styleTextForPreview: alt1Out,
+            hexes
+          }));
+          sources.push({ kind: "python-domain", note: "domain=style" });
         }
-      } catch {
-        // ignore and fallback
       }
+    } catch {
+      // Handle errors silently
     }
 
-    const parsed = parseBundlesFromText(relevantText);
-    const bundles = parsed ?? fallbackBundles();
+    // Alternative 2: Opposite aesthetic
+    try {
+      const oppositeStyle = inputData.audience === "client" ? "brutalism high-contrast" : "minimal";
+      const alt2Result = await callTool(
+        searchDesignDatabase,
+        { 
+          query: `${inputData.platformType} ${inputData.dashboardKind} ${oppositeStyle}`,
+          domain: "style",
+          maxResults: 2
+        },
+        { requestContext: context?.requestContext ?? context ?? {} }
+      );
 
+      const alt2Out = String(alt2Result?.output ?? "");
+      if (alt2Out) {
+        const hexes = extractHexes(alt2Out);
+        if (hexes.length >= 3) {
+          bundles.push(bundleFromHexes({
+            idSeed: "alt-opposite-aesthetic",
+            name: oppositeStyle === "minimal" ? "Minimal Alternative" : "Bold Alternative",
+            description: `Opposite aesthetic: ${oppositeStyle}`,
+            tags: ["Alternative", oppositeStyle.includes("minimal") ? "Clean" : "Bold"],
+            styleTextForPreview: alt2Out,
+            hexes
+          }));
+          sources.push({ kind: "python-domain", note: `domain=style (${oppositeStyle})` });
+        }
+      }
+    } catch {
+      // Handle errors silently
+    }
+
+    // Alternative 3: Platform-specific colors
+    try {
+      const alt3Result = await callTool(
+        searchDesignDatabase,
+        { 
+          query: `${inputData.platformType} dashboard ${inputData.outcome}`,
+          domain: "color",
+          maxResults: 2
+        },
+        { requestContext: context?.requestContext ?? context ?? {} }
+      );
+
+      const alt3Out = String(alt3Result?.output ?? "");
+      if (alt3Out) {
+        const hexes = extractHexes(alt3Out);
+        if (hexes.length >= 3) {
+          bundles.push(bundleFromHexes({
+            idSeed: "alt-platform-colors",
+            name: `${inputData.platformType} Color Palette`,
+            description: `Platform-specific colors for ${inputData.platformType}`,
+            tags: [inputData.platformType, "Colors"],
+            styleTextForPreview: alt3Out,
+            hexes
+          }));
+          sources.push({ kind: "python-domain", note: "domain=color" });
+        }
+      }
+    } catch {
+      // Handle errors silently
+    }
+
+    // Fill remaining slots with fallback bundles to ensure exactly 4 results
+    while (bundles.length < 4) {
+      const fallback = fallbackBundles();
+      const remaining = 4 - bundles.length;
+      for (let i = 0; i < remaining && i < fallback.length; i++) {
+        if (!bundles.find(b => b.name === fallback[i].name)) {
+          bundles.push(fallback[i]);
+          sources.push({ kind: "fallback", note: "Default safe bundle" });
+        }
+      }
+      if (bundles.length === 0) break; // Safety check
+    }
+
+    // Take exactly 4 bundles
+    const finalBundles = bundles.slice(0, 4);
+    
     // Validate output against schema before returning
-    const validated = z.array(StyleBundle).length(4).parse(bundles);
+    const validated = z.array(StyleBundle).length(4).parse(finalBundles);
 
     return { bundles: validated, sources };
   },

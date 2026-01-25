@@ -1,85 +1,74 @@
 
-import { createTool } from '@mastra/core/tools';
-import { z } from 'zod';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import path from 'path';
-
-const execAsync = promisify(exec);
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+import { getUiUxProMaxSearchScriptPath, runPythonSearch, shell } from "./_python";
 
 export const generateDesignSystem = createTool({
-  id: 'design-system.generateDesignSystem',
-  description: 'Generate a complete design system using UI/UX Pro Max Python script with --design-system flag',
+  id: "designSystem.generate",
+  description:
+    "Generate a complete UI/UX Pro Max design system using the local Python search script (--design-system).",
   inputSchema: z.object({
-    query: z.string().describe('Search query for design system generation'),
-    projectName: z.string().optional().describe('Optional project name for design system output'),
-    format: z.enum(['ascii', 'markdown']).optional().default('ascii').describe('Output format'),
-    persist: z.boolean().optional().default(false).describe('Whether to persist to design-system/ folder'),
-    page: z.string().optional().describe('Page-specific override (requires persist=true)'),
+    query: z.string().min(1),
+    projectName: z.string().optional(),
+    format: z.enum(["ascii", "markdown"]).default("ascii"),
+    persist: z.boolean().default(false),
+    page: z.string().optional(),
   }),
   outputSchema: z.object({
     success: z.boolean(),
     output: z.string(),
     error: z.string().optional(),
+    meta: z
+      .object({
+        scriptPath: z.string(),
+        commandHint: z.string(),
+      })
+      .optional(),
   }),
-  execute: async ({ context }) => {
-    const scriptPath = path.join(
-      process.cwd(),
-      '.agent',
-      'skills',
-      'ui-ux-pro-max',
-      'scripts',
-      'search.py'
-    );
-    
-    // Build command arguments
-    const args = ['python3', `"${scriptPath}"`, `"${context.query}"`, '--design-system'];
-    
-    if (context.projectName) {
-      args.push(`-p "${context.projectName}"`);
+  execute: async (inputData) => {
+    const scriptPath = getUiUxProMaxSearchScriptPath();
+
+    const args: string[] = [];
+    args.push(shell.shEscape(scriptPath));
+    args.push(shell.shEscape(inputData.query));
+    args.push("--design-system");
+    args.push("-f", shell.shEscape(inputData.format));
+
+    if (inputData.projectName) {
+      args.push("-p", shell.shEscape(inputData.projectName));
     }
-    
-    if (context.format) {
-      args.push(`-f ${context.format}`);
+    if (inputData.persist) {
+      args.push("--persist");
     }
-    
-    if (context.persist) {
-      args.push('--persist');
+    if (inputData.page) {
+      args.push("--page", shell.shEscape(inputData.page));
     }
-    
-    if (context.page) {
-      args.push(`--page "${context.page}"`);
-    }
-    
-    const command = args.join(' ');
-    
+
     try {
-      console.log('[TOOL] generateDesignSystem - Executing:', { query: context.query, projectName: context.projectName });
-      console.log('[TOOL] generateDesignSystem - Command:', command);
-      
-      const { stdout, stderr } = await execAsync(command, {
-        maxBuffer: 1024 * 1024 * 10, // 10MB buffer
-        cwd: process.cwd(),
-      });
-      
-      if (stderr) {
-        console.log('[TOOL] generateDesignSystem - Stderr:', stderr);
+      const { stdout, stderr } = await runPythonSearch(args);
+      const output = String(stdout || "").trim();
+
+      if (stderr?.trim()) {
+        console.log("[TOOL][designSystem.generate] stderr:", stderr.trim());
       }
-      
-      const output = stdout.trim();
-      console.log('[TOOL] generateDesignSystem - Output length:', output.length);
-      console.log('[TOOL] generateDesignSystem - Success: true');
-      
+
       return {
         success: true,
         output,
+        meta: {
+          scriptPath,
+          commandHint: `python3 "${scriptPath}" "${inputData.query}" --design-system`,
+        },
       };
-    } catch (error: any) {
-      console.log('[TOOL] generateDesignSystem - Error:', error.message);
+    } catch (e: any) {
       return {
         success: false,
-        output: '',
-        error: error.message,
+        output: "",
+        error: e?.message ?? "PYTHON_EXEC_FAILED",
+        meta: {
+          scriptPath,
+          commandHint: `python3 "${scriptPath}" "${inputData.query}" --design-system`,
+        },
       };
     }
   },
