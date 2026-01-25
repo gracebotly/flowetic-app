@@ -79,7 +79,6 @@ type GetOutcomesResult = {
   validation: {
     totalOutcomes: number;
     filteredOutcomes: number;
-    invalidMetrics?: string[];
   };
 };
 

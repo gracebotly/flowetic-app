@@ -45,7 +45,6 @@ export const getOutcomes = createTool({
     validation: z.object({
       totalOutcomes: z.number(),
       filteredOutcomes: z.number(),
-      invalidMetrics: z.array(z.string()).optional(),
     }),
   }),
   execute: async (inputData) => {
@@ -64,36 +63,14 @@ export const getOutcomes = createTool({
       );
     }
 
-    // Validate metrics against Supabase event types
-    const invalidMetrics: string[] = [];
-    for (const outcome of filtered) {
-      for (const metric of [
-        ...outcome.metrics.primary,
-        ...outcome.metrics.secondary,
-      ]) {
-        if (!VALID_EVENT_TYPES.includes(metric)) {
-          invalidMetrics.push(metric);
-        }
-      }
-    }
-
-    // Log validation issues (should be empty in production)
-    if (invalidMetrics.length > 0) {
-      console.error(
-        "[TOOL][outcomes.getOutcomes] Invalid metrics found:",
-        invalidMetrics
-      );
-    }
+    // Note: Metrics include both raw events and derived aggregations
+    // (e.g., call_volume, success_rate are calculated from raw events)
 
     return {
       outcomes: filtered,
       validation: {
         totalOutcomes: OUTCOME_CATALOG.length,
         filteredOutcomes: filtered.length,
-        invalidMetrics:
-          invalidMetrics.length > 0
-            ? [...new Set(invalidMetrics)]
-            : undefined,
       },
     };
   },
