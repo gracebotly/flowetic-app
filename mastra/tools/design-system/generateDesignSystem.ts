@@ -32,7 +32,7 @@ export const generateDesignSystem = createTool({
     args.push(shell.shEscape(scriptPath));
     args.push(shell.shEscape(inputData.query));
     args.push("--design-system");
-    args.push("-f", shell.shEscape(inputData.format));
+    args.push("-f", shell.shEscape(inputData.format ?? "ascii"));
 
     if (inputData.projectName) {
       args.push("-p", shell.shEscape(inputData.projectName));
