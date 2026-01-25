@@ -4,7 +4,7 @@ import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { openai } from "@ai-sdk/openai";
 import type { RequestContext } from "@mastra/core/request-context";
-import { searchDesignKB, searchDesignKBLocal } from "../tools/designAdvisor";
+import { searchDesignKBLocal } from "../tools/designAdvisor";
 import { todoAdd, todoList, todoUpdate, todoComplete } from "../tools/todo";
 import { getStyleBundles } from "../tools/design";
 
@@ -21,12 +21,12 @@ export const designAdvisorAgent: Agent = new Agent({
     const platformType = (requestContext.get("platformType") as string | undefined) ?? "make";
 
     // Load frontend-design skill
-    const frontendDesignSkill = await loadNamedSkillMarkdown("frontend-design");
+    const skill = await loadNamedSkillMarkdown("ui-ux-pro-max");
 
     return [
       {
         role: "system",
-        content: `Frontend-Design Skill.md:\n\n${frontendDesignSkill}`,
+        content: `UI/UX Pro Max Skill.md:\n\n${skill.content}`,
       },
       {
         role: "system",
@@ -35,9 +35,8 @@ export const designAdvisorAgent: Agent = new Agent({
           "Goal: Make the dashboard look polished, modern, and appropriate for the user's brand (e.g., law firm, healthcare, startup) while staying consistent with the GetFlowetic component system.\n\n" +
           "CRITICAL RULES:\n" +
           "- Never ask the user for tenantId, sourceId, interfaceId, threadId, versionId, or any UUID. Never mention internal identifiers.\n" +
-          "- Use RAG retrieval before giving design recommendations: call searchDesignKB with the user's style request.\n" +
-          "If searchDesignKB fails or returns empty context, fall back to searchDesignKBLocal (keyword-based) and proceed with conservative recommendations.\n" +
-          "- Never invent a design system. If retrieval is empty or low-quality, give conservative, broadly safe guidance and say it's a best-practice default.\n" +
+          "Local Python search tools: fallback to searchDesignKBLocal when needed. Never mention the underlying tools; give grounded UI/UX guidance.\n" +
+          "Never invent a design system. If retrieval is empty or low-quality, give conservative, broadly safe guidance and say it is a best-practice default.\n" +
           "- Prefer concrete edits: design tokens (colors, radius, spacing, typography), component prop defaults, and light layout tweaks.\n" +
           "- Do not show raw spec JSON unless explicitly requested.\n\n" +
           "PHASE GATING:\n" +
@@ -46,7 +45,7 @@ export const designAdvisorAgent: Agent = new Agent({
           "- Never change template/platform without router direction\n" +
           "- Never produce raw JSON unless asked\n\n" +
           "When the user asks to 'make it look more premium' or similar:\n" +
-          "1) Call searchDesignKB to retrieve relevant guidance.\n" +
+          "1) Call searchDesignKBLocal to retrieve relevant guidance.\n" +
           "2) Summarize recommendations in 5–10 bullets max.\n" +
           "3) If the user wants changes applied (or they say 'apply it' / 'do it'), then:\n" +
           "   a) Call getCurrentSpec\n" +
@@ -62,7 +61,8 @@ export const designAdvisorAgent: Agent = new Agent({
         role: "system",
         content:
           "Tools:\n" +
-          "- searchDesignKB: RAG search for grounded UI/UX guidance\n" +
+          "- Python UI/UX Pro Max tools: generate design systems and search design database\n" +
+          "- searchDesignKBLocal: keyword-based fallback for local HTML UI/UX assets\n" +
           "- getCurrentSpec/applySpecPatch/validateSpec/savePreviewVersion: deterministic spec editing pipeline\n",
       },
     ];
@@ -74,7 +74,6 @@ export const designAdvisorAgent: Agent = new Agent({
     },
   }),
   tools: {
-    searchDesignKB,
     searchDesignKBLocal,
     getStyleBundles,
     todoAdd,
