@@ -16,6 +16,7 @@ import { getStyleBundles } from "@/mastra/tools/design/getStyleBundles";
 import { applyInteractiveEdits } from "@/mastra/tools/interactiveEdit";
 import { getCurrentSpec, applySpecPatch } from "@/mastra/tools/specEditor";
 import { callTool } from "@/mastra/lib/callTool";
+import { getOutcomes } from "@/mastra/tools/outcomes";
 
 type JourneyMode =
   | "select_entity"
@@ -30,7 +31,7 @@ type ToolUi =
   | {
       type: "outcome_cards";
       title: string;
-      options: Array<{ id: "dashboard" | "product"; title: string; description: string }>;
+      options: Array<{ id: string; title: string; description: string; previewImageUrl?: string; tags?: string[] }>;
     }
   | {
       type: "storyboard_cards";
@@ -529,26 +530,26 @@ Journey phases:
     }
 
     // ------------------------------------------------------------------
-    // Phase: recommend (Phase 1 — deterministic 2 cards)
+    // Phase: recommend (Phase 1 — platform-specific outcomes)
     // ------------------------------------------------------------------
     if (effectiveMode === "recommend") {
+      // Get platform-specific outcomes from catalog
+      const outcomesResult = await callTool(
+        getOutcomes,
+        { platformType },
+        { requestContext: runtimeContext }
+      );
+
       const toolUi: ToolUi = {
         type: "outcome_cards",
         title: "Outcome + Monetization Strategy",
-        options: [
-          {
-            id: "dashboard",
-            title: "Client ROI Dashboard (Retention)",
-            description:
-              "Helps renew retainers, makes automation value visible weekly, and proves ROI to clients.",
-          },
-          {
-            id: "product",
-            title: "Workflow Product (SaaS wrapper)",
-            description:
-              "Sell access monthly, hide the underlying workflow, and provide a form/button UI to run it.",
-          },
-        ],
+        options: outcomesResult.outcomes.map((o) => ({
+          id: o.id,
+          title: o.name,
+          description: o.description,
+          previewImageUrl: o.previewImageUrl,
+          tags: o.tags,
+        })),
       };
 
       const workflowName = String(vibeContext?.displayName ?? vibeContext?.externalId ?? "").trim();

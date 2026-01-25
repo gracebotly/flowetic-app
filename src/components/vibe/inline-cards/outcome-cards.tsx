@@ -10,6 +10,8 @@ interface OutcomeCardsProps {
     id: string;
     title: string;
     description: string;
+    previewImageUrl?: string;
+    tags?: string[];
   }>;
   onSelect: (id: string) => void;
   onHelpDecide?: () => void;
@@ -41,6 +43,15 @@ export function OutcomeCards({ options, onSelect, onHelpDecide }: OutcomeCardsPr
             >
               <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/0 to-purple-500/0 group-hover:from-indigo-500/5 group-hover:to-purple-500/5 transition-all duration-500" />
               <div className="relative z-10">
+                {opt.previewImageUrl && (
+                  <div className="mb-4 rounded-lg overflow-hidden border border-gray-200">
+                    <img
+                      src={opt.previewImageUrl}
+                      alt={opt.title}
+                      className="w-full h-32 object-cover"
+                    />
+                  </div>
+                )}
                 <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white">
                   <Icon size={20} />
                 </div>
@@ -48,6 +59,19 @@ export function OutcomeCards({ options, onSelect, onHelpDecide }: OutcomeCardsPr
                   {opt.title}
                 </h3>
                 <p className="text-sm text-gray-600">{opt.description}</p>
+                
+                {opt.tags && opt.tags.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {opt.tags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-700"
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             </motion.button>
           );

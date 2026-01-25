@@ -1,0 +1,2 @@
+
+export { getOutcomes } from "./getOutcomes";
