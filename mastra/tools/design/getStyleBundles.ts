@@ -1,6 +1,5 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
-import { searchDesignKBLocal } from "@/mastra/tools/designAdvisor";
 import { generateDesignSystem, searchDesignDatabase } from "@/mastra/tools/design-system";
 import { callTool } from "../../lib/callTool";
 
@@ -281,157 +280,119 @@ export const getStyleBundles = createTool({
     bundles: z.array(StyleBundle).length(4),
     sources: z.array(z.object({ kind: z.string(), note: z.string() })).default([]),
   }),
-  execute: async (inputData: any, context: any) => {
-    console.log("[TOOL][design.getStyleBundles] hybrid inputs:", inputData);
+  execute: async (inputData, context) => {
+    console.log("[TOOL][design.getStyleBundles] HYBRID inputs:", inputData);
 
-    const bundles: StyleBundle[] = [];
+    const baseQuery =
+      `${inputData.platformType} ${inputData.dashboardKind} ` +
+      `${inputData.outcome} audience=${inputData.audience}. ` +
+      `Prefer premium client-ready style bundles. Notes: ${inputData.notes ?? ""}`;
+
+    // 1) Primary recommendation from design system generator
+    const primaryRes = await callTool(
+      generateDesignSystem,
+      { query: baseQuery, format: "markdown", persist: false },
+      { requestContext: (context as any)?.requestContext ?? (context as any) ?? {} }
+    );
+
+    const primaryText = primaryRes?.success ? String(primaryRes.output || "") : "";
+    console.log("[TOOL][design.getStyleBundles] primary chars:", primaryText.length);
+
+    // 2) Alternates via domain searches
+    const altStyleRes = await callTool(
+      searchDesignDatabase,
+      { query: `${inputData.platformType} premium dashboard style`, domain: "style", maxResults: 3 },
+      { requestContext: (context as any)?.requestContext ?? (context as any) ?? {} }
+    );
+    const oppositeStyleRes = await callTool(
+      searchDesignDatabase,
+      { query: `${inputData.platformType} high-contrast bold brutalism dashboard`, domain: "style", maxResults: 3 },
+      { requestContext: (context as any)?.requestContext ?? (context as any) ?? {} }
+    );
+    const platformColorRes = await callTool(
+      searchDesignDatabase,
+      { query: `${inputData.platformType} dashboard color palette`, domain: "color", maxResults: 3 },
+      { requestContext: (context as any)?.requestContext ?? (context as any) ?? {} }
+    );
+
+    const altStyleText = altStyleRes?.success ? String(altStyleRes.output || "") : "";
+    const oppositeStyleText = oppositeStyleRes?.success ? String(oppositeStyleRes.output || "") : "";
+    const platformColorText = platformColorRes?.success ? String(platformColorRes.output || "") : "";
+
     const sources: Array<{ kind: string; note: string }> = [];
+    sources.push({ kind: "python", note: "generateDesignSystem(--design-system -f markdown)" });
+    sources.push({ kind: "python", note: "searchDesignDatabase(--domain style)" });
+    sources.push({ kind: "python", note: "searchDesignDatabase(--domain color)" });
 
-    // Primary: Generate design system
-    try {
-      const primaryResult = await callTool(
-        generateDesignSystem,
-        { 
-          query: `${inputData.platformType} ${inputData.dashboardKind} ${inputData.audience} ${inputData.outcome} premium`,
-          format: "markdown"
-        },
-        { requestContext: context?.requestContext ?? context ?? {} }
+    // Build 4 bundles from extracted hexes; fallback per-card if needed
+    const bundles: StyleBundle[] = [];
+
+    const primaryHexes = extractHexes(primaryText);
+    if (primaryText && primaryHexes.length >= 3) {
+      bundles.push(
+        bundleFromHexes({
+          idSeed: "primary-design-system",
+          name: "Primary Recommendation",
+          description: "Recommended by UI/UX Pro Max design system generator.",
+          tags: ["Primary", "Recommended", "Client-ready"],
+          styleTextForPreview: primaryText,
+          hexes: primaryHexes,
+        }),
       );
-
-      const primaryOut = String(primaryResult?.output ?? "");
-      console.log("[TOOL][design.getStyleBundles] generateDesignSystem output chars:", primaryOut.length);
-
-      if (primaryOut) {
-        const hexes = extractHexes(primaryOut);
-        if (hexes.length >= 5) {
-          bundles.push(bundleFromHexes({
-            idSeed: "primary-generate",
-            name: "AI-Generated Design System",
-            description: `Primary design system for ${inputData.platformType} ${inputData.dashboardKind}`,
-            tags: [inputData.audience, inputData.outcome, "Generated"],
-            styleTextForPreview: primaryOut,
-            hexes
-          }));
-          sources.push({ kind: "python-generate", note: "generateDesignSystem" });
-        }
-      }
-    } catch {
-      // Handle errors silently, fall back to safe bundle later
+    } else {
+      bundles.push(fallbackBundles()[0]!);
     }
 
-    // Alternative 1: Style domain search
-    try {
-      const alt1Result = await callTool(
-        searchDesignDatabase,
-        { 
-          query: `${inputData.platformType} ${inputData.dashboardKind} premium`,
-          domain: "style",
-          maxResults: 3
-        },
-        { requestContext: context?.requestContext ?? context ?? {} }
+    const altHexes = extractHexes(altStyleText + "\n" + platformColorText);
+    if (altHexes.length >= 3) {
+      bundles.push(
+        bundleFromHexes({
+          idSeed: "alt-similar-style",
+          name: "Alternative (Similar)",
+          description: "Alternative premium style + compatible palette.",
+          tags: ["Alternative", "Premium", "Safe"],
+          styleTextForPreview: altStyleText,
+          hexes: altHexes,
+        }),
       );
-
-      const alt1Out = String(alt1Result?.output ?? "");
-      if (alt1Out) {
-        const hexes = extractHexes(alt1Out);
-        if (hexes.length >= 3) {
-          bundles.push(bundleFromHexes({
-            idSeed: "alt-style-premium",
-            name: "Premium Style Alternative",
-            description: `Alternative style for ${inputData.dashboardKind}`,
-            tags: [inputData.audience, "Style"],
-            styleTextForPreview: alt1Out,
-            hexes
-          }));
-          sources.push({ kind: "python-domain", note: "domain=style" });
-        }
-      }
-    } catch {
-      // Handle errors silently
+    } else {
+      bundles.push(fallbackBundles()[1]!);
     }
 
-    // Alternative 2: Opposite aesthetic
-    try {
-      const oppositeStyle = inputData.audience === "client" ? "brutalism high-contrast" : "minimal";
-      const alt2Result = await callTool(
-        searchDesignDatabase,
-        { 
-          query: `${inputData.platformType} ${inputData.dashboardKind} ${oppositeStyle}`,
-          domain: "style",
-          maxResults: 2
-        },
-        { requestContext: context?.requestContext ?? context ?? {} }
+    const oppHexes = extractHexes(oppositeStyleText + "\n" + platformColorText);
+    if (oppHexes.length >= 3) {
+      bundles.push(
+        bundleFromHexes({
+          idSeed: "opposite-aesthetic",
+          name: "Opposite Aesthetic",
+          description: "Contrasting look for stronger differentiation.",
+          tags: ["Opposite", "Bold", "Differentiated"],
+          styleTextForPreview: oppositeStyleText,
+          hexes: oppHexes,
+        }),
       );
-
-      const alt2Out = String(alt2Result?.output ?? "");
-      if (alt2Out) {
-        const hexes = extractHexes(alt2Out);
-        if (hexes.length >= 3) {
-          bundles.push(bundleFromHexes({
-            idSeed: "alt-opposite-aesthetic",
-            name: oppositeStyle === "minimal" ? "Minimal Alternative" : "Bold Alternative",
-            description: `Opposite aesthetic: ${oppositeStyle}`,
-            tags: ["Alternative", oppositeStyle.includes("minimal") ? "Clean" : "Bold"],
-            styleTextForPreview: alt2Out,
-            hexes
-          }));
-          sources.push({ kind: "python-domain", note: `domain=style (${oppositeStyle})` });
-        }
-      }
-    } catch {
-      // Handle errors silently
+    } else {
+      bundles.push(fallbackBundles()[2]!);
     }
 
-    // Alternative 3: Platform-specific colors
-    try {
-      const alt3Result = await callTool(
-        searchDesignDatabase,
-        { 
-          query: `${inputData.platformType} dashboard ${inputData.outcome}`,
-          domain: "color",
-          maxResults: 2
-        },
-        { requestContext: context?.requestContext ?? context ?? {} }
+    const platformHexes = extractHexes(platformColorText + "\n" + primaryText);
+    if (platformHexes.length >= 3) {
+      bundles.push(
+        bundleFromHexes({
+          idSeed: "platform-specific",
+          name: "Platform-Specific",
+          description: "Palette aligned with your platform + matching style.",
+          tags: ["Platform", "Aligned", "Consistent"],
+          styleTextForPreview: primaryText,
+          hexes: platformHexes,
+        }),
       );
-
-      const alt3Out = String(alt3Result?.output ?? "");
-      if (alt3Out) {
-        const hexes = extractHexes(alt3Out);
-        if (hexes.length >= 3) {
-          bundles.push(bundleFromHexes({
-            idSeed: "alt-platform-colors",
-            name: `${inputData.platformType} Color Palette`,
-            description: `Platform-specific colors for ${inputData.platformType}`,
-            tags: [inputData.platformType, "Colors"],
-            styleTextForPreview: alt3Out,
-            hexes
-          }));
-          sources.push({ kind: "python-domain", note: "domain=color" });
-        }
-      }
-    } catch {
-      // Handle errors silently
+    } else {
+      bundles.push(fallbackBundles()[3]!);
     }
 
-    // Fill remaining slots with fallback bundles to ensure exactly 4 results
-    while (bundles.length < 4) {
-      const fallback = fallbackBundles();
-      const remaining = 4 - bundles.length;
-      for (let i = 0; i < remaining && i < fallback.length; i++) {
-        if (!bundles.find(b => b.name === fallback[i].name)) {
-          bundles.push(fallback[i]);
-          sources.push({ kind: "fallback", note: "Default safe bundle" });
-        }
-      }
-      if (bundles.length === 0) break; // Safety check
-    }
-
-    // Take exactly 4 bundles
-    const finalBundles = bundles.slice(0, 4);
-    
     // Validate output against schema before returning
-    const validated = z.array(StyleBundle).length(4).parse(finalBundles);
-
+    const validated = z.array(StyleBundle).length(4).parse(bundles);
     return { bundles: validated, sources };
   },
 });

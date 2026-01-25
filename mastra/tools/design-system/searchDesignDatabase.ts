@@ -2,7 +2,7 @@
 
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
-import { getUiUxProMaxSearchScriptPath, runPythonSearch, shell } from "./_python";
+import { getUiUxProMaxSearchScriptPath, runPython, shell } from "./_python";
 
 const Domain = z.enum(["style", "color", "typography", "landing", "chart", "ux", "product", "icons"]);
 const Stack = z.enum([
@@ -20,8 +20,7 @@ const Stack = z.enum([
 
 export const searchDesignDatabase = createTool({
   id: "designDatabase.search",
-  description:
-    "Search UI/UX Pro Max CSV knowledge base via the local Python search script (domain or stack search).",
+  description: "Search UI/UX Pro Max via local Python (domain or stack search).",
   inputSchema: z.object({
     query: z.string().min(1),
     domain: Domain.optional(),
@@ -56,26 +55,18 @@ export const searchDesignDatabase = createTool({
       args.push("--stack", shell.shEscape(inputData.stack));
     }
 
-    args.push("-n", shell.shEscape(String(inputData.maxResults)));
+    args.push("-n", shell.shEscape(String(inputData.maxResults ?? 3)));
 
     try {
-      const { stdout, stderr } = await runPythonSearch(args);
-      const output = String(stdout || "").trim();
-
-      if (stderr?.trim()) {
-        console.log("[TOOL][designDatabase.search] stderr:", stderr.trim());
-      }
+      const { stdout, stderr } = await runPython(args);
+      if (stderr?.trim()) console.log("[TOOL][designDatabase.search] stderr:", stderr.trim());
 
       return {
         success: true,
-        output,
+        output: String(stdout || "").trim(),
         meta: {
           scriptPath,
-          used: {
-            domain: inputData.domain,
-            stack: inputData.stack,
-            maxResults: inputData.maxResults ?? 3,
-          },
+          used: { domain: inputData.domain, stack: inputData.stack, maxResults: inputData.maxResults ?? 3 },
         },
       };
     } catch (e: any) {
@@ -85,11 +76,7 @@ export const searchDesignDatabase = createTool({
         error: e?.message ?? "PYTHON_EXEC_FAILED",
         meta: {
           scriptPath,
-          used: {
-            domain: inputData.domain,
-            stack: inputData.stack,
-            maxResults: inputData.maxResults ?? 3,
-          },
+          used: { domain: inputData.domain, stack: inputData.stack, maxResults: inputData.maxResults ?? 3 },
         },
       };
     }
