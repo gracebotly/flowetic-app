@@ -17,12 +17,6 @@ export const generateDesignSystem = createTool({
     success: z.boolean(),
     output: z.string(),
     error: z.string().optional(),
-    meta: z
-      .object({
-        python: z.string(),
-        scriptPath: z.string(),
-      })
-      .optional(),
   }),
   execute: async (inputData) => {
     const scriptPath = getUiUxProMaxSearchScriptPath();
@@ -31,7 +25,7 @@ export const generateDesignSystem = createTool({
     args.push(shell.shEscape(scriptPath));
     args.push(shell.shEscape(inputData.query));
     args.push("--design-system");
-    args.push("-f", shell.shEscape(inputData.format || "markdown"));
+    args.push("-f", shell.shEscape(inputData.format));
 
     if (inputData.projectName) args.push("-p", shell.shEscape(inputData.projectName));
     if (inputData.persist) args.push("--persist");
@@ -40,19 +34,9 @@ export const generateDesignSystem = createTool({
     try {
       const { stdout, stderr } = await runPython(args);
       if (stderr?.trim()) console.log("[TOOL][designSystem.generate] stderr:", stderr.trim());
-
-      return {
-        success: true,
-        output: String(stdout || "").trim(),
-        meta: { python: process.platform === "win32" ? "py" : "python3", scriptPath },
-      };
+      return { success: true, output: String(stdout || "").trim() };
     } catch (e: any) {
-      return {
-        success: false,
-        output: "",
-        error: e?.message ?? "PYTHON_EXEC_FAILED",
-        meta: { python: process.platform === "win32" ? "py" : "python3", scriptPath },
-      };
+      return { success: false, output: "", error: e?.message ?? "PYTHON_EXEC_FAILED" };
     }
   },
 });
