@@ -26,7 +26,7 @@ export const searchDesignDatabase = createTool({
     args.push(shell.shEscape(scriptPath));
     args.push(shell.shEscape(inputData.query));
     args.push("--domain", shell.shEscape(inputData.domain));
-    args.push("-n", shell.shEscape(String(inputData.maxResults)));
+    args.push("-n", shell.shEscape(String(inputData.maxResults ?? 3)));
 
     try {
       const { stdout, stderr } = await runPython(args);
