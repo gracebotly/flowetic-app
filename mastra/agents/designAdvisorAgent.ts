@@ -21,12 +21,12 @@ export const designAdvisorAgent: Agent = new Agent({
     const platformType = (requestContext.get("platformType") as string | undefined) ?? "make";
 
     // Load frontend-design skill
-    const frontendDesignSkill = await loadNamedSkillMarkdown("frontend-design");
+    const frontendDesignSkill = await loadNamedSkillMarkdown("ui-ux-pro-max");
 
     return [
       {
         role: "system",
-        content: `Frontend-Design Skill.md:\n\n${frontendDesignSkill}`,
+        content: `UI/UX Pro Max Skill:\n\n${frontendDesignSkill.content}`,
       },
       {
         role: "system",
