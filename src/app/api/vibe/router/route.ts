@@ -57,6 +57,32 @@ type ToolUi =
       density: "compact" | "comfortable" | "spacious";
     };
 
+// Type definition for getOutcomes tool result
+// Matches the outputSchema defined in mastra/tools/outcomes/getOutcomes.ts
+type GetOutcomesResult = {
+  outcomes: Array<{
+    id: string;
+    name: string;
+    description: string;
+    platformTypes: string[];
+    category: "dashboard" | "product" | "operations";
+    audience: "client" | "internal" | "both";
+    metrics: {
+      primary: string[];
+      secondary: string[];
+    };
+    previewImageUrl: string;
+    tags: string[];
+    supportedEventTypes: string[];
+    requiredEntityKinds?: string[];
+  }>;
+  validation: {
+    totalOutcomes: number;
+    filteredOutcomes: number;
+    invalidMetrics?: string[];
+  };
+};
+
 function isAction(msg: string) {
   return msg.startsWith("__ACTION__:");
 }
@@ -534,11 +560,11 @@ Journey phases:
     // ------------------------------------------------------------------
     if (effectiveMode === "recommend") {
       // Get platform-specific outcomes from catalog
-      const outcomesResult = await callTool(
+      const outcomesResult = (await callTool(
         getOutcomes,
         { platformType },
         { requestContext: runtimeContext }
-      );
+      )) as GetOutcomesResult;
 
       const toolUi: ToolUi = {
         type: "outcome_cards",
