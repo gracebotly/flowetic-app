@@ -39,7 +39,7 @@ const mastraActionAdapter = {
 };
 
 // CopilotKit runtime endpoint
-export const runtime = 'edge';
+export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
   const copilotKit = new CopilotRuntime({
