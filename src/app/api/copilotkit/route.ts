@@ -28,3 +28,5 @@ export const POST = async (req: NextRequest) => {
 
   return handleRequest(req);
 };
+
+export const OPTIONS = async () => new Response(null, { status: 204 });
