@@ -1,5 +1,5 @@
 import { Mastra } from "@mastra/core/mastra";
-import { LibSQLStore } from "@mastra/libsql";
+import { mastraStorage } from "./lib/storage";
 
 
 import { masterRouterAgent } from "./agents/masterRouterAgent";
@@ -12,11 +12,7 @@ import { connectionBackfillWorkflow } from "./workflows/connectionBackfill";
 import { deployDashboardWorkflow } from "./workflows/deployDashboard";
 
 export const mastra = new Mastra({
-  storage: new LibSQLStore({
-    id: "mastra-storage",
-    url: process.env.MASTRA_STORAGE_URL || "file:./mastra.db",
-    authToken: process.env.TURSO_AUTH_TOKEN,
-  }),
+  storage: mastraStorage,
   agents: {
     masterRouterAgent,
     platformMappingMaster,
