@@ -1,7 +1,11 @@
-import { LibSQLStore } from "@mastra/libsql";
+import { PostgresStore } from "@mastra/pg";
 
-export const mastraStorage = new LibSQLStore({
-  id: "mastra-storage",
-  url: process.env.MASTRA_STORAGE_URL || "file:./mastra.db",
-  authToken: process.env.TURSO_AUTH_TOKEN,
+const url = process.env.DATABASE_URL;
+if (!url) {
+  throw new Error("DATABASE_URL is required (Mastra PostgresStore).");
+}
+
+export const mastraStorage = new PostgresStore({
+  id: "flowetic-pg",
+  connectionString: url,
 });
