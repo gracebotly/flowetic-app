@@ -210,7 +210,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (wantsPreview || wantsMapping) {
-      const mappingAgent = mastra.getAgent("platformMappingMaster") as any;
+      const mappingAgent = (mastra.getAgent as any)("platformMappingMaster");
       if (!mappingAgent) {
         return new Response(
           JSON.stringify({
