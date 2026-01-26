@@ -1,6 +1,7 @@
 import { Mastra } from "@mastra/core/mastra";
 import { LibSQLStore } from "@mastra/libsql";
 
+import { ZaiGateway } from "./gateways/zaiGateway";
 import { masterRouterAgent } from "./agents/masterRouterAgent";
 import { platformMappingMaster } from "./agents/platformMappingMaster";
 import { dashboardBuilderAgent } from "./agents/dashboardBuilderAgent";
@@ -16,6 +17,9 @@ export const mastra = new Mastra({
     url: process.env.MASTRA_STORAGE_URL || "file:./mastra.db",
     authToken: process.env.TURSO_AUTH_TOKEN,
   }),
+  gateways: {
+    zai: new ZaiGateway(),
+  },
   agents: {
     masterRouterAgent,
     platformMappingMaster,
