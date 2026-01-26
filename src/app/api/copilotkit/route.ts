@@ -18,6 +18,8 @@ export const POST = async (req: NextRequest) => {
       default: vibeRouterAgent,
       // Canonical Flowetic agent id
       vibe: vibeRouterAgent,
+      // REQUIRED for UI components calling useAgent("vibeRouterAgent")
+      vibeRouterAgent: vibeRouterAgent,
     },
   });
 
