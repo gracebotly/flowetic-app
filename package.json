@@ -73,7 +73,6 @@
   },
   "overrides": {
     "@mastra/core": "1.0.4",
-    "@ag-ui/mastra/@mastra/core": "1.0.4",
     "@mastra/client-js/@mastra/core": "1.0.4",
     "@mastra/rag/@mastra/core": "1.0.4",
     "@mastra/libsql": "1.0.0",
