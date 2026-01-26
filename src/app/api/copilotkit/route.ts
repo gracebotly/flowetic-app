@@ -43,7 +43,7 @@ export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
   const copilotKit = new CopilotRuntime({
-    actions: mastraActionAdapter.actions,
+    actions: mastraActionAdapter.actions as unknown as any,
   });
 
   return copilotKit.serve(req);
