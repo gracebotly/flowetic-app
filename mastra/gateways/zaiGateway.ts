@@ -1,7 +1,4 @@
-
-
-
-import { MastraModelGateway } from "@mastra/core/gateway";
+import { MastraModelGateway } from "@mastra/core/llm";
 import type { LanguageModelV2 } from "ai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 
@@ -33,5 +30,3 @@ export class ZaiGateway extends MastraModelGateway {
     return provider(modelId);
   }
 }
-
-
