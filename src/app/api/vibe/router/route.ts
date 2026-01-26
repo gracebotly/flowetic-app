@@ -36,7 +36,7 @@ function toMetricId(label: string): string {
     .replace(/^_+|_+$/g, "");
 }
 
-function uniqueStringsByMetricId(labels: string[]): string[] {
+function dedupeStringsByMetricId(labels: string[]): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
   for (const l of labels) {
@@ -44,20 +44,7 @@ function uniqueStringsByMetricId(labels: string[]): string[] {
     if (!id) continue;
     if (seen.has(id)) continue;
     seen.add(id);
-    out.push(id);
-  }
-  return out;
-}
-
-function uniqueByMetricId<T extends { id?: string; label?: string }>(items: T[]): T[] {
-  const seen = new Set<string>();
-  const out: T[] = [];
-  for (const it of items) {
-    const id = toMetricId((it.id ?? it.label ?? "") as string);
-    if (!id) continue;
-    if (seen.has(id)) continue;
-    seen.add(id);
-    out.push({ ...it, id } as T);
+    out.push(l);
   }
   return out;
 }
@@ -354,19 +341,19 @@ Journey phases:
               id: "roi_proof",
               title: "ROI Proof (Client-facing)",
               description: "Prove automation value and time saved to drive renewals.",
-              kpis: ["Tasks automated", "Time saved", "Success rate", "Executions over time", "Most recent runs"],
+              kpis: dedupeStringsByMetricId(["Tasks automated", "Time saved", "Success rate", "Executions over time", "Most recent runs"]),
             },
             {
               id: "reliability_ops",
               title: "Reliability Ops (Agency-facing)",
               description: "Operate and debug reliability across workflows quickly.",
-              kpis: ["Failure count", "Success rate", "Recent errors", "Avg runtime", "Slowest runs"],
+              kpis: dedupeStringsByMetricId(["Failure count", "Success rate", "Recent errors", "Avg runtime", "Slowest runs"]),
             },
             {
               id: "delivery_sla",
               title: "Delivery / SLA (Client-facing)",
               description: "Show delivery health and turnaround time trends.",
-              kpis: ["Runs completed", "Avg turnaround time", "Incidents this week", "Last successful run", "Status trend"],
+              kpis: dedupeStringsByMetricId(["Runs completed", "Avg turnaround time", "Incidents this week", "Last successful run", "Status trend"]),
             },
           ],
         };
@@ -419,19 +406,19 @@ Journey phases:
             id: "roi_proof",
             title: "ROI Proof (Client-facing)",
             description: "Prove automation value and time saved to drive renewals.",
-            kpis: ["Tasks automated", "Time saved", "Success rate", "Executions over time", "Most recent runs"],
+            kpis: dedupeStringsByMetricId(["Tasks automated", "Time saved", "Success rate", "Executions over time", "Most recent runs"]),
           },
           {
             id: "reliability_ops",
             title: "Reliability Ops (Agency-facing)",
             description: "Operate and debug reliability across workflows quickly.",
-            kpis: ["Failure count", "Success rate", "Recent errors", "Avg runtime", "Slowest runs"],
+            kpis: dedupeStringsByMetricId(["Failure count", "Success rate", "Recent errors", "Avg runtime", "Slowest runs"]),
           },
           {
             id: "delivery_sla",
             title: "Delivery / SLA (Client-facing)",
             description: "Show delivery health and turnaround time trends.",
-            kpis: ["Runs completed", "Avg turnaround time", "Incidents this week", "Last successful run", "Status trend"],
+            kpis: dedupeStringsByMetricId(["Runs completed", "Avg turnaround time", "Incidents this week", "Last successful run", "Status trend"]),
           },
         ],
       };
@@ -667,19 +654,19 @@ Journey phases:
             id: "roi_proof",
             title: "ROI Proof (Client-facing)",
             description: "Prove automation value and time saved to drive renewals.",
-            kpis: ["Tasks automated", "Time saved", "Success rate", "Executions over time", "Most recent runs"],
+            kpis: dedupeStringsByMetricId(["Tasks automated", "Time saved", "Success rate", "Executions over time", "Most recent runs"]),
           },
           {
             id: "reliability_ops",
             title: "Reliability Ops (Agency-facing)",
             description: "Operate and debug reliability across workflows quickly.",
-            kpis: ["Failure count", "Success rate", "Recent errors", "Avg runtime", "Slowest runs"],
+            kpis: dedupeStringsByMetricId(["Failure count", "Success rate", "Recent errors", "Avg runtime", "Slowest runs"]),
           },
           {
             id: "delivery_sla",
             title: "Delivery / SLA (Client-facing)",
             description: "Show delivery health and turnaround time trends.",
-            kpis: ["Runs completed", "Avg turnaround time", "Incidents this week", "Last successful run", "Status trend"],
+            kpis: dedupeStringsByMetricId(["Runs completed", "Avg turnaround time", "Incidents this week", "Last successful run", "Status trend"]),
           },
         ],
       };
@@ -991,8 +978,28 @@ Journey phases:
       vibeContext: { ...(vibeContext ?? {}), skillMD },
     });
   } catch (err: any) {
+    const message = String(err?.message || "UNKNOWN_ROUTER_ERROR");
+    const stack = typeof err?.stack === "string" ? err.stack : undefined;
+
+    // Log to Vercel for immediate visibility
+    console.error("[api/vibe/router] error", {
+      message,
+      stack,
+      name: err?.name,
+      code: err?.code,
+      cause: err?.cause,
+    });
+
     return NextResponse.json(
-      { error: err?.message ?? "UNKNOWN_ROUTER_ERROR" },
+      {
+        error: message,
+        details: {
+          name: err?.name,
+          code: err?.code,
+          // stack is included only to speed up debugging; remove later if desired
+          stack,
+        },
+      },
       { status: 500 }
     );
   }

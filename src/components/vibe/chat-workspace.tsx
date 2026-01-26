@@ -286,8 +286,6 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
   try {
     const supabase = createClient();
 
-    // source_entities primary identity: (tenant_id, source_id, external_id)
-    // In this UI, ctx.entityId is used as the external_id for the selected entity/workflow.
     const externalId = String(entityId || "").trim();
     if (!externalId) return "";
 
