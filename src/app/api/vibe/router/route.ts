@@ -3,6 +3,8 @@
 import { NextRequest, NextResponse } from "next/server";
 // import { RequestContext } from "@mastra/core/request-context"; // Removed - invalid import
 import { createClient } from "@/lib/supabase/server";
+
+export const runtime = "nodejs";
 import { loadSkill } from "@/mastra/skills/loadSkill";
 import { z } from "zod";
 
@@ -140,6 +142,15 @@ const NO_ROADMAP_RULES = [
 ].join("\n");
 
 export async function POST(req: NextRequest) {
+  const databaseUrl = process.env.DATABASE_URL;
+
+  if (!databaseUrl) {
+    return new Response(
+      JSON.stringify({ ok: false, error: "DATABASE_URL_MISSING" }),
+      { status: 500, headers: { "Content-Type": "application/json" } },
+    );
+  }
+
   try {
     const body = await req.json();
 
