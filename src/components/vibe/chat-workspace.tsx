@@ -286,14 +286,13 @@ export function ChatWorkspace({
   try {
     const supabase = createClient();
     
-    // Query indexed_entities for the skillMD
+    // Query source_entities for the skillMD
     const { data, error } = await supabase
-      .from('indexed_entities')
-      .select('skill_md')
+      .from('source_entities')
+      .select('skill_md,entity_kind,external_id,display_name,last_seen_at')
       .eq('tenant_id', authContext.tenantId)
-      .eq('platform_type', platformType)
       .eq('source_id', sourceId)
-      .eq('entity_id', entityId || '')
+      .eq('external_id', entityId || '')
       .maybeSingle();
 
     if (error) {

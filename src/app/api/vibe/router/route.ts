@@ -27,6 +27,29 @@ type JourneyMode =
   | "interactive_edit"
   | "deploy";
 
+// Helper functions for metric deduplication
+function toMetricId(label: string): string {
+  return String(label || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[%]/g, " percent")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function uniqueByKey<T>(items: T[], keyFn: (item: T) => string): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const it of items) {
+    const k = keyFn(it);
+    if (!k) continue;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(it);
+  }
+  return out;
+}
+
 type ToolUi =
   | {
       type: "outcome_cards";
