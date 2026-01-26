@@ -1,16 +1,18 @@
-import { Mastra } from '@mastra/core/mastra';
-import { PostgresStore } from '@mastra/pg';
-import { vibeRouterAgent } from '@/lib/copilotkit/vibe-router-agent';
+import { Mastra } from "@mastra/core/mastra";
+import { vibeRouterAgent } from "@/lib/copilotkit/vibe-router-agent";
+import { getMastraStorage } from "./lib/storage";
 
-// Create Postgres storage
-const mastraStorage = new PostgresStore({
-  id: 'flowetic-pg',
-  connectionString: process.env.DATABASE_URL!,
-});
+let _mastra: Mastra | null = null;
 
-export const mastra = new Mastra({
-  storage: mastraStorage,
-  agents: {
-    vibeRouterAgent,
-  },
-});
+export function getMastra(): Mastra {
+  if (_mastra) return _mastra;
+
+  _mastra = new Mastra({
+    storage: getMastraStorage(),
+    agents: {
+      vibeRouterAgent,
+    },
+  });
+
+  return _mastra;
+}

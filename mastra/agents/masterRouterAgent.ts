@@ -2,7 +2,7 @@
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { glm47Model } from "../lib/models/glm47";
-import { mastraStorage } from "../lib/storage";
+import { getMastraStorage } from "../lib/storage";
 import type { RequestContext } from "@mastra/core/request-context";
 import { loadSkillMarkdown, loadNamedSkillMarkdown, PlatformType } from "../skills/loadSkill";
 
@@ -132,7 +132,7 @@ export const masterRouterAgent: Agent = new Agent({
   },
 
   memory: new Memory({
-    storage: mastraStorage,
+    storage: getMastraStorage(),
     options: {
       lastMessages: 20,
     },

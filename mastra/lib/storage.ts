@@ -1,11 +1,19 @@
 import { PostgresStore } from "@mastra/pg";
 
-const url = process.env.DATABASE_URL;
-if (!url) {
-  throw new Error("DATABASE_URL is required (Mastra PostgresStore).");
-}
+let _store: PostgresStore | null = null;
 
-export const mastraStorage = new PostgresStore({
-  id: "flowetic-pg",
-  connectionString: url,
-});
+export function getMastraStorage(): PostgresStore {
+  if (_store) return _store;
+
+  const url = String(process.env.DATABASE_URL || "").trim();
+  if (!url) {
+    throw new Error("DATABASE_URL is required (Mastra PostgresStore).");
+  }
+
+  _store = new PostgresStore({
+    id: "flowetic-pg",
+    connectionString: url,
+  });
+
+  return _store;
+}

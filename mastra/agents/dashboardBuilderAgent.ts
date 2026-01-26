@@ -1,7 +1,7 @@
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { glm47Model } from "../lib/models/glm47";
-import { mastraStorage } from "../lib/storage";
+import { getMastraStorage } from "../lib/storage";
 import type { RequestContext } from "@mastra/core/request-context";
 import {
   getCurrentSpec,
@@ -58,7 +58,7 @@ export const dashboardBuilderAgent: Agent = new Agent({
   },
   model: glm47Model(),
   memory: new Memory({
-    storage: mastraStorage,
+    storage: getMastraStorage(),
     options: {
       lastMessages: 20,
     },
