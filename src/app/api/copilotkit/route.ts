@@ -1,62 +1,33 @@
 
-import { CopilotRuntime } from '@copilotkit/runtime';
-import { mastra } from '@/mastra';
-import { NextRequest } from 'next/server';
+import { NextRequest } from "next/server";
+import {
+  CopilotRuntime,
+  ExperimentalEmptyAdapter,
+  copilotRuntimeNextJSAppRouterEndpoint,
+} from "@copilotkit/runtime";
+import { vibeRouterAgent } from "@/lib/copilotkit/vibe-router-agent";
 
-// Custom action adapter to bridge CopilotKit with Mastra agent
-const mastraActionAdapter = {
-  actions: [
-    {
-      name: 'vibeRouterAgent',
-      description: 'Routes user messages to appropriate vibe',
-      parameters: {
-        type: 'object',
-        properties: {
-          message: {
-            type: 'string',
-            description: 'The user message to process',
-          },
-        },
-        required: ['message'],
-      },
-      handler: async ({ message }: { message: string }) => {
-        const agent = mastra.getAgent('vibeRouterAgent');
-        if (!agent) {
-          throw new Error('Agent not found');
-        }
-        
-        const result = await agent.generate([
-          {
-            role: 'user',
-            content: message,
-          },
-        ]);
 
-        return result.text;
-      },
+export const runtime = "nodejs";
+
+
+export const POST = async (req: NextRequest) => {
+  const copilotRuntime = new CopilotRuntime({
+    agents: {
+      // Alias for clients/components that default to "default"
+      default: vibeRouterAgent,
+      // Canonical Flowetic agent id
+      vibe: vibeRouterAgent,
     },
-  ],
+  });
+
+
+  const { handleRequest } = copilotRuntimeNextJSAppRouterEndpoint({
+    runtime: copilotRuntime,
+    serviceAdapter: new ExperimentalEmptyAdapter(),
+    endpoint: "/api/copilotkit",
+  });
+
+
+  return handleRequest(req);
 };
-
-// CopilotKit runtime endpoint
-export const runtime = 'nodejs';
-
-export async function POST(req: NextRequest) {
-  const copilotKit = new CopilotRuntime({
-    actions: mastraActionAdapter.actions as unknown as any,
-  });
-
-  return copilotKit.serve(req);
-}
-
-export async function GET() {
-  const agents = mastra.listAgents();
-  
-  return Response.json({
-    agents: agents.map((agent) => ({
-      id: agent.id,
-      name: agent.name,
-      description: agent.description,
-    })),
-  });
-}
