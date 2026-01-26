@@ -27,7 +27,6 @@ type JourneyMode =
   | "interactive_edit"
   | "deploy";
 
-// Helper functions for metric deduplication
 function toMetricId(label: string): string {
   return String(label || "")
     .trim()
@@ -37,15 +36,28 @@ function toMetricId(label: string): string {
     .replace(/^_+|_+$/g, "");
 }
 
-function uniqueByKey<T>(items: T[], keyFn: (item: T) => string): T[] {
+function uniqueStringsByMetricId(labels: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const l of labels) {
+    const id = toMetricId(l);
+    if (!id) continue;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
+function uniqueByMetricId<T extends { id?: string; label?: string }>(items: T[]): T[] {
   const seen = new Set<string>();
   const out: T[] = [];
   for (const it of items) {
-    const k = keyFn(it);
-    if (!k) continue;
-    if (seen.has(k)) continue;
-    seen.add(k);
-    out.push(it);
+    const id = toMetricId((it.id ?? it.label ?? "") as string);
+    if (!id) continue;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push({ ...it, id } as T);
   }
   return out;
 }

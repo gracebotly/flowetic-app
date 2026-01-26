@@ -278,31 +278,35 @@ export function ChatWorkspace({
 
   
 
-  async function loadSkillMD(platformType: string, sourceId: string, entityId?: string) {
+async function loadSkillMD(platformType: string, sourceId: string, entityId?: string) {
   if (!authContext.tenantId || !platformType || !sourceId) {
     return "";
   }
 
   try {
     const supabase = createClient();
-    
-    // Query source_entities for the skillMD
+
+    // source_entities primary identity: (tenant_id, source_id, external_id)
+    // In this UI, ctx.entityId is used as the external_id for the selected entity/workflow.
+    const externalId = String(entityId || "").trim();
+    if (!externalId) return "";
+
     const { data, error } = await supabase
-      .from('source_entities')
-      .select('skill_md,entity_kind,external_id,display_name,last_seen_at')
-      .eq('tenant_id', authContext.tenantId)
-      .eq('source_id', sourceId)
-      .eq('external_id', entityId || '')
+      .from("source_entities")
+      .select("skill_md")
+      .eq("tenant_id", authContext.tenantId)
+      .eq("source_id", sourceId)
+      .eq("external_id", externalId)
       .maybeSingle();
 
     if (error) {
-      console.error('Error loading skillMD:', error);
+      console.error("[vibe] Error loading skillMD:", error);
       return "";
     }
 
-    return data?.skill_md || "";
+    return (data?.skill_md as string) || "";
   } catch (e) {
-    console.error('Failed to load skillMD:', e);
+    console.error("[vibe] Failed to load skillMD:", e);
     return "";
   }
 }
