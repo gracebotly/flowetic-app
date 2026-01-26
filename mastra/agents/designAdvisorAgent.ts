@@ -2,7 +2,8 @@
 
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
-import { openai } from "@ai-sdk/openai";
+import { glm47Model } from "../lib/models/glm47";
+import { getMastraStorage } from "../lib/storage";
 import type { RequestContext } from "@mastra/core/request-context";
 import { searchDesignKBLocal } from "../tools/designAdvisor";
 import { todoAdd, todoList, todoUpdate, todoComplete } from "../tools/todo";
@@ -67,8 +68,9 @@ export const designAdvisorAgent: Agent = new Agent({
       },
     ];
   },
-  model: openai("gpt-4o"),
+  model: glm47Model(),
   memory: new Memory({
+    storage: getMastraStorage(),
     options: {
       lastMessages: 20,
     },

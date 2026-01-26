@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 // import { RequestContext } from "@mastra/core/request-context"; // Removed - invalid import
-import { mastra } from "@/mastra";
 import { createClient } from "@/lib/supabase/server";
+import { getMastra } from "@/mastra";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,6 +30,7 @@ function detectIntent(message: string) {
 }
 
 export async function POST(req: NextRequest) {
+  const mastra = getMastra();
   const supabase = await createClient();
 
   try {
@@ -152,7 +153,7 @@ export async function POST(req: NextRequest) {
     } as any;
 
     // 5) Always start with Master Router
-    const master = mastra.getAgent("masterRouterAgent");
+    const master = mastra.getAgent("vibeRouterAgent" as const);
     if (!master) {
       return new Response(
         JSON.stringify({
@@ -210,7 +211,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (wantsPreview || wantsMapping) {
-      const mappingAgent = mastra.getAgent("platformMappingMaster");
+      const mappingAgent = (mastra.getAgent as any)("platformMappingMaster");
       if (!mappingAgent) {
         return new Response(
           JSON.stringify({

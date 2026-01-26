@@ -1,31 +1,34 @@
 import { Mastra } from "@mastra/core/mastra";
-import { LibSQLStore } from "@mastra/libsql";
+import { vibeRouterAgent } from "@/lib/copilotkit/vibe-router-agent";
+import { getMastraStorage } from "./lib/storage";
 
-import { masterRouterAgent } from "./agents/masterRouterAgent";
-import { platformMappingMaster } from "./agents/platformMappingMaster";
-import { dashboardBuilderAgent } from "./agents/dashboardBuilderAgent";
-import { designAdvisorAgent } from "./agents/designAdvisorAgent";
+let _mastra: Mastra | null = null;
 
-import { generatePreviewWorkflow } from "./workflows/generatePreview";
-import { connectionBackfillWorkflow } from "./workflows/connectionBackfill";
-import { deployDashboardWorkflow } from "./workflows/deployDashboard";
+export function getMastra(): Mastra {
+  if (_mastra) return _mastra;
 
-export const mastra = new Mastra({
-  storage: new LibSQLStore({
-    id: "mastra-storage",
-    url: process.env.MASTRA_STORAGE_URL || "file:./mastra.db",
-    authToken: process.env.TURSO_AUTH_TOKEN,
-  }),
-  agents: {
-    masterRouterAgent,
-    platformMappingMaster,
-    dashboardBuilderAgent,
-    designAdvisorAgent,
-    default: masterRouterAgent,
+  _mastra = new Mastra({
+    storage: getMastraStorage(),
+    agents: {
+      vibeRouterAgent,
+    },
+  });
+
+  return _mastra;
+}
+
+/**
+ * Backward-compatible export.
+ * Many internal modules still import `{ mastra }` from "@/mastra" or "../../index".
+ * This ensures no module-level DATABASE_URL capture while preserving the old import shape.
+ */
+export const mastra = new Proxy({} as Mastra, {
+  get(_target, prop) {
+    const instance = getMastra();
+    return (instance as any)[prop];
   },
-  workflows: {
-    generatePreview: generatePreviewWorkflow,
-    connectionBackfill: connectionBackfillWorkflow,
-    deployDashboard: deployDashboardWorkflow,
+  has(_target, prop) {
+    const instance = getMastra();
+    return prop in (instance as any);
   },
-});
+}) as unknown as Mastra;

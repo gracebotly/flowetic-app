@@ -278,32 +278,33 @@ export function ChatWorkspace({
 
   
 
-  async function loadSkillMD(platformType: string, sourceId: string, entityId?: string) {
+async function loadSkillMD(platformType: string, sourceId: string, entityId?: string) {
   if (!authContext.tenantId || !platformType || !sourceId) {
     return "";
   }
 
   try {
     const supabase = createClient();
-    
-    // Query indexed_entities for the skillMD
+
+    const externalId = String(entityId || "").trim();
+    if (!externalId) return "";
+
     const { data, error } = await supabase
-      .from('indexed_entities')
-      .select('skill_md')
-      .eq('tenant_id', authContext.tenantId)
-      .eq('platform_type', platformType)
-      .eq('source_id', sourceId)
-      .eq('entity_id', entityId || '')
+      .from("source_entities")
+      .select("skill_md")
+      .eq("tenant_id", authContext.tenantId)
+      .eq("source_id", sourceId)
+      .eq("external_id", externalId)
       .maybeSingle();
 
     if (error) {
-      console.error('Error loading skillMD:', error);
+      console.error("[vibe] Error loading skillMD:", error);
       return "";
     }
 
-    return data?.skill_md || "";
+    return (data?.skill_md as string) || "";
   } catch (e) {
-    console.error('Failed to load skillMD:', e);
+    console.error("[vibe] Failed to load skillMD:", e);
     return "";
   }
 }
@@ -844,7 +845,7 @@ export function ChatWorkspace({
   }
 
 return (
-  <CopilotKit runtimeUrl="/api/copilotkit" agent="vibe">
+  <CopilotKit runtimeUrl="/api/copilotkit" agent="vibeRouterAgent">
     <div className="flex h-screen w-full overflow-hidden bg-[#0b1220]">
       {/* Left mini-rail */}
       <div className="absolute left-4 top-4 z-[60] flex flex-col gap-2">

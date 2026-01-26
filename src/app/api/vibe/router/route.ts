@@ -3,6 +3,8 @@
 import { NextRequest, NextResponse } from "next/server";
 // import { RequestContext } from "@mastra/core/request-context"; // Removed - invalid import
 import { createClient } from "@/lib/supabase/server";
+
+export const runtime = "nodejs";
 import { loadSkill } from "@/mastra/skills/loadSkill";
 import { z } from "zod";
 
@@ -16,6 +18,7 @@ import { getStyleBundles } from "@/mastra/tools/design/getStyleBundles";
 import { applyInteractiveEdits } from "@/mastra/tools/interactiveEdit";
 import { getCurrentSpec, applySpecPatch } from "@/mastra/tools/specEditor";
 import { callTool } from "@/mastra/lib/callTool";
+import { getOutcomes } from "@/mastra/tools/outcomes";
 
 type JourneyMode =
   | "select_entity"
@@ -26,11 +29,33 @@ type JourneyMode =
   | "interactive_edit"
   | "deploy";
 
+function toMetricId(label: string): string {
+  return String(label || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[%]/g, " percent")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function dedupeStringsByMetricId(labels: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const l of labels) {
+    const id = toMetricId(l);
+    if (!id) continue;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(l);
+  }
+  return out;
+}
+
 type ToolUi =
   | {
       type: "outcome_cards";
       title: string;
-      options: Array<{ id: "dashboard" | "product"; title: string; description: string }>;
+      options: Array<{ id: string; title: string; description: string; previewImageUrl?: string; tags?: string[] }>;
     }
   | {
       type: "storyboard_cards";
@@ -55,6 +80,31 @@ type ToolUi =
       palettes: any[];
       density: "compact" | "comfortable" | "spacious";
     };
+
+// Type definition for getOutcomes tool result
+// Matches the outputSchema defined in mastra/tools/outcomes/getOutcomes.ts
+type GetOutcomesResult = {
+  outcomes: Array<{
+    id: string;
+    name: string;
+    description: string;
+    platformTypes: string[];
+    category: "dashboard" | "product" | "operations";
+    audience: "client" | "internal" | "both";
+    metrics: {
+      primary: string[];
+      secondary: string[];
+    };
+    previewImageUrl: string;
+    tags: string[];
+    supportedEventTypes: string[];
+    requiredEntityKinds?: string[];
+  }>;
+  validation: {
+    totalOutcomes: number;
+    filteredOutcomes: number;
+  };
+};
 
 function isAction(msg: string) {
   return msg.startsWith("__ACTION__:");
@@ -92,6 +142,15 @@ const NO_ROADMAP_RULES = [
 ].join("\n");
 
 export async function POST(req: NextRequest) {
+  const databaseUrl = process.env.DATABASE_URL;
+
+  if (!databaseUrl) {
+    return new Response(
+      JSON.stringify({ ok: false, error: "DATABASE_URL_MISSING" }),
+      { status: 500, headers: { "Content-Type": "application/json" } },
+    );
+  }
+
   try {
     const body = await req.json();
 
@@ -293,19 +352,19 @@ Journey phases:
               id: "roi_proof",
               title: "ROI Proof (Client-facing)",
               description: "Prove automation value and time saved to drive renewals.",
-              kpis: ["Tasks automated", "Time saved", "Success rate", "Executions over time", "Most recent runs"],
+              kpis: dedupeStringsByMetricId(["Tasks automated", "Time saved", "Success rate", "Executions over time", "Most recent runs"]),
             },
             {
               id: "reliability_ops",
               title: "Reliability Ops (Agency-facing)",
               description: "Operate and debug reliability across workflows quickly.",
-              kpis: ["Failure count", "Success rate", "Recent errors", "Avg runtime", "Slowest runs"],
+              kpis: dedupeStringsByMetricId(["Failure count", "Success rate", "Recent errors", "Avg runtime", "Slowest runs"]),
             },
             {
               id: "delivery_sla",
               title: "Delivery / SLA (Client-facing)",
               description: "Show delivery health and turnaround time trends.",
-              kpis: ["Runs completed", "Avg turnaround time", "Incidents this week", "Last successful run", "Status trend"],
+              kpis: dedupeStringsByMetricId(["Runs completed", "Avg turnaround time", "Incidents this week", "Last successful run", "Status trend"]),
             },
           ],
         };
@@ -358,19 +417,19 @@ Journey phases:
             id: "roi_proof",
             title: "ROI Proof (Client-facing)",
             description: "Prove automation value and time saved to drive renewals.",
-            kpis: ["Tasks automated", "Time saved", "Success rate", "Executions over time", "Most recent runs"],
+            kpis: dedupeStringsByMetricId(["Tasks automated", "Time saved", "Success rate", "Executions over time", "Most recent runs"]),
           },
           {
             id: "reliability_ops",
             title: "Reliability Ops (Agency-facing)",
             description: "Operate and debug reliability across workflows quickly.",
-            kpis: ["Failure count", "Success rate", "Recent errors", "Avg runtime", "Slowest runs"],
+            kpis: dedupeStringsByMetricId(["Failure count", "Success rate", "Recent errors", "Avg runtime", "Slowest runs"]),
           },
           {
             id: "delivery_sla",
             title: "Delivery / SLA (Client-facing)",
             description: "Show delivery health and turnaround time trends.",
-            kpis: ["Runs completed", "Avg turnaround time", "Incidents this week", "Last successful run", "Status trend"],
+            kpis: dedupeStringsByMetricId(["Runs completed", "Avg turnaround time", "Incidents this week", "Last successful run", "Status trend"]),
           },
         ],
       };
@@ -529,26 +588,26 @@ Journey phases:
     }
 
     // ------------------------------------------------------------------
-    // Phase: recommend (Phase 1 — deterministic 2 cards)
+    // Phase: recommend (Phase 1 — platform-specific outcomes)
     // ------------------------------------------------------------------
     if (effectiveMode === "recommend") {
+      // Get platform-specific outcomes from catalog
+      const outcomesResult = (await callTool(
+        getOutcomes,
+        { platformType },
+        { requestContext: runtimeContext }
+      )) as GetOutcomesResult;
+
       const toolUi: ToolUi = {
         type: "outcome_cards",
         title: "Outcome + Monetization Strategy",
-        options: [
-          {
-            id: "dashboard",
-            title: "Client ROI Dashboard (Retention)",
-            description:
-              "Helps renew retainers, makes automation value visible weekly, and proves ROI to clients.",
-          },
-          {
-            id: "product",
-            title: "Workflow Product (SaaS wrapper)",
-            description:
-              "Sell access monthly, hide the underlying workflow, and provide a form/button UI to run it.",
-          },
-        ],
+        options: outcomesResult.outcomes.map((o) => ({
+          id: o.id,
+          title: o.name,
+          description: o.description,
+          previewImageUrl: o.previewImageUrl,
+          tags: o.tags,
+        })),
       };
 
       const workflowName = String(vibeContext?.displayName ?? vibeContext?.externalId ?? "").trim();
@@ -606,19 +665,19 @@ Journey phases:
             id: "roi_proof",
             title: "ROI Proof (Client-facing)",
             description: "Prove automation value and time saved to drive renewals.",
-            kpis: ["Tasks automated", "Time saved", "Success rate", "Executions over time", "Most recent runs"],
+            kpis: dedupeStringsByMetricId(["Tasks automated", "Time saved", "Success rate", "Executions over time", "Most recent runs"]),
           },
           {
             id: "reliability_ops",
             title: "Reliability Ops (Agency-facing)",
             description: "Operate and debug reliability across workflows quickly.",
-            kpis: ["Failure count", "Success rate", "Recent errors", "Avg runtime", "Slowest runs"],
+            kpis: dedupeStringsByMetricId(["Failure count", "Success rate", "Recent errors", "Avg runtime", "Slowest runs"]),
           },
           {
             id: "delivery_sla",
             title: "Delivery / SLA (Client-facing)",
             description: "Show delivery health and turnaround time trends.",
-            kpis: ["Runs completed", "Avg turnaround time", "Incidents this week", "Last successful run", "Status trend"],
+            kpis: dedupeStringsByMetricId(["Runs completed", "Avg turnaround time", "Incidents this week", "Last successful run", "Status trend"]),
           },
         ],
       };
@@ -930,8 +989,28 @@ Journey phases:
       vibeContext: { ...(vibeContext ?? {}), skillMD },
     });
   } catch (err: any) {
+    const message = String(err?.message || "UNKNOWN_ROUTER_ERROR");
+    const stack = typeof err?.stack === "string" ? err.stack : undefined;
+
+    // Log to Vercel for immediate visibility
+    console.error("[api/vibe/router] error", {
+      message,
+      stack,
+      name: err?.name,
+      code: err?.code,
+      cause: err?.cause,
+    });
+
     return NextResponse.json(
-      { error: err?.message ?? "UNKNOWN_ROUTER_ERROR" },
+      {
+        error: message,
+        details: {
+          name: err?.name,
+          code: err?.code,
+          // stack is included only to speed up debugging; remove later if desired
+          stack,
+        },
+      },
       { status: 500 }
     );
   }
