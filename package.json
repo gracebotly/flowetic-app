@@ -75,7 +75,6 @@
     "@mastra/memory": "1.0.0",
     "@mastra/mcp": "1.0.0",
     "@mastra/pg": "1.0.0",
-    "rxjs": "^7.8.1",
-    "@copilotkit/runtime>rxjs": "^7.8.1"
+    "rxjs": "7.8.1"
   }
 }
