@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 // import { RequestContext } from "@mastra/core/request-context"; // Removed - invalid import
-import { mastra } from "@/mastra";
 import { createClient } from "@/lib/supabase/server";
+
+async function getMastra() {
+  const mod = await import("@/mastra");
+  return mod.mastra;
+}
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,6 +34,7 @@ function detectIntent(message: string) {
 }
 
 export async function POST(req: NextRequest) {
+  const mastra = await getMastra();
   const supabase = await createClient();
 
   try {
