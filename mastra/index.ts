@@ -16,3 +16,19 @@ export function getMastra(): Mastra {
 
   return _mastra;
 }
+
+/**
+ * Backward-compatible export.
+ * Many internal modules still import `{ mastra }` from "@/mastra" or "../../index".
+ * This ensures no module-level DATABASE_URL capture while preserving the old import shape.
+ */
+export const mastra = new Proxy({} as Mastra, {
+  get(_target, prop) {
+    const instance = getMastra();
+    return (instance as any)[prop];
+  },
+  has(_target, prop) {
+    const instance = getMastra();
+    return prop in (instance as any);
+  },
+}) as unknown as Mastra;
