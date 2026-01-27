@@ -1,17 +1,17 @@
 
-
-import { getMastraStorage } from "./storage";
+```ts
+import { Memory } from "@mastra/memory";
 import { createClient } from "@/lib/supabase/server";
+import { getMastraStorage } from "./storage";
 
 export async function ensureMastraThreadId(params: {
   tenantId: string;
   journeyThreadId: string;
-  resourceId: string; // use tenantId if you don't have a separate user resource id
+  resourceId: string;
   title?: string;
 }): Promise<string> {
   const supabase = await createClient();
 
-  // 1) read session
   const { data: session, error: sessionErr } = await supabase
     .from("journey_sessions")
     .select("mastra_thread_id")
@@ -20,30 +20,30 @@ export async function ensureMastraThreadId(params: {
     .maybeSingle();
 
   if (sessionErr) {
-    throw new Error("ensureMastraThreadId: failed reading journey_session: " + String(sessionErr.message || sessionErr));
+    throw new Error("ensureMastraThreadId: failed reading journey_sessions: " + String(sessionErr.message || sessionErr));
   }
 
   if (session?.mastra_thread_id) {
     return session.mastra_thread_id;
   }
 
-  // 2) create Mastra thread in storage (UUID-backed)
   const storage = getMastraStorage();
-  await storage.init();
 
-  const memoryStore = await storage.getStore("memory");
-  if (!memoryStore) throw new Error("ensureMastraThreadId: memory store unavailable");
-
-  const created = await memoryStore.createThread({
-    resourceId: params.resourceId,
-    title: params.title || "Conversation",
-    metadata: JSON.stringify({ journeyThreadId: params.journeyThreadId }),
+  const memory = new Memory({
+    storage,
   });
 
-  const mastraThreadId = created?.id;
-  if (!mastraThreadId) throw new Error("ensureMastraThreadId: createThread returned no id");
+  const thread = await memory.createThread({
+    resourceId: params.resourceId,
+    title: params.title || "Conversation",
+    metadata: { journeyThreadId: params.journeyThreadId },
+  });
 
-  // 3) persist mapping
+  const mastraThreadId = thread?.id;
+  if (!mastraThreadId) {
+    throw new Error("ensureMastraThreadId: Memory.createThread returned no id");
+  }
+
   const { error: updErr } = await supabase
     .from("journey_sessions")
     .update({ mastra_thread_id: mastraThreadId })
@@ -51,9 +51,10 @@ export async function ensureMastraThreadId(params: {
     .eq("thread_id", params.journeyThreadId);
 
   if (updErr) {
-    throw new Error("ensureMastraThreadId: failed updating journey_session: " + String(updErr.message || updErr));
+    throw new Error("ensureMastraThreadId: failed updating journey_sessions: " + String(updErr.message || updErr));
   }
 
   return mastraThreadId;
 }
+
 
