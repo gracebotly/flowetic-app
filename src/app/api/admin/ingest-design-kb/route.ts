@@ -82,10 +82,10 @@ export async function POST(req: Request) {
     process.env.DESIGN_KB_ROOT ||
     path.join(process.cwd(), "vendor", "ui-ux-pro-max-skill");
 
-  const connectionString = process.env.POSTGRES_CONNECTION_STRING;
+  const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
     return NextResponse.json(
-      { ok: false, code: "MISSING_ENV", message: "POSTGRES_CONNECTION_STRING is not set." },
+      { ok: false, code: "MISSING_ENV", message: "DATABASE_URL is not set." },
       { status: 400 },
     );
   }
