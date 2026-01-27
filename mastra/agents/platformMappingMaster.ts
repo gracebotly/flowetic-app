@@ -3,7 +3,6 @@ import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { glm47Model } from "../lib/models/glm47";
 import { getMastraStorage } from "../lib/storage";
-import type { RequestContext } from "@mastra/core/request-context";
 import { loadSkillMarkdown, PlatformType } from "../skills/loadSkill";
 import {
   appendThreadEvent,
@@ -16,19 +15,20 @@ import {
 } from "../tools/platformMapping";
 import { todoAdd, todoList, todoUpdate, todoComplete } from "../tools/todo";
 import { getStyleBundles } from "../tools/design";
-
 import { getJourneySession } from "../tools/journey/getJourneySession";
 import { setSchemaReady } from "../tools/journey/setSchemaReady";
-
 import { connectionBackfillWorkflow } from "../workflows/connectionBackfill";
+
 
 export const platformMappingMaster: Agent = new Agent({
   id: "platformMappingMaster",
   name: "platformMappingMaster",
   description:
     "Platform Mapping Agent: inspects event samples, recommends templates, proposes mappings, and triggers preview workflow. Triggers connection backfill when schema is not ready.",
-  instructions: async ({ requestContext }: { requestContext: RequestContext }) => {
-    const platformType = (requestContext.get("platformType") as PlatformType) || "make";
+  instructions: async (context: any) => {
+    // ✅ DEFENSIVE CONTEXT EXTRACTION
+    const requestContext = context?.requestContext || context || {};
+    const platformType = (requestContext.get?.("platformType") || requestContext.platformType || "make") as PlatformType;
     const skill = await loadSkillMarkdown(platformType);
 
     return [
@@ -51,11 +51,9 @@ export const platformMappingMaster: Agent = new Agent({
     ];
   },
   model: glm47Model(),
-
   workflows: {
     connectionBackfillWorkflow,
   },
-
   memory: new Memory({
     storage: getMastraStorage(),
     options: {
@@ -63,11 +61,6 @@ export const platformMappingMaster: Agent = new Agent({
     },
   }),
   tools: {
-    // new gating tools
-    getJourneySession,
-    setSchemaReady,
-
-    // existing platform mapping tools
     appendThreadEvent,
     getClientContext,
     getRecentEventSamples,
@@ -75,6 +68,8 @@ export const platformMappingMaster: Agent = new Agent({
     proposeMapping,
     saveMapping,
     runGeneratePreviewWorkflow,
+    getJourneySession,
+    setSchemaReady,
     getStyleBundles,
     todoAdd,
     todoList,
