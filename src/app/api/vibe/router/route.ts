@@ -1,7 +1,7 @@
 
 
 import { NextRequest, NextResponse } from "next/server";
-// import { RequestContext } from "@mastra/core/request-context"; // Removed - invalid import
+import { RequestContext } from "@mastra/core/request-context";
 import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -145,15 +145,6 @@ const NO_ROADMAP_RULES = [
 ].join("\n");
 
 export async function POST(req: NextRequest) {
-  // TEMPORARY DIAGNOSTIC: Verify which database Vercel is connecting to
-  const url = new URL(process.env.DATABASE_URL!);
-  console.log("[DB fingerprint]", {
-    host: url.host,
-    port: url.port,
-    db: url.pathname?.replace("/", ""),
-    user: url.username ? "[set]" : "[missing]",
-  });
-  
   const databaseUrl = process.env.DATABASE_URL;
 
   if (!databaseUrl) {
@@ -268,6 +259,28 @@ Journey phases:
     if (journey?.selectedOutcome) (runtimeContext as any).selectedOutcome = String(journey.selectedOutcome);
     if (journey?.selectedStoryboard) (runtimeContext as any).selectedStoryboard = String(journey.selectedStoryboard);
 
+    // --- Normalize requestContext: Mastra expects RequestContext with .set() ---
+    const requestContext = new RequestContext();
+
+    // Copy enumerable keys from the existing runtimeContext object
+    if (runtimeContext && typeof runtimeContext === "object") {
+      for (const [k, v] of Object.entries(runtimeContext as Record<string, unknown>)) {
+        // Skip function-valued properties like get()
+        if (typeof v === "function") continue;
+        requestContext.set(k, v as any);
+      }
+
+      // Preserve legacy get() behavior if present (some of your code relies on it)
+      const legacyGet = (runtimeContext as any).get;
+      if (typeof legacyGet === "function") {
+        // Only set if not already present
+        // @ts-expect-error - RequestContext is dynamic
+        if (typeof (requestContext as any).get !== "function") {
+          (requestContext as any).get = legacyGet.bind(runtimeContext);
+        }
+      }
+    }
+
     const mode: JourneyMode = journey?.mode || "select_entity";
 
     const hasSelectedEntity = Boolean(vibeContext?.entityId && vibeContext?.sourceId);
@@ -291,16 +304,6 @@ Journey phases:
 
         const mastra = getMastra();
         const master = mastra.getAgent("masterRouterAgent" as const);
-        console.log("[vibe/router] ctx debug", {
-          hasRuntimeContext: !!runtimeContext,
-          runtimeContextType: typeof runtimeContext,
-          runtimeContextCtor: (runtimeContext as any)?.constructor?.name,
-          runtimeContextHasSet: typeof (runtimeContext as any)?.set === "function",
-          runtimeContextKeys:
-            runtimeContext && typeof runtimeContext === "object"
-              ? Object.keys(runtimeContext as any).slice(0, 20)
-              : null,
-        });
         const agentRes = await master.generate(
           [
             "System: Deep lane step 2 (final question). User needs help deciding.",
@@ -318,7 +321,7 @@ Journey phases:
             NO_ROADMAP_RULES,
           ].filter(Boolean).join("\n"),
           { 
-            requestContext: runtimeContext,
+            requestContext,
             memory: mastraMemory,
           }
         );
@@ -339,16 +342,6 @@ Journey phases:
         // Agent generates final recommendation
         const mastra = getMastra();
         const master = mastra.getAgent("masterRouterAgent" as const);
-        console.log("[vibe/router] ctx debug", {
-          hasRuntimeContext: !!runtimeContext,
-          runtimeContextType: typeof runtimeContext,
-          runtimeContextCtor: (runtimeContext as any)?.constructor?.name,
-          runtimeContextHasSet: typeof (runtimeContext as any)?.set === "function",
-          runtimeContextKeys:
-            runtimeContext && typeof runtimeContext === "object"
-              ? Object.keys(runtimeContext as any).slice(0, 20)
-              : null,
-        });
         const agentRes = await master.generate(
           [
             "System: Deep lane complete. Provide final recommendation.",
@@ -377,7 +370,7 @@ Journey phases:
             NO_ROADMAP_RULES,
           ].filter(Boolean).join("\n"),
           { 
-            requestContext: runtimeContext,
+            requestContext,
             memory: mastraMemory,
           }
         );
@@ -491,21 +484,11 @@ Journey phases:
       const agentInput = actionToAgentHint(userMessage);
       const mastra = getMastra();
       const master = mastra.getAgent("masterRouterAgent" as const);
-      console.log("[vibe/router] ctx debug", {
-        hasRuntimeContext: !!runtimeContext,
-        runtimeContextType: typeof runtimeContext,
-        runtimeContextCtor: (runtimeContext as any)?.constructor?.name,
-        runtimeContextHasSet: typeof (runtimeContext as any)?.set === "function",
-        runtimeContextKeys:
-          runtimeContext && typeof runtimeContext === "object"
-            ? Object.keys(runtimeContext as any).slice(0, 20)
-            : null,
-      });
       const agentRes = await master.generate(
         "System: You are a premium agency business consultant speaking to a non-technical user. " +
         "Use plain language. Avoid technical jargon. Explain what happens next in simple terms.",
         { 
-          requestContext: runtimeContext,
+          requestContext,
           memory: mastraMemory,
         }
       );
@@ -536,16 +519,6 @@ Journey phases:
 
       const mastra = getMastra();
       const master = mastra.getAgent("masterRouterAgent" as const);
-      console.log("[vibe/router] ctx debug", {
-        hasRuntimeContext: !!runtimeContext,
-        runtimeContextType: typeof runtimeContext,
-        runtimeContextCtor: (runtimeContext as any)?.constructor?.name,
-        runtimeContextHasSet: typeof (runtimeContext as any)?.set === "function",
-        runtimeContextKeys:
-          runtimeContext && typeof runtimeContext === "object"
-            ? Object.keys(runtimeContext as any).slice(0, 20)
-            : null,
-      });
       const agentRes = await master.generate(
         [
           "System: Deep lane start. User clicked 'I'm not sure, help me decide'.",
@@ -563,7 +536,7 @@ Journey phases:
           NO_ROADMAP_RULES,
         ].filter(Boolean).join("\n"),
         { 
-          requestContext: runtimeContext,
+          requestContext,
           memory: mastraMemory,
         }
       );
@@ -597,7 +570,7 @@ Journey phases:
           dashboardKind: "workflow-activity",
           notes: "User selected a bundle; return the same set for token extraction.",
         }, // inputData
-        { requestContext: runtimeContext } // context
+        { requestContext } // context
       );
 
       const bundle = bundlesResult.bundles.find((b: any) => b.id === selectedId);
@@ -635,7 +608,7 @@ Journey phases:
           dashboardKind: "workflow-activity",
           notes: "Return premium style+palette bundles appropriate for agency white-label client delivery.",
         }, // inputData
-        { requestContext: runtimeContext } // context
+        { requestContext } // context
       );
 
       return NextResponse.json({
@@ -678,7 +651,7 @@ Journey phases:
       const outcomesResult = (await callTool(
         getOutcomes,
         { platformType },
-        { requestContext: runtimeContext }
+        { requestContext }
       )) as GetOutcomesResult;
 
       const toolUi: ToolUi = {
@@ -697,16 +670,6 @@ Journey phases:
 
       const mastra = getMastra();
       const master = mastra.getAgent("masterRouterAgent" as const);
-      console.log("[vibe/router] ctx debug", {
-        hasRuntimeContext: !!runtimeContext,
-        runtimeContextType: typeof runtimeContext,
-        runtimeContextCtor: (runtimeContext as any)?.constructor?.name,
-        runtimeContextHasSet: typeof (runtimeContext as any)?.set === "function",
-        runtimeContextKeys:
-          runtimeContext && typeof runtimeContext === "object"
-            ? Object.keys(runtimeContext as any).slice(0, 20)
-            : null,
-      });
       const agentRes = await master.generate(
         [
           "System: Phase 1 outcome selection. You are a premium business consultant.",
@@ -737,7 +700,7 @@ Journey phases:
           NO_ROADMAP_RULES,
         ].filter(Boolean).join("\n"),
         { 
-          requestContext: runtimeContext,
+          requestContext,
           memory: mastraMemory,
         }
       );
@@ -784,16 +747,6 @@ Journey phases:
 
       const mastra = getMastra();
       const master = mastra.getAgent("masterRouterAgent" as const);
-      console.log("[vibe/router] ctx debug", {
-        hasRuntimeContext: !!runtimeContext,
-        runtimeContextType: typeof runtimeContext,
-        runtimeContextCtor: (runtimeContext as any)?.constructor?.name,
-        runtimeContextHasSet: typeof (runtimeContext as any)?.set === "function",
-        runtimeContextKeys:
-          runtimeContext && typeof runtimeContext === "object"
-            ? Object.keys(runtimeContext as any).slice(0, 20)
-            : null,
-      });
       const agentRes = await master.generate(
         [
           "System: Phase 2 storyboard selection (KPI story).",
@@ -805,7 +758,7 @@ Journey phases:
           "- Do NOT list metrics (the cards already show them).",
         ].filter(Boolean).join("\n"),
         { 
-          requestContext: runtimeContext,
+          requestContext,
           memory: mastraMemory,
         }
       );
@@ -832,7 +785,7 @@ Journey phases:
           dashboardKind: "workflow-activity",
           notes: "Return premium style+palette bundles appropriate for agency white-label client delivery.",
         }, // inputData
-        { requestContext: runtimeContext } // context
+        { requestContext } // context
       );
 
       return NextResponse.json({
@@ -918,7 +871,7 @@ Journey phases:
       const current = await callTool(
         getCurrentSpec,
         { interfaceId }, // inputData - tenantId removed as it's not needed
-        { requestContext: runtimeContext } // context
+        { requestContext } // context
       );
 
       const spec = current.spec_json as any;
@@ -1051,7 +1004,7 @@ Journey phases:
           const currentSpecForPalette = await callTool(
             getCurrentSpec,
             { interfaceId: payload.interfaceId },  // FIXED: Direct parameters, no tenantId
-            { requestContext: runtimeContext }
+            { requestContext }
           );
           
           await callTool(
@@ -1067,7 +1020,7 @@ Journey phases:
                 { op: "setDesignToken", tokenPath: "theme.color.text", tokenValue: p.text },
               ],
             },  // FIXED: Direct parameters
-            { requestContext: runtimeContext }
+            { requestContext }
           );
         }
       }
@@ -1081,7 +1034,7 @@ Journey phases:
           platformType,
           actions: actions,
         },  // FIXED: Direct parameters, not wrapped
-        { requestContext: runtimeContext }
+        { requestContext }
       );
 
       return NextResponse.json({
@@ -1097,19 +1050,9 @@ Journey phases:
     // Default fallback: process user message with router agent
     const mastra = getMastra();
     const master = mastra.getAgent("masterRouterAgent" as const);
-    console.log("[vibe/router] ctx debug", {
-      hasRuntimeContext: !!runtimeContext,
-      runtimeContextType: typeof runtimeContext,
-      runtimeContextCtor: (runtimeContext as any)?.constructor?.name,
-      runtimeContextHasSet: typeof (runtimeContext as any)?.set === "function",
-      runtimeContextKeys:
-        runtimeContext && typeof runtimeContext === "object"
-          ? Object.keys(runtimeContext as any).slice(0, 20)
-          : null,
-    });
     const result = await master.generate(userMessage, {
       maxSteps: 3,
-      requestContext: runtimeContext,
+      requestContext,
       memory: mastraMemory,
     });
 
