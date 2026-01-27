@@ -21,6 +21,7 @@ import { callTool } from "@/mastra/lib/callTool";
 import { getMemoryContext, generateThreadId } from '~/mastra/lib/threads';
 import { getOutcomes } from "@/mastra/tools/outcomes";
 import { ensureMastraThreadId } from "@/mastra/lib/ensureMastraThread";
+import { getMastra } from "@/mastra/index";
 
 type JourneyMode =
   | "select_entity"
@@ -387,6 +388,29 @@ Journey phases:
     }
 
     const supabase = await createClient();
+
+    // Fetch or create journey session for memory context
+    const { data: journeySession } = await supabase
+      .from('journey_sessions')
+      .upsert({
+        tenant_id: tenantId,
+        thread_id: vibeContext?.threadId || "default",
+        user_id: userId,
+      })
+      .select()
+      .single();
+
+    // Ensure session has mastra_thread_id for memory context
+    let sessionForAgent = journeySession;
+    if (journeySession && !journeySession.mastra_thread_id) {
+      const { data: updated } = await supabase
+        .from('journey_sessions')
+        .update({ mastra_thread_id: crypto.randomUUID() })
+        .eq('id', journeySession.id)
+        .select()
+        .single();
+      sessionForAgent = updated;
+    }
 
     // Helper: list workflows WITH events for picker (MVP rule A)
     async function listActiveWorkflows() {
@@ -990,17 +1014,16 @@ Journey phases:
     }
 
     // Default fallback: process user message with router agent
-    const memoryContext = mastraThreadId ? {
-      resource: journeyThreadId,
-      thread: mastraThreadId,
-    } : undefined;
-
-    const result = await masterRouterAgent.generate(
+    const mastra = getMastra();
+    
+    const result = await mastra.getAgent("masterRouterAgent").generate(
       userMessage,
       {
         maxSteps: 3,
         requestContext: runtimeContext,
-        memory: memoryContext,
+        memory: sessionForAgent?.mastra_thread_id
+          ? { resource: sessionForAgent.id, thread: sessionForAgent.mastra_thread_id }
+          : undefined,
       }
     );
 
