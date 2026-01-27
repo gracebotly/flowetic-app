@@ -9,18 +9,16 @@ type NormalizedListMessagesResult<T = any> = {
 };
 
 function normalizeListMessagesResult<T = any>(value: unknown): NormalizedListMessagesResult<T> {
-  // Most common expected shape from memory APIs: { messages, total, hasMore }
+  // If the implementation returns { messages, total, hasMore }
   if (value && typeof value === "object") {
     const v = value as any;
 
-    // Defensive: some buggy implementations may return array directly, or messages under a different key.
+    // Some implementations might return { items: [...] } or similar
     const messages = Array.isArray(v.messages)
       ? (v.messages as T[])
       : Array.isArray(v.items)
         ? (v.items as T[])
-        : Array.isArray(v)
-          ? (v as T[])
-          : [];
+        : [];
 
     const total =
       typeof v.total === "number"
@@ -34,49 +32,47 @@ function normalizeListMessagesResult<T = any>(value: unknown): NormalizedListMes
     return { messages, total, hasMore };
   }
 
-  // If something returned an array directly, treat it as messages.
+  // If the implementation returns an array directly, accept it
   if (Array.isArray(value)) {
-    return { messages: value as any[], total: (value as any[]).length, hasMore: false };
+    return { messages: value as T[], total: (value as T[]).length, hasMore: false };
   }
 
   // null/undefined/anything else
   return { messages: [], total: 0, hasMore: false };
 }
 
-function wrapMemoryDomainStore(memoryStore: any): any {
-  if (!memoryStore || typeof memoryStore !== "object") return memoryStore;
+function wrapAnyObjectDeep<T extends object>(obj: T): T {
+  const seen = new WeakMap<object, any>();
 
-  // Avoid double-wrapping if hot reload or multiple calls happen
-  if ((memoryStore as any).__floweticWrapped) return memoryStore;
+  const wrap = (target: any): any => {
+    if (!target || (typeof target !== "object" && typeof target !== "function")) return target;
+    if (seen.has(target)) return seen.get(target);
 
-  return new Proxy(memoryStore, {
-    get(target, prop, receiver) {
-      if (prop === "__floweticWrapped") return true;
+    const proxy = new Proxy(target, {
+      get(t, prop, receiver) {
+        const value = Reflect.get(t, prop, receiver);
 
-      if (prop === "listMessages") {
-        return async (...args: any[]) => {
-          const raw = await (target as any).listMessages(...args);
-          return normalizeListMessagesResult(raw);
-        };
-      }
+        // Normalize ANY listMessages() we encounter (wherever Mastra calls it from)
+        if (prop === "listMessages" && typeof value === "function") {
+          return async (...args: any[]) => {
+            const raw = await value.apply(t, args);
+            return normalizeListMessagesResult(raw);
+          };
+        }
 
-      return Reflect.get(target, prop, receiver);
-    },
-  });
-}
+        // Pass through primitives as-is
+        if (!value || (typeof value !== "object" && typeof value !== "function")) return value;
 
-function wrapStore(store: PostgresStore): PostgresStore {
-  const originalGetStore = store.getStore.bind(store);
+        // Recursively proxy nested objects/functions to catch listMessages deeper in graph
+        return wrap(value);
+      },
+    });
 
-  type GetStoreDomain = Parameters<PostgresStore["getStore"]>[0];
-
-  (store as any).getStore = async (domain: GetStoreDomain) => {
-    const s = await originalGetStore(domain);
-    if (domain === ("memory" as GetStoreDomain)) return wrapMemoryDomainStore(s);
-    return s;
+    seen.set(target, proxy);
+    return proxy;
   };
 
-  return store;
+  return wrap(obj);
 }
 
 export function getMastraStorage(): PostgresStore {
@@ -87,11 +83,13 @@ export function getMastraStorage(): PostgresStore {
     throw new Error("DATABASE_URL is required (Mastra PostgresStore).");
   }
 
-  const store = new PostgresStore({
+  const base = new PostgresStore({
     id: "flowetic-pg",
     connectionString: url,
   });
 
-  _store = wrapStore(store);
+  // Wrap the entire store object so ANY path Mastra uses to reach listMessages is intercepted.
+  _store = wrapAnyObjectDeep(base) as unknown as PostgresStore;
+
   return _store;
 }
