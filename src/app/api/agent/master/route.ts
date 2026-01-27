@@ -224,22 +224,20 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // Use ensureMastraThreadId to get session with memory context
-      const session = await ensureMastraThreadId({
-        supabase,
+      // Use ensureMastraThreadId to get Mastra thread ID
+      const mastraThreadId = await ensureMastraThreadId({
         tenantId,
-        threadId,
-        platformType,
-        sourceId,
-        entityId: null,
+        journeyThreadId: threadId,
+        resourceId: userId,
+        title: "Flowetic Vibe",
       });
 
       const routerResponse = await master.generate(message, {
         maxSteps: 3,
         requestContext: runtimeContext,
         memory: {
-          resource: String(session.id),
-          thread: String(session.mastra_thread_id),
+          resource: String(userId),
+          thread: String(mastraThreadId),
         },
       });
 
@@ -247,8 +245,8 @@ export async function POST(req: NextRequest) {
         maxSteps: 8,
         requestContext: runtimeContext,
         memory: {
-          resource: String(session.id),
-          thread: String(session.mastra_thread_id),
+          resource: String(userId),
+          thread: String(mastraThreadId),
         },
       });
 
@@ -262,22 +260,20 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Use ensureMastraThreadId to get session with memory context for router-only call
-    const session = await ensureMastraThreadId({
-      supabase,
+    // Use ensureMastraThreadId to get Mastra thread ID for router-only call
+    const mastraThreadId = await ensureMastraThreadId({
       tenantId,
-      threadId,
-      platformType,
-      sourceId,
-      entityId: null,
+      journeyThreadId: threadId,
+      resourceId: userId,
+      title: "Flowetic Vibe",
     });
 
     const routerOnly = await master.generate(message, {
       maxSteps: 3,
       requestContext: runtimeContext,
       memory: {
-        resource: String(session.id),
-        thread: String(session.mastra_thread_id),
+        resource: String(userId),
+        thread: String(mastraThreadId),
       },
     });
 
