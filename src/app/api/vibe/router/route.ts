@@ -291,6 +291,16 @@ Journey phases:
 
         const mastra = getMastra();
         const master = mastra.getAgent("masterRouterAgent" as const);
+        console.log("[vibe/router] ctx debug", {
+          hasRuntimeContext: !!runtimeContext,
+          runtimeContextType: typeof runtimeContext,
+          runtimeContextCtor: (runtimeContext as any)?.constructor?.name,
+          runtimeContextHasSet: typeof (runtimeContext as any)?.set === "function",
+          runtimeContextKeys:
+            runtimeContext && typeof runtimeContext === "object"
+              ? Object.keys(runtimeContext as any).slice(0, 20)
+              : null,
+        });
         const agentRes = await master.generate(
           [
             "System: Deep lane step 2 (final question). User needs help deciding.",
@@ -329,6 +339,16 @@ Journey phases:
         // Agent generates final recommendation
         const mastra = getMastra();
         const master = mastra.getAgent("masterRouterAgent" as const);
+        console.log("[vibe/router] ctx debug", {
+          hasRuntimeContext: !!runtimeContext,
+          runtimeContextType: typeof runtimeContext,
+          runtimeContextCtor: (runtimeContext as any)?.constructor?.name,
+          runtimeContextHasSet: typeof (runtimeContext as any)?.set === "function",
+          runtimeContextKeys:
+            runtimeContext && typeof runtimeContext === "object"
+              ? Object.keys(runtimeContext as any).slice(0, 20)
+              : null,
+        });
         const agentRes = await master.generate(
           [
             "System: Deep lane complete. Provide final recommendation.",
@@ -471,6 +491,16 @@ Journey phases:
       const agentInput = actionToAgentHint(userMessage);
       const mastra = getMastra();
       const master = mastra.getAgent("masterRouterAgent" as const);
+      console.log("[vibe/router] ctx debug", {
+        hasRuntimeContext: !!runtimeContext,
+        runtimeContextType: typeof runtimeContext,
+        runtimeContextCtor: (runtimeContext as any)?.constructor?.name,
+        runtimeContextHasSet: typeof (runtimeContext as any)?.set === "function",
+        runtimeContextKeys:
+          runtimeContext && typeof runtimeContext === "object"
+            ? Object.keys(runtimeContext as any).slice(0, 20)
+            : null,
+      });
       const agentRes = await master.generate(
         "System: You are a premium agency business consultant speaking to a non-technical user. " +
         "Use plain language. Avoid technical jargon. Explain what happens next in simple terms.",
@@ -506,6 +536,16 @@ Journey phases:
 
       const mastra = getMastra();
       const master = mastra.getAgent("masterRouterAgent" as const);
+      console.log("[vibe/router] ctx debug", {
+        hasRuntimeContext: !!runtimeContext,
+        runtimeContextType: typeof runtimeContext,
+        runtimeContextCtor: (runtimeContext as any)?.constructor?.name,
+        runtimeContextHasSet: typeof (runtimeContext as any)?.set === "function",
+        runtimeContextKeys:
+          runtimeContext && typeof runtimeContext === "object"
+            ? Object.keys(runtimeContext as any).slice(0, 20)
+            : null,
+      });
       const agentRes = await master.generate(
         [
           "System: Deep lane start. User clicked 'I'm not sure, help me decide'.",
@@ -657,6 +697,16 @@ Journey phases:
 
       const mastra = getMastra();
       const master = mastra.getAgent("masterRouterAgent" as const);
+      console.log("[vibe/router] ctx debug", {
+        hasRuntimeContext: !!runtimeContext,
+        runtimeContextType: typeof runtimeContext,
+        runtimeContextCtor: (runtimeContext as any)?.constructor?.name,
+        runtimeContextHasSet: typeof (runtimeContext as any)?.set === "function",
+        runtimeContextKeys:
+          runtimeContext && typeof runtimeContext === "object"
+            ? Object.keys(runtimeContext as any).slice(0, 20)
+            : null,
+      });
       const agentRes = await master.generate(
         [
           "System: Phase 1 outcome selection. You are a premium business consultant.",
@@ -734,6 +784,16 @@ Journey phases:
 
       const mastra = getMastra();
       const master = mastra.getAgent("masterRouterAgent" as const);
+      console.log("[vibe/router] ctx debug", {
+        hasRuntimeContext: !!runtimeContext,
+        runtimeContextType: typeof runtimeContext,
+        runtimeContextCtor: (runtimeContext as any)?.constructor?.name,
+        runtimeContextHasSet: typeof (runtimeContext as any)?.set === "function",
+        runtimeContextKeys:
+          runtimeContext && typeof runtimeContext === "object"
+            ? Object.keys(runtimeContext as any).slice(0, 20)
+            : null,
+      });
       const agentRes = await master.generate(
         [
           "System: Phase 2 storyboard selection (KPI story).",
@@ -1037,7 +1097,16 @@ Journey phases:
     // Default fallback: process user message with router agent
     const mastra = getMastra();
     const master = mastra.getAgent("masterRouterAgent" as const);
-
+    console.log("[vibe/router] ctx debug", {
+      hasRuntimeContext: !!runtimeContext,
+      runtimeContextType: typeof runtimeContext,
+      runtimeContextCtor: (runtimeContext as any)?.constructor?.name,
+      runtimeContextHasSet: typeof (runtimeContext as any)?.set === "function",
+      runtimeContextKeys:
+        runtimeContext && typeof runtimeContext === "object"
+          ? Object.keys(runtimeContext as any).slice(0, 20)
+          : null,
+    });
     const result = await master.generate(userMessage, {
       maxSteps: 3,
       requestContext: runtimeContext,
