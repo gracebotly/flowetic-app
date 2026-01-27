@@ -68,9 +68,11 @@ function wrapMemoryDomainStore(memoryStore: any): any {
 function wrapStore(store: PostgresStore): PostgresStore {
   const originalGetStore = store.getStore.bind(store);
 
-  (store as any).getStore = async (domain: string) => {
+  type GetStoreDomain = Parameters<PostgresStore["getStore"]>[0];
+
+  (store as any).getStore = async (domain: GetStoreDomain) => {
     const s = await originalGetStore(domain);
-    if (domain === "memory") return wrapMemoryDomainStore(s);
+    if (domain === ("memory" as GetStoreDomain)) return wrapMemoryDomainStore(s);
     return s;
   };
 
