@@ -11,7 +11,7 @@ import { z } from "zod";
 import { designAdvisorAgent } from "@/mastra/agents/designAdvisorAgent";
 
 import { dashboardBuilderAgent } from "@/mastra/agents/dashboardBuilderAgent";
-import { masterRouterAgent } from "@/mastra/agents/masterRouterAgent";
+
 
 import { todoAdd, todoList } from "@/mastra/tools/todo";
 import { getStyleBundles } from "@/mastra/tools/design/getStyleBundles";
@@ -241,10 +241,15 @@ Journey phases:
     const mastraThreadId = await ensureMastraThreadId({
       tenantId,
       journeyThreadId,
-      resourceId: tenantId,
+      resourceId: userId,
       title: "Flowetic Conversation",
     });
     (runtimeContext as any).threadId = mastraThreadId;
+
+    const mastraMemory = {
+      resource: String(userId),
+      thread: String(mastraThreadId),
+    } as const;
 
     // Add context properties to runtimeContext object
     const workflowName = String(vibeContext?.displayName ?? vibeContext?.externalId ?? "").trim();
@@ -295,10 +300,7 @@ Journey phases:
           ].filter(Boolean).join("\n"),
           { 
             requestContext: runtimeContext,
-            memory: {
-              resource: String(userId),
-              thread: String(mastraThreadId),
-            },
+            memory: mastraMemory,
           }
         );
         const agentText = String((agentRes as any)?.text ?? "").trim();
@@ -347,10 +349,7 @@ Journey phases:
           ].filter(Boolean).join("\n"),
           { 
             requestContext: runtimeContext,
-            memory: {
-              resource: String(userId),
-              thread: String(mastraThreadId),
-            },
+            memory: mastraMemory,
           }
         );
         const agentText = String((agentRes as any)?.text ?? "").trim();
@@ -468,10 +467,7 @@ Journey phases:
         "Use plain language. Avoid technical jargon. Explain what happens next in simple terms.",
         { 
           requestContext: runtimeContext,
-          memory: {
-            resource: String(userId),
-            thread: String(mastraThreadId),
-          },
+          memory: mastraMemory,
         }
       );
       const agentText = String((agentRes as any)?.text ?? "").trim();
@@ -519,10 +515,7 @@ Journey phases:
         ].filter(Boolean).join("\n"),
         { 
           requestContext: runtimeContext,
-          memory: {
-            resource: String(userId),
-            thread: String(mastraThreadId),
-          },
+          memory: mastraMemory,
         }
       );
       const agentText = String((agentRes as any)?.text ?? "").trim();
@@ -686,10 +679,7 @@ Journey phases:
         ].filter(Boolean).join("\n"),
         { 
           requestContext: runtimeContext,
-          memory: {
-            resource: String(userId),
-            thread: String(mastraThreadId),
-          },
+          memory: mastraMemory,
         }
       );
       const agentText = String((agentRes as any)?.text ?? "").trim();
@@ -747,10 +737,7 @@ Journey phases:
         ].filter(Boolean).join("\n"),
         { 
           requestContext: runtimeContext,
-          memory: {
-            resource: String(userId),
-            thread: String(mastraThreadId),
-          },
+          memory: mastraMemory,
         }
       );
       const agentText = String((agentRes as any)?.text ?? "").trim();
@@ -1040,24 +1027,12 @@ Journey phases:
 
     // Default fallback: process user message with router agent
     const mastra = getMastra();
-    
-    // Use ensureMastraThreadId to get Mastra thread ID
-    const mastraThreadId = await ensureMastraThreadId({
-      tenantId,
-      journeyThreadId,
-      resourceId: userId,
-      title: "Flowetic Vibe",
-    });
-    
     const master = mastra.getAgent("vibeRouterAgent" as const);
-    
+
     const result = await master.generate(userMessage, {
       maxSteps: 3,
       requestContext: runtimeContext,
-      memory: {
-        resource: String(userId),
-        thread: String(mastraThreadId),
-      },
+      memory: mastraMemory,
     });
 
     const agentText = String((result as any)?.text ?? "").trim();
