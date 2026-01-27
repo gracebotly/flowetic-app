@@ -274,7 +274,6 @@ Journey phases:
       const legacyGet = (runtimeContext as any).get;
       if (typeof legacyGet === "function") {
         // Only set if not already present
-        // @ts-expect-error - RequestContext is dynamic
         if (typeof (requestContext as any).get !== "function") {
           (requestContext as any).get = legacyGet.bind(runtimeContext);
         }
