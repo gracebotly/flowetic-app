@@ -19,6 +19,7 @@ import { applyInteractiveEdits } from "@/mastra/tools/interactiveEdit";
 import { getCurrentSpec, applySpecPatch } from "@/mastra/tools/specEditor";
 import { callTool } from "@/mastra/lib/callTool";
 import { getOutcomes } from "@/mastra/tools/outcomes";
+import { ensureMastraThreadId } from "@/mastra/lib/ensureMastraThread";
 
 type JourneyMode =
   | "select_entity"
@@ -233,9 +234,15 @@ Journey phases:
 
     const enhancedSystemPrompt = baseSystemPrompt + workflowContext;
 
-    // Thread id: use vibeContextSnapshot/thread id if you have it; fallback to "vibe"
-    const threadId = vibeContext?.threadId || "vibe";
-    (runtimeContext as any).threadId = threadId;
+    // Ensure Mastra thread exists and get Mastra thread ID
+    const journeyThreadId = vibeContext?.threadId || "vibe";
+    const mastraThreadId = await ensureMastraThreadId({
+      tenantId,
+      journeyThreadId,
+      resourceId: tenantId,
+      title: "Flowetic Conversation",
+    });
+    (runtimeContext as any).threadId = mastraThreadId;
 
     // Add context properties to runtimeContext object
     const workflowName = String(vibeContext?.displayName ?? vibeContext?.externalId ?? "").trim();
