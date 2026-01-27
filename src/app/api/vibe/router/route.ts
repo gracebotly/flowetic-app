@@ -290,7 +290,7 @@ Journey phases:
         };
 
         const mastra = getMastra();
-        const master = mastra.getAgent("vibeRouterAgent" as const);
+        const master = mastra.getAgent("masterRouterAgent" as const);
         const agentRes = await master.generate(
           [
             "System: Deep lane step 2 (final question). User needs help deciding.",
@@ -328,7 +328,7 @@ Journey phases:
         
         // Agent generates final recommendation
         const mastra = getMastra();
-        const master = mastra.getAgent("vibeRouterAgent" as const);
+        const master = mastra.getAgent("masterRouterAgent" as const);
         const agentRes = await master.generate(
           [
             "System: Deep lane complete. Provide final recommendation.",
@@ -470,7 +470,7 @@ Journey phases:
       // Agent-driven user-facing text, skill-aware with plain language
       const agentInput = actionToAgentHint(userMessage);
       const mastra = getMastra();
-      const master = mastra.getAgent("vibeRouterAgent" as const);
+      const master = mastra.getAgent("masterRouterAgent" as const);
       const agentRes = await master.generate(
         "System: You are a premium agency business consultant speaking to a non-technical user. " +
         "Use plain language. Avoid technical jargon. Explain what happens next in simple terms.",
@@ -505,7 +505,7 @@ Journey phases:
       const workflowName = String(vibeContext?.displayName ?? vibeContext?.externalId ?? "").trim();
 
       const mastra = getMastra();
-      const master = mastra.getAgent("vibeRouterAgent" as const);
+      const master = mastra.getAgent("masterRouterAgent" as const);
       const agentRes = await master.generate(
         [
           "System: Deep lane start. User clicked 'I'm not sure, help me decide'.",
@@ -656,7 +656,7 @@ Journey phases:
       const workflowName = String(vibeContext?.displayName ?? vibeContext?.externalId ?? "").trim();
 
       const mastra = getMastra();
-      const master = mastra.getAgent("vibeRouterAgent" as const);
+      const master = mastra.getAgent("masterRouterAgent" as const);
       const agentRes = await master.generate(
         [
           "System: Phase 1 outcome selection. You are a premium business consultant.",
@@ -733,7 +733,7 @@ Journey phases:
       const workflowName = String(vibeContext?.displayName ?? vibeContext?.externalId ?? "").trim();
 
       const mastra = getMastra();
-      const master = mastra.getAgent("vibeRouterAgent" as const);
+      const master = mastra.getAgent("masterRouterAgent" as const);
       const agentRes = await master.generate(
         [
           "System: Phase 2 storyboard selection (KPI story).",
@@ -1036,7 +1036,7 @@ Journey phases:
 
     // Default fallback: process user message with router agent
     const mastra = getMastra();
-    const master = mastra.getAgent("vibeRouterAgent" as const);
+    const master = mastra.getAgent("masterRouterAgent" as const);
 
     const result = await master.generate(userMessage, {
       maxSteps: 3,

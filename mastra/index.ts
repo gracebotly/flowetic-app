@@ -1,11 +1,13 @@
 import { Mastra } from "@mastra/core/mastra";
-import { vibeRouterAgent } from "@/lib/copilotkit/vibe-router-agent";
 import { getMastraStorage } from "./lib/storage";
 
-// Add these imports
-import { generatePreviewWorkflow } from './workflows/generatePreview';
-import { connectionBackfillWorkflow } from './workflows/connectionBackfill';
-import { deployDashboardWorkflow } from './workflows/deployDashboard';
+// Register real Mastra agents (NOT AG-UI AbstractAgent wrappers)
+import { masterRouterAgent } from "./agents/masterRouterAgent";
+
+// Workflows
+import { generatePreviewWorkflow } from "./workflows/generatePreview";
+import { connectionBackfillWorkflow } from "./workflows/connectionBackfill";
+import { deployDashboardWorkflow } from "./workflows/deployDashboard";
 
 let _mastra: Mastra | null = null;
 
@@ -13,43 +15,21 @@ export function getMastra(): Mastra {
   if (_mastra) return _mastra;
 
   if (process.env.DEBUG_MASTRA_BOOT === "true") {
-    console.log("[Mastra boot] versions", {
-      mastraCore: require("@mastra/core/package.json").version,
-      mastraPg: require("@mastra/pg/package.json").version,
-      mastraMemory: require("@mastra/memory/package.json").version,
-      agUiMastra: require("@ag-ui/mastra/package.json").version,
-      agUiClient: require("@ag-ui/client/package.json").version,
-    });
-    console.log("[Mastra boot] agents keys", Object.keys({ vibeRouterAgent }));
-    console.log("[Mastra boot] vibeRouterAgent type", typeof vibeRouterAgent, vibeRouterAgent?.constructor?.name);
-    console.log("[Mastra boot] vibeRouterAgent keys sample", Object.keys(vibeRouterAgent || {}).slice(0, 30));
+    console.log("[Mastra boot] building Mastra instance");
+    console.log("[Mastra boot] agent ids", ["masterRouterAgent"]);
   }
 
   _mastra = new Mastra({
     storage: getMastraStorage(),
     agents: {
-      vibeRouterAgent,
+      masterRouterAgent,
     },
-    // Add workflows property
     workflows: {
       generatePreviewWorkflow,
       connectionBackfillWorkflow,
       deployDashboardWorkflow,
     },
   });
-
-  if (process.env.DEBUG_MASTRA_BOOT === "true") {
-    console.log("[Mastra boot] versions", {
-      mastraCore: require("@mastra/core/package.json").version,
-      mastraPg: require("@mastra/pg/package.json").version,
-      mastraMemory: require("@mastra/memory/package.json").version,
-      agUiMastra: require("@ag-ui/mastra/package.json").version,
-      agUiClient: require("@ag-ui/client/package.json").version,
-    });
-    console.log("[Mastra boot] agents keys", Object.keys({ vibeRouterAgent }));
-    console.log("[Mastra boot] vibeRouterAgent type", typeof vibeRouterAgent, vibeRouterAgent?.constructor?.name);
-    console.log("[Mastra boot] vibeRouterAgent keys sample", Object.keys(vibeRouterAgent || {}).slice(0, 30));
-  }
 
   return _mastra;
 }
