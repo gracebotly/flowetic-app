@@ -3,6 +3,7 @@ import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { glm47Model } from "../lib/models/glm47";
 import { getMastraStorage } from "../lib/storage";
+import type { RequestContext } from "@mastra/core/request-context";
 import { loadSkillMarkdown, PlatformType } from "../skills/loadSkill";
 import {
   appendThreadEvent,
@@ -25,30 +26,28 @@ export const platformMappingMaster: Agent = new Agent({
   name: "platformMappingMaster",
   description:
     "Platform Mapping Agent: inspects event samples, recommends templates, proposes mappings, and triggers preview workflow. Triggers connection backfill when schema is not ready.",
-  instructions: async (context: any) => {
-    // ✅ DEFENSIVE CONTEXT EXTRACTION
-    const requestContext = context?.requestContext || context || {};
-    const platformType = (requestContext.get?.("platformType") || requestContext.platformType || "make") as PlatformType;
+  instructions: async ({ requestContext }: { requestContext: RequestContext }) => {
+    const platformType = (
+      (typeof requestContext?.get === 'function' 
+        ? requestContext.get("platformType") 
+        : (requestContext as any)?.platformType) || "make"
+    ) as PlatformType;
+    
     const skill = await loadSkillMarkdown(platformType);
 
-    return [
-      {
-        role: "system",
-        content:
-          "CRITICAL RULES: Never ask the user for tenantId, sourceId, interfaceId, threadId, or any UUID. Never mention internal identifiers. Never hallucinate field names. Never show raw JSON unless the user explicitly asks. " +
-          "You are PlatformMappingMaster. Your job is to get the user from connected platform -> preview dashboard generated in minutes. " +
-          "SCHEMA READINESS GATE: You MUST check journey.getSession. If schemaReady is false, you MUST run connectionBackfillWorkflow first, then set journey.setSchemaReady(schemaReady=true), then proceed. " +
-          "Before proposing mapping, use getRecentEventSamples + recommendTemplates + proposeMapping as needed. " +
-          "Write brief rationale via appendThreadEvent (1-2 sentences)."
-      },
-      { role: "system", content: `Selected platformType: ${platformType}` },
-      { role: "system", content: `Platform Skill.md:\n\n${skill}` },
-      {
-        role: "system",
-        content:
-          "When user asks to generate/preview, call runGeneratePreviewWorkflow only AFTER schemaReady is true and mapping is complete.",
-      },
-    ];
+    return {
+      role: "system" as const,
+      content: [
+        "CRITICAL RULES: Never ask the user for tenantId, sourceId, interfaceId, threadId, or any UUID. Never mention internal identifiers. Never hallucinate field names. Never show raw JSON unless the user explicitly asks.",
+        "You are PlatformMappingMaster. Your job is to get the user from connected platform -> preview dashboard generated in minutes.",
+        "SCHEMA READINESS GATE: You MUST check journey.getSession. If schemaReady is false, you MUST run connectionBackfillWorkflow first, then set journey.setSchemaReady(schemaReady=true), then proceed.",
+        "Before proposing mapping, use getRecentEventSamples + recommendTemplates + proposeMapping as needed.",
+        "Write brief rationale via appendThreadEvent (1-2 sentences).",
+        `Selected platformType: ${platformType}`,
+        `Platform Skill.md:\n\n${skill}`,
+        "When user asks to generate/preview, call runGeneratePreviewWorkflow only AFTER schemaReady is true and mapping is complete.",
+      ].join("\n"),
+    };
   },
   model: glm47Model(),
   workflows: {
