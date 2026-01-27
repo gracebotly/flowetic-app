@@ -20,7 +20,7 @@ export async function ensureMastraThreadId(params: {
     .maybeSingle();
 
   if (sessionErr) {
-    throw new Error(`ensureMastraThreadId: failed reading journey_session: ${sessionErr.message}`);
+    throw new Error("ensureMastraThreadId: failed reading journey_session: " + String(sessionErr.message || sessionErr));
   }
 
   if (session?.mastra_thread_id) {
@@ -51,7 +51,7 @@ export async function ensureMastraThreadId(params: {
     .eq("thread_id", params.journeyThreadId);
 
   if (updErr) {
-    throw new Error(`ensureMastraThreadId: failed updating journey_session: ${updErr.message}`);
+    throw new Error("ensureMastraThreadId: failed updating journey_session: " + String(updErr.message || updErr));
   }
 
   return mastraThreadId;
