@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 // import { RequestContext } from "@mastra/core/request-context"; // Removed - invalid import
 import { createClient } from "@/lib/supabase/server";
 import { getMastra } from "@/mastra";
+import { ensureMastraThreadId } from "@/mastra/lib/ensureMastraThread";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -223,14 +224,30 @@ export async function POST(req: NextRequest) {
         );
       }
 
+      // Use ensureMastraThreadId to get Mastra thread ID
+      const mastraThreadId = await ensureMastraThreadId({
+        tenantId,
+        journeyThreadId: threadId,
+        resourceId: userId,
+        title: "Flowetic Vibe",
+      });
+
       const routerResponse = await master.generate(message, {
         maxSteps: 3,
         requestContext: runtimeContext,
+        memory: {
+          resource: String(userId),
+          thread: String(mastraThreadId),
+        },
       });
 
       const mappingResponse = await mappingAgent.generate(message, {
         maxSteps: 8,
         requestContext: runtimeContext,
+        memory: {
+          resource: String(userId),
+          thread: String(mastraThreadId),
+        },
       });
 
       return new Response(
@@ -243,9 +260,21 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Use ensureMastraThreadId to get Mastra thread ID for router-only call
+    const mastraThreadId = await ensureMastraThreadId({
+      tenantId,
+      journeyThreadId: threadId,
+      resourceId: userId,
+      title: "Flowetic Vibe",
+    });
+
     const routerOnly = await master.generate(message, {
       maxSteps: 3,
       requestContext: runtimeContext,
+      memory: {
+        resource: String(userId),
+        thread: String(mastraThreadId),
+      },
     });
 
     return new Response(

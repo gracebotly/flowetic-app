@@ -11,14 +11,17 @@ import { z } from "zod";
 import { designAdvisorAgent } from "@/mastra/agents/designAdvisorAgent";
 
 import { dashboardBuilderAgent } from "@/mastra/agents/dashboardBuilderAgent";
-import { masterRouterAgent } from "@/mastra/agents/masterRouterAgent";
+
 
 import { todoAdd, todoList } from "@/mastra/tools/todo";
 import { getStyleBundles } from "@/mastra/tools/design/getStyleBundles";
 import { applyInteractiveEdits } from "@/mastra/tools/interactiveEdit";
 import { getCurrentSpec, applySpecPatch } from "@/mastra/tools/specEditor";
 import { callTool } from "@/mastra/lib/callTool";
+
 import { getOutcomes } from "@/mastra/tools/outcomes";
+import { ensureMastraThreadId } from "@/mastra/lib/ensureMastraThread";
+import { getMastra } from "@/mastra/index";
 
 type JourneyMode =
   | "select_entity"
@@ -233,9 +236,20 @@ Journey phases:
 
     const enhancedSystemPrompt = baseSystemPrompt + workflowContext;
 
-    // Thread id: use vibeContextSnapshot/thread id if you have it; fallback to "vibe"
-    const threadId = vibeContext?.threadId || "vibe";
-    (runtimeContext as any).threadId = threadId;
+    // Ensure Mastra thread exists and get Mastra thread ID
+    const journeyThreadId = vibeContext?.threadId || "vibe";
+    const mastraThreadId = await ensureMastraThreadId({
+      tenantId,
+      journeyThreadId,
+      resourceId: userId,
+      title: "Flowetic Conversation",
+    });
+    (runtimeContext as any).threadId = mastraThreadId;
+
+    const mastraMemory = {
+      resource: String(userId),
+      thread: String(mastraThreadId),
+    } as const;
 
     // Add context properties to runtimeContext object
     const workflowName = String(vibeContext?.displayName ?? vibeContext?.externalId ?? "").trim();
@@ -266,7 +280,9 @@ Journey phases:
           },
         };
 
-        const agentRes = await masterRouterAgent.generate(
+        const mastra = getMastra();
+        const master = mastra.getAgent("vibeRouterAgent" as const);
+        const agentRes = await master.generate(
           [
             "System: Deep lane step 2 (final question). User needs help deciding.",
             workflowName ? `System: User's workflow: "${workflowName}".` : "",
@@ -282,7 +298,10 @@ Journey phases:
             "",
             NO_ROADMAP_RULES,
           ].filter(Boolean).join("\n"),
-          { requestContext: runtimeContext }
+          { 
+            requestContext: runtimeContext,
+            memory: mastraMemory,
+          }
         );
         const agentText = String((agentRes as any)?.text ?? "").trim();
 
@@ -299,7 +318,9 @@ Journey phases:
         const answers = journey?.deepLane?.answers ?? {};
         
         // Agent generates final recommendation
-        const agentRes = await masterRouterAgent.generate(
+        const mastra = getMastra();
+        const master = mastra.getAgent("vibeRouterAgent" as const);
+        const agentRes = await master.generate(
           [
             "System: Deep lane complete. Provide final recommendation.",
             workflowName ? `System: User's workflow: "${workflowName}".` : "",
@@ -326,7 +347,10 @@ Journey phases:
             "",
             NO_ROADMAP_RULES,
           ].filter(Boolean).join("\n"),
-          { requestContext: runtimeContext }
+          { 
+            requestContext: runtimeContext,
+            memory: mastraMemory,
+          }
         );
         const agentText = String((agentRes as any)?.text ?? "").trim();
 
@@ -436,10 +460,15 @@ Journey phases:
 
       // Agent-driven user-facing text, skill-aware with plain language
       const agentInput = actionToAgentHint(userMessage);
-      const agentRes = await masterRouterAgent.generate(
+      const mastra = getMastra();
+      const master = mastra.getAgent("vibeRouterAgent" as const);
+      const agentRes = await master.generate(
         "System: You are a premium agency business consultant speaking to a non-technical user. " +
         "Use plain language. Avoid technical jargon. Explain what happens next in simple terms.",
-        { requestContext: runtimeContext }
+        { 
+          requestContext: runtimeContext,
+          memory: mastraMemory,
+        }
       );
       const agentText = String((agentRes as any)?.text ?? "").trim();
 
@@ -466,7 +495,9 @@ Journey phases:
 
       const workflowName = String(vibeContext?.displayName ?? vibeContext?.externalId ?? "").trim();
 
-      const agentRes = await masterRouterAgent.generate(
+      const mastra = getMastra();
+      const master = mastra.getAgent("vibeRouterAgent" as const);
+      const agentRes = await master.generate(
         [
           "System: Deep lane start. User clicked 'I'm not sure, help me decide'.",
           workflowName ? `System: User's workflow: "${workflowName}".` : "",
@@ -482,7 +513,10 @@ Journey phases:
           "",
           NO_ROADMAP_RULES,
         ].filter(Boolean).join("\n"),
-        { requestContext: runtimeContext }
+        { 
+          requestContext: runtimeContext,
+          memory: mastraMemory,
+        }
       );
       const agentText = String((agentRes as any)?.text ?? "").trim();
 
@@ -612,7 +646,9 @@ Journey phases:
 
       const workflowName = String(vibeContext?.displayName ?? vibeContext?.externalId ?? "").trim();
 
-      const agentRes = await masterRouterAgent.generate(
+      const mastra = getMastra();
+      const master = mastra.getAgent("vibeRouterAgent" as const);
+      const agentRes = await master.generate(
         [
           "System: Phase 1 outcome selection. You are a premium business consultant.",
           workflowName ? `System: User's workflow name: "${workflowName}".` : "",
@@ -641,7 +677,10 @@ Journey phases:
           "",
           NO_ROADMAP_RULES,
         ].filter(Boolean).join("\n"),
-        { requestContext: runtimeContext }
+        { 
+          requestContext: runtimeContext,
+          memory: mastraMemory,
+        }
       );
       const agentText = String((agentRes as any)?.text ?? "").trim();
 
@@ -684,7 +723,9 @@ Journey phases:
 
       const workflowName = String(vibeContext?.displayName ?? vibeContext?.externalId ?? "").trim();
 
-      const agentRes = await masterRouterAgent.generate(
+      const mastra = getMastra();
+      const master = mastra.getAgent("vibeRouterAgent" as const);
+      const agentRes = await master.generate(
         [
           "System: Phase 2 storyboard selection (KPI story).",
           workflowName ? `System: Selected workflow name: "${workflowName}".` : "",
@@ -694,7 +735,10 @@ Journey phases:
           "- Recommend ONE storyboard by name (ROI Proof vs Reliability Ops vs Delivery/SLA) with 1 short reason.",
           "- Do NOT list metrics (the cards already show them).",
         ].filter(Boolean).join("\n"),
-        { requestContext: runtimeContext }
+        { 
+          requestContext: runtimeContext,
+          memory: mastraMemory,
+        }
       );
       const agentText = String((agentRes as any)?.text ?? "").trim();
 
@@ -981,9 +1025,20 @@ Journey phases:
       });
     }
 
-    // Default fallback
+    // Default fallback: process user message with router agent
+    const mastra = getMastra();
+    const master = mastra.getAgent("vibeRouterAgent" as const);
+
+    const result = await master.generate(userMessage, {
+      maxSteps: 3,
+      requestContext: runtimeContext,
+      memory: mastraMemory,
+    });
+
+    const agentText = String((result as any)?.text ?? "").trim();
+
     return NextResponse.json({
-      text: "I'm ready. Tell me what you want to do next.",
+      text: agentText || "I'm ready. Tell me what you want to do next.",
       journey,
       toolUi: null,
       vibeContext: { ...(vibeContext ?? {}), skillMD },

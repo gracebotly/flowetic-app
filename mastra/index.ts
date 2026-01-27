@@ -2,6 +2,11 @@ import { Mastra } from "@mastra/core/mastra";
 import { vibeRouterAgent } from "@/lib/copilotkit/vibe-router-agent";
 import { getMastraStorage } from "./lib/storage";
 
+// Add these imports
+import { generatePreviewWorkflow } from './workflows/generatePreview';
+import { connectionBackfillWorkflow } from './workflows/connectionBackfill';
+import { deployDashboardWorkflow } from './workflows/deployDashboard';
+
 let _mastra: Mastra | null = null;
 
 export function getMastra(): Mastra {
@@ -11,6 +16,12 @@ export function getMastra(): Mastra {
     storage: getMastraStorage(),
     agents: {
       vibeRouterAgent,
+    },
+    // Add workflows property
+    workflows: {
+      generatePreviewWorkflow,
+      connectionBackfillWorkflow,
+      deployDashboardWorkflow,
     },
   });
 
