@@ -145,6 +145,15 @@ const NO_ROADMAP_RULES = [
 ].join("\n");
 
 export async function POST(req: NextRequest) {
+  // TEMPORARY DIAGNOSTIC: Verify which database Vercel is connecting to
+  const url = new URL(process.env.DATABASE_URL!);
+  console.log("[DB fingerprint]", {
+    host: url.host,
+    port: url.port,
+    db: url.pathname?.replace("/", ""),
+    user: url.username ? "[set]" : "[missing]",
+  });
+  
   const databaseUrl = process.env.DATABASE_URL;
 
   if (!databaseUrl) {
