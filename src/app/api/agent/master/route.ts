@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 // import { RequestContext } from "@mastra/core/request-context"; // Removed - invalid import
 import { createClient } from "@/lib/supabase/server";
 import { getMastra } from "@/mastra";
+import { ensureMastraThreadId } from "@/mastra/lib/ensureMastraThread";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -223,14 +224,32 @@ export async function POST(req: NextRequest) {
         );
       }
 
+      // Use ensureMastraThreadId to get session with memory context
+      const session = await ensureMastraThreadId({
+        supabase,
+        tenantId,
+        threadId,
+        platformType,
+        sourceId,
+        entityId: null,
+      });
+
       const routerResponse = await master.generate(message, {
         maxSteps: 3,
         requestContext: runtimeContext,
+        memory: {
+          resource: String(session.id),
+          thread: String(session.mastra_thread_id),
+        },
       });
 
       const mappingResponse = await mappingAgent.generate(message, {
         maxSteps: 8,
         requestContext: runtimeContext,
+        memory: {
+          resource: String(session.id),
+          thread: String(session.mastra_thread_id),
+        },
       });
 
       return new Response(
@@ -243,9 +262,23 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Use ensureMastraThreadId to get session with memory context for router-only call
+    const session = await ensureMastraThreadId({
+      supabase,
+      tenantId,
+      threadId,
+      platformType,
+      sourceId,
+      entityId: null,
+    });
+
     const routerOnly = await master.generate(message, {
       maxSteps: 3,
       requestContext: runtimeContext,
+      memory: {
+        resource: String(session.id),
+        thread: String(session.mastra_thread_id),
+      },
     });
 
     return new Response(

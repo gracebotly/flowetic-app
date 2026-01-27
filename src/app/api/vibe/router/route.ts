@@ -18,7 +18,7 @@ import { getStyleBundles } from "@/mastra/tools/design/getStyleBundles";
 import { applyInteractiveEdits } from "@/mastra/tools/interactiveEdit";
 import { getCurrentSpec, applySpecPatch } from "@/mastra/tools/specEditor";
 import { callTool } from "@/mastra/lib/callTool";
-import { getMemoryContext, generateThreadId } from '~/mastra/lib/threads';
+
 import { getOutcomes } from "@/mastra/tools/outcomes";
 import { ensureMastraThreadId } from "@/mastra/lib/ensureMastraThread";
 import { getMastra } from "@/mastra/index";
@@ -388,29 +388,6 @@ Journey phases:
     }
 
     const supabase = await createClient();
-
-    // Fetch or create journey session for memory context
-    const { data: journeySession } = await supabase
-      .from('journey_sessions')
-      .upsert({
-        tenant_id: tenantId,
-        thread_id: vibeContext?.threadId || "default",
-        user_id: userId,
-      })
-      .select()
-      .single();
-
-    // Ensure session has mastra_thread_id for memory context
-    let sessionForAgent = journeySession;
-    if (journeySession && !journeySession.mastra_thread_id) {
-      const { data: updated } = await supabase
-        .from('journey_sessions')
-        .update({ mastra_thread_id: crypto.randomUUID() })
-        .eq('id', journeySession.id)
-        .select()
-        .single();
-      sessionForAgent = updated;
-    }
 
     // Helper: list workflows WITH events for picker (MVP rule A)
     async function listActiveWorkflows() {
@@ -1016,16 +993,26 @@ Journey phases:
     // Default fallback: process user message with router agent
     const mastra = getMastra();
     
-    const result = await mastra.getAgent("masterRouterAgent").generate(
-      userMessage,
-      {
-        maxSteps: 3,
-        requestContext: runtimeContext,
-        memory: sessionForAgent?.mastra_thread_id
-          ? { resource: sessionForAgent.id, thread: sessionForAgent.mastra_thread_id }
-          : undefined,
-      }
-    );
+    // Use ensureMastraThreadId to get session with memory context
+    const session = await ensureMastraThreadId({
+      supabase,
+      tenantId,
+      threadId: journeyThreadId,
+      platformType,
+      sourceId,
+      entityId: vibeContext?.entityId ?? null,
+    });
+    
+    const master = mastra.getAgent("vibeRouterAgent" as const);
+    
+    const result = await master.generate(userMessage, {
+      maxSteps: 3,
+      requestContext: runtimeContext,
+      memory: {
+        resource: String(session.id),
+        thread: String(session.mastra_thread_id),
+      },
+    });
 
     const agentText = String((result as any)?.text ?? "").trim();
 
