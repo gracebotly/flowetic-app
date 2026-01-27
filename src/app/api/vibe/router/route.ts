@@ -18,6 +18,7 @@ import { getStyleBundles } from "@/mastra/tools/design/getStyleBundles";
 import { applyInteractiveEdits } from "@/mastra/tools/interactiveEdit";
 import { getCurrentSpec, applySpecPatch } from "@/mastra/tools/specEditor";
 import { callTool } from "@/mastra/lib/callTool";
+import { getMemoryContext, generateThreadId } from '~/mastra/lib/threads';
 import { getOutcomes } from "@/mastra/tools/outcomes";
 import { ensureMastraThreadId } from "@/mastra/lib/ensureMastraThread";
 
@@ -988,9 +989,25 @@ Journey phases:
       });
     }
 
-    // Default fallback
+    // Default fallback: process user message with router agent
+    const memoryContext = mastraThreadId ? {
+      resource: journeyThreadId,
+      thread: mastraThreadId,
+    } : undefined;
+
+    const result = await masterRouterAgent.generate(
+      userMessage,
+      {
+        maxSteps: 3,
+        requestContext: runtimeContext,
+        memory: memoryContext,
+      }
+    );
+
+    const agentText = String((result as any)?.text ?? "").trim();
+
     return NextResponse.json({
-      text: "I'm ready. Tell me what you want to do next.",
+      text: agentText || "I'm ready. Tell me what you want to do next.",
       journey,
       toolUi: null,
       vibeContext: { ...(vibeContext ?? {}), skillMD },
