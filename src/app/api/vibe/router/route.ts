@@ -55,6 +55,44 @@ function dedupeStringsByMetricId(labels: string[]): string[] {
   return out;
 }
 
+/**
+ * Maps business outcome IDs to the style bundle type expected by getStyleBundles tool.
+ * Bridges business layer (user selection) with technical layer (design system).
+ * 
+ * @param outcomeId - Outcome ID from OUTCOMES catalog or user selection
+ * @returns 'dashboard' | 'product' for getStyleBundles tool
+ */
+function mapOutcomeToStyleType(outcomeId: string | undefined | null): 'dashboard' | 'product' {
+  const normalized = String(outcomeId || "").trim().toLowerCase();
+  
+  if (!normalized) {
+    return 'dashboard'; // Default fallback
+  }
+  
+  // Look up outcome in OUTCOMES catalog to use its category
+  const outcome = OUTCOMES.find((o: any) => o?.id === normalized);
+  
+  if (outcome?.category) {
+    // Map category to style type
+    if (outcome.category === 'product') {
+      return 'product';
+    }
+    // Both 'dashboard' and 'operations' map to 'dashboard'
+    return 'dashboard';
+  }
+  
+  // Fallback: keyword-based heuristics if category missing
+  if (normalized.includes('product') || 
+      normalized.includes('portal') || 
+      normalized.includes('saas') ||
+      normalized.includes('marketplace')) {
+    return 'product';
+  }
+  
+  // Default: dashboard (most common case)
+  return 'dashboard';
+}
+
 type ToolUi =
   | {
       type: "outcome_cards";
@@ -571,7 +609,7 @@ Journey phases:
         getStyleBundles,
         {
           platformType,
-          outcome: journey?.selectedOutcome ?? "dashboard",
+          outcome: mapOutcomeToStyleType(journey?.selectedOutcome),
           audience: "client",
           dashboardKind: "workflow-activity",
           notes: "User selected a bundle; return the same set for token extraction.",
@@ -609,7 +647,7 @@ Journey phases:
         getStyleBundles,
         {
           platformType,
-          outcome: nextJourney?.selectedOutcome ?? "dashboard",
+          outcome: mapOutcomeToStyleType(nextJourney?.selectedOutcome),
           audience: "client",
           dashboardKind: "workflow-activity",
           notes: "Return premium style+palette bundles appropriate for agency white-label client delivery.",
@@ -660,13 +698,15 @@ Journey phases:
         { requestContext }
       )) as GetOutcomesResult;
 
-      // Filter to 2 core outcomes: dashboard and product
+      // Filter to 2 core outcomes: dashboard and product only
+      type OutcomeType = GetOutcomesResult['outcomes'][number];
+      
       const dashboardOutcome = outcomesResult.outcomes.find(o => o.category === 'dashboard');
       const productOutcome = outcomesResult.outcomes.find(o => o.category === 'product');
       
-      // TypeScript-safe filtering: explicitly check for undefined
+      // TypeScript-safe filtering: remove undefined values
       const coreOutcomes = [dashboardOutcome, productOutcome].filter(
-        (o): o is NonNullable<typeof o> => o !== undefined && o !== null
+        (o): o is OutcomeType => o !== undefined && o !== null
       );
       
       const toolUi: ToolUi = {
@@ -798,7 +838,7 @@ Journey phases:
         getStyleBundles,
         {
           platformType,
-          outcome: journey?.selectedOutcome ?? "dashboard",
+          outcome: mapOutcomeToStyleType(journey?.selectedOutcome),
           audience: "client",
           dashboardKind: "workflow-activity",
           notes: "Return premium style+palette bundles appropriate for agency white-label client delivery.",
