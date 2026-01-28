@@ -1,23 +1,29 @@
 import { Mastra } from "@mastra/core/mastra";
-import { vibeRouterAgent } from "@/lib/copilotkit/vibe-router-agent";
 import { getMastraStorage } from "./lib/storage";
 
-// Add these imports
-import { generatePreviewWorkflow } from './workflows/generatePreview';
-import { connectionBackfillWorkflow } from './workflows/connectionBackfill';
-import { deployDashboardWorkflow } from './workflows/deployDashboard';
+// Register real Mastra agents (NOT AG-UI AbstractAgent wrappers)
+import { masterRouterAgent } from "./agents/masterRouterAgent";
+
+// Workflows
+import { generatePreviewWorkflow } from "./workflows/generatePreview";
+import { connectionBackfillWorkflow } from "./workflows/connectionBackfill";
+import { deployDashboardWorkflow } from "./workflows/deployDashboard";
 
 let _mastra: Mastra | null = null;
 
 export function getMastra(): Mastra {
   if (_mastra) return _mastra;
 
+  if (process.env.DEBUG_MASTRA_BOOT === "true") {
+    console.log("[Mastra boot] building Mastra instance");
+    console.log("[Mastra boot] agent ids", ["masterRouterAgent"]);
+  }
+
   _mastra = new Mastra({
     storage: getMastraStorage(),
     agents: {
-      vibeRouterAgent,
+      masterRouterAgent,
     },
-    // Add workflows property
     workflows: {
       generatePreviewWorkflow,
       connectionBackfillWorkflow,
