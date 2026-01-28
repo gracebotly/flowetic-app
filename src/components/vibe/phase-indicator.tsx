@@ -9,7 +9,8 @@ type JourneyMode =
   | "style"
   | "build_preview"
   | "interactive_edit"
-  | "deploy";
+  | "deploy"
+  | "consultation";
 
 interface PhaseIndicatorProps {
   currentMode: JourneyMode;
@@ -26,6 +27,11 @@ const PHASES = [
 ] as const;
 
 export function PhaseIndicator({ currentMode }: PhaseIndicatorProps) {
+  // Hide indicator entirely during consultation mode
+  if (currentMode === "consultation") {
+    return null;
+  }
+
   const currentPhaseIndex = PHASES.findIndex((p) => p.id === currentMode);
 
   return (

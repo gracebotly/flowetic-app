@@ -31,7 +31,8 @@ type JourneyMode =
   | "style"
   | "build_preview"
   | "interactive_edit"
-  | "deploy";
+  | "deploy"
+  | "consultation";
 
 function toMetricId(label: string): string {
   return String(label || "")
@@ -376,6 +377,7 @@ Journey phases:
           journey: nextJourney,
           toolUi: null, // KEEP cards hidden during deep lane
           vibeContext: { ...(vibeContext ?? {}), skillMD },
+          progress: { show: false }, // Hide progress during consultation
         });
       }
 
@@ -464,6 +466,10 @@ Journey phases:
           journey: nextJourney,
           toolUi,
           vibeContext: { ...(vibeContext ?? {}), skillMD },
+          progress: { 
+            show: true, // Agent controls when to show progress
+            currentStep: nextJourney.mode === "consultation" ? undefined : 1 // Hide step during consultation
+          },
         });
       }
     }
@@ -543,6 +549,7 @@ Journey phases:
         journey: nextJourney,
         toolUi: storyboardToolUi,
         vibeContext: { ...(vibeContext ?? {}), skillMD },
+        progress: { show: true, currentStep: 2 },
       });
     }
 
@@ -592,6 +599,29 @@ Journey phases:
         journey: deepLaneJourney,
         toolUi: null, // ← CHANGED: Don't show cards during deep lane questions
         vibeContext: { ...(vibeContext ?? {}), skillMD },
+        progress: { show: false },
+      });
+    }
+
+    // ------------------------------------------------------------------
+    // MODE: consultation (error recovery / deep consultation)
+    // ------------------------------------------------------------------
+    if (effectiveMode === "consultation") {
+      // Agent is in error recovery/consultation mode
+      const mastra = getMastra();
+      const master = mastra.getAgent("masterRouterAgent" as const);
+      
+      const consultRes = await master.generate(
+        "User encountered an issue. Provide helpful, consultative guidance to understand their needs and continue the dashboard design process naturally.",
+        { requestContext, memory: mastraMemory }
+      );
+      
+      return NextResponse.json({
+        text: String((consultRes as any)?.text ?? "").trim(),
+        journey: { ...journey, mode: "consultation" },
+        toolUi: null,
+        vibeContext: { ...(vibeContext ?? {}), skillMD },
+        progress: { show: false },
       });
     }
 
@@ -1123,30 +1153,43 @@ Journey phases:
       vibeContext: { ...(vibeContext ?? {}), skillMD },
     });
   } catch (err: any) {
-    const message = String(err?.message || "UNKNOWN_ROUTER_ERROR");
+    const errorMessage = String(err?.message || "UNKNOWN_ROUTER_ERROR");
     const stack = typeof err?.stack === "string" ? err.stack : undefined;
 
     // Log to Vercel for immediate visibility
     console.error("[api/vibe/router] error", {
-      message,
+      message: errorMessage,
       stack,
       name: err?.name,
       code: err?.code,
       cause: err?.cause,
     });
 
-    return NextResponse.json(
-      {
-        error: message,
-        details: {
-          name: err?.name,
-          code: err?.code,
-          // stack is included only to speed up debugging; remove later if desired
-          stack,
-        },
-      },
-      { status: 500 }
+    // Agent provides consultative error response
+    const mastra = getMastra();
+    const master = mastra.getAgent("masterRouterAgent" as const);
+    
+    // Get agent to craft error recovery response
+    const agentErrorRes = await master.generate(
+      `System: Backend error occurred: ${errorMessage}. 
+       User context: ${workflowName ? `Workflow: ${workflowName}` : 'No workflow selected'}
+       Current phase: ${effectiveMode}
+       
+       CRITICAL: Do NOT mention technical errors or "request failed".
+       Instead, provide helpful consulting to keep the user engaged.
+       Ask questions or show fallback options to continue the journey naturally.`,
+      { requestContext: runtimeContext, memory: mastraMemory }
     );
+    
+    const agentText = String((agentErrorRes as any)?.text ?? "").trim();
+    
+    return NextResponse.json({
+      text: agentText || "Let me help you work through this. What would you like to achieve with your dashboard?",
+      journey: { ...journey, mode: "consultation" }, // Enter consultative mode
+      toolUi: null, // No cards during error recovery
+      vibeContext: { ...(vibeContext ?? {}), skillMD },
+      progress: { show: false }, // Hide progress during consultation
+    });
   }
 }
 

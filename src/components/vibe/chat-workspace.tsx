@@ -49,7 +49,8 @@ type JourneyMode =
   | "style"
   | "build_preview"
   | "interactive_edit"
-  | "deploy";
+  | "deploy"
+  | "consultation";
 
 type ToolUiPayload =
   | {
@@ -446,7 +447,24 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
 
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-          addLog("error", "Failed to start Phase 1", data?.error || "ROUTER_REQUEST_FAILED");
+          // Agent-driven error handling during initialization
+          const agentErrorText = data?.text || "Let me help you get started with your dashboard journey.";
+          if (data?.text) {
+            await fetch("/api/journey-messages", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                tenantId: authContext.tenantId,
+                threadId,
+                role: "assistant",
+                content: agentErrorText,
+              }),
+            });
+            setMessages((prev) => [
+              ...prev,
+              { id: `a-init-${Date.now()}`, role: "assistant", content: agentErrorText },
+            ]);
+          }
         } else {
           if (data?.journey?.mode) setJourneyMode(data.journey.mode);
           setToolUi(data?.toolUi ?? null);
@@ -766,7 +784,16 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
 
       const data = await res.json();
 
-      if (!res.ok) throw new Error(data?.error || "ROUTER_REQUEST_FAILED");
+      if (!res.ok) {
+        // Let agent handle the error instead of showing technical banner
+        const agentErrorText = data?.text || "Let me help you work through this issue.";
+        setMessages((prev) => [
+          ...prev,
+          { id: `a-${Date.now()}`, role: "assistant", content: agentErrorText },
+        ]);
+        // Don't throw error - let agent continue the conversation
+        return;
+      }
 
       if (data?.journey?.mode) setJourneyMode(data.journey.mode);
       if (typeof data?.journey?.selectedOutcome !== "undefined")
@@ -781,6 +808,15 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
         setPaletteOverrideId(data.journey.paletteOverrideId);
 
       setToolUi(data?.toolUi ?? null);
+
+      // Add progress control handling
+      if (data?.progress) {
+        // Agent can control progress visibility
+        if (data.progress.show === false) {
+          // Hide progress indicator during consultation
+          setJourneyMode("consultation"); // Use a mode that hides progress
+        }
+      }
 
       if (data?.vibeContext) {
         setVibeContext((prev: any) => ({ ...(prev ?? {}), ...data.vibeContext }));
