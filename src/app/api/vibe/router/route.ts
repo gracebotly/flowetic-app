@@ -1165,6 +1165,9 @@ Journey phases:
       cause: err?.cause,
     });
 
+    // Get workflow name from available context
+    const workflowName = String(vibeContext?.displayName ?? vibeContext?.externalId ?? "").trim();
+    
     // Agent provides consultative error response
     const mastra = getMastra();
     const master = mastra.getAgent("masterRouterAgent" as const);
