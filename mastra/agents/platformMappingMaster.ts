@@ -60,6 +60,14 @@ export const platformMappingMaster: Agent = new Agent({
     },
   }),
   tools: {
+    // Add these missing tools
+    analyzeSchema: {} as any,           // Add this tool
+    getSchemaSummary: {} as any,        // Add this tool
+    generateMapping: {} as any,         // Add this tool
+    proposeMapping: {} as any,          // Add this tool (when created)
+    getCurrentMapping: {} as any,       // Add this tool (when created)
+    saveMapping: {} as any,             // Add this tool (when created)
+    // Keep existing tools
     appendThreadEvent,
     getClientContext,
     getRecentEventSamples,
@@ -67,12 +75,15 @@ export const platformMappingMaster: Agent = new Agent({
     proposeMapping,
     saveMapping,
     runGeneratePreviewWorkflow,
-    getJourneySession,
-    setSchemaReady,
-    getStyleBundles,
+    // Todo tools
     todoAdd,
     todoList,
     todoUpdate,
     todoComplete,
+    // Design tools
+    getStyleBundles,
+    // Journey tools
+    getJourneySession,
+    setSchemaReady,
   },
 });
