@@ -664,7 +664,10 @@ Journey phases:
       const dashboardOutcome = outcomesResult.outcomes.find(o => o.category === 'dashboard');
       const productOutcome = outcomesResult.outcomes.find(o => o.category === 'product');
       
-      const coreOutcomes = [dashboardOutcome, productOutcome].filter(Boolean);
+      // TypeScript-safe filtering: explicitly check for undefined
+      const coreOutcomes = [dashboardOutcome, productOutcome].filter(
+        (o): o is NonNullable => o !== undefined && o !== null
+      );
       
       const toolUi: ToolUi = {
         type: "outcome_cards",
