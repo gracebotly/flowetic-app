@@ -660,10 +660,16 @@ Journey phases:
         { requestContext }
       )) as GetOutcomesResult;
 
+      // Filter to 2 core outcomes: dashboard and product
+      const dashboardOutcome = outcomesResult.outcomes.find(o => o.category === 'dashboard');
+      const productOutcome = outcomesResult.outcomes.find(o => o.category === 'product');
+      
+      const coreOutcomes = [dashboardOutcome, productOutcome].filter(Boolean);
+      
       const toolUi: ToolUi = {
         type: "outcome_cards",
         title: "Outcome + Monetization Strategy",
-        options: outcomesResult.outcomes.map((o) => ({
+        options: coreOutcomes.map((o) => ({
           id: o.id,
           title: o.name,
           description: o.description,
@@ -712,10 +718,13 @@ Journey phases:
       );
       const agentText = String((agentRes as any)?.text ?? "").trim();
 
+      // Check if user is in deep lane (consultative mode)
+      const inDeepLane = Boolean(journey?.deepLane);
+      
       return NextResponse.json({
         text: agentText || "Hey! Let's figure out what you want to build first. Pick one of the cards below, or click \"I'm not sure\" if you want help deciding.",
         journey: { ...journey, mode: "recommend" },
-        toolUi,
+        toolUi: inDeepLane ? null : toolUi, // Suppress cards in deep lane
         vibeContext: { ...(vibeContext ?? {}), skillMD },
       });
     }
