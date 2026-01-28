@@ -1174,6 +1174,13 @@ Journey phases:
     const master = mastra.getAgent("masterRouterAgent" as const);
     
     // Get agent to craft error recovery response
+    const errorContext = {
+      userId: body?.userId || "unknown",
+      tenantId: body?.tenantId || "unknown",
+      platformType: body?.vibeContext?.platformType || "other",
+      sourceId: body?.vibeContext?.sourceId,
+    };
+    
     const agentErrorRes = await master.generate(
       `System: Backend error occurred: ${errorMessage}. 
        User context: ${workflowName ? `Workflow: ${workflowName}` : 'No workflow selected'}
@@ -1182,7 +1189,13 @@ Journey phases:
        CRITICAL: Do NOT mention technical errors or "request failed".
        Instead, provide helpful consulting to keep the user engaged.
        Ask questions or show fallback options to continue the journey naturally.`,
-      { requestContext: { userId: body?.userId, tenantId: body?.tenantId }, memory: { threadId: body?.threadId } }
+      { 
+        requestContext: errorContext, 
+        memory: {
+          resource: String(body?.userId || "unknown"),
+          thread: String(body?.threadId || "error-thread")
+        }
+      }
     );
     
     const agentText = String((agentErrorRes as any)?.text ?? "").trim();
