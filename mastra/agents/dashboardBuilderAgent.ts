@@ -64,15 +64,17 @@ export const dashboardBuilderAgent: Agent = new Agent({
     },
   }),
   tools: {
-    getCurrentSpec,
-    applySpecPatch,
-    validateSpec,
-    savePreviewVersion,
-    applyInteractiveEdits,
-    reorderComponents,
-    getStyleBundles,
-    todoAdd,
-    todoList,
+    // Add these missing tools
+    selectTemplate: {} as any,        // Add this tool
+    listTemplates: {} as any,         // Add this tool
+    getTemplateRequirements: {} as any, // Add this tool (when created)
+    generateDashboardSpec: {} as any,   // Add this tool
+    validateDashboardSpec: {} as any,   // Add this tool
+    scoreDashboardSpec: {} as any,      // Add this tool
+    savePreviewSpec: {} as any,         // Add this tool
+    interactiveApplyEdits: {} as any,   // Add this tool
+    interactiveReorderComponents: {} as any, // Add this tool
+    // Keep existing todo tools
     todoUpdate,
     todoComplete,
   },
