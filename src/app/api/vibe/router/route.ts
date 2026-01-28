@@ -20,7 +20,6 @@ import { getCurrentSpec, applySpecPatch } from "@/mastra/tools/specEditor";
 import { callTool } from "@/mastra/lib/callTool";
 
 import { getOutcomes } from "@/mastra/tools/outcomes";
-import { outcomes } from "@/data/outcomes";
 import { ensureMastraThreadId } from "@/mastra/lib/ensureMastraThread";
 import { getMastra } from "@/mastra/index";
 
@@ -145,10 +144,12 @@ const NO_ROADMAP_RULES = [
   "- Avoid jargon like: execution status, success rate, optimize processes, workflow activity dashboard.",
 ].join("\n");
 
-function isValidOutcomeId(id: string): boolean {
+async function isValidOutcomeId(id: string): Promise<boolean> {
   const normalized = String(id || "").trim();
   if (!normalized) return false;
-  return outcomes.some((o) => o.id === normalized);
+
+  const list = await getOutcomes();
+  return Array.isArray(list) && list.some((o: any) => o?.id === normalized);
 }
 
 export async function POST(req: NextRequest) {
@@ -454,7 +455,7 @@ Journey phases:
     if (isAction(userMessage) && userMessage.startsWith("__ACTION__:select_outcome:")) {
       const outcome = userMessage.replace("__ACTION__:select_outcome:", "").trim();
 
-      if (!isValidOutcomeId(outcome)) {
+      if (!(await isValidOutcomeId(outcome))) {
         return NextResponse.json({ error: "INVALID_OUTCOME" }, { status: 400 });
       }
 
