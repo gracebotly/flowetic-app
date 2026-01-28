@@ -1165,8 +1165,9 @@ Journey phases:
       cause: err?.cause,
     });
 
-    // Get workflow name from available context
-    const workflowName = String(vibeContext?.displayName ?? vibeContext?.externalId ?? "").trim();
+    // Get workflow name from request body if vibeContext is not available in catch scope
+    const body = await req.clone().json().catch(() => ({}));
+    const workflowName = String(body?.vibeContext?.displayName ?? body?.vibeContext?.externalId ?? "").trim();
     
     // Agent provides consultative error response
     const mastra = getMastra();
@@ -1176,21 +1177,21 @@ Journey phases:
     const agentErrorRes = await master.generate(
       `System: Backend error occurred: ${errorMessage}. 
        User context: ${workflowName ? `Workflow: ${workflowName}` : 'No workflow selected'}
-       Current phase: ${effectiveMode}
+       Current phase: 'consultation'
        
        CRITICAL: Do NOT mention technical errors or "request failed".
        Instead, provide helpful consulting to keep the user engaged.
        Ask questions or show fallback options to continue the journey naturally.`,
-      { requestContext: runtimeContext, memory: mastraMemory }
+      { requestContext: { userId: body?.userId, tenantId: body?.tenantId }, memory: { threadId: body?.threadId } }
     );
     
     const agentText = String((agentErrorRes as any)?.text ?? "").trim();
     
     return NextResponse.json({
       text: agentText || "Let me help you work through this. What would you like to achieve with your dashboard?",
-      journey: { ...journey, mode: "consultation" }, // Enter consultative mode
+      journey: { ...(body?.journey ?? {}), mode: "consultation" }, // Enter consultative mode
       toolUi: null, // No cards during error recovery
-      vibeContext: { ...(vibeContext ?? {}), skillMD },
+      vibeContext: { ...(body?.vibeContext ?? {}) },
       progress: { show: false }, // Hide progress during consultation
     });
   }
