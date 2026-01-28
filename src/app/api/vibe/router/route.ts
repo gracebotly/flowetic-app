@@ -22,6 +22,7 @@ import { callTool } from "@/mastra/lib/callTool";
 import { getOutcomes } from "@/mastra/tools/outcomes";
 import { ensureMastraThreadId } from "@/mastra/lib/ensureMastraThread";
 import { getMastra } from "@/mastra/index";
+import { OUTCOMES } from "@/data/outcomes";
 
 type JourneyMode =
   | "select_entity"
@@ -144,12 +145,10 @@ const NO_ROADMAP_RULES = [
   "- Avoid jargon like: execution status, success rate, optimize processes, workflow activity dashboard.",
 ].join("\n");
 
-async function isValidOutcomeId(id: string): Promise<boolean> {
+function isValidOutcomeId(id: string): boolean {
   const normalized = String(id || "").trim();
   if (!normalized) return false;
-
-  const list = await getOutcomes();
-  return Array.isArray(list) && list.some((o: any) => o?.id === normalized);
+  return OUTCOMES.some((o: any) => o?.id === normalized);
 }
 
 export async function POST(req: NextRequest) {
@@ -455,7 +454,7 @@ Journey phases:
     if (isAction(userMessage) && userMessage.startsWith("__ACTION__:select_outcome:")) {
       const outcome = userMessage.replace("__ACTION__:select_outcome:", "").trim();
 
-      if (!(await isValidOutcomeId(outcome))) {
+      if (!isValidOutcomeId(outcome)) {
         return NextResponse.json({ error: "INVALID_OUTCOME" }, { status: 400 });
       }
 
