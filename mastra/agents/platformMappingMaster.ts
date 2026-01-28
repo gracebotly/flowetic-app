@@ -64,9 +64,7 @@ export const platformMappingMaster: Agent = new Agent({
     analyzeSchema: {} as any,           // Add this tool
     getSchemaSummary: {} as any,        // Add this tool
     generateMapping: {} as any,         // Add this tool
-    proposeMapping: {} as any,          // Add this tool (when created)
     getCurrentMapping: {} as any,       // Add this tool (when created)
-    saveMapping: {} as any,             // Add this tool (when created)
     // Keep existing tools
     appendThreadEvent,
     getClientContext,

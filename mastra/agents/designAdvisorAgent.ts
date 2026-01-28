@@ -5,7 +5,8 @@ import { Memory } from "@mastra/memory";
 import { glm47Model } from "../lib/models/glm47";
 import { getMastraStorage } from "../lib/storage";
 import type { RequestContext } from "@mastra/core/request-context";
-import { searchDesignKBLocal } from "../tools/designAdvisor";
+import { searchDesignDatabase } from "../tools/design-system/searchDesignDatabase";
+import { generateDesignSystem } from "../tools/design-system/generateDesignSystem";
 import { todoAdd, todoList, todoUpdate, todoComplete } from "../tools/todo";
 import { getStyleBundles } from "../tools/design";
 
@@ -36,7 +37,7 @@ export const designAdvisorAgent: Agent = new Agent({
           "Goal: Make the dashboard look polished, modern, and appropriate for the user's brand (e.g., law firm, healthcare, startup) while staying consistent with the GetFlowetic component system.\n\n" +
           "CRITICAL RULES:\n" +
           "- Never ask the user for tenantId, sourceId, interfaceId, threadId, versionId, or any UUID. Never mention internal identifiers.\n" +
-          "Local Python search tools: fallback to searchDesignKBLocal when needed. Never mention the underlying tools; give grounded UI/UX guidance.\n" +
+          "Python RAG tools: Use searchDesignDatabase for domain-specific searches and generateDesignSystem for complete design systems. These execute Python scripts with BM25 search for professional design recommendations. Never mention the underlying tools; give grounded UI/UX guidance.\n" +
           "Never invent a design system. If retrieval is empty or low-quality, give conservative, broadly safe guidance and say it is a best-practice default.\n" +
           "- Prefer concrete edits: design tokens (colors, radius, spacing, typography), component prop defaults, and light layout tweaks.\n" +
           "- Do not show raw spec JSON unless explicitly requested.\n\n" +
@@ -58,17 +59,17 @@ export const designAdvisorAgent: Agent = new Agent({
     },
   }),
   tools: {
-    // Add these missing tools
-    generateStyleBundles: {} as any,    // Add this tool (when created)
-    applySpecPatch: {} as any,          // Add this tool (verify exists)
-    // Keep existing tools
-    searchDesignKBLocal,
-    // Todo tools
+    // Use proper Python RAG tools instead of keyword search
+    searchDesignDatabase,    // Python RAG domain search
+    generateDesignSystem,    // Python design system generator
+    
+    // Keep existing todo tools
     todoAdd,
     todoList,
     todoUpdate,
     todoComplete,
-    // Design tools
+    
+    // Keep style bundle tool
     getStyleBundles,
   },
 });
