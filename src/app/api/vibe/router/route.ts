@@ -666,7 +666,7 @@ Journey phases:
       
       // TypeScript-safe filtering: explicitly check for undefined
       const coreOutcomes = [dashboardOutcome, productOutcome].filter(
-        (o): o is NonNullable => o !== undefined && o !== null
+        (o): o is NonNullable<typeof o> => o !== undefined && o !== null
       );
       
       const toolUi: ToolUi = {
