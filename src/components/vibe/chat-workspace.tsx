@@ -49,8 +49,7 @@ type JourneyMode =
   | "style"
   | "build_preview"
   | "interactive_edit"
-  | "deploy"
-  | "consultation";
+  | "deploy";
 
 type ToolUiPayload =
   | {
