@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getMastra } from "@/mastra";
 import { ensureMastraThreadId } from "@/mastra/lib/ensureMastraThread";
+import { runAgentNetworkToText } from "@/mastra/lib/runNetwork";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -212,19 +213,6 @@ export async function POST(req: NextRequest) {
     }
 
     if (wantsPreview || wantsMapping) {
-      const mappingAgent = (mastra.getAgent as any)("platformMappingMaster");
-      if (!mappingAgent) {
-        return new Response(
-          JSON.stringify({
-            type: "error",
-            code: "AGENT_NOT_FOUND",
-            message: "platformMappingMaster agent is not registered.",
-          }),
-          { status: 500, headers: { "Content-Type": "application/json" } },
-        );
-      }
-
-      // Use ensureMastraThreadId to get Mastra thread ID
       const mastraThreadId = await ensureMastraThreadId({
         tenantId,
         journeyThreadId: threadId,
@@ -232,31 +220,24 @@ export async function POST(req: NextRequest) {
         title: "Flowetic Vibe",
       });
 
-      const routerResponse = await master.generate(message, {
-        maxSteps: 3,
+      const { text } = await runAgentNetworkToText({
+        agent: master as any,
+        message,
         requestContext: runtimeContext,
         memory: {
           resource: String(userId),
           thread: String(mastraThreadId),
         },
-      });
-
-      const mappingResponse = await mappingAgent.generate(message, {
-        maxSteps: 8,
-        requestContext: runtimeContext,
-        memory: {
-          resource: String(userId),
-          thread: String(mastraThreadId),
-        },
+        maxSteps: 15,
       });
 
       return new Response(
         JSON.stringify({
           type: "success",
-          agentKey: "masterRouterAgent->platformMappingMaster",
-          text: `${routerResponse.text ?? ""}\n\n${mappingResponse.text ?? ""}`.trim(),
+          agentKey: "masterRouterAgent.network",
+          text: text || "",
         }),
-        { headers: { "Content-Type": "application/json" } },
+        { headers: { "Content-Type": "application/json" } }
       );
     }
 
@@ -269,7 +250,8 @@ export async function POST(req: NextRequest) {
     });
 
     const routerOnly = await master.generate(message, {
-      maxSteps: 3,
+      maxSteps: 10,
+      toolChoice: "auto",
       requestContext: runtimeContext,
       memory: {
         resource: String(userId),

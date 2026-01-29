@@ -8,6 +8,7 @@ import {
   applySpecPatch,
   savePreviewVersion,
 } from "../tools/specEditor";
+import { createFloweticMemory } from "../lib/memory";
 import { validateSpec } from "../tools/validateSpec";
 import { applyInteractiveEdits } from "../tools/interactiveEdit/applyInteractiveEdits";
 import { reorderComponents } from "../tools/interactiveEdit/reorderComponents";
@@ -57,24 +58,28 @@ export const dashboardBuilderAgent: Agent = new Agent({
     ];
   },
   model: glm47Model(),
-  memory: new Memory({
-    storage: getMastraStorage(),
-    options: {
-      lastMessages: 20,
+  memory: createFloweticMemory({
+    lastMessages: 30,
+    workingMemory: {
+      enabled: true,
+      template: `# Spec Editing Session
+- interfaceId:
+- currentGoal:
+- lastEditApplied:
+- validationStatus:
+- previewUrl:
+`,
     },
   }),
   tools: {
-    // Add these missing tools
-    selectTemplate: {} as any,        // Add this tool
-    listTemplates: {} as any,         // Add this tool
-    getTemplateRequirements: {} as any, // Add this tool (when created)
-    generateDashboardSpec: {} as any,   // Add this tool
-    validateDashboardSpec: {} as any,   // Add this tool
-    scoreDashboardSpec: {} as any,      // Add this tool
-    savePreviewSpec: {} as any,         // Add this tool
-    interactiveApplyEdits: {} as any,   // Add this tool
-    interactiveReorderComponents: {} as any, // Add this tool
-    // Keep existing todo tools
+    getCurrentSpec,
+    applySpecPatch,
+    validateSpec,
+    savePreviewVersion,
+    applyInteractiveEdits,
+    reorderComponents,
+    todoAdd,
+    todoList,
     todoUpdate,
     todoComplete,
   },

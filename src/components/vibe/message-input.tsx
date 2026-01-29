@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef } from "react";
-import { Paperclip, Mic, Send } from "lucide-react";
+import { Mic, Send, Paperclip } from "lucide-react";
+import { ModelSelector, type ModelId } from "./model-selector";
 
 export function MessageInput(props: {
   value: string;
@@ -11,6 +12,8 @@ export function MessageInput(props: {
   onAttachFiles?: (files: FileList) => void;
   onToggleVoice?: () => void;
   isListening?: boolean;
+  selectedModel?: ModelId;
+  onModelSelect?: (modelId: ModelId) => void;
 }) {
   const fileRef = useRef<HTMLInputElement | null>(null);
   const disabled = !!props.disabled;
@@ -31,16 +34,24 @@ export function MessageInput(props: {
         }}
       />
 
-      <button
-        type="button"
-        aria-label="Attach file"
-        title="Attach file"
-        onClick={() => fileRef.current?.click()}
-        className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 text-gray-600 hover:bg-gradient-to-br hover:from-indigo-50 hover:to-purple-50 hover:border-indigo-300 hover:text-indigo-600 disabled:opacity-50 transition-all duration-300"
-        disabled={disabled}
-      >
-        <Paperclip size={18} />
-      </button>
+      {props.selectedModel && props.onModelSelect ? (
+        <ModelSelector
+          selectedModel={props.selectedModel}
+          onModelSelect={props.onModelSelect}
+          onFileUpload={() => fileRef.current?.click()}
+        />
+      ) : (
+        <button
+          type="button"
+          aria-label="Attach file"
+          title="Attach file"
+          onClick={() => fileRef.current?.click()}
+          className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 text-gray-600 hover:bg-gradient-to-br hover:from-indigo-50 hover:to-purple-50 hover:border-indigo-300 hover:text-indigo-600 disabled:opacity-50 transition-all duration-300"
+          disabled={disabled}
+        >
+          <Paperclip size={18} />
+        </button>
+      )}
 
       <textarea
         aria-label="Message input"

@@ -23,6 +23,7 @@ import { getOutcomes } from "@/mastra/tools/outcomes";
 import { ensureMastraThreadId } from "@/mastra/lib/ensureMastraThread";
 import { getMastra } from "@/mastra/index";
 import { OUTCOMES } from "@/data/outcomes";
+import { runAgentNetworkToText } from "@/mastra/lib/runNetwork";
 
 type JourneyMode =
   | "select_entity"
@@ -208,12 +209,14 @@ export async function POST(req: NextRequest) {
       vibeContext,
       journey,
       userMessage,
+      selectedModel,
     }: {
       userId: string;
       tenantId: string;
       vibeContext: any;
       journey: any;
       userMessage: string;
+      selectedModel?: string;
     } = body;
 
     if (!userId || !tenantId) {
@@ -315,6 +318,11 @@ Journey phases:
         requestContext.set(k, v as any);
       }
 
+      // Add selected model to RequestContext for dynamic model selection
+      if (selectedModel) {
+        requestContext.set("selectedModel", selectedModel);
+      }
+
       // Preserve legacy get() behavior if present (some of your code relies on it)
       const legacyGet = (runtimeContext as any).get;
       if (typeof legacyGet === "function") {
@@ -350,21 +358,14 @@ Journey phases:
         const master = mastra.getAgent("masterRouterAgent" as const);
         const agentRes = await master.generate(
           [
-            "System: Deep lane step 2 (final question). User needs help deciding.",
+            "System: User answered your question. Make a confident recommendation based on what they told you.",
             workflowName ? `System: User's workflow: "${workflowName}".` : "",
-            "",
-            "TONE: Consultative and helpful (not interrogative)",
-            "",
-            "OUTPUT STRUCTURE:",
-            "1. Acknowledge their answer briefly (1 sentence)",
-            "2. Ask ONE final question: Who will use this most often - your team or client?",
-            "",
-            "EXAMPLE:",
-            "Got it. One more quick question: who will mainly use this — your team, or client?",
-            "",
-            NO_ROADMAP_RULES,
+            "User message:",
+            userMessage,
           ].filter(Boolean).join("\n"),
           { 
+            maxSteps: 10,
+            toolChoice: "auto",
             requestContext,
             memory: mastraMemory,
           }
@@ -389,32 +390,17 @@ Journey phases:
         const master = mastra.getAgent("masterRouterAgent" as const);
         const agentRes = await master.generate(
           [
-            "System: Deep lane complete. Provide final recommendation.",
+            "System: User has expressed their goal. Make your final recommendation.",
             workflowName ? `System: User's workflow: "${workflowName}".` : "",
-            "",
-            "User's answers:",
+            "Their responses:",
             `Q1: ${String(answers.q1 ?? "")}`,
             `Q2: ${String(userMessage)}`,
             "",
-            "TONE: Confident consultant wrapping up discovery",
-            "",
-            "OUTPUT STRUCTURE:",
-            "1. Transition: 'Based on what you told me...'",
-            "2. Recommendation: 'I recommend [Dashboard/Product].'",
-            "3. Exactly 2 bullet reasons (tie to their specific answers)",
-            "4. Transition: 'Now let's pick the story this will tell.'",
-            "",
-            "EXAMPLE:",
-            "Based on what you told me, I recommend starting with a **Dashboard**.",
-            "",
-            "• Since this is for proving results to clients, dashboards are perfect for showing ROI",
-            "• Your team will use it internally to monitor performance before sharing with clients",
-            "",
-            "Now let's pick the story this will tell.",
-            "",
-            NO_ROADMAP_RULES,
+            "Recommend Dashboard or Product with 2-3 specific reasons tied to THEIR situation.",
           ].filter(Boolean).join("\n"),
           { 
+            maxSteps: 10,
+            toolChoice: "auto",
             requestContext,
             memory: mastraMemory,
           }
@@ -537,6 +523,8 @@ Journey phases:
         "System: You are a premium agency business consultant speaking to a non-technical user. " +
         "Use plain language. Avoid technical jargon. Explain what happens next in simple terms.",
         { 
+          maxSteps: 10,
+          toolChoice: "auto",
           requestContext,
           memory: mastraMemory,
         }
@@ -571,21 +559,14 @@ Journey phases:
       const master = mastra.getAgent("masterRouterAgent" as const);
       const agentRes = await master.generate(
         [
-          "System: Deep lane start. User clicked 'I'm not sure, help me decide'.",
+          "System: User clicked 'help me decide'. Evaluate their workflow and recommend an outcome.",
           workflowName ? `System: User's workflow: "${workflowName}".` : "",
-          "",
-          "TONE: Supportive consultant (not pushy)",
-          "",
-          "OUTPUT STRUCTURE:",
-          "1. Acknowledge: 'No problem! Let me help you figure this out.' (1 sentence)",
-          "2. Ask ONE question: What's your main goal - to prove results to a client (retention), or to sell access as a product?",
-          "",
-          "EXAMPLE:",
-          "No problem! Quick question: is this mainly to prove results to a client and help with renewals, or to sell access to the workflow as a product?",
-          "",
-          NO_ROADMAP_RULES,
+          "User message (if any):",
+          userMessage || "[No additional context]",
         ].filter(Boolean).join("\n"),
         { 
+          maxSteps: 10,
+          toolChoice: "auto",
           requestContext,
           memory: mastraMemory,
         }
@@ -761,6 +742,8 @@ Journey phases:
           NO_ROADMAP_RULES,
         ].filter(Boolean).join("\n"),
         { 
+          maxSteps: 10,
+          toolChoice: "auto",
           requestContext,
           memory: mastraMemory,
         }
@@ -822,6 +805,8 @@ Journey phases:
           "- Do NOT list metrics (the cards already show them).",
         ].filter(Boolean).join("\n"),
         { 
+          maxSteps: 10,
+          toolChoice: "auto",
           requestContext,
           memory: mastraMemory,
         }
@@ -873,145 +858,91 @@ Journey phases:
     }
 
     // ------------------------------------------------------------------
-    // Phase: build_preview (delegate to platformMappingMaster for real preview)
+    // Phase: build_preview (network orchestration)
     // ------------------------------------------------------------------
     if (effectiveMode === "build_preview") {
-      let interfaceId = vibeContext?.interfaceId as string | undefined;
+      const mastra = getMastra();
+      const master = mastra.getAgent("masterRouterAgent" as const);
 
-      if (!interfaceId) {
-        // Trigger preview generation via existing agent orchestrator.
-        // This must return interfaceId + previewUrl + versionId, or at minimum previewUrl + versionId.
-        const previewRes = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL ?? ""}/api/agent/master`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            tenantId,
-            userId,
-            message: "Generate preview dashboard now.",
-            platformType,
-            sourceId,
-          }),
-        });
-
-        const previewJson = await previewRes.json().catch(() => ({}));
-
-        if (!previewRes.ok || previewJson?.type === "error") {
-          return NextResponse.json(
-            { error: previewJson?.message || "PREVIEW_GENERATION_FAILED" },
-            { status: 500 }
-          );
-        }
-
-        // Attempt to extract preview outputs (must match your existing /api/agent/master response)
-        const previewUrl = String(previewJson?.previewUrl ?? previewJson?.result?.previewUrl ?? "");
-        const newInterfaceId = String(previewJson?.interfaceId ?? previewJson?.result?.interfaceId ?? "");
-        const newVersionId = String(previewJson?.versionId ?? previewJson?.result?.versionId ?? "");
-
-        if (!newInterfaceId) {
-          return NextResponse.json(
-            { error: "PREVIEW_GENERATION_DID_NOT_RETURN_INTERFACE_ID" },
-            { status: 500 }
-          );
-        }
-
-        interfaceId = newInterfaceId;
-
-        // Merge into vibeContext for subsequent steps
-        const nextVibeContext = {
-          ...(vibeContext ?? {}),
-          interfaceId: newInterfaceId,
-          previewUrl: previewUrl || null,
-          previewVersionId: newVersionId || null,
-          skillMD,
-        };
-
-        // Continue build_preview using the newly created interfaceId
-        vibeContext.interfaceId = newInterfaceId;
-        vibeContext.previewUrl = previewUrl || null;
-        vibeContext.previewVersionId = newVersionId || null;
+      if (!master) {
+        return NextResponse.json(
+          { error: "AGENT_NOT_FOUND", details: "masterRouterAgent not registered" },
+          { status: 500 }
+        );
       }
 
-      // Load the actual current spec to extract real component IDs for interactive edit.
-      const current = await callTool(
-        getCurrentSpec,
-        { interfaceId }, // inputData - tenantId removed as it's not needed
-        { requestContext } // context
-      );
+      // Require an interfaceId to exist (same as your previous logic)
+      const interfaceId = journey?.interfaceId || vibeContext?.interfaceId;
+      if (!interfaceId) {
+        return NextResponse.json(
+          { error: "MISSING_INTERFACE_ID", details: "No interface ID found in journey or vibeContext" },
+          { status: 400 }
+        );
+      }
 
-      const spec = current.spec_json as any;
-      const components = Array.isArray(spec?.components) ? spec.components : [];
+      // Add diagnostic toggle
+      const debugNetwork = req.nextUrl?.searchParams?.get("debugNetwork") === "1";
 
-      const widgets = components.map((c: any) => {
-        const type = String(c?.type ?? "other");
-        const kind =
-          type.toLowerCase().includes("chart")
-            ? "chart"
-            : type.toLowerCase().includes("table")
-            ? "table"
-            : type.toLowerCase().includes("metric")
-            ? "metric"
-            : "other";
+      // Let the agent network decide the correct sequence: mapping/schema checks -> workflow -> finalize
+      const networkPrompt = [
+        "System: You are orchestrating Phase 4 (Build Preview).",
+        "System: Goal: produce a previewUrl for the dashboard as fast as possible.",
+        "System: You MUST ensure schema is ready; if not, run connection backfill first.",
+        "System: You MUST ensure required mappings are complete; suspend only if required fields are missing.",
+        "System: Once ready, run the generatePreviewWorkflow and return previewUrl.",
+        "System: Return a short, confident message and include previewUrl in tool/state if available.",
+        "",
+        `System: interfaceId=${String(interfaceId)}`,
+        `System: platformType=${String(vibeContext?.platformType || requestContext.get("platformType") || "make")}`,
+        vibeContext?.sourceId ? `System: sourceId=${String(vibeContext.sourceId)}` : "",
+        "",
+        "User: Generate my preview now.",
+      ]
+        .filter(Boolean)
+        .join("\n");
 
-        const title = String(c?.props?.title ?? c?.id ?? "Widget");
-        const enabled = !(c?.props?.hidden === true);
-
-        return { id: String(c.id), title, kind, enabled };
+      const { text: agentText } = await runAgentNetworkToText({
+        agent: master as any,
+        message: networkPrompt,
+        requestContext,
+        memory: mastraMemory,
+        maxSteps: 15,
       });
 
-      // Palette options shown in interactive editing (simple MVP set).
-      const palettes = [
-        {
-          id: "premium-neutral",
-          name: "Premium Neutral",
-          swatches: [
-            { name: "Primary", hex: "#2563EB" },
-            { name: "Accent", hex: "#22C55E" },
-            { name: "Background", hex: "#F8FAFC" },
-            { name: "Surface", hex: "#FFFFFF" },
-            { name: "Text", hex: "#0F172A" },
-          ],
-        },
-        {
-          id: "dark-saas",
-          name: "Dark SaaS",
-          swatches: [
-            { name: "Primary", hex: "#60A5FA" },
-            { name: "Accent", hex: "#F472B6" },
-            { name: "Background", hex: "#0B1220" },
-            { name: "Surface", hex: "#111827" },
-            { name: "Text", hex: "#E5E7EB" },
-          ],
-        },
-        {
-          id: "slate-minimal",
-          name: "Slate Minimal",
-          swatches: [
-            { name: "Primary", hex: "#334155" },
-            { name: "Accent", hex: "#0EA5E9" },
-            { name: "Background", hex: "#F9FAFB" },
-            { name: "Surface", hex: "#FFFFFF" },
-            { name: "Text", hex: "#111827" },
-          ],
-        },
-      ];
-
-      // At this point you should have a previewUrl from your preview workflow; return it if available.
-      // If not yet wired, keep previewUrl null and the UI will still show the editor panel.
-      return NextResponse.json({
-        text: "Preview is ready. Use the controls below to refine it before deploying.",
-        journey: { ...journey, mode: "interactive_edit" },
-        toolUi: {
-          type: "interactive_edit_panel",
-          title: "Refine your dashboard",
-          interfaceId,
-          widgets,
-          palettes,
-          density: journey?.densityPreset ?? "comfortable",
-        },
+      // IMPORTANT: masterRouterAgent/network may also update storage via workflows/tools.
+      // We still update journey mode here to move forward in UI.
+      const nextJourney = {
+        ...journey,
+        mode: "interactive_edit",
+        previewGenerated: true,
         interfaceId,
-        previewUrl: vibeContext?.previewUrl ?? null,
-        previewVersionId: vibeContext?.previewVersionId ?? null,
-        vibeContext: { ...(vibeContext ?? {}), skillMD, interfaceId, previewUrl: vibeContext?.previewUrl ?? null, previewVersionId: vibeContext?.previewVersionId ?? null },
+        // previewUrl will be filled by the UI if present in vibeContext or returned later.
+        previewUrl: journey?.previewUrl || vibeContext?.previewUrl || null,
+      };
+
+      return NextResponse.json({
+        text: agentText || "Preview generation kicked off. Your preview will appear shortly.",
+        journey: nextJourney,
+        toolUi: null,
+        vibeContext: {
+          ...(vibeContext ?? {}),
+          interfaceId,
+          // leave previewUrl as-is; it should be set by the workflow/tool side if implemented
+          previewUrl: vibeContext?.previewUrl ?? journey?.previewUrl ?? null,
+          skillMD,
+        },
+        preview: journey?.previewUrl || vibeContext?.previewUrl
+          ? {
+              url: journey?.previewUrl || vibeContext?.previewUrl,
+              interfaceId,
+              status: "ready",
+            }
+          : {
+              url: null,
+              interfaceId,
+              status: "generating",
+            },
+        debug: debugNetwork ? { mode: effectiveMode } : undefined,
       });
     }
 
@@ -1115,7 +1046,8 @@ Journey phases:
     const mastra = getMastra();
     const master = mastra.getAgent("masterRouterAgent" as const);
     const result = await master.generate(userMessage, {
-      maxSteps: 3,
+      maxSteps: 10,
+      toolChoice: "auto",
       requestContext,
       memory: mastraMemory,
     });
