@@ -1,11 +1,11 @@
-import { openai } from "@ai-sdk/openai";
-import { anthropic } from "@ai-sdk/anthropic";
-import { google } from "@ai-sdk/google";
+import { createOpenAI } from "@ai-sdk/openai";
+import { createAnthropic } from "@ai-sdk/anthropic";
+import { createGoogle } from "@ai-sdk/google";
 import { glm47Model } from "./glm47";
 
 /**
  * Model configuration for Getflowetic
- * Supports 4 models: GLM 4.7 (default/cheap), Gemini 3 Pro, Claude Sonnet 4.5, GPT 5.2
+ * Uses AI SDK v5 provider factories for compatibility with Mastra v1.0.4
  */
 
 export type ModelId = "glm-4.7" | "gemini-3-pro" | "claude-sonnet-4.5" | "gpt-5.2";
@@ -15,12 +15,37 @@ export interface ModelConfig {
   displayName: string;
   provider: string;
   costTier: "cheap" | "medium" | "expensive";
-  instance: any; // AI SDK model instance
+  instance: any; // AI SDK v5 LanguageModel instance
+}
+
+// Initialize provider factories with API keys
+function getOpenAIProvider() {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    console.warn("[ModelSelector] OPENAI_API_KEY not set, GPT-5.2 will fail");
+  }
+  return createOpenAI({ apiKey });
+}
+
+function getAnthropicProvider() {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    console.warn("[ModelSelector] ANTHROPIC_API_KEY not set, Claude will fail");
+  }
+  return createAnthropic({ apiKey });
+}
+
+function getGoogleProvider() {
+  const apiKey = process.env.GOOGLE_API_KEY;
+  if (!apiKey) {
+    console.warn("[ModelSelector] GOOGLE_API_KEY not set, Gemini will fail");
+  }
+  return createGoogle({ apiKey });
 }
 
 /**
  * Available models for selection
- * Order matches UI dropdown order
+ * All use AI SDK v5 provider factories
  */
 export const AVAILABLE_MODELS: ModelConfig[] = [
   {
@@ -28,28 +53,28 @@ export const AVAILABLE_MODELS: ModelConfig[] = [
     displayName: "GLM 4.7",
     provider: "zai.chat",
     costTier: "cheap",
-    instance: glm47Model(), // Use existing implementation
+    instance: glm47Model(), // Already v5-compatible via createOpenAICompatible
   },
   {
     id: "gemini-3-pro",
     displayName: "Gemini 3 Pro",
     provider: "google",
     costTier: "expensive",
-    instance: google("gemini-3-pro-preview"),
+    instance: getGoogleProvider()("gemini-3-pro-preview"), // v5 model
   },
   {
     id: "claude-sonnet-4.5",
     displayName: "Claude Sonnet 4.5",
     provider: "anthropic",
     costTier: "expensive",
-    instance: anthropic("claude-sonnet-4-5"),
+    instance: getAnthropicProvider()("claude-sonnet-4-5"), // v5 model
   },
   {
     id: "gpt-5.2",
     displayName: "GPT 5.2",
     provider: "openai",
     costTier: "expensive",
-    instance: openai("gpt-5.2"),
+    instance: getOpenAIProvider()("gpt-5.2"), // v5 model
   },
 ];
 

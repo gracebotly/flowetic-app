@@ -2,7 +2,7 @@
 
 import { Memory } from "@mastra/memory";
 import { getMastraStorage } from "./storage";
-import { PgVector } from "@mastra/rag";
+import { PgVector } from "@mastra/pg";
 import { openai } from "@ai-sdk/openai";
 
 type CreateFloweticMemoryOpts = {
@@ -38,7 +38,7 @@ export function createFloweticMemory(opts: CreateFloweticMemoryOpts = {}) {
       storage,
       options: {
         lastMessages,
-        workingMemory,
+        workingMemory: workingMemory as any,
       },
     });
   }
@@ -49,7 +49,7 @@ export function createFloweticMemory(opts: CreateFloweticMemoryOpts = {}) {
       storage,
       options: {
         lastMessages,
-        workingMemory,
+        workingMemory: workingMemory as any,
       },
     });
   }
@@ -69,7 +69,7 @@ export function createFloweticMemory(opts: CreateFloweticMemoryOpts = {}) {
     embedder: openai.textEmbeddingModel("text-embedding-3-small"),
     options: {
       lastMessages,
-      workingMemory,
+      workingMemory: workingMemory as any,
       semanticRecall: {
         topK: 5,
         messageRange: 3,

@@ -1,6 +1,6 @@
 
 import { Agent } from "@mastra/core/agent";
-import Memory = require("@mastra/memory");
+import { Memory } from "@mastra/memory";
 import { glm47Model } from "../lib/models/glm47";
 import { getMastraStorage } from "../lib/storage";
 import type { RequestContext } from "@mastra/core/request-context";
