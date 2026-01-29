@@ -1,6 +1,6 @@
 import { createOpenAI } from "@ai-sdk/openai";
 import { createAnthropic } from "@ai-sdk/anthropic";
-import { createGoogle } from "@ai-sdk/google";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { glm47Model } from "./glm47";
 
 /**
@@ -40,7 +40,7 @@ function getGoogleProvider() {
   if (!apiKey) {
     console.warn("[ModelSelector] GOOGLE_API_KEY not set, Gemini will fail");
   }
-  return createGoogle({ apiKey });
+  return createGoogleGenerativeAI({ apiKey });
 }
 
 /**
