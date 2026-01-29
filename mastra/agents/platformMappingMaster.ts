@@ -5,6 +5,7 @@ import { glm47Model } from "../lib/models/glm47";
 import { getMastraStorage } from "../lib/storage";
 import type { RequestContext } from "@mastra/core/request-context";
 import { loadSkillMarkdown, PlatformType } from "../skills/loadSkill";
+import { createFloweticMemory } from "../lib/memory";
 import {
   appendThreadEvent,
   getClientContext,
@@ -59,13 +60,11 @@ export const platformMappingMaster: Agent = new Agent({
   workflows: {
     connectionBackfillWorkflow,
   },
-  memory: new Memory({
-    storage: getMastraStorage(),
-    options: {
-      lastMessages: 30,
-      workingMemory: {
-        enabled: true,
-        template: `# Mapping Session
+  memory: createFloweticMemory({
+    lastMessages: 30,
+    workingMemory: {
+      enabled: true,
+      template: `# Mapping Session
 - platformType:
 - schemaReady:
 - chosenTemplateId:
@@ -73,12 +72,6 @@ export const platformMappingMaster: Agent = new Agent({
 - missingFields:
 - lastDecision:
 `,
-      },
-      semanticRecall: {
-        topK: 5,
-        messageRange: 3,
-        scope: "resource",
-      },
     },
   }),
   tools: {

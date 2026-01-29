@@ -7,6 +7,7 @@ import { getMastraStorage } from "../lib/storage";
 import type { RequestContext } from "@mastra/core/request-context";
 import { searchDesignDatabase } from "../tools/design-system/searchDesignDatabase";
 import { generateDesignSystem } from "../tools/design-system/generateDesignSystem";
+import { createFloweticMemory } from "../lib/memory";
 import { todoAdd, todoList, todoUpdate, todoComplete } from "../tools/todo";
 import { getStyleBundles } from "../tools/design";
 
@@ -54,25 +55,17 @@ export const designAdvisorAgent: Agent = new Agent({
     ];
   },
   model: glm47Model(),
-  memory: new Memory({
-    storage: getMastraStorage(),
-    options: {
-      lastMessages: 30,
-      workingMemory: {
-        enabled: true,
-        template: `# Design Preferences
+  memory: createFloweticMemory({
+    lastMessages: 30,
+    workingMemory: {
+      enabled: true,
+      template: `# Design Preferences
 - styleDirection:
 - audience:
 - density:
 - palette:
 - typographyNotes:
 `,
-      },
-      semanticRecall: {
-        topK: 5,
-        messageRange: 3,
-        scope: "resource",
-      },
     },
   }),
   tools: {

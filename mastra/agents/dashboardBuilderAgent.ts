@@ -8,6 +8,7 @@ import {
   applySpecPatch,
   savePreviewVersion,
 } from "../tools/specEditor";
+import { createFloweticMemory } from "../lib/memory";
 import { validateSpec } from "../tools/validateSpec";
 import { applyInteractiveEdits } from "../tools/interactiveEdit/applyInteractiveEdits";
 import { reorderComponents } from "../tools/interactiveEdit/reorderComponents";
@@ -57,25 +58,17 @@ export const dashboardBuilderAgent: Agent = new Agent({
     ];
   },
   model: glm47Model(),
-  memory: new Memory({
-    storage: getMastraStorage(),
-    options: {
-      lastMessages: 30,
-      workingMemory: {
-        enabled: true,
-        template: `# Spec Editing Session
+  memory: createFloweticMemory({
+    lastMessages: 30,
+    workingMemory: {
+      enabled: true,
+      template: `# Spec Editing Session
 - interfaceId:
 - currentGoal:
 - lastEditApplied:
 - validationStatus:
 - previewUrl:
 `,
-      },
-      semanticRecall: {
-        topK: 5,
-        messageRange: 3,
-        scope: "resource",
-      },
     },
   }),
   tools: {

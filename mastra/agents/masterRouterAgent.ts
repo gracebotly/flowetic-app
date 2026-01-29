@@ -1,11 +1,12 @@
 
 import { Agent } from "@mastra/core/agent";
-import { Memory } from "@mastra/memory";
+import Memory = require("@mastra/memory");
 import { glm47Model } from "../lib/models/glm47";
 import { getMastraStorage } from "../lib/storage";
 import type { RequestContext } from "@mastra/core/request-context";
 import type { PlatformType } from "../skills/loadSkill";
 import { loadSkillMarkdown, loadNamedSkillMarkdown } from "../skills/loadSkill";
+import { createFloweticMemory } from "../lib/memory";
 import { platformMappingMaster } from "./platformMappingMaster";
 import { dashboardBuilderAgent } from "./dashboardBuilderAgent";
 import { designAdvisorAgent } from "./designAdvisorAgent";
@@ -155,25 +156,17 @@ export const masterRouterAgent: Agent = new Agent({
     connectionBackfillWorkflow,
     deployDashboardWorkflow,
   },
-  memory: new Memory({
-    storage: getMastraStorage(),
-    options: {
-      lastMessages: 30,
-      workingMemory: {
-        enabled: true,
-        template: `# User Profile
+  memory: createFloweticMemory({
+    lastMessages: 30,
+    workingMemory: {
+      enabled: true,
+      template: `# User Profile
 - Primary goal:
 - Target audience (client vs internal):
 - Monetization intent (renewals/retention vs sell access vs both):
 - Constraints:
 - Decisions made so far:
 `,
-      },
-      semanticRecall: {
-        topK: 5,
-        messageRange: 3,
-        scope: "resource",
-      },
     },
   }),
   tools: {
