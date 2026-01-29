@@ -1312,7 +1312,7 @@ return (
           <div
             className="fixed inset-0 bg-black bg-opacity-50"
             onClick={() => setShowShareModal(false)}
-          ></div>
+          />
           <div className="relative bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-gray-900">Export Conversation</h3>
