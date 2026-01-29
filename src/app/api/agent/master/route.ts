@@ -243,7 +243,8 @@ export async function POST(req: NextRequest) {
       });
 
       const mappingResponse = await mappingAgent.generate(message, {
-        maxSteps: 8,
+        maxSteps: 10,
+        toolChoice: "auto",
         requestContext: runtimeContext,
         memory: {
           resource: String(userId),

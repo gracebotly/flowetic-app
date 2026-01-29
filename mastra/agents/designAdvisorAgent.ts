@@ -47,7 +47,9 @@ export const designAdvisorAgent: Agent = new Agent({
           "- Never change template/platform without router direction\n" +
           "- Never produce raw JSON unless asked\n\n" +
           "When the user asks to 'make it more premium/minimal/bold', give 2-3 specific token changes (palette, radius, density) and explain the visual impact in plain language.\n" +
-          "Always end with: 'Would you like me to apply these changes?'",
+          "DEFAULT BEHAVIOR:\n" +
+          "- If the user asks for a change (premium/minimal/bold), propose 2-3 concrete token edits and then proceed to apply them ONLY if you have an explicit tool path to apply changes in the current phase.\n" +
+          "- If you do not have the tool path in this agent to apply changes, provide the recommendations and tell the user what will change in the preview once applied.",
       },
     ];
   },
@@ -55,7 +57,22 @@ export const designAdvisorAgent: Agent = new Agent({
   memory: new Memory({
     storage: getMastraStorage(),
     options: {
-      lastMessages: 20,
+      lastMessages: 30,
+      workingMemory: {
+        enabled: true,
+        template: `# Design Preferences
+- styleDirection:
+- audience:
+- density:
+- palette:
+- typographyNotes:
+`,
+      },
+      semanticRecall: {
+        topK: 5,
+        messageRange: 3,
+        scope: "resource",
+      },
     },
   }),
   tools: {

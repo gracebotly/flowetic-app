@@ -14,6 +14,9 @@ import {
   saveMapping,
   runGeneratePreviewWorkflow,
 } from "../tools/platformMapping";
+import { analyzeSchema } from "../tools/analyzeSchema";
+import { generateMapping } from "../tools/generateMapping";
+import { getSchemaSummary } from "../tools/platformMapping/getSchemaSummary";
 import { todoAdd, todoList, todoUpdate, todoComplete } from "../tools/todo";
 import { getStyleBundles } from "../tools/design";
 import { getJourneySession } from "../tools/journey/getJourneySession";
@@ -46,6 +49,9 @@ export const platformMappingMaster: Agent = new Agent({
         `Selected platformType: ${platformType}`,
         `Platform Skill.md:\n\n${skill}`,
         "When user asks to generate/preview, call runGeneratePreviewWorkflow only AFTER schemaReady is true and mapping is complete.",
+        "BEHAVIOR:",
+        "- When you have enough information to proceed, proceed without asking for confirmation.",
+        "- Only suspend / ask a question when a required mapping field is missing or schemaReady is false.",
       ].join("\n"),
     };
   },
@@ -56,15 +62,29 @@ export const platformMappingMaster: Agent = new Agent({
   memory: new Memory({
     storage: getMastraStorage(),
     options: {
-      lastMessages: 20,
+      lastMessages: 30,
+      workingMemory: {
+        enabled: true,
+        template: `# Mapping Session
+- platformType:
+- schemaReady:
+- chosenTemplateId:
+- mappingConfidence:
+- missingFields:
+- lastDecision:
+`,
+      },
+      semanticRecall: {
+        topK: 5,
+        messageRange: 3,
+        scope: "resource",
+      },
     },
   }),
   tools: {
-    // Add these missing tools
-    analyzeSchema: {} as any,           // Add this tool
-    getSchemaSummary: {} as any,        // Add this tool
-    generateMapping: {} as any,         // Add this tool
-    getCurrentMapping: {} as any,       // Add this tool (when created)
+    analyzeSchema,
+    generateMapping,
+    getSchemaSummary,
     // Keep existing tools
     appendThreadEvent,
     getClientContext,
