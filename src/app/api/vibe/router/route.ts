@@ -890,7 +890,7 @@ Journey phases:
         const generateWorkflow = mastra.getWorkflow("generatePreviewWorkflow");
         
         if (!generateWorkflow) {
-          return NextResponse.json({ 
+          return NextResponse.json({
             error: "WORKFLOW_NOT_FOUND",
             details: "generatePreviewWorkflow is not registered"
           }, { status: 500 });
@@ -901,25 +901,16 @@ Journey phases:
           const interfaceId = journey?.interfaceId || vibeContext?.interfaceId;
           
           if (!interfaceId) {
-            return NextResponse.json({ 
+            return NextResponse.json({
               error: "MISSING_INTERFACE_ID",
               details: "No interface ID found in journey or vibeContext"
             }, { status: 400 });
           }
 
-          // Create run context
-          const runContext = new RequestContext();
-          runContext.set("tenantId", tenantId);
-          runContext.set("interfaceId", interfaceId);
-          runContext.set("platformType", platformType);
-          if (vibeContext?.sourceId) {
-            runContext.set("sourceId", vibeContext.sourceId);
-          }
+          // Create workflow run instance (synchronous method, no parameters)
+          const workflowRun = await generateWorkflow.createRun();
 
-          // Create workflow run instance (no parameters in v1.0.4)
-          const workflowRun = await generateWorkflow.createRunAsync();
-
-          // Start workflow with input data
+          // Start workflow with input data only
           const result = await workflowRun.start({
             inputData: {
               tenantId,
@@ -929,7 +920,6 @@ Journey phases:
               selectedStyleBundle: journey?.selectedStyleBundle,
               selectedOutcome: journey?.selectedOutcome,
             },
-            runtimeContext: runContext,
           });
 
           // Check if workflow succeeded
@@ -948,8 +938,8 @@ Journey phases:
               text: "Here's your preview! You can now make edits or proceed to deploy.",
               journey: nextJourney,
               toolUi: null,
-              vibeContext: { 
-                ...(vibeContext ?? {}), 
+              vibeContext: {
+                ...(vibeContext ?? {}),
                 previewUrl: result.previewUrl,
                 interfaceId: result.interfaceId,
               },
@@ -984,7 +974,7 @@ Journey phases:
         text: "Here's your preview! You can now make edits or proceed to deploy.",
         journey: { ...journey, mode: "interactive_edit" },
         toolUi: null,
-        vibeContext: { 
+        vibeContext: {
           ...(vibeContext ?? {}),
           previewUrl: journey?.previewUrl,
         },
