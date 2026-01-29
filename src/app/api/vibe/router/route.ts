@@ -1173,13 +1173,18 @@ Journey phases:
     const mastra = getMastra();
     const master = mastra.getAgent("masterRouterAgent" as const);
     
-    // Get agent to craft error recovery response
-    const errorContext = {
-      userId: body?.userId || "unknown",
-      tenantId: body?.tenantId || "unknown",
-      platformType: body?.vibeContext?.platformType || "other",
-      sourceId: body?.vibeContext?.sourceId,
-    };
+    // Create proper RequestContext instance for agent
+    const errorRequestContext = new RequestContext();
+    errorRequestContext.set("userId", body?.userId || "unknown");
+    errorRequestContext.set("tenantId", body?.tenantId || "unknown");
+    errorRequestContext.set("platformType", body?.vibeContext?.platformType || "other");
+    errorRequestContext.set("phase", "consultation");
+    if (body?.vibeContext?.sourceId) {
+      errorRequestContext.set("sourceId", body.vibeContext.sourceId);
+    }
+    if (workflowName) {
+      errorRequestContext.set("workflowName", workflowName);
+    }
     
     const agentErrorRes = await master.generate(
       `System: Backend error occurred: ${errorMessage}. 
@@ -1190,7 +1195,7 @@ Journey phases:
        Instead, provide helpful consulting to keep the user engaged.
        Ask questions or show fallback options to continue the journey naturally.`,
       { 
-        requestContext: errorContext, 
+        requestContext: errorRequestContext, 
         memory: {
           resource: String(body?.userId || "unknown"),
           thread: String(body?.threadId || "error-thread")
