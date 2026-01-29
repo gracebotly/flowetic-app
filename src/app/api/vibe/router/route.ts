@@ -22,6 +22,7 @@ import { callTool } from "@/mastra/lib/callTool";
 import { getOutcomes } from "@/mastra/tools/outcomes";
 import { ensureMastraThreadId } from "@/mastra/lib/ensureMastraThread";
 import { getMastra } from "@/mastra/index";
+import { OUTCOMES } from "@/data/outcomes";
 
 type JourneyMode =
   | "select_entity"
@@ -52,6 +53,44 @@ function dedupeStringsByMetricId(labels: string[]): string[] {
     out.push(l);
   }
   return out;
+}
+
+/**
+ * Maps business outcome IDs to the style bundle type expected by getStyleBundles tool.
+ * Bridges business layer (user selection) with technical layer (design system).
+ * 
+ * @param outcomeId - Outcome ID from OUTCOMES catalog or user selection
+ * @returns 'dashboard' | 'product' for getStyleBundles tool
+ */
+function mapOutcomeToStyleType(outcomeId: string | undefined | null): 'dashboard' | 'product' {
+  const normalized = String(outcomeId || "").trim().toLowerCase();
+  
+  if (!normalized) {
+    return 'dashboard'; // Default fallback
+  }
+  
+  // Look up outcome in OUTCOMES catalog to use its category
+  const outcome = OUTCOMES.find((o: any) => o?.id === normalized);
+  
+  if (outcome?.category) {
+    // Map category to style type
+    if (outcome.category === 'product') {
+      return 'product';
+    }
+    // Both 'dashboard' and 'operations' map to 'dashboard'
+    return 'dashboard';
+  }
+  
+  // Fallback: keyword-based heuristics if category missing
+  if (normalized.includes('product') || 
+      normalized.includes('portal') || 
+      normalized.includes('saas') ||
+      normalized.includes('marketplace')) {
+    return 'product';
+  }
+  
+  // Default: dashboard (most common case)
+  return 'dashboard';
 }
 
 type ToolUi =
@@ -143,6 +182,12 @@ const NO_ROADMAP_RULES = [
   "- Use plain language for non-technical users.",
   "- Avoid jargon like: execution status, success rate, optimize processes, workflow activity dashboard.",
 ].join("\n");
+
+function isValidOutcomeId(id: string): boolean {
+  const normalized = String(id || "").trim();
+  if (!normalized) return false;
+  return OUTCOMES.some((o: any) => o?.id === normalized);
+}
 
 export async function POST(req: NextRequest) {
   const databaseUrl = process.env.DATABASE_URL;
@@ -331,6 +376,7 @@ Journey phases:
           journey: nextJourney,
           toolUi: null, // KEEP cards hidden during deep lane
           vibeContext: { ...(vibeContext ?? {}), skillMD },
+          progress: { show: false }, // Hide progress during consultation
         });
       }
 
@@ -419,6 +465,10 @@ Journey phases:
           journey: nextJourney,
           toolUi,
           vibeContext: { ...(vibeContext ?? {}), skillMD },
+          progress: { 
+            show: true, // Agent controls when to show progress
+            currentStep: nextJourney.mode === "consultation" ? undefined : 1 // Hide step during consultation
+          },
         });
       }
     }
@@ -447,7 +497,7 @@ Journey phases:
     if (isAction(userMessage) && userMessage.startsWith("__ACTION__:select_outcome:")) {
       const outcome = userMessage.replace("__ACTION__:select_outcome:", "").trim();
 
-      if (outcome !== "dashboard" && outcome !== "product") {
+      if (!isValidOutcomeId(outcome)) {
         return NextResponse.json({ error: "INVALID_OUTCOME" }, { status: 400 });
       }
 
@@ -498,6 +548,7 @@ Journey phases:
         journey: nextJourney,
         toolUi: storyboardToolUi,
         vibeContext: { ...(vibeContext ?? {}), skillMD },
+        progress: { show: true, currentStep: 2 },
       });
     }
 
@@ -547,9 +598,9 @@ Journey phases:
         journey: deepLaneJourney,
         toolUi: null, // ← CHANGED: Don't show cards during deep lane questions
         vibeContext: { ...(vibeContext ?? {}), skillMD },
+        progress: { show: false },
       });
     }
-
     // ------------------------------------------------------------------
     // ACTION: style bundle selected
     // ------------------------------------------------------------------
@@ -564,7 +615,7 @@ Journey phases:
         getStyleBundles,
         {
           platformType,
-          outcome: journey?.selectedOutcome ?? "dashboard",
+          outcome: mapOutcomeToStyleType(journey?.selectedOutcome),
           audience: "client",
           dashboardKind: "workflow-activity",
           notes: "User selected a bundle; return the same set for token extraction.",
@@ -602,7 +653,7 @@ Journey phases:
         getStyleBundles,
         {
           platformType,
-          outcome: nextJourney?.selectedOutcome ?? "dashboard",
+          outcome: mapOutcomeToStyleType(nextJourney?.selectedOutcome),
           audience: "client",
           dashboardKind: "workflow-activity",
           notes: "Return premium style+palette bundles appropriate for agency white-label client delivery.",
@@ -653,10 +704,21 @@ Journey phases:
         { requestContext }
       )) as GetOutcomesResult;
 
+      // Filter to 2 core outcomes: dashboard and product only
+      type OutcomeType = GetOutcomesResult['outcomes'][number];
+      
+      const dashboardOutcome = outcomesResult.outcomes.find(o => o.category === 'dashboard');
+      const productOutcome = outcomesResult.outcomes.find(o => o.category === 'product');
+      
+      // TypeScript-safe filtering: remove undefined values
+      const coreOutcomes = [dashboardOutcome, productOutcome].filter(
+        (o): o is OutcomeType => o !== undefined && o !== null
+      );
+      
       const toolUi: ToolUi = {
         type: "outcome_cards",
         title: "Outcome + Monetization Strategy",
-        options: outcomesResult.outcomes.map((o) => ({
+        options: coreOutcomes.map((o) => ({
           id: o.id,
           title: o.name,
           description: o.description,
@@ -705,10 +767,13 @@ Journey phases:
       );
       const agentText = String((agentRes as any)?.text ?? "").trim();
 
+      // Check if user is in deep lane (consultative mode)
+      const inDeepLane = Boolean(journey?.deepLane);
+      
       return NextResponse.json({
         text: agentText || "Hey! Let's figure out what you want to build first. Pick one of the cards below, or click \"I'm not sure\" if you want help deciding.",
         journey: { ...journey, mode: "recommend" },
-        toolUi,
+        toolUi: inDeepLane ? null : toolUi, // Suppress cards in deep lane
         vibeContext: { ...(vibeContext ?? {}), skillMD },
       });
     }
@@ -779,7 +844,7 @@ Journey phases:
         getStyleBundles,
         {
           platformType,
-          outcome: journey?.selectedOutcome ?? "dashboard",
+          outcome: mapOutcomeToStyleType(journey?.selectedOutcome),
           audience: "client",
           dashboardKind: "workflow-activity",
           notes: "Return premium style+palette bundles appropriate for agency white-label client delivery.",
@@ -1082,7 +1147,6 @@ Journey phases:
         details: {
           name: err?.name,
           code: err?.code,
-          // stack is included only to speed up debugging; remove later if desired
           stack,
         },
       },

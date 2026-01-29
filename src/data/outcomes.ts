@@ -177,3 +177,16 @@ export function filterOutcomesByPlatform(
 export function getOutcomeById(id: string): OutcomeCard | undefined {
   return OUTCOME_CATALOG.find((o) => o.id === id);
 }
+
+// Canonical outcomes list for server/runtime validation.
+// This is intentionally a simple array export so API routes can validate IDs
+// without depending on Mastra Tool wrappers.
+export const OUTCOMES = [
+  ...filterOutcomesByPlatform("make"),
+  ...filterOutcomesByPlatform("n8n"),
+  ...filterOutcomesByPlatform("activepieces"),
+  ...filterOutcomesByPlatform("zapier"),
+  ...filterOutcomesByPlatform("retell"),
+  ...filterOutcomesByPlatform("vapi"),
+  ...filterOutcomesByPlatform("other"),
+].filter((o, idx, arr) => arr.findIndex((x) => x.id === o.id) === idx);

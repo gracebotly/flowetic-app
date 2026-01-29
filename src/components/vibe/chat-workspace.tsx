@@ -782,6 +782,8 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
 
       setToolUi(data?.toolUi ?? null);
 
+      
+
       if (data?.vibeContext) {
         setVibeContext((prev: any) => ({ ...(prev ?? {}), ...data.vibeContext }));
       }
