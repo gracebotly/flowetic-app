@@ -358,10 +358,10 @@ Journey phases:
         const master = mastra.getAgent("masterRouterAgent" as const);
         const agentRes = await master.generate(
           [
-            "System: User answered your question. Acknowledge and ask one final simple question to complete their profile.",
+            "System: User answered your question. Make a confident recommendation based on what they told you.",
             workflowName ? `System: User's workflow: "${workflowName}".` : "",
-            "",
-            NO_ROADMAP_RULES,
+            "User message:",
+            userMessage,
           ].filter(Boolean).join("\n"),
           { 
             maxSteps: 10,
@@ -390,14 +390,13 @@ Journey phases:
         const master = mastra.getAgent("masterRouterAgent" as const);
         const agentRes = await master.generate(
           [
-            "System: User answered your questions. Provide a clear recommendation based on their responses.",
+            "System: User has expressed their goal. Make your final recommendation.",
             workflowName ? `System: User's workflow: "${workflowName}".` : "",
-            "",
-            "User's answers:",
+            "Their responses:",
             `Q1: ${String(answers.q1 ?? "")}`,
             `Q2: ${String(userMessage)}`,
             "",
-            NO_ROADMAP_RULES,
+            "Recommend Dashboard or Product with 2-3 specific reasons tied to THEIR situation.",
           ].filter(Boolean).join("\n"),
           { 
             maxSteps: 10,
@@ -560,10 +559,10 @@ Journey phases:
       const master = mastra.getAgent("masterRouterAgent" as const);
       const agentRes = await master.generate(
         [
-          "System: User needs help deciding between outcomes. Ask a simple question to understand their goal.",
+          "System: User clicked 'help me decide'. Evaluate their workflow and recommend an outcome.",
           workflowName ? `System: User's workflow: "${workflowName}".` : "",
-          "",
-          NO_ROADMAP_RULES,
+          "User message (if any):",
+          userMessage || "[No additional context]",
         ].filter(Boolean).join("\n"),
         { 
           maxSteps: 10,
