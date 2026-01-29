@@ -103,6 +103,41 @@ export const masterRouterAgent: Agent = new Agent({
       "- Workflow is packaged service (input→output) → Product (hide complexity)",
       "- User mentions 'prove ROI', 'show clients' → Dashboard (retention)",
       "- When uncertain → Dashboard (safer default) + explain assumption",
+      "",
+      "# MEMORY MANAGEMENT (CRITICAL)",
+      
+      "AFTER EVERY USER MESSAGE:",
+      "- Update working memory with inferences about:",
+      "  - Primary goal (from workflow description + user questions)",
+      "  - Target audience (client vs internal - from 'client', 'team', 'selling' keywords)",
+      "  - Monetization intent (from 'sell', 'track', 'prove ROI', 'show value' keywords)",
+      "  - User preferences and decisions made (style choices, platform selections)",
+      "  - Industry focus (from user questions about markets/industries)",
+      "  - Previous recommendations and user reactions (agreed/disagreed)",
+      "",
+      
+      "WHEN RESPONDING:",
+      "- Reference previous context naturally without saying 'I remember' or 'as we discussed'",
+      "- Use working memory to avoid repeating questions",
+      "- Use working memory to answer follow-up questions accurately",
+      "- Acknowledge specific details user mentioned earlier in conversation",
+      "- When user asks follow-up questions, check working memory first for context",
+      "",
+      
+      "MEMORY UPDATE RULES:",
+      "- Don't explicitly say 'I'm updating my memory' - just do it",
+      "- Update proactively when user provides new information",
+      "- Keep working memory concise - remove outdated info",
+      "- Track what user has agreed/disagreed with in recommendations",
+      "",
+      
+      "Example of GOOD memory usage:",
+      "User: 'What if I wanted to turn this into a client-facing service?'",
+      "Agent: 'That's a great direction. Based on your B2B lead gen focus, I'd recommend starting with...'",
+      
+      "Example of BAD memory usage:",
+      "Agent: 'As I remember from our conversation...', 'Let me check what we discussed...'",
+      "",
     ].join("\n");
 
     return {
@@ -135,14 +170,14 @@ export const masterRouterAgent: Agent = new Agent({
     lastMessages: 30,
     workingMemory: {
       enabled: true,
-      template: `# Session Context (auto-updated by agent)
-- Workflow type: [infer from name/description]
-- User's primary goal: [infer from questions/comments]
-- Target audience: [infer from 'client'/'team'/'sell' keywords]
-- Monetization intent: [infer from 'retention'/'sell access'/'prove ROI']
-- Key concerns raised: [track user objections or challenges]
-- Recommendation given: [what you recommended and why]
-- User reaction: [accepted/challenged/asked for more info]
+      template: `# User Profile (Auto-filled by agent)
+- Primary goal: [INFER from workflow description and questions]
+- Target audience: [INFER from 'client', 'team', 'selling' keywords]
+- Monetization intent: [INFER from 'sell', 'track', 'prove ROI' keywords]
+- Workflow type: [Lead gen / CRM / Analytics / Automation]
+- Industry focus: [INFER from questions about markets/industries]
+- Key recommendations made: [Track recommendations and user reactions]
+- Next step: [Specific action user should take]
 `,
     },
   }),

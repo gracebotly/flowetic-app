@@ -17,34 +17,25 @@ function envFlag(name: string, defaultValue: boolean) {
 }
 
 /**
- * IMPORTANT:
+ * IMPORTANT: Memory configuration for autonomous agent behavior
  * - semanticRecall requires BOTH: vector store + embedder
  * - Vercel build will instantiate agents; so this must never throw at import-time.
- * - Default: semantic recall OFF unless explicitly enabled and configured.
+ * - Default: semantic recall ENABLED for autonomous behavior (changed from false to true)
  */
 export function createFloweticMemory(opts: CreateFloweticMemoryOpts = {}) {
   const storage = getMastraStorage();
-
   const lastMessages = opts.lastMessages ?? 30;
   const workingMemory = opts.workingMemory ?? { enabled: true };
-
-  const semanticRecallEnabled = envFlag("MASTRA_SEMANTIC_RECALL_ENABLED", false);
-
-  // If enabled but missing env, hard-disable (do not throw) to avoid Vercel build failures.
-  const connectionString = String(process.env.DATABASE_URL || "").trim();
-
-  if (!semanticRecallEnabled) {
-    return new Memory({
-      storage,
-      options: {
-        lastMessages,
-        workingMemory: workingMemory as any,
-      },
-    });
-  }
-
+  
+  // Enable semantic recall by default for autonomous behavior
+  const semanticRecallEnabled = envFlag("MASTRA_SEMANTIC_RECALL_ENABLED", true);
+  
   // We require DB + pgvector. You already use PgVector elsewhere.
-  if (!connectionString) {
+  const connectionString = String(process.env.DATABASE_URL || "").trim();
+  
+  // If semantic recall is disabled, return basic memory
+  if (!semanticRecallEnabled) {
+    console.log('[FloweticMemory] Semantic recall DISABLED - using message history + working memory only');
     return new Memory({
       storage,
       options: {
@@ -53,20 +44,33 @@ export function createFloweticMemory(opts: CreateFloweticMemoryOpts = {}) {
       },
     });
   }
-
-  const indexName =
-    String(process.env.MASTRA_MEMORY_VECTOR_INDEX_NAME || "mastra_memory").trim() ||
-    "mastra_memory";
-
+  
+  // If DB connection string is missing, fall back to basic memory
+  if (!connectionString) {
+    console.warn('[FloweticMemory] DATABASE_URL missing - semantic recall DISABLED');
+    return new Memory({
+      storage,
+      options: {
+        lastMessages,
+        workingMemory: workingMemory as any,
+      },
+    });
+  }
+  
+  // FULL AUTONOMOUS MEMORY: Message History + Working Memory + Semantic Recall
+  const indexName = String(
+    process.env.MASTRA_MEMORY_VECTOR_INDEX_NAME || "mastra_memory"
+  ).trim() || "mastra_memory";
+  
   const vector = new PgVector({
     connectionString,
     id: "flowetic-memory-vector",
   });
-
-  return new Memory({
+  
+  const memory = new Memory({
     storage,
     vector,
-    embedder: openai.textEmbeddingModel("text-embedding-3-small"),
+    embedder: openai.embedding("text-embedding-3-small"),
     options: {
       lastMessages,
       workingMemory: workingMemory as any,
@@ -78,5 +82,20 @@ export function createFloweticMemory(opts: CreateFloweticMemoryOpts = {}) {
       } as any,
     },
   });
+  
+  // Add diagnostic logging
+  if (process.env.NODE_ENV === 'development' || process.env.DEBUG_MEMORY === 'true') {
+    console.log('[FloweticMemory] Semantic recall ENABLED with full configuration:', {
+      lastMessages,
+      workingMemoryEnabled: workingMemory.enabled,
+      topK: 5,
+      messageRange: 3,
+      scope: 'resource',
+      indexName,
+      connectionString: connectionString.replace(/:[^:]+@/, ':****@'), // Hide password in logs
+    });
+  }
+  
+  return memory;
 }
 
