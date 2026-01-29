@@ -923,14 +923,16 @@ Journey phases:
           });
 
           // Check if workflow succeeded
-          if (result?.previewUrl || result?.interfaceId) {
+          if (result?.status === "success" && result?.result) {
+            const workflowOutput = result.result;
+            
             // Update journey to mark preview as generated
             const nextJourney = {
               ...journey,
               mode: "interactive_edit",
               previewGenerated: true,
-              previewUrl: result.previewUrl,
-              interfaceId: result.interfaceId,
+              previewUrl: workflowOutput.previewUrl,
+              interfaceId: interfaceId, // Use the interfaceId from earlier, not from workflow output
             };
 
             // Return success with preview URL
@@ -940,20 +942,33 @@ Journey phases:
               toolUi: null,
               vibeContext: {
                 ...(vibeContext ?? {}),
-                previewUrl: result.previewUrl,
-                interfaceId: result.interfaceId,
+                previewUrl: workflowOutput.previewUrl,
+                interfaceId: interfaceId,
               },
               preview: {
-                url: result.previewUrl,
-                interfaceId: result.interfaceId,
+                url: workflowOutput.previewUrl,
+                interfaceId: interfaceId,
                 status: "ready",
               },
             });
-          } else {
-            // Workflow completed but no preview URL returned
+          } else if (result?.status === "failed") {
+            // Workflow failed
             return NextResponse.json({
               error: "PREVIEW_GENERATION_FAILED",
-              details: "Workflow completed but did not return preview URL",
+              details: result.error?.message || "Workflow execution failed",
+            }, { status: 500 });
+          } else if (result?.status === "suspended") {
+            // Workflow suspended (e.g., waiting for user input)
+            return NextResponse.json({
+              error: "PREVIEW_GENERATION_SUSPENDED",
+              details: "Workflow is waiting for additional input",
+              suspendPayload: result.suspended,
+            }, { status: 202 });
+          } else {
+            // Workflow completed but no valid result
+            return NextResponse.json({
+              error: "PREVIEW_GENERATION_FAILED",
+              details: "Workflow completed but did not return valid output",
             }, { status: 500 });
           }
         } catch (workflowError: any) {
