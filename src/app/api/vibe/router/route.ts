@@ -909,20 +909,21 @@ Journey phases:
             runContext.set("sourceId", vibeContext.sourceId);
           }
 
-          // Trigger workflow execution
-          const workflowRun = await generateWorkflow.createRunAsync({
-            tenantId,
-            interfaceId,
-            platformType,
-            sourceId: vibeContext?.sourceId,
-            selectedStyleBundle: journey?.selectedStyleBundle,
-            selectedOutcome: journey?.selectedOutcome,
-          }, {
-            requestContext: runContext,
-          });
+          // Create workflow run instance (no parameters in v1.0.4)
+          const workflowRun = await generateWorkflow.createRunAsync();
 
-          // Execute the workflow
-          const result = await workflowRun.execute();
+          // Start workflow with input data
+          const result = await workflowRun.start({
+            inputData: {
+              tenantId,
+              interfaceId,
+              platformType,
+              sourceId: vibeContext?.sourceId,
+              selectedStyleBundle: journey?.selectedStyleBundle,
+              selectedOutcome: journey?.selectedOutcome,
+            },
+            runtimeContext: runContext,
+          });
 
           // Check if workflow succeeded
           if (result?.previewUrl || result?.interfaceId) {
