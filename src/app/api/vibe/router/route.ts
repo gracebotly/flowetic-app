@@ -678,77 +678,58 @@ Journey phases:
     // Phase: recommend (Phase 1 — platform-specific outcomes)
     // ------------------------------------------------------------------
     if (effectiveMode === "recommend") {
-      // Get platform-specific outcomes from catalog
-      const outcomesResult = (await callTool(
-        getOutcomes,
-        { platformType },
-        { requestContext }
-      )) as GetOutcomesResult;
+  // Get platform-specific outcomes from catalog
+  const outcomesResult = (await callTool(
+    getOutcomes,
+    { platformType },
+    { requestContext }
+  )) as GetOutcomesResult;
 
-      // Filter to 2 core outcomes: dashboard and product only
-      type OutcomeType = GetOutcomesResult['outcomes'][number];
-      
-      const dashboardOutcome = outcomesResult.outcomes.find(o => o.category === 'dashboard');
-      const productOutcome = outcomesResult.outcomes.find(o => o.category === 'product');
-      
-      // TypeScript-safe filtering: remove undefined values
-      const coreOutcomes = [dashboardOutcome, productOutcome].filter(
-        (o): o is OutcomeType => o !== undefined && o !== null
-      );
-      
-      const toolUi: ToolUi = {
-        type: "outcome_cards",
-        title: "Outcome + Monetization Strategy",
-        options: coreOutcomes.map((o) => ({
-          id: o.id,
-          title: o.name,
-          description: o.description,
-          previewImageUrl: o.previewImageUrl,
-          tags: o.tags,
-        })),
-      };
+  type OutcomeType = GetOutcomesResult['outcomes'][number];
+  
+  const dashboardOutcome = outcomesResult.outcomes.find(o => o.category === 'dashboard');
+  const productOutcome = outcomesResult.outcomes.find(o => o.category === 'product');
+  
+  const coreOutcomes = [dashboardOutcome, productOutcome].filter(
+    (o): o is OutcomeType => o !== undefined && o !== null
+  );
+  
+  const toolUi: ToolUi = {
+    type: "outcome_cards",
+    title: "Outcome + Monetization Strategy",
+    options: coreOutcomes.map((o) => ({
+      id: o.id,
+      title: o.name,
+      description: o.description,
+      previewImageUrl: o.previewImageUrl,
+      tags: o.tags,
+    })),
+  };
 
-      const workflowName = String(vibeContext?.displayName ?? vibeContext?.externalId ?? "").trim();
+  const workflowName = String(vibeContext?.displayName ?? vibeContext?.externalId ?? "").trim();
 
-      const mastra = getMastra();
-      const master = mastra.getAgent("masterRouterAgent" as const);
-      const agentRes = await master.generate(
-        [
-          "System: Phase 1 outcome selection. You are a premium business consultant.",
-          workflowName ? `System: User's workflow name: "${workflowName}".` : "",
-          "",
-          "TONE REQUIREMENTS:",
-          "- Warm and consultative (not robotic)",
-          "- Use plain business language",
-          "- Reference the workflow naturally in context",
-          "- Make the user feel understood",
-          "",
-          "OUTPUT STRUCTURE (exactly 4 parts):",
-          "1. Greeting: 'Hey! I see you're working with [workflow name/type].'",
-          "2. Recommendation: 'I recommend starting with a [Dashboard/Product].'",
-          "3. Reasons: Exactly 2 bullet points explaining WHY (tie to the workflow's purpose)",
-          "4. CTA: 'Pick one of the cards below, or click \"I'm not sure\" if you want help deciding.'",
-          "",
-          "EXAMPLE:",
-          "Hey! I see you're working with your WooCommerce Support Agent.",
-          "",
-          "I recommend starting with a **Dashboard**.",
-          "",
-          "• It will help you easily track how well your support agent is handling customer queries",
-          "• You'll be able to quickly identify any issues and improve response times",
-          "",
-          "Pick one of the cards below, or click \"I'm not sure\" if you want help deciding.",
-          "",
-          NO_ROADMAP_RULES,
-        ].filter(Boolean).join("\n"),
-        { 
-          maxSteps: 10,
-          toolChoice: "auto",
-          requestContext,
-          memory: mastraMemory,
-        }
-      );
-      const agentText = String((agentRes as any)?.text ?? "").trim();
+  const mastra = getMastra();
+  const master = mastra.getAgent("masterRouterAgent" as const);
+  
+  // Trust the Business Outcomes Advisor skill - minimal guidance only
+  const agentRes = await master.generate(
+    [
+      workflowName ? `System: User's workflow: "${workflowName}".` : "",
+      "System: Phase 1 - Outcome selection. Use your Business Outcomes Advisor skill.",
+      "System: If user asks 'what do you think?', evaluate their idea directly.",
+      "System: If user challenges your recommendation, defend it with specific reasoning.",
+      "",
+      NO_ROADMAP_RULES,
+    ].filter(Boolean).join("\n"),
+    { 
+      maxSteps: 12,
+      toolChoice: "auto",
+      requestContext,
+      memory: mastraMemory,
+    }
+  );
+  
+  const agentText = String((agentRes as any)?.text ?? "").trim();
 
       // Check if user is in deep lane (consultative mode)
       const inDeepLane = Boolean(journey?.deepLane);
