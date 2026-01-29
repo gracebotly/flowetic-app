@@ -1110,6 +1110,7 @@ return (
               </button>
             </div>
           </div>
+        </div>
 
           {view === "terminal" ? (
             <div className="flex flex-1 items-center justify-center bg-gray-50">
