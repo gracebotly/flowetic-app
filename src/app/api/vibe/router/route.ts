@@ -31,8 +31,7 @@ type JourneyMode =
   | "style"
   | "build_preview"
   | "interactive_edit"
-  | "deploy"
-  | "consultation";
+  | "deploy";
 
 function toMetricId(label: string): string {
   return String(label || "")
@@ -602,29 +601,6 @@ Journey phases:
         progress: { show: false },
       });
     }
-
-    // ------------------------------------------------------------------
-    // MODE: consultation (error recovery / deep consultation)
-    // ------------------------------------------------------------------
-    if (effectiveMode === "consultation") {
-      // Agent is in error recovery/consultation mode
-      const mastra = getMastra();
-      const master = mastra.getAgent("masterRouterAgent" as const);
-      
-      const consultRes = await master.generate(
-        "User encountered an issue. Provide helpful, consultative guidance to understand their needs and continue the dashboard design process naturally.",
-        { requestContext, memory: mastraMemory }
-      );
-      
-      return NextResponse.json({
-        text: String((consultRes as any)?.text ?? "").trim(),
-        journey: { ...journey, mode: "consultation" },
-        toolUi: null,
-        vibeContext: { ...(vibeContext ?? {}), skillMD },
-        progress: { show: false },
-      });
-    }
-
     // ------------------------------------------------------------------
     // ACTION: style bundle selected
     // ------------------------------------------------------------------
@@ -1153,65 +1129,29 @@ Journey phases:
       vibeContext: { ...(vibeContext ?? {}), skillMD },
     });
   } catch (err: any) {
-    const errorMessage = String(err?.message || "UNKNOWN_ROUTER_ERROR");
+    const message = String(err?.message || "UNKNOWN_ROUTER_ERROR");
     const stack = typeof err?.stack === "string" ? err.stack : undefined;
 
     // Log to Vercel for immediate visibility
     console.error("[api/vibe/router] error", {
-      message: errorMessage,
+      message,
       stack,
       name: err?.name,
       code: err?.code,
       cause: err?.cause,
     });
 
-    // Get workflow name from request body if vibeContext is not available in catch scope
-    const body = await req.clone().json().catch(() => ({}));
-    const workflowName = String(body?.vibeContext?.displayName ?? body?.vibeContext?.externalId ?? "").trim();
-    
-    // Agent provides consultative error response
-    const mastra = getMastra();
-    const master = mastra.getAgent("masterRouterAgent" as const);
-    
-    // Create proper RequestContext instance for agent
-    const errorRequestContext = new RequestContext();
-    errorRequestContext.set("userId", body?.userId || "unknown");
-    errorRequestContext.set("tenantId", body?.tenantId || "unknown");
-    errorRequestContext.set("platformType", body?.vibeContext?.platformType || "other");
-    errorRequestContext.set("phase", "consultation");
-    if (body?.vibeContext?.sourceId) {
-      errorRequestContext.set("sourceId", body.vibeContext.sourceId);
-    }
-    if (workflowName) {
-      errorRequestContext.set("workflowName", workflowName);
-    }
-    
-    const agentErrorRes = await master.generate(
-      `System: Backend error occurred: ${errorMessage}. 
-       User context: ${workflowName ? `Workflow: ${workflowName}` : 'No workflow selected'}
-       Current phase: 'consultation'
-       
-       CRITICAL: Do NOT mention technical errors or "request failed".
-       Instead, provide helpful consulting to keep the user engaged.
-       Ask questions or show fallback options to continue the journey naturally.`,
-      { 
-        requestContext: errorRequestContext, 
-        memory: {
-          resource: String(body?.userId || "unknown"),
-          thread: String(body?.threadId || "error-thread")
-        }
-      }
+    return NextResponse.json(
+      {
+        error: message,
+        details: {
+          name: err?.name,
+          code: err?.code,
+          stack,
+        },
+      },
+      { status: 500 }
     );
-    
-    const agentText = String((agentErrorRes as any)?.text ?? "").trim();
-    
-    return NextResponse.json({
-      text: agentText || "Let me help you work through this. What would you like to achieve with your dashboard?",
-      journey: { ...(body?.journey ?? {}), mode: "consultation" }, // Enter consultative mode
-      toolUi: null, // No cards during error recovery
-      vibeContext: { ...(body?.vibeContext ?? {}) },
-      progress: { show: false }, // Hide progress during consultation
-    });
   }
 }
 

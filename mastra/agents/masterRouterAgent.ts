@@ -135,7 +135,6 @@ export const masterRouterAgent: Agent = new Agent({
     storage: getMastraStorage(),
     options: {
       lastMessages: 20,
-      workingMemory: { enabled: true }, // REQUIRED for .network()
     },
   }),
   tools: {
