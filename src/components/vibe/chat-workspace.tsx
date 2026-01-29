@@ -39,6 +39,7 @@ import { PhaseIndicator } from "@/components/vibe/phase-indicator";
 import { OutcomeCards } from "@/components/vibe/inline-cards/outcome-cards";
 import { StoryboardCards } from "@/components/vibe/inline-cards/storyboard-cards";
 import { StyleBundleCards } from "@/components/vibe/inline-cards/style-bundle-cards";
+import { ModelSelector, type ModelId } from "./model-selector";
 
 type ViewMode = "terminal" | "preview" | "publish";
 
@@ -166,7 +167,9 @@ export function ChatWorkspace({
   const [chatMode, setChatMode] = useState<"chat" | "voice">("chat");
   const [isListening, setIsListening] = useState(false);
   const [isChatExpanded, setIsChatExpanded] = useState(false);
+  const [selectedModel, setSelectedModel] = useState<ModelId>("glm-4.7");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
 
   function getActionAcknowledgment(action: string): string {
@@ -441,6 +444,7 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
               paletteOverrideId,
             },
             userMessage: "System: start Phase 1 outcome selection.",
+            selectedModel, // Add this line
           }),
         });
 
@@ -761,6 +765,7 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
             paletteOverrideId,
           },
           userMessage: text,
+          selectedModel, // Add this line
         }),
       });
 
@@ -1031,6 +1036,8 @@ return (
               onChange={setInput}
               disabled={isLoading}
               isListening={isListening}
+              selectedModel={selectedModel}
+              onModelSelect={setSelectedModel}
               onToggleVoice={() => {
                 setChatMode((m) => (m === "chat" ? "voice" : "chat"));
                 setIsListening((v) => !v);

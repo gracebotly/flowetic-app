@@ -119,7 +119,16 @@ export const masterRouterAgent: Agent = new Agent({
       content: skillContent
     };
   },
-  model: glm47Model(),
+  model: ({ runtimeContext }: { runtimeContext: RequestContext }) => {
+    // Get selected model from RuntimeContext (defaults to GLM 4.7)
+    const selectedModelId = (typeof runtimeContext?.get === 'function'
+      ? runtimeContext.get("selectedModel")
+      : (runtimeContext as any)?.selectedModel) as string | undefined;
+    
+    // Import and use model selector
+    const { getModelById } = require("../lib/models/modelSelector");
+    return getModelById(selectedModelId);
+  },
   // REQUIRED: routing primitives for Agent.network()
   agents: {
     platformMappingMaster,

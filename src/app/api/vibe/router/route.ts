@@ -208,12 +208,14 @@ export async function POST(req: NextRequest) {
       vibeContext,
       journey,
       userMessage,
+      selectedModel,
     }: {
       userId: string;
       tenantId: string;
       vibeContext: any;
       journey: any;
       userMessage: string;
+      selectedModel?: string;
     } = body;
 
     if (!userId || !tenantId) {
@@ -313,6 +315,11 @@ Journey phases:
         // Skip function-valued properties like get()
         if (typeof v === "function") continue;
         requestContext.set(k, v as any);
+      }
+
+      // Add selected model to RequestContext for dynamic model selection
+      if (selectedModel) {
+        requestContext.set("selectedModel", selectedModel);
       }
 
       // Preserve legacy get() behavior if present (some of your code relies on it)
