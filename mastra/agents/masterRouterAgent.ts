@@ -110,6 +110,10 @@ export const masterRouterAgent: Agent = new Agent({
       "You can manage Connections (sources): create, list, update, and delete platform connections for the tenant.",
       "You can manage Projects: create, list, update, and delete projects for the tenant.",
       "You can return a navigation URL using the navigation.navigateTo tool when you want the UI to move to a specific page.",
+
+      "# NETWORK ORCHESTRATION:",
+      "- When user asks for preview generation or mapping, use your sub-agents/workflows autonomously via network execution.",
+      "- Prefer delegating: mapping → platformMappingMaster; style → designAdvisorAgent; spec edits → dashboardBuilderAgent; preview build → generatePreviewWorkflow.",
       "",
       "# INTERNAL ROUTING STATES (FOR YOUR LOGIC ONLY)",
       "(USER NEVER SEES THESE STATE NAMES)",

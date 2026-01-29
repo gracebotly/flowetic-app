@@ -23,6 +23,7 @@ import { getOutcomes } from "@/mastra/tools/outcomes";
 import { ensureMastraThreadId } from "@/mastra/lib/ensureMastraThread";
 import { getMastra } from "@/mastra/index";
 import { OUTCOMES } from "@/data/outcomes";
+import { runAgentNetworkToText } from "@/mastra/lib/runNetwork";
 
 type JourneyMode =
   | "select_entity"
@@ -858,124 +859,91 @@ Journey phases:
     }
 
     // ------------------------------------------------------------------
-    // Phase: build_preview (trigger preview generation workflow)
+    // Phase: build_preview (network orchestration)
     // ------------------------------------------------------------------
     if (effectiveMode === "build_preview") {
-      // Check if we need to trigger the preview workflow
-      if (!journey?.previewGenerated) {
-        // Trigger preview generation workflow
-        const mastra = getMastra();
-        const generateWorkflow = mastra.getWorkflow("generatePreviewWorkflow");
-        
-        if (!generateWorkflow) {
-          return NextResponse.json({
-            error: "WORKFLOW_NOT_FOUND",
-            details: "generatePreviewWorkflow is not registered"
-          }, { status: 500 });
-        }
+      const mastra = getMastra();
+      const master = mastra.getAgent("masterRouterAgent" as const);
 
-        try {
-          // Get interface ID from journey or create new one
-          const interfaceId = journey?.interfaceId || vibeContext?.interfaceId;
-          
-          if (!interfaceId) {
-            return NextResponse.json({
-              error: "MISSING_INTERFACE_ID",
-              details: "No interface ID found in journey or vibeContext"
-            }, { status: 400 });
-          }
-
-          // Create workflow run instance (synchronous method, no parameters)
-          const workflowRun = await generateWorkflow.createRun();
-
-          // Start workflow with input data only
-          const result = await workflowRun.start({
-            inputData: {
-              tenantId,
-              interfaceId,
-              platformType,
-              sourceId: vibeContext?.sourceId,
-              selectedStyleBundle: journey?.selectedStyleBundle,
-              selectedOutcome: journey?.selectedOutcome,
-            },
-          });
-
-          // Check if workflow succeeded
-          if (result?.status === "success" && result?.result) {
-            const workflowOutput = result.result;
-            
-            // Update journey to mark preview as generated
-            const nextJourney = {
-              ...journey,
-              mode: "interactive_edit",
-              previewGenerated: true,
-              previewUrl: workflowOutput.previewUrl,
-              interfaceId: interfaceId, // Use the interfaceId from earlier, not from workflow output
-            };
-
-            // Return success with preview URL
-            return NextResponse.json({
-              text: "Here's your preview! You can now make edits or proceed to deploy.",
-              journey: nextJourney,
-              toolUi: null,
-              vibeContext: {
-                ...(vibeContext ?? {}),
-                previewUrl: workflowOutput.previewUrl,
-                interfaceId: interfaceId,
-              },
-              preview: {
-                url: workflowOutput.previewUrl,
-                interfaceId: interfaceId,
-                status: "ready",
-              },
-            });
-          } else if (result?.status === "failed") {
-            // Workflow failed
-            return NextResponse.json({
-              error: "PREVIEW_GENERATION_FAILED",
-              details: result.error?.message || "Workflow execution failed",
-            }, { status: 500 });
-          } else if (result?.status === "suspended") {
-            // Workflow suspended (e.g., waiting for user input)
-            return NextResponse.json({
-              error: "PREVIEW_GENERATION_SUSPENDED",
-              details: "Workflow is waiting for additional input",
-              suspendPayload: result.suspended,
-            }, { status: 202 });
-          } else {
-            // Workflow completed but no valid result
-            return NextResponse.json({
-              error: "PREVIEW_GENERATION_FAILED",
-              details: "Workflow completed but did not return valid output",
-            }, { status: 500 });
-          }
-        } catch (workflowError: any) {
-          console.error("[api/vibe/router] Preview workflow error", {
-            message: workflowError?.message,
-            stack: workflowError?.stack,
-          });
-
-          return NextResponse.json({
-            error: "WORKFLOW_EXECUTION_FAILED",
-            details: workflowError?.message || "Preview generation workflow failed",
-          }, { status: 500 });
-        }
+      if (!master) {
+        return NextResponse.json(
+          { error: "AGENT_NOT_FOUND", details: "masterRouterAgent not registered" },
+          { status: 500 }
+        );
       }
 
-      // If preview already generated, return it
+      // Require an interfaceId to exist (same as your previous logic)
+      const interfaceId = journey?.interfaceId || vibeContext?.interfaceId;
+      if (!interfaceId) {
+        return NextResponse.json(
+          { error: "MISSING_INTERFACE_ID", details: "No interface ID found in journey or vibeContext" },
+          { status: 400 }
+        );
+      }
+
+      // Add diagnostic toggle
+      const debugNetwork = req.nextUrl?.searchParams?.get("debugNetwork") === "1";
+
+      // Let the agent network decide the correct sequence: mapping/schema checks -> workflow -> finalize
+      const networkPrompt = [
+        "System: You are orchestrating Phase 4 (Build Preview).",
+        "System: Goal: produce a previewUrl for the dashboard as fast as possible.",
+        "System: You MUST ensure schema is ready; if not, run connection backfill first.",
+        "System: You MUST ensure required mappings are complete; suspend only if required fields are missing.",
+        "System: Once ready, run the generatePreviewWorkflow and return previewUrl.",
+        "System: Return a short, confident message and include previewUrl in tool/state if available.",
+        "",
+        `System: interfaceId=${String(interfaceId)}`,
+        `System: platformType=${String(vibeContext?.platformType || requestContext.get("platformType") || "make")}`,
+        vibeContext?.sourceId ? `System: sourceId=${String(vibeContext.sourceId)}` : "",
+        "",
+        "User: Generate my preview now.",
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      const { text: agentText } = await runAgentNetworkToText({
+        agent: master as any,
+        message: networkPrompt,
+        requestContext,
+        memory: mastraMemory,
+        maxSteps: 15,
+      });
+
+      // IMPORTANT: masterRouterAgent/network may also update storage via workflows/tools.
+      // We still update journey mode here to move forward in UI.
+      const nextJourney = {
+        ...journey,
+        mode: "interactive_edit",
+        previewGenerated: true,
+        interfaceId,
+        // previewUrl will be filled by the UI if present in vibeContext or returned later.
+        previewUrl: journey?.previewUrl || vibeContext?.previewUrl || null,
+      };
+
       return NextResponse.json({
-        text: "Here's your preview! You can now make edits or proceed to deploy.",
-        journey: { ...journey, mode: "interactive_edit" },
+        text: agentText || "Preview generation kicked off. Your preview will appear shortly.",
+        journey: nextJourney,
         toolUi: null,
         vibeContext: {
           ...(vibeContext ?? {}),
-          previewUrl: journey?.previewUrl,
+          interfaceId,
+          // leave previewUrl as-is; it should be set by the workflow/tool side if implemented
+          previewUrl: vibeContext?.previewUrl ?? journey?.previewUrl ?? null,
+          skillMD,
         },
-        preview: {
-          url: journey?.previewUrl,
-          interfaceId: journey?.interfaceId,
-          status: "ready",
-        },
+        preview: journey?.previewUrl || vibeContext?.previewUrl
+          ? {
+              url: journey?.previewUrl || vibeContext?.previewUrl,
+              interfaceId,
+              status: "ready",
+            }
+          : {
+              url: null,
+              interfaceId,
+              status: "generating",
+            },
+        debug: debugNetwork ? { mode: effectiveMode } : undefined,
       });
     }
 
