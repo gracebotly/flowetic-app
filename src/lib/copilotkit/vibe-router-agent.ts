@@ -44,6 +44,7 @@ type VibeAgentContext = {
   tenantId: string;
   vibeContext: any;
   journey?: any;
+  selectedModel?: any;
 };
 
 type FloweticJourneyMode =
@@ -71,6 +72,7 @@ function getContextFromInput(input: any): VibeAgentContext {
     tenantId: String(ctx.tenantId || ""),
     vibeContext: ctx.vibeContext ?? null,
     journey: ctx.journey ?? null,
+    selectedModel: ctx.selectedModel,
   };
 }
 
@@ -169,6 +171,7 @@ class VibeRouterAgent extends AbstractAgent {
           requestContext.set("userId", ctx.userId);
           requestContext.set("tenantId", ctx.tenantId);
           if (ctx.vibeContext?.platformType) requestContext.set("platformType", ctx.vibeContext.platformType);
+          if (ctx.selectedModel) requestContext.set("selectedModel", ctx.selectedModel);
 
           const result = await runVibeRouter({
             userId: ctx.userId,

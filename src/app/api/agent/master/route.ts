@@ -233,7 +233,8 @@ export async function POST(req: NextRequest) {
       });
 
       const routerResponse = await master.generate(message, {
-        maxSteps: 3,
+        maxSteps: 10,
+        toolChoice: "auto",
         requestContext: runtimeContext,
         memory: {
           resource: String(userId),
@@ -269,7 +270,8 @@ export async function POST(req: NextRequest) {
     });
 
     const routerOnly = await master.generate(message, {
-      maxSteps: 3,
+      maxSteps: 10,
+      toolChoice: "auto",
       requestContext: runtimeContext,
       memory: {
         resource: String(userId),

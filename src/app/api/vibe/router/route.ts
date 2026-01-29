@@ -357,21 +357,14 @@ Journey phases:
         const master = mastra.getAgent("masterRouterAgent" as const);
         const agentRes = await master.generate(
           [
-            "System: Deep lane step 2 (final question). User needs help deciding.",
+            "System: User answered your question. Acknowledge and ask one final simple question to complete their profile.",
             workflowName ? `System: User's workflow: "${workflowName}".` : "",
-            "",
-            "TONE: Consultative and helpful (not interrogative)",
-            "",
-            "OUTPUT STRUCTURE:",
-            "1. Acknowledge their answer briefly (1 sentence)",
-            "2. Ask ONE final question: Who will use this most often - your team or client?",
-            "",
-            "EXAMPLE:",
-            "Got it. One more quick question: who will mainly use this — your team, or client?",
             "",
             NO_ROADMAP_RULES,
           ].filter(Boolean).join("\n"),
           { 
+            maxSteps: 10,
+            toolChoice: "auto",
             requestContext,
             memory: mastraMemory,
           }
@@ -396,32 +389,18 @@ Journey phases:
         const master = mastra.getAgent("masterRouterAgent" as const);
         const agentRes = await master.generate(
           [
-            "System: Deep lane complete. Provide final recommendation.",
+            "System: User answered your questions. Provide a clear recommendation based on their responses.",
             workflowName ? `System: User's workflow: "${workflowName}".` : "",
             "",
             "User's answers:",
             `Q1: ${String(answers.q1 ?? "")}`,
             `Q2: ${String(userMessage)}`,
             "",
-            "TONE: Confident consultant wrapping up discovery",
-            "",
-            "OUTPUT STRUCTURE:",
-            "1. Transition: 'Based on what you told me...'",
-            "2. Recommendation: 'I recommend [Dashboard/Product].'",
-            "3. Exactly 2 bullet reasons (tie to their specific answers)",
-            "4. Transition: 'Now let's pick the story this will tell.'",
-            "",
-            "EXAMPLE:",
-            "Based on what you told me, I recommend starting with a **Dashboard**.",
-            "",
-            "• Since this is for proving results to clients, dashboards are perfect for showing ROI",
-            "• Your team will use it internally to monitor performance before sharing with clients",
-            "",
-            "Now let's pick the story this will tell.",
-            "",
             NO_ROADMAP_RULES,
           ].filter(Boolean).join("\n"),
           { 
+            maxSteps: 10,
+            toolChoice: "auto",
             requestContext,
             memory: mastraMemory,
           }
@@ -544,6 +523,8 @@ Journey phases:
         "System: You are a premium agency business consultant speaking to a non-technical user. " +
         "Use plain language. Avoid technical jargon. Explain what happens next in simple terms.",
         { 
+          maxSteps: 10,
+          toolChoice: "auto",
           requestContext,
           memory: mastraMemory,
         }
@@ -578,21 +559,14 @@ Journey phases:
       const master = mastra.getAgent("masterRouterAgent" as const);
       const agentRes = await master.generate(
         [
-          "System: Deep lane start. User clicked 'I'm not sure, help me decide'.",
+          "System: User needs help deciding between outcomes. Ask a simple question to understand their goal.",
           workflowName ? `System: User's workflow: "${workflowName}".` : "",
-          "",
-          "TONE: Supportive consultant (not pushy)",
-          "",
-          "OUTPUT STRUCTURE:",
-          "1. Acknowledge: 'No problem! Let me help you figure this out.' (1 sentence)",
-          "2. Ask ONE question: What's your main goal - to prove results to a client (retention), or to sell access as a product?",
-          "",
-          "EXAMPLE:",
-          "No problem! Quick question: is this mainly to prove results to a client and help with renewals, or to sell access to the workflow as a product?",
           "",
           NO_ROADMAP_RULES,
         ].filter(Boolean).join("\n"),
         { 
+          maxSteps: 10,
+          toolChoice: "auto",
           requestContext,
           memory: mastraMemory,
         }
@@ -768,6 +742,8 @@ Journey phases:
           NO_ROADMAP_RULES,
         ].filter(Boolean).join("\n"),
         { 
+          maxSteps: 10,
+          toolChoice: "auto",
           requestContext,
           memory: mastraMemory,
         }
@@ -829,6 +805,8 @@ Journey phases:
           "- Do NOT list metrics (the cards already show them).",
         ].filter(Boolean).join("\n"),
         { 
+          maxSteps: 10,
+          toolChoice: "auto",
           requestContext,
           memory: mastraMemory,
         }
@@ -1101,7 +1079,8 @@ Journey phases:
     const mastra = getMastra();
     const master = mastra.getAgent("masterRouterAgent" as const);
     const result = await master.generate(userMessage, {
-      maxSteps: 3,
+      maxSteps: 10,
+      toolChoice: "auto",
       requestContext,
       memory: mastraMemory,
     });

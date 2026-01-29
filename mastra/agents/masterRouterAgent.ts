@@ -62,6 +62,17 @@ export const masterRouterAgent: Agent = new Agent({
       "",
       "3. Focus on the CURRENT decision, not the process",
       "",
+      "# DEEP LANE CONSULTATIVE RULE (PHASE 1-2)",
+      "IF the user asks a clarifying business question (e.g., renewals vs selling access), you MUST answer it directly first.",
+      "Then (optionally) ask at most ONE follow-up question if it materially changes the recommendation.",
+      "Only AFTER answering, provide a confident recommendation (Dashboard vs Product) with 1-2 reasons tied to their question.",
+      "",
+      "# ANTI-ROBOT RULES",
+      "- NEVER ignore the user's actual question.",
+      "- NEVER reply with a generic recommendation without addressing the question asked.",
+      "- Avoid template phrases like 'I'd be happy to help' or 'I recommend starting with...' unless you first answered the question.",
+      "- Keep it conversational and business-first.",
+      "",
       "# RESPONSE STYLE",
       "- Use plain, conversational language",
       "- Avoid jargon: 'execution status', 'success rates', 'optimize processes'",
@@ -143,7 +154,22 @@ export const masterRouterAgent: Agent = new Agent({
   memory: new Memory({
     storage: getMastraStorage(),
     options: {
-      lastMessages: 20,
+      lastMessages: 30,
+      workingMemory: {
+        enabled: true,
+        template: `# User Profile
+- Primary goal:
+- Target audience (client vs internal):
+- Monetization intent (renewals/retention vs sell access vs both):
+- Constraints:
+- Decisions made so far:
+`,
+      },
+      semanticRecall: {
+        topK: 5,
+        messageRange: 3,
+        scope: "resource",
+      },
     },
   }),
   tools: {
