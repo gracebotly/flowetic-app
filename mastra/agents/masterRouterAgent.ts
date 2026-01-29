@@ -119,11 +119,11 @@ export const masterRouterAgent: Agent = new Agent({
       content: skillContent
     };
   },
-  model: ({ runtimeContext }: { runtimeContext: RequestContext }) => {
-    // Get selected model from RuntimeContext (defaults to GLM 4.7)
-    const selectedModelId = (typeof runtimeContext?.get === 'function'
-      ? runtimeContext.get("selectedModel")
-      : (runtimeContext as any)?.selectedModel) as string | undefined;
+  model: ({ requestContext }: { requestContext: RequestContext }) => {
+    // Get selected model from RequestContext (defaults to GLM 4.7)
+    const selectedModelId = (typeof requestContext?.get === 'function'
+      ? requestContext.get("selectedModel")
+      : (requestContext as any)?.selectedModel) as string | undefined;
     
     // Import and use model selector
     const { getModelById } = require("../lib/models/modelSelector");
