@@ -773,12 +773,25 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
         setSelectedOutcome(data.journey.selectedOutcome);
       if (typeof data?.journey?.selectedStoryboard !== "undefined")
         setSelectedStoryboard(data.journey.selectedStoryboard);
-      if (typeof data?.journey?.selectedStyleBundleId !== "undefined")
+      if (typeof data?.journey?.selectedStyleBundleId !== "undefined") {
+        // Style bundle selected
         setSelectedStyleBundleId(data.journey.selectedStyleBundleId);
+      }
       if (typeof data?.journey?.densityPreset !== "undefined")
         setDensityPreset(data.journey.densityPreset);
       if (typeof data?.journey?.paletteOverrideId !== "undefined")
         setPaletteOverrideId(data.journey.paletteOverrideId);
+
+      // Handle preview data
+      if (data?.preview) {
+        // Set preview URL and status
+        setVibeContext((prev: any) => ({
+          ...(prev ?? {}),
+          previewUrl: data.preview.url,
+          interfaceId: data.preview.interfaceId,
+          previewStatus: data.preview.status,
+        }));
+      }
 
       setToolUi(data?.toolUi ?? null);
 
@@ -1088,24 +1101,30 @@ return (
             </div>
           ) : null}
 
-          {view === "preview" && vibeContext?.previewUrl ? (
-            <div className="flex-1 overflow-hidden">
-              <iframe
-                src={vibeContext.previewUrl}
-                className="w-full h-full border-0"
-                title="Dashboard Preview"
-              />
-            </div>
-          ) : view === "preview" ? (
-            <div className="flex-1 flex items-center justify-center bg-gray-50">
-              <div className="text-center">
-                <Eye className="w-12 h-12 mx-auto mb-3 text-gray-400" />
-                <p className="text-sm text-gray-500">
-                  Preview will appear here once generated
-                </p>
+          {/* Right Panel - Preview Area */}
+          <div className="flex-1 bg-gray-50 relative">
+            {vibeContext?.previewUrl ? (
+              <div className="h-full">
+                <iframe
+                  src={vibeContext.previewUrl}
+                  className="w-full h-full border-0"
+                  title="Dashboard Preview"
+                  sandbox="allow-scripts allow-same-origin"
+                />
               </div>
-            </div>
-          ) : null}
+            ) : journeyMode === "build_preview" ? (
+              <div className="flex items-center justify-center h-full">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                  <p className="text-gray-600">Generating your preview...</p>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center h-full text-gray-400">
+                <p>Preview will appear here after Phase 3</p>
+              </div>
+            )}
+          </div>
 
           {view === "publish" && (
             <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-indigo-50 to-purple-50">
