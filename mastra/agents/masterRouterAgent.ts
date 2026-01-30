@@ -69,8 +69,13 @@ export const masterRouterAgent: Agent = new Agent({
       "# BUSINESS OUTCOMES ADVISOR SKILL",
       businessSkill?.content || "",
       "",
-      "# PLATFORM KNOWLEDGE", 
+      "# PLATFORM KNOWLEDGE",
       platformSkill || "",
+      "",
+      "# TOOL USAGE GUIDELINES",
+      "- When calling TODO tools, always ensure tenantId and threadId are passed from RequestContext",
+      "- These values are automatically available via context.requestContext.get('tenantId') and context.requestContext.get('threadId')",
+      "- The tools will fall back to these values if not explicitly provided in the tool call",
     ].filter(Boolean).join("\n");
 
     return {

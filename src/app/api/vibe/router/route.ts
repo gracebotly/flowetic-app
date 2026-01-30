@@ -519,10 +519,13 @@ Journey phases:
       const agentInput = actionToAgentHint(userMessage);
       const mastra = getMastra();
       const master = mastra.getAgent("masterRouterAgent" as const);
+
+      // CRITICAL: Update requestContext with selectedOutcome BEFORE calling agent
+      requestContext.set("selectedOutcome", outcome);
+
       const agentRes = await master.generate(
-        "System: You are a premium agency business consultant speaking to a non-technical user. " +
-        "Use plain language. Avoid technical jargon. Explain what happens next in simple terms.",
-        { 
+        `System: User selected outcome "${outcome}". ${actionToAgentHint(userMessage)}`,
+        {
           maxSteps: 10,
           toolChoice: "auto",
           requestContext,
@@ -589,6 +592,14 @@ Journey phases:
       const selectedId = userMessage.replace("__ACTION__:select_style_bundle:", "").trim();
       if (!selectedId) {
         return NextResponse.json({ error: "MISSING_STYLE_BUNDLE_ID" }, { status: 400 });
+      }
+
+      // CRITICAL: Update requestContext with selected values for agent awareness
+      if (journey?.selectedStoryboard) {
+        requestContext.set("selectedStoryboard", journey.selectedStoryboard);
+      }
+      if (journey?.selectedOutcome) {
+        requestContext.set("selectedOutcome", journey.selectedOutcome);
       }
 
       // Get bundle list again, pick chosen bundle
