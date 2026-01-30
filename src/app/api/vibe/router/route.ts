@@ -396,21 +396,18 @@ Journey phases:
 
         const mastra = getMastra();
         const master = mastra.getAgent("masterRouterAgent" as const);
-        const agentRes = await master.generate(
-          [
+        const { text: agentText } = await runAgentNetworkToText({
+          agent: master as any,
+          message: [
             "System: User answered your question. Make a confident recommendation based on what they told you.",
             workflowName ? `System: User's workflow: "${workflowName}".` : "",
             "User message:",
             userMessage,
           ].filter(Boolean).join("\n"),
-          { 
-            maxSteps: 10,
-            toolChoice: "auto",
-            requestContext,
-            memory: mastraMemory,
-          }
-        );
-        const agentText = String((agentRes as any)?.text ?? "").trim();
+          requestContext,
+          memory: mastraMemory,
+          maxSteps: 10,
+        });
 
         return NextResponse.json({
           text: agentText || "Got it. One more quick question: who will mainly use this — your team, or client?",
@@ -428,8 +425,9 @@ Journey phases:
         // Agent generates final recommendation
         const mastra = getMastra();
         const master = mastra.getAgent("masterRouterAgent" as const);
-        const agentRes = await master.generate(
-          [
+        const { text: agentText } = await runAgentNetworkToText({
+          agent: master as any,
+          message: [
             "System: User has expressed their goal. Make your final recommendation.",
             workflowName ? `System: User's workflow: "${workflowName}".` : "",
             "Their responses:",
@@ -438,14 +436,10 @@ Journey phases:
             "",
             "Recommend Dashboard or Product with 2-3 specific reasons tied to THEIR situation.",
           ].filter(Boolean).join("\n"),
-          { 
-            maxSteps: 10,
-            toolChoice: "auto",
-            requestContext,
-            memory: mastraMemory,
-          }
-        );
-        const agentText = String((agentRes as any)?.text ?? "").trim();
+          requestContext,
+          memory: mastraMemory,
+          maxSteps: 10,
+        });
 
         // CRITICAL FIX: Determine outcome from answers
         const inferredOutcome = String(answers.q1 ?? "").toLowerCase().includes("product") 
@@ -563,16 +557,13 @@ Journey phases:
       // CRITICAL: Update requestContext with selectedOutcome BEFORE calling agent
       requestContext.set("selectedOutcome", outcome);
 
-      const agentRes = await master.generate(
-        `System: User selected outcome "${outcome}". ${actionToAgentHint(userMessage)}`,
-        {
-          maxSteps: 10,
-          toolChoice: "auto",
-          requestContext,
-          memory: mastraMemory,
-        }
-      );
-      const agentText = String((agentRes as any)?.text ?? "").trim();
+      const { text: agentText } = await runAgentNetworkToText({
+        agent: master as any,
+        message: `System: User selected outcome "${outcome}". ${actionToAgentHint(userMessage)}`,
+        requestContext,
+        memory: mastraMemory,
+        maxSteps: 10,
+      });
 
       return NextResponse.json({
         text: agentText || "Great — now pick a storyboard so we lock the story before design.",
@@ -600,21 +591,18 @@ Journey phases:
 
       const mastra = getMastra();
       const master = mastra.getAgent("masterRouterAgent" as const);
-      const agentRes = await master.generate(
-        [
+      const { text: agentText } = await runAgentNetworkToText({
+        agent: master as any,
+        message: [
           "System: User clicked 'help me decide'. Evaluate their workflow and recommend an outcome.",
           workflowName ? `System: User's workflow: "${workflowName}".` : "",
           "User message (if any):",
           userMessage || "[No additional context]",
         ].filter(Boolean).join("\n"),
-        { 
-          maxSteps: 10,
-          toolChoice: "auto",
-          requestContext,
-          memory: mastraMemory,
-        }
-      );
-      const agentText = String((agentRes as any)?.text ?? "").trim();
+        requestContext,
+        memory: mastraMemory,
+        maxSteps: 10,
+      });
 
 
       return NextResponse.json({
@@ -762,14 +750,13 @@ Journey phases:
     "Answer their questions directly. Provide specific recommendations based on their workflow.",
   ].filter(Boolean).join("\n");
   
-  const agentRes = await master.generate(systemPrompt, {
-    maxSteps: 12,
-    toolChoice: "auto",
+  const { text: agentText } = await runAgentNetworkToText({
+    agent: master as any,
+    message: systemPrompt,
     requestContext,
-    memory: mastraMemory
+    memory: mastraMemory,
+    maxSteps: 12,
   });
-  
-  const agentText = String((agentRes as any)?.text ?? "").trim();
 
 const inDeepLane = Boolean(journey?.deepLane);
 const deepLaneStep =
@@ -824,8 +811,9 @@ return NextResponse.json({
 
       const mastra = getMastra();
       const master = mastra.getAgent("masterRouterAgent" as const);
-      const agentRes = await master.generate(
-        [
+      const { text: agentText } = await runAgentNetworkToText({
+        agent: master as any,
+        message: [
           "System: Phase 2 storyboard selection (KPI story).",
           workflowName ? `System: Selected workflow name: "${workflowName}".` : "",
           NO_ROADMAP_RULES,
@@ -834,14 +822,10 @@ return NextResponse.json({
           "- Recommend ONE storyboard by name (ROI Proof vs Reliability Ops vs Delivery/SLA) with 1 short reason.",
           "- Do NOT list metrics (the cards already show them).",
         ].filter(Boolean).join("\n"),
-        { 
-          maxSteps: 10,
-          toolChoice: "auto",
-          requestContext,
-          memory: mastraMemory,
-        }
-      );
-      const agentText = String((agentRes as any)?.text ?? "").trim();
+        requestContext,
+        memory: mastraMemory,
+        maxSteps: 10,
+      });
 
       return NextResponse.json({
         text: agentText || "Now let's pick the story this will tell. Choose the option that matches what you want to prove first.",
