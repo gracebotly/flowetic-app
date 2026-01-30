@@ -5,6 +5,7 @@ import { glm47Model } from "../lib/models/glm47";
 import { getMastraStorage } from "../lib/storage";
 import type { RequestContext } from "@mastra/core/request-context";
 import { loadSkillMarkdown, PlatformType } from "../skills/loadSkill";
+import { z } from 'zod';
 import { createFloweticMemory } from "../lib/memory";
 import {
   appendThreadEvent,
@@ -30,6 +31,20 @@ export const platformMappingMaster: Agent = new Agent({
   name: "platformMappingMaster",
   description:
     "Platform Mapping Agent: inspects event samples, recommends templates, proposes mappings, and triggers preview workflow. Triggers connection backfill when schema is not ready.",
+  requestContextSchema: z.object({
+    userId: z.string().optional(),
+    tenantId: z.string().optional(),
+    platformType: z.string().optional(),
+    workflowName: z.string().optional(),
+    selectedOutcome: z.string().optional(),
+    selectedStoryboard: z.string().optional(),
+    mode: z.string().optional(),
+    phase: z.string().optional(),
+    threadId: z.string().optional(),
+    sourceId: z.string().optional(),
+    workflowEntityId: z.string().optional(),
+    selectedModel: z.string().optional(),
+  }),
   instructions: async ({ requestContext }: { requestContext: RequestContext }) => {
     const platformType = (
       (typeof requestContext?.get === 'function' 

@@ -3,6 +3,7 @@ import { Memory } from "@mastra/memory";
 import { glm47Model } from "../lib/models/glm47";
 import { getMastraStorage } from "../lib/storage";
 import type { RequestContext } from "@mastra/core/request-context";
+import { z } from 'zod';
 import {
   getCurrentSpec,
   applySpecPatch,
@@ -20,6 +21,20 @@ export const dashboardBuilderAgent: Agent = new Agent({
   name: "dashboardBuilderAgent",
   description:
     "Dashboard Builder Agent: applies safe, incremental edits to an existing dashboard spec and persists validated preview versions.",
+  requestContextSchema: z.object({
+    userId: z.string().optional(),
+    tenantId: z.string().optional(),
+    platformType: z.string().optional(),
+    workflowName: z.string().optional(),
+    selectedOutcome: z.string().optional(),
+    selectedStoryboard: z.string().optional(),
+    mode: z.string().optional(),
+    phase: z.string().optional(),
+    threadId: z.string().optional(),
+    sourceId: z.string().optional(),
+    workflowEntityId: z.string().optional(),
+    selectedModel: z.string().optional(),
+  }),
   instructions: async ({ requestContext }: { requestContext: RequestContext }) => {
     const mode = (requestContext.get("mode") as string | undefined) ?? "edit";
     const phase = (requestContext.get("phase") as string | undefined) ?? "editing";

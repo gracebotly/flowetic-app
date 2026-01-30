@@ -6,6 +6,7 @@ import { glm47Model } from "../lib/models/glm47";
 import { getMastraStorage } from "../lib/storage";
 import type { RequestContext } from "@mastra/core/request-context";
 import type { PlatformType } from "../skills/loadSkill";
+import { z } from 'zod';
 import { loadSkillMarkdown, loadNamedSkillMarkdown } from "../skills/loadSkill";
 import { createFloweticMemory } from "../lib/memory";
 import { platformMappingMaster } from "./platformMappingMaster";
@@ -23,6 +24,20 @@ export const masterRouterAgent: Agent = new Agent({
   id: "masterRouterAgent",
   name: "masterRouterAgent",
   description: "Master router agent that orchestrates sub-agents and workflows.",
+  requestContextSchema: z.object({
+    userId: z.string().optional(),
+    tenantId: z.string().optional(),
+    platformType: z.string().optional(),
+    workflowName: z.string().optional(),
+    selectedOutcome: z.string().optional(),
+    selectedStoryboard: z.string().optional(),
+    mode: z.string().optional(),
+    phase: z.string().optional(),
+    threadId: z.string().optional(),
+    sourceId: z.string().optional(),
+    workflowEntityId: z.string().optional(),
+    selectedModel: z.string().optional(),
+  }),
   instructions: async ({ requestContext }: { requestContext: RequestContext }) => {
     const phase = (typeof requestContext?.get === 'function' 
       ? requestContext.get("phase") 

@@ -363,6 +363,18 @@ Journey phases:
         requestContext.set("selectedModel", selectedModel);
       }
 
+      // -- New: set workflowName and selected values on RequestContext --
+      if (workflowName) {
+        requestContext.set('workflowName', workflowName);
+      }
+      if (journey?.selectedOutcome) {
+        requestContext.set('selectedOutcome', String(journey.selectedOutcome));
+      }
+      if (journey?.selectedStoryboard) {
+        requestContext.set('selectedStoryboard', String(journey.selectedStoryboard));
+      }
+      // End new block
+
       // Preserve legacy get() behavior if present (some of your code relies on it)
       const legacyGet = (runtimeContext as any).get;
       if (typeof legacyGet === "function") {
@@ -378,6 +390,15 @@ Journey phases:
     const hasSelectedEntity = Boolean(vibeContext?.entityId && vibeContext?.sourceId);
     const effectiveMode: JourneyMode =
       mode === "select_entity" && hasSelectedEntity ? "recommend" : mode;
+
+    // -- New: populate RequestContext with current phase and mode --
+    try {
+      requestContext.set('mode', effectiveMode);
+      requestContext.set('phase', effectiveMode);
+    } catch {
+      // If RequestContext is sealed, ignore errors silently
+    }
+    // End new block
 
     const deepLaneStep = journey?.deepLane?.step as number | undefined;
 

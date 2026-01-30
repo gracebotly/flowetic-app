@@ -5,6 +5,7 @@ import { Memory } from "@mastra/memory";
 import { glm47Model } from "../lib/models/glm47";
 import { getMastraStorage } from "../lib/storage";
 import type { RequestContext } from "@mastra/core/request-context";
+import { z } from 'zod';
 import { searchDesignDatabase } from "../tools/design-system/searchDesignDatabase";
 import { generateDesignSystem } from "../tools/design-system/generateDesignSystem";
 import { createFloweticMemory } from "../lib/memory";
@@ -18,6 +19,20 @@ export const designAdvisorAgent: Agent = new Agent({
   name: "designAdvisorAgent",
   description:
     "Design Advisor Agent (RAG): Frontend-design powered UI/UX guidance. Generates style bundles (Phase 3), applies interactive edits (Phase 5), follows frontend-design principles for distinctive dashboards.",
+  requestContextSchema: z.object({
+    userId: z.string().optional(),
+    tenantId: z.string().optional(),
+    platformType: z.string().optional(),
+    workflowName: z.string().optional(),
+    selectedOutcome: z.string().optional(),
+    selectedStoryboard: z.string().optional(),
+    mode: z.string().optional(),
+    phase: z.string().optional(),
+    threadId: z.string().optional(),
+    sourceId: z.string().optional(),
+    workflowEntityId: z.string().optional(),
+    selectedModel: z.string().optional(),
+  }),
   instructions: async ({ requestContext }: { requestContext: RequestContext }) => {
     const mode = (requestContext.get("mode") as string | undefined) ?? "edit";
     const phase = (requestContext.get("phase") as string | undefined) ?? "editing";
