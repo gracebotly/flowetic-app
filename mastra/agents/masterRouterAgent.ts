@@ -6,7 +6,6 @@ import { glm47Model } from "../lib/models/glm47";
 import { getMastraStorage } from "../lib/storage";
 import type { RequestContext } from "@mastra/core/request-context";
 import type { PlatformType } from "../skills/loadSkill";
-import { z } from 'zod';
 import { loadSkillMarkdown, loadNamedSkillMarkdown } from "../skills/loadSkill";
 import { createFloweticMemory } from "../lib/memory";
 import { platformMappingMaster } from "./platformMappingMaster";
@@ -24,36 +23,26 @@ export const masterRouterAgent: Agent = new Agent({
   id: "masterRouterAgent",
   name: "masterRouterAgent",
   description: "Master router agent that orchestrates sub-agents and workflows.",
-  requestContextSchema: z.object({
-    userId: z.string().optional(),
-    tenantId: z.string().optional(),
-    platformType: z.string().optional(),
-    workflowName: z.string().optional(),
-    selectedOutcome: z.string().optional(),
-    selectedStoryboard: z.string().optional(),
-    mode: z.string().optional(),
-    phase: z.string().optional(),
-    threadId: z.string().optional(),
-    sourceId: z.string().optional(),
-    workflowEntityId: z.string().optional(),
-    selectedModel: z.string().optional(),
-  }),
   instructions: async ({ requestContext }: { requestContext: RequestContext }) => {
-    const phase = (typeof requestContext?.get === 'function' 
-      ? requestContext.get("phase") 
-      : (requestContext as any)?.phase) as string | undefined;
-    
     const platformType = (typeof requestContext?.get === 'function' 
       ? requestContext.get("platformType") 
       : (requestContext as any)?.platformType) || "make" as PlatformType;
     
-    const workflowName = (typeof requestContext?.get === 'function' 
-      ? requestContext.get("workflowName") 
-      : (requestContext as any)?.workflowName) as string | undefined;
-    
-    const selectedOutcome = (typeof requestContext?.get === 'function' 
-      ? requestContext.get("selectedOutcome") 
-      : (requestContext as any)?.selectedOutcome) as string | undefined;
+    const phase = String(requestContext?.get?.("phase") ?? requestContext?.get?.("mode") ?? "");
+    const selectedOutcome = String(requestContext?.get?.("selectedOutcome") ?? "");
+    const workflowName = String(requestContext?.get?.("workflowName") ?? "");
+    const tenantId = String(requestContext?.get?.("tenantId") ?? "");
+    const userId = String(requestContext?.get?.("userId") ?? "");
+
+    const contextHeader = [
+      "# CURRENT REQUEST CONTEXT (authoritative)",
+      userId ? `userId: ${userId}` : "userId: (missing)",
+      tenantId ? `tenantId: ${tenantId}` : "tenantId: (missing)",
+      phase ? `phase: ${phase}` : "phase: (missing)",
+      workflowName ? `workflowName: ${workflowName}` : "workflowName: (missing)",
+      selectedOutcome ? `selectedOutcome: ${selectedOutcome}` : "selectedOutcome: (missing)",
+      "",
+    ].join("\n");
 
     const platformSkill = await loadSkillMarkdown(platformType);
     
@@ -96,7 +85,7 @@ export const masterRouterAgent: Agent = new Agent({
     return [
       {
         role: "system" as const,
-        content: skillContent
+        content: `${contextHeader}\n${skillContent}`
       },
       {
         role: "system",
