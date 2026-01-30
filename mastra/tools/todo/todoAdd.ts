@@ -1,65 +1,63 @@
 
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
-import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from "@mastra/core/request-context";
+import { createClient } from "@/lib/supabase/server";
+
+const TodoPrioritySchema = z.enum(["low", "medium", "high", "urgent"]);
 
 export const todoAdd = createTool({
   id: "todo.add",
   description: "Create a new todo item for the current thread. Use for planning and progress tracking.",
   inputSchema: z.object({
-  tenantId: z.string().uuid().optional(),
-  threadId: z.string().min(1).optional(),
-  title: z.string().min(1).max(160),
-  description: z.string().max(2000).optional(),
-  priority: z.enum(["low", "medium", "high", "urgent"]).describe("Priority"),
-  tags: z.array(z.string()).optional().default([]),
-  parentId: z.string().uuid().optional().nullable(),
-}),
+    tenantId: z.string().uuid(),
+    threadId: z.string().min(1),
+    title: z.string().min(1).max(160),
+    description: z.string().max(2000).optional(),
+    priority: TodoPrioritySchema.optional().default("medium"),
+    tags: z.array(z.string()).optional().default([]),
+    parentId: z.string().uuid().optional().nullable(),
+  }),
   outputSchema: z.object({
-  todo: z.any(),
-}),
-execute: async (inputData, context) => {
-  const { tenantId: explicitTenantId, threadId: explicitThreadId, title, description, priority, tags, parentId } =
-    inputData;
+    todo: z.any().nullable(),
+  }),
+  execute: async (inputData: any) => {
+    const supabase = await createClient();
 
-  const tenantId =
-    explicitTenantId ??
-    (context?.requestContext?.get("tenantId") as string | undefined) ??
-    (context?.requestContext?.get(MASTRA_RESOURCE_ID_KEY) as string | undefined);
+    const { data: authData } = await supabase.auth.getUser();
+    if (!authData?.user?.id) {
+      return { todo: null };
+    }
 
-  const threadId =
-    explicitThreadId ??
-    (context?.requestContext?.get("threadId") as string | undefined) ??
-    (context?.requestContext?.get(MASTRA_THREAD_ID_KEY) as string | undefined);
+    const { tenantId, threadId, title, description, priority, tags, parentId } = inputData;
 
-  if (!tenantId || !threadId) {
-    throw new Error("Missing required parameters: tenantId and threadId are required");
-  }
+    try {
+      const { data, error } = await supabase
+        .from("todos")
+        .insert({
+          tenant_id: tenantId,
+          thread_id: threadId,
+          title,
+          description: description ?? null,
+          status: "open",
+          priority: priority ?? "medium",
+          tags: tags ?? [],
+          parent_id: parentId ?? null,
+        })
+        .select("*")
+        .single();
 
-  // IMPORTANT: Keep using the existing mastra supabase client to avoid compile/runtime boundary issues.
-  const { createClient } = await import("../../lib/supabase");
-  const supabase = createClient();
+      if (error || !data) {
+        console.error("[todo.add] failed (non-fatal)", {
+          message: error?.message,
+          code: (error as any)?.code,
+        });
+        return { todo: null };
+      }
 
-  const { data, error } = await supabase
-    .from("todos")
-    .insert({
-      tenant_id: tenantId,
-      thread_id: threadId,
-      title,
-      description: description ?? null,
-      // Keep original status vocabulary used by this repo's todo pipeline:
-      status: "open",
-      priority,
-      tags: tags ?? [],
-      parent_id: parentId ?? null,
-    })
-    .select("*")
-    .single();
-
-  if (error || !data) throw new Error(error?.message ?? "TODO_ADD_FAILED");
-
-  // Return raw row as originally expected by codebase
-  return { todo: data };
-},
+      return { todo: data };
+    } catch (err) {
+      console.error("[todo.add] exception (non-fatal)", err);
+      return { todo: null };
+    }
+  },
 });
-

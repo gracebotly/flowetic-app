@@ -217,7 +217,20 @@ class VibeRouterAgent extends AbstractAgent {
           emit(subscriber, base, { type: "RUN_FINISHED" });
           subscriber.complete();
         } catch (err: any) {
-          const msg = err?.message ? String(err.message) : "Unknown error.";
+          const raw = err?.message ? String(err.message) : "Unknown error.";
+          const codeFromDetails =
+            typeof err?.details?.code === "string" ? err.details.code : undefined;
+
+          const isConcurrency =
+            raw === "LLM_CONCURRENCY_LIMIT" ||
+            codeFromDetails === "LLM_CONCURRENCY_LIMIT" ||
+            raw.toLowerCase().includes("high concurrency") ||
+            raw.toLowerCase().includes("rate limit") ||
+            raw.toLowerCase().includes("429");
+
+          const msg = isConcurrency
+            ? "Our AI service is temporarily overloaded. Please wait ~10 seconds and try again."
+            : raw;
 
           emit(subscriber, base, { type: "TEXT_MESSAGE_START", payload: {} });
           emit(subscriber, base, { type: "TEXT_MESSAGE_CONTENT", delta: msg });

@@ -2,8 +2,7 @@
 
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
-import { createClient } from "../../lib/supabase";
-import type { TodoItem, TodoStatus } from "./types";
+import { createClient } from "@/lib/supabase/server";
 
 export const todoList = createTool({
   id: "todo.list",
@@ -11,40 +10,51 @@ export const todoList = createTool({
   inputSchema: z.object({
     tenantId: z.string().uuid(),
     threadId: z.string().min(1),
-    status: z.enum(["open", "in_progress", "done"]),
+    status: z.enum(["open", "in_progress", "done"]).optional(),
   }),
   outputSchema: z.object({
-    todos: z.array(
-      z.object({
-        id: z.string().uuid(),
-        title: z.string(),
-        priority: z.enum(["low", "medium", "high", "urgent"]),
-        status: z.enum(["pending", "in_progress", "completed"]),
-        dueDate: z.string().optional(),
-        createdAt: z.string(),
-        completedAt: z.string().nullable(),
-      })
-    ),
+    todos: z.array(z.any()),
     total: z.number(),
     completed: z.number(),
   }),
-  execute: async (inputData, context) => {
-    const supabase = createClient();
+  execute: async (inputData: any) => {
+    const supabase = await createClient();
+
+    const { data: authData } = await supabase.auth.getUser();
+    if (!authData?.user?.id) {
+      return { todos: [], total: 0, completed: 0 };
+    }
+
     const { tenantId, threadId, status } = inputData;
 
-    let q = supabase
-      .from("todos")
-      .select("*")
-      .eq("tenant_id", tenantId)
-      .eq("thread_id", threadId)
-      .order("created_at", { ascending: true });
+    try {
+      let q = supabase
+        .from("todos")
+        .select("*")
+        .eq("tenant_id", tenantId)
+        .eq("thread_id", threadId)
+        .order("created_at", { ascending: true });
 
-    if (status) q = q.eq("status", status);
+      if (status) q = q.eq("status", status);
 
-    const { data, error } = await q;
-    if (error || !data) throw new Error(error?.message ?? "TODO_LIST_FAILED");
+      const { data, error } = await q;
 
-    return { todos: data };
+      if (error || !data) {
+        console.error("[todo.list] failed (non-fatal)", {
+          message: error?.message,
+          code: (error as any)?.code,
+        });
+        return { todos: [], total: 0, completed: 0 };
+      }
+
+      const total = data.length;
+      const completed = data.filter((t: any) => String(t?.status) === "done").length;
+
+      return { todos: data, total, completed };
+    } catch (err) {
+      console.error("[todo.list] exception (non-fatal)", err);
+      return { todos: [], total: 0, completed: 0 };
+    }
   },
 });
 
