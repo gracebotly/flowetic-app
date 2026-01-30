@@ -678,21 +678,12 @@ Journey phases:
     // Phase: recommend (Phase 1 — platform-specific outcomes)
     // ------------------------------------------------------------------
     if (effectiveMode === "recommend") {
-  // Get platform-specific outcomes from catalog
-  const outcomesResult = (await callTool(
-    getOutcomes,
-    { platformType },
-    { requestContext }
-  )) as GetOutcomesResult;
-
-  type OutcomeType = GetOutcomesResult['outcomes'][number];
+  const outcomesResult = (await callTool(getOutcomes, { platformType }, { requestContext })) as GetOutcomesResult;
   
+  type OutcomeType = GetOutcomesResult['outcomes'][number];
   const dashboardOutcome = outcomesResult.outcomes.find(o => o.category === 'dashboard');
   const productOutcome = outcomesResult.outcomes.find(o => o.category === 'product');
-  
-  const coreOutcomes = [dashboardOutcome, productOutcome].filter(
-    (o): o is OutcomeType => o !== undefined && o !== null
-  );
+  const coreOutcomes = [dashboardOutcome, productOutcome].filter((o): o is OutcomeType => o !== undefined && o !== null);
   
   const toolUi: ToolUi = {
     type: "outcome_cards",
@@ -707,40 +698,33 @@ Journey phases:
   };
 
   const workflowName = String(vibeContext?.displayName ?? vibeContext?.externalId ?? "").trim();
-
   const mastra = getMastra();
   const master = mastra.getAgent("masterRouterAgent" as const);
   
-  // Trust the Business Outcomes Advisor skill - minimal guidance only
-  const agentRes = await master.generate(
-    [
-      workflowName ? `System: User's workflow: "${workflowName}".` : "",
-      "System: Phase 1 - Outcome selection. Use your Business Outcomes Advisor skill.",
-      "System: If user asks 'what do you think?', evaluate their idea directly.",
-      "System: If user challenges your recommendation, defend it with specific reasoning.",
-      "",
-      NO_ROADMAP_RULES,
-    ].filter(Boolean).join("\n"),
-    { 
-      maxSteps: 12,
-      toolChoice: "auto",
-      requestContext,
-      memory: mastraMemory,
-    }
-  );
+  // Trust the agent and Business Outcomes Advisor skill
+  const systemPrompt = [
+    workflowName ? `User's workflow: "${workflowName}"` : "",
+    "Help the user select the right outcome (Dashboard vs Product).",
+    "Answer their questions directly. Provide specific recommendations based on their workflow.",
+  ].filter(Boolean).join("\n");
+  
+  const agentRes = await master.generate(systemPrompt, {
+    maxSteps: 12,
+    toolChoice: "auto",
+    requestContext,
+    memory: mastraMemory
+  });
   
   const agentText = String((agentRes as any)?.text ?? "").trim();
-
-      // Check if user is in deep lane (consultative mode)
-      const inDeepLane = Boolean(journey?.deepLane);
-      
-      return NextResponse.json({
-        text: agentText || "Hey! Let's figure out what you want to build first. Pick one of the cards below, or click \"I'm not sure\" if you want help deciding.",
-        journey: { ...journey, mode: "recommend" },
-        toolUi: inDeepLane ? null : toolUi, // Suppress cards in deep lane
-        vibeContext: { ...(vibeContext ?? {}), skillMD },
-      });
-    }
+  const inDeepLane = Boolean(journey?.deepLane);
+  
+  return NextResponse.json({
+    text: agentText || "Let's figure out what you want to build.",
+    journey: { ...journey, mode: "recommend" },
+    toolUi: inDeepLane ? null : toolUi,
+    vibeContext: { ...(vibeContext ?? {}), skillMD },
+  });
+}
 
     // ------------------------------------------------------------------
     // Phase: align (Phase 2 — storyboard cards)
