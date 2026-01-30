@@ -8,7 +8,7 @@ import type { RequestContext } from "@mastra/core/request-context";
 import { searchDesignDatabase } from "../tools/design-system/searchDesignDatabase";
 import { generateDesignSystem } from "../tools/design-system/generateDesignSystem";
 import { createFloweticMemory } from "../lib/memory";
-import { todoAdd, todoList, todoUpdate, todoComplete } from "../tools/todo";
+
 import { getStyleBundles } from "../tools/design";
 
 import { loadNamedSkillMarkdown } from "../skills/loadSkill";
@@ -69,17 +69,8 @@ export const designAdvisorAgent: Agent = new Agent({
     },
   }),
   tools: {
-    // Use proper Python RAG tools instead of keyword search
-    searchDesignDatabase,    // Python RAG domain search
-    generateDesignSystem,    // Python design system generator
-    
-    // Keep existing todo tools
-    todoAdd,
-    todoList,
-    todoUpdate,
-    todoComplete,
-    
-    // Keep style bundle tool
+    searchDesignDatabase,
+    generateDesignSystem,
     getStyleBundles,
   },
 });

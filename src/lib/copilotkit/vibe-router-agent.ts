@@ -4,6 +4,7 @@ import { RequestContext } from "@mastra/core/request-context";
 // import { createRuntimeContext, type RuntimeContextLike } from "@/mastra/lib/runtimeContext"; // Removed runtimeContext shim
 import { runVibeRouter } from "@/app/api/vibe/router/runner";
 import { Observable } from "rxjs";
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from "@mastra/core/request-context";
 
 function getOrCreateThreadId(input: any): string {
   const candidate =
@@ -173,6 +174,20 @@ class VibeRouterAgent extends AbstractAgent {
           if (ctx.vibeContext?.platformType) requestContext.set("platformType", ctx.vibeContext.platformType);
           if (ctx.selectedModel) requestContext.set("selectedModel", ctx.selectedModel);
 
+          // Add journey state properties to RequestContext for agent awareness
+          if (ctx.journey?.selectedOutcome) requestContext.set("selectedOutcome", ctx.journey.selectedOutcome);
+          if (ctx.journey?.selectedStoryboard) requestContext.set("selectedStoryboard", ctx.journey.selectedStoryboard);
+          if (ctx.journey?.mode) requestContext.set("phase", ctx.journey.mode);
+
+          // Add workflow name from vibeContext for agent instructions
+          if (ctx.vibeContext?.displayName || ctx.vibeContext?.externalId) {
+            requestContext.set("workflowName", String(ctx.vibeContext.displayName ?? ctx.vibeContext.externalId ?? "").trim());
+          }
+
+          // Set reserved keys for secure memory operations
+          requestContext.set(MASTRA_RESOURCE_ID_KEY, ctx.tenantId);
+          requestContext.set(MASTRA_THREAD_ID_KEY, ctx.journey?.threadId || ctx.journey?.mastraThreadId || ctx.threadId || "");
+
           const result = await runVibeRouter({
             userId: ctx.userId,
             tenantId: ctx.tenantId,
@@ -202,7 +217,20 @@ class VibeRouterAgent extends AbstractAgent {
           emit(subscriber, base, { type: "RUN_FINISHED" });
           subscriber.complete();
         } catch (err: any) {
-          const msg = err?.message ? String(err.message) : "Unknown error.";
+          const raw = err?.message ? String(err.message) : "Unknown error.";
+          const codeFromDetails =
+            typeof err?.details?.code === "string" ? err.details.code : undefined;
+
+          const isConcurrency =
+            raw === "LLM_CONCURRENCY_LIMIT" ||
+            codeFromDetails === "LLM_CONCURRENCY_LIMIT" ||
+            raw.toLowerCase().includes("high concurrency") ||
+            raw.toLowerCase().includes("rate limit") ||
+            raw.toLowerCase().includes("429");
+
+          const msg = isConcurrency
+            ? "Our AI service is temporarily overloaded. Please wait ~10 seconds and try again."
+            : raw;
 
           emit(subscriber, base, { type: "TEXT_MESSAGE_START", payload: {} });
           emit(subscriber, base, { type: "TEXT_MESSAGE_CONTENT", delta: msg });

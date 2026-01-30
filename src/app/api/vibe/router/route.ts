@@ -6,6 +6,38 @@ import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 import { loadSkill } from "@/mastra/skills/loadSkill";
+
+function isConcurrencyLimitError(err: any): boolean {
+  const msg = String(err?.message ?? "");
+  const name = String(err?.name ?? "");
+  const code = String(err?.code ?? "");
+  const status = Number(err?.status ?? err?.statusCode ?? 0);
+
+  if (status === 429) return true;
+  if (code === "429") return true;
+  if (msg.toLowerCase().includes("high concurrency usage")) return true;
+  if (msg.toLowerCase().includes("rate limit")) return true;
+  if (name.includes("AI_APICallError") && msg.toLowerCase().includes("concurrency")) return true;
+
+  return false;
+}
+
+function safeMergeRequestContextEntries(requestContext: RequestContext, entries: unknown) {
+  if (!Array.isArray(entries)) return;
+
+  for (const pair of entries) {
+    if (!Array.isArray(pair) || pair.length !== 2) continue;
+    const [k, v] = pair;
+    if (typeof k !== "string" || !k) continue;
+    if (typeof v === "function") continue;
+
+    try {
+      requestContext.set(k, v as any);
+    } catch {
+      // best-effort
+    }
+  }
+}
 import { z } from "zod";
 
 import { designAdvisorAgent } from "@/mastra/agents/designAdvisorAgent";
@@ -210,6 +242,7 @@ export async function POST(req: NextRequest) {
       journey,
       userMessage,
       selectedModel,
+      __requestContextEntries,
     }: {
       userId: string;
       tenantId: string;
@@ -217,6 +250,7 @@ export async function POST(req: NextRequest) {
       journey: any;
       userMessage: string;
       selectedModel?: string;
+      __requestContextEntries?: unknown;
     } = body;
 
     if (!userId || !tenantId) {
@@ -309,12 +343,18 @@ Journey phases:
 
     // --- Normalize requestContext: Mastra expects RequestContext with .set() ---
     const requestContext = new RequestContext();
+    
+    // Merge forwarded requestContext entries
+    safeMergeRequestContextEntries(requestContext, __requestContextEntries);
 
     // Copy enumerable keys from the existing runtimeContext object
     if (runtimeContext && typeof runtimeContext === "object") {
       for (const [k, v] of Object.entries(runtimeContext as Record<string, unknown>)) {
-        // Skip function-valued properties like get()
         if (typeof v === "function") continue;
+
+        const existing = requestContext.get(k);
+        if (existing !== undefined && existing !== null) continue;
+
         requestContext.set(k, v as any);
       }
 
@@ -519,10 +559,13 @@ Journey phases:
       const agentInput = actionToAgentHint(userMessage);
       const mastra = getMastra();
       const master = mastra.getAgent("masterRouterAgent" as const);
+
+      // CRITICAL: Update requestContext with selectedOutcome BEFORE calling agent
+      requestContext.set("selectedOutcome", outcome);
+
       const agentRes = await master.generate(
-        "System: You are a premium agency business consultant speaking to a non-technical user. " +
-        "Use plain language. Avoid technical jargon. Explain what happens next in simple terms.",
-        { 
+        `System: User selected outcome "${outcome}". ${actionToAgentHint(userMessage)}`,
+        {
           maxSteps: 10,
           toolChoice: "auto",
           requestContext,
@@ -591,6 +634,14 @@ Journey phases:
         return NextResponse.json({ error: "MISSING_STYLE_BUNDLE_ID" }, { status: 400 });
       }
 
+      // CRITICAL: Update requestContext with selected values for agent awareness
+      if (journey?.selectedStoryboard) {
+        requestContext.set("selectedStoryboard", journey.selectedStoryboard);
+      }
+      if (journey?.selectedOutcome) {
+        requestContext.set("selectedOutcome", journey.selectedOutcome);
+      }
+
       // Get bundle list again, pick chosen bundle
       const bundlesResult = await callTool(
         getStyleBundles,
@@ -627,6 +678,9 @@ Journey phases:
       if (!storyboardId) {
         return NextResponse.json({ error: "MISSING_STORYBOARD_ID" }, { status: 400 });
       }
+
+      // CRITICAL: Update requestContext with selectedStoryboard BEFORE proceeding
+      requestContext.set("selectedStoryboard", storyboardId);
 
       const nextJourney = { ...journey, selectedStoryboard: storyboardId, mode: "style" };
 
@@ -1049,16 +1103,18 @@ return NextResponse.json({
       cause: err?.cause,
     });
 
+    const isConcurrency = isConcurrencyLimitError(err);
+
     return NextResponse.json(
       {
-        error: message,
+        error: isConcurrency ? "LLM_CONCURRENCY_LIMIT" : message,
         details: {
           name: err?.name,
           code: err?.code,
           stack,
         },
       },
-      { status: 500 }
+      { status: isConcurrency ? 503 : 500 }
     );
   }
 }
