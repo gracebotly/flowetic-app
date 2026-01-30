@@ -678,88 +678,64 @@ Journey phases:
     // Phase: recommend (Phase 1 — platform-specific outcomes)
     // ------------------------------------------------------------------
     if (effectiveMode === "recommend") {
-      // Get platform-specific outcomes from catalog
-      const outcomesResult = (await callTool(
-        getOutcomes,
-        { platformType },
-        { requestContext }
-      )) as GetOutcomesResult;
+  const outcomesResult = (await callTool(getOutcomes, { platformType }, { requestContext })) as GetOutcomesResult;
+  
+  type OutcomeType = GetOutcomesResult['outcomes'][number];
+  const dashboardOutcome = outcomesResult.outcomes.find(o => o.category === 'dashboard');
+  const productOutcome = outcomesResult.outcomes.find(o => o.category === 'product');
+  const coreOutcomes = [dashboardOutcome, productOutcome].filter((o): o is OutcomeType => o !== undefined && o !== null);
+  
+  const toolUi: ToolUi = {
+    type: "outcome_cards",
+    title: "Outcome + Monetization Strategy",
+    options: coreOutcomes.map((o) => ({
+      id: o.id,
+      title: o.name,
+      description: o.description,
+      previewImageUrl: o.previewImageUrl,
+      tags: o.tags,
+    })),
+  };
 
-      // Filter to 2 core outcomes: dashboard and product only
-      type OutcomeType = GetOutcomesResult['outcomes'][number];
-      
-      const dashboardOutcome = outcomesResult.outcomes.find(o => o.category === 'dashboard');
-      const productOutcome = outcomesResult.outcomes.find(o => o.category === 'product');
-      
-      // TypeScript-safe filtering: remove undefined values
-      const coreOutcomes = [dashboardOutcome, productOutcome].filter(
-        (o): o is OutcomeType => o !== undefined && o !== null
-      );
-      
-      const toolUi: ToolUi = {
-        type: "outcome_cards",
-        title: "Outcome + Monetization Strategy",
-        options: coreOutcomes.map((o) => ({
-          id: o.id,
-          title: o.name,
-          description: o.description,
-          previewImageUrl: o.previewImageUrl,
-          tags: o.tags,
-        })),
-      };
+  const workflowName = String(vibeContext?.displayName ?? vibeContext?.externalId ?? "").trim();
+  const mastra = getMastra();
+  const master = mastra.getAgent("masterRouterAgent" as const);
+  
+  // Trust the agent and Business Outcomes Advisor skill
+  const systemPrompt = [
+    workflowName ? `User's workflow: "${workflowName}"` : "",
+    "Help the user select the right outcome (Dashboard vs Product).",
+    "Answer their questions directly. Provide specific recommendations based on their workflow.",
+  ].filter(Boolean).join("\n");
+  
+  const agentRes = await master.generate(systemPrompt, {
+    maxSteps: 12,
+    toolChoice: "auto",
+    requestContext,
+    memory: mastraMemory
+  });
+  
+  const agentText = String((agentRes as any)?.text ?? "").trim();
 
-      const workflowName = String(vibeContext?.displayName ?? vibeContext?.externalId ?? "").trim();
+const inDeepLane = Boolean(journey?.deepLane);
+const deepLaneStep =
+  typeof (journey as any)?.deepLane?.step === "number"
+    ? ((journey as any).deepLane.step as number)
+    : undefined;
 
-      const mastra = getMastra();
-      const master = mastra.getAgent("masterRouterAgent" as const);
-      const agentRes = await master.generate(
-        [
-          "System: Phase 1 outcome selection. You are a premium business consultant.",
-          workflowName ? `System: User's workflow name: "${workflowName}".` : "",
-          "",
-          "TONE REQUIREMENTS:",
-          "- Warm and consultative (not robotic)",
-          "- Use plain business language",
-          "- Reference the workflow naturally in context",
-          "- Make the user feel understood",
-          "",
-          "OUTPUT STRUCTURE (exactly 4 parts):",
-          "1. Greeting: 'Hey! I see you're working with [workflow name/type].'",
-          "2. Recommendation: 'I recommend starting with a [Dashboard/Product].'",
-          "3. Reasons: Exactly 2 bullet points explaining WHY (tie to the workflow's purpose)",
-          "4. CTA: 'Pick one of the cards below, or click \"I'm not sure\" if you want help deciding.'",
-          "",
-          "EXAMPLE:",
-          "Hey! I see you're working with your WooCommerce Support Agent.",
-          "",
-          "I recommend starting with a **Dashboard**.",
-          "",
-          "• It will help you easily track how well your support agent is handling customer queries",
-          "• You'll be able to quickly identify any issues and improve response times",
-          "",
-          "Pick one of the cards below, or click \"I'm not sure\" if you want help deciding.",
-          "",
-          NO_ROADMAP_RULES,
-        ].filter(Boolean).join("\n"),
-        { 
-          maxSteps: 10,
-          toolChoice: "auto",
-          requestContext,
-          memory: mastraMemory,
-        }
-      );
-      const agentText = String((agentRes as any)?.text ?? "").trim();
+// Suppress cards after the agent has made a recommendation (not just during deep lane questions)
+const agentMadeRecommendation = /(^|\n)\s*i\s*(would\s*)?recommend\b/i.test(agentText);
+const deepLaneComplete = typeof deepLaneStep === "number" && deepLaneStep >= 2;
 
-      // Check if user is in deep lane (consultative mode)
-      const inDeepLane = Boolean(journey?.deepLane);
-      
-      return NextResponse.json({
-        text: agentText || "Hey! Let's figure out what you want to build first. Pick one of the cards below, or click \"I'm not sure\" if you want help deciding.",
-        journey: { ...journey, mode: "recommend" },
-        toolUi: inDeepLane ? null : toolUi, // Suppress cards in deep lane
-        vibeContext: { ...(vibeContext ?? {}), skillMD },
-      });
-    }
+const suppressOutcomeCards = Boolean(journey?.deepLane) && (agentMadeRecommendation || deepLaneComplete);
+
+return NextResponse.json({
+  text: agentText || "Let's figure out what you want to build.",
+  journey: { ...journey, mode: "recommend" },
+  toolUi: suppressOutcomeCards ? null : (inDeepLane ? null : toolUi),
+  vibeContext: { ...(vibeContext ?? {}), skillMD },
+});
+}
 
     // ------------------------------------------------------------------
     // Phase: align (Phase 2 — storyboard cards)

@@ -4,7 +4,7 @@
 import { useState } from "react";
 import { Paperclip, Plus, X } from "lucide-react";
 
-export type ModelId = "glm-4.7" | "gemini-3-pro" | "claude-sonnet-4.5" | "gpt-5.2";
+export type ModelId = "glm-4.7" | "gemini-3-pro-preview" | "claude-sonnet-4-5" | "gpt-5.2";
 
 interface ModelOption {
   id: ModelId;
@@ -13,8 +13,8 @@ interface ModelOption {
 
 const MODELS: ModelOption[] = [
   { id: "glm-4.7", name: "GLM 4.7" },
-  { id: "gemini-3-pro", name: "Gemini 3 Pro" },
-  { id: "claude-sonnet-4.5", name: "Claude Sonnet 4.5" },
+  { id: "gemini-3-pro-preview", name: "Gemini 3 Pro" },
+  { id: "claude-sonnet-4-5", name: "Claude Sonnet 4.5" },
   { id: "gpt-5.2", name: "GPT 5.2" },
 ];
 

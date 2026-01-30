@@ -26,6 +26,7 @@ import {
   Plus,
   MessagesSquare,
   Sparkles,
+  Share2,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
@@ -40,6 +41,7 @@ import { OutcomeCards } from "@/components/vibe/inline-cards/outcome-cards";
 import { StoryboardCards } from "@/components/vibe/inline-cards/storyboard-cards";
 import { StyleBundleCards } from "@/components/vibe/inline-cards/style-bundle-cards";
 import { ModelSelector, type ModelId } from "./model-selector";
+import { exportAsMarkdown, exportAsJSON } from "@/lib/export-chat";
 
 type ViewMode = "terminal" | "preview" | "publish";
 
@@ -169,6 +171,7 @@ export function ChatWorkspace({
   const [isChatExpanded, setIsChatExpanded] = useState(false);
   const [selectedModel, setSelectedModel] = useState<ModelId>("glm-4.7");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [showShareModal, setShowShareModal] = useState(false);
 
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
 
@@ -1057,7 +1060,18 @@ return (
               {view === "preview" ? "Dashboard Preview" : view === "publish" ? "Deploy Dashboard" : "Current Changes"}
             </h2>
             
-            <div className="inline-flex items-center gap-1 rounded-lg bg-gray-100 p-1">
+            <div className="flex items-center gap-2">
+              {/* Share Button */}
+              <button
+                type="button"
+                onClick={() => setShowShareModal(true)}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100 transition-colors"
+                title="Export conversation"
+              >
+                <Share2 size={18} />
+              </button>
+
+              <div className="inline-flex items-center gap-1 rounded-lg bg-gray-100 p-1">
               <button
                 type="button"
                 onClick={() => setView("terminal")}
@@ -1096,6 +1110,7 @@ return (
               </button>
             </div>
           </div>
+        </div>
 
           {view === "terminal" ? (
             <div className="flex flex-1 items-center justify-center bg-gray-50">
@@ -1288,6 +1303,100 @@ return (
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Share Modal */}
+      {showShareModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="fixed inset-0 bg-black bg-opacity-50"
+            onClick={() => setShowShareModal(false)}
+          />
+          <div className="relative bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Export Conversation</h3>
+              <button
+                onClick={() => setShowShareModal(false)}
+                className="p-1 rounded-md hover:bg-gray-100"
+              >
+                <X className="h-5 w-5 text-gray-500" />
+              </button>
+            </div>
+
+            <p className="text-sm text-gray-600 mb-6">
+              Choose your export format
+            </p>
+
+            <div className="space-y-3">
+              {/* Markdown Export */}
+              <button
+                onClick={() => {
+                  exportAsMarkdown(messages, {
+                    chatId: threadId,
+                    currentPhase: journeyMode,
+                    platformType: vibeContext?.platformType,
+                    sourceId: vibeContext?.sourceId,
+                    entityId: vibeContext?.entityId,
+                    selectedOutcome,
+                    selectedStoryboard,
+                    selectedStyleBundle: selectedStyleBundleId,
+                    selectedModel,
+                  });
+                  setShowShareModal(false);
+                }}
+                className="w-full flex items-start gap-4 p-4 rounded-lg border-2 border-gray-200 hover:border-blue-500 hover:bg-blue-50 transition-all group"
+              >
+                <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center group-hover:bg-blue-500 transition-colors">
+                  <FileText className="w-5 h-5 text-blue-600 group-hover:text-white" />
+                </div>
+                <div className="flex-1 text-left">
+                  <div className="font-medium text-gray-900 mb-1">Text (Markdown)</div>
+                  <div className="text-sm text-gray-600">
+                    Download conversation as markdown
+                  </div>
+                </div>
+              </button>
+
+              {/* JSON Export */}
+              <button
+                onClick={() => {
+                  exportAsJSON(messages, {
+                    chatId: threadId,
+                    currentPhase: journeyMode,
+                    platformType: vibeContext?.platformType,
+                    sourceId: vibeContext?.sourceId,
+                    entityId: vibeContext?.entityId,
+                    selectedOutcome,
+                    selectedStoryboard,
+                    selectedStyleBundle: selectedStyleBundleId,
+                    selectedModel,
+                  });
+                  setShowShareModal(false);
+                }}
+                className="w-full flex items-start gap-4 p-4 rounded-lg border-2 border-gray-200 hover:border-purple-500 hover:bg-purple-50 transition-all group"
+              >
+                <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center group-hover:bg-purple-500 transition-colors">
+                  <FileText className="w-5 h-5 text-purple-600 group-hover:text-white" />
+                </div>
+                <div className="flex-1 text-left">
+                  <div className="font-medium text-gray-900 mb-1">JSON</div>
+                  <div className="text-sm text-gray-600">
+                    Download as JSON for fine-tuning or debugging
+                  </div>
+                </div>
+              </button>
+            </div>
+
+            <div className="mt-6 pt-4 border-t border-gray-200">
+              <button
+                onClick={() => setShowShareModal(false)}
+                className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}
