@@ -639,6 +639,9 @@ Journey phases:
         return NextResponse.json({ error: "MISSING_STORYBOARD_ID" }, { status: 400 });
       }
 
+      // CRITICAL: Update requestContext with selectedStoryboard BEFORE proceeding
+      requestContext.set("selectedStoryboard", storyboardId);
+
       const nextJourney = { ...journey, selectedStoryboard: storyboardId, mode: "style" };
 
       const bundlesResult = await callTool(

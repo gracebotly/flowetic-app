@@ -46,22 +46,27 @@ export const todoAdd = createTool({
       throw new Error("Missing required parameters: tenantId and threadId are required");
     }
     
+    // Use authenticated client for RLS operations
+    const { createClient } = await import('../../../src/lib/supabase/server');
     const supabase = await createClient();
+    
     const { data: newTodo, error } = await supabase
       .from("todos")
       .insert({
         tenant_id: tenantId,
         thread_id: threadId,
         title,
-        description: description ?? null,
+        description: description || null,
         status: "pending",
-        priority,
-        tags,
+        priority: priority || "medium",
+        tags: tags || [],
       })
-      .select("*")
+      .select()
       .single();
-
-    if (error || !newTodo) throw new Error(error?.message ?? "TODO_ADD_FAILED");
+  
+    if (error) {
+      throw new Error(`Failed to create todo: ${error.message}`);
+    }
     
     return {
       id: newTodo.id,
