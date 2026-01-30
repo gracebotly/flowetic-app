@@ -18,7 +18,7 @@ import {
 import { analyzeSchema } from "../tools/analyzeSchema";
 import { generateMapping } from "../tools/generateMapping";
 import { getSchemaSummary } from "../tools/platformMapping/getSchemaSummary";
-import { todoAdd, todoList, todoUpdate, todoComplete } from "../tools/todo";
+
 import { getStyleBundles } from "../tools/design";
 import { getJourneySession } from "../tools/journey/getJourneySession";
 import { setSchemaReady } from "../tools/journey/setSchemaReady";
@@ -78,7 +78,6 @@ export const platformMappingMaster: Agent = new Agent({
     analyzeSchema,
     generateMapping,
     getSchemaSummary,
-    // Keep existing tools
     appendThreadEvent,
     getClientContext,
     getRecentEventSamples,
@@ -86,14 +85,7 @@ export const platformMappingMaster: Agent = new Agent({
     proposeMapping,
     saveMapping,
     runGeneratePreviewWorkflow,
-    // Todo tools
-    todoAdd,
-    todoList,
-    todoUpdate,
-    todoComplete,
-    // Design tools
     getStyleBundles,
-    // Journey tools
     getJourneySession,
     setSchemaReady,
   },

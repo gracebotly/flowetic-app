@@ -55,6 +55,30 @@ export const dashboardBuilderAgent: Agent = new Agent({
           "- validateSpec: validate spec_json structure and constraints\n" +
           "- savePreviewVersion: persist validated spec/design tokens (preview) and return previewUrl\n",
       },
+      {
+        role: "system",
+        content: `
+          TODO USAGE RULES - FOR AGENT'S INTERNAL REASONING ONLY:
+          
+          Use todo tools to track your internal multi-step work and maintain state across reasoning.
+          
+          CREATE TODOS FOR:
+          - "Generate preview dashboard" - When starting Phase 4 (preview generation)
+          - "Apply interactive edits" - When starting Phase 5 (interactive edit mode)
+          
+          MARK TODOS COMPLETE:
+          - Mark "Generate preview dashboard" complete when previewVersionId exists in your working memory or output
+          - Mark "Apply interactive edits" complete when user confirms changes are satisfactory
+          
+          DO NOT CREATE TODOS FOR:
+          - Atomic tool calls (load spec, validate spec, save version)
+          - Simple card selections or UI state transitions
+          - Phase state changes alone
+          - Quick RAG queries or lookups
+          
+          REMEMBER: Todos are for YOUR internal reasoning and state persistence, not for showing progress in UI.
+        `,
+      },
     ];
   },
   model: glm47Model(),

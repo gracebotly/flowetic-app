@@ -78,10 +78,36 @@ export const masterRouterAgent: Agent = new Agent({
       "- The tools will fall back to these values if not explicitly provided in the tool call",
     ].filter(Boolean).join("\n");
 
-    return {
-      role: "system" as const,
-      content: skillContent
-    };
+    return [
+      {
+        role: "system" as const,
+        content: skillContent
+      },
+      {
+        role: "system",
+        content: `
+          TODO USAGE RULES - FOR AGENT'S INTERNAL REASONING ONLY:
+          
+          Use todo tools to track high-level orchestration milestones and maintain your reasoning state.
+          
+          CREATE TODOS FOR:
+          - "Plan dashboard journey" - When a new dashboard journey begins (session start)
+          - "Deploy dashboard" - When entering Phase 6 (deployment phase)
+          
+          MARK TODOS COMPLETE:
+          - Mark "Deploy dashboard" complete after deployment record is successfully created
+          
+          DO NOT CREATE TODOS FOR:
+          - UI card selections (outcome selection, storyboard selection, style bundle selection)
+          - Atomic tool calls or RAG queries
+          - Workflow execution (connectionBackfill, generatePreview)
+          - Phase state transitions alone
+          
+          REMEMBER: Todos are for YOUR internal reasoning and state persistence across operations, not for simple user choices.
+          Todo list should only contain high-level milestones that represent actual multi-step work requiring state tracking.
+        `,
+      },
+    ];
   },
   model: ({ requestContext }: { requestContext: RequestContext }) => {
     // Get selected model from RequestContext (defaults to GLM 4.7)
