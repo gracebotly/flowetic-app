@@ -1,7 +1,6 @@
 
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
-import type { TodoItem } from "./types";
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from "@mastra/core/request-context";
 
 export const todoAdd = createTool({
@@ -17,16 +16,7 @@ export const todoAdd = createTool({
   parentId: z.string().uuid().optional().nullable(),
 }),
   outputSchema: z.object({
-  id: z.string().uuid(),
-  todo: z.object({
-    id: z.string().uuid(),
-    title: z.string(),
-    status: z.enum(["pending", "in_progress", "completed"]),
-    priority: z.enum(["low", "medium", "high", "urgent"]),
-    createdAt: z.string(),
-    completedAt: z.string().nullable(),
-    dueDate: z.string().optional(),
-  }),
+  todo: z.any(),
 }),
 execute: async (inputData, context) => {
   const { tenantId: explicitTenantId, threadId: explicitThreadId, title, description, priority, tags, parentId } =
@@ -46,9 +36,9 @@ execute: async (inputData, context) => {
     throw new Error("Missing required parameters: tenantId and threadId are required");
   }
 
-  // Use authenticated client for RLS operations (Next.js server cookies)
-  const { createClient } = await import("../../../src/lib/supabase/server");
-  const supabase = await createClient();
+  // IMPORTANT: Keep using the existing mastra supabase client to avoid compile/runtime boundary issues.
+  const { createClient } = await import("../../lib/supabase");
+  const supabase = createClient();
 
   const { data, error } = await supabase
     .from("todos")
@@ -57,7 +47,8 @@ execute: async (inputData, context) => {
       thread_id: threadId,
       title,
       description: description ?? null,
-      status: "pending",
+      // Keep original status vocabulary used by this repo's todo pipeline:
+      status: "open",
       priority,
       tags: tags ?? [],
       parent_id: parentId ?? null,
@@ -67,18 +58,8 @@ execute: async (inputData, context) => {
 
   if (error || !data) throw new Error(error?.message ?? "TODO_ADD_FAILED");
 
-  // Map DB row -> tool output contract
-  const todo: TodoItem = {
-    id: data.id,
-    title: data.title,
-    status: data.status,
-    priority: data.priority,
-    createdAt: data.created_at,
-    completedAt: null,
-    dueDate: undefined,
-  };
-
-  return { id: data.id, todo };
+  // Return raw row as originally expected by codebase
+  return { todo: data };
 },
 });
 
