@@ -7,7 +7,7 @@ import { glm47Model } from "./glm47";
  * Model configuration for Getflowetic
  * Uses AI SDK v5 provider factories for compatibility with Mastra v1.0.4
  */
-export type ModelId = "glm-4.7" | "gemini-3-pro" | "claude-sonnet-4-5" | "gpt-5.2";
+export type ModelId = "glm-4.7" | "gemini-3-pro-preview" | "claude-sonnet-4-5" | "gpt-5.2";
 
 export interface ModelConfig {
   id: ModelId;
@@ -58,11 +58,11 @@ export const AVAILABLE_MODELS: ModelConfig[] = [
     instance: glm47Model(), // Returns model directly
   },
   {
-    id: "gemini-3-pro",
+    id: "gemini-3-pro-preview",
     displayName: "Gemini 3 Pro",
     provider: "google",
     costTier: "expensive",
-    instance: getGoogleProvider(),  // Returns model instance directly
+    instance: getGoogleProvider(), // Returns model instance directly
   },
   {
     id: "claude-sonnet-4-5",

@@ -716,14 +716,25 @@ Journey phases:
   });
   
   const agentText = String((agentRes as any)?.text ?? "").trim();
-  const inDeepLane = Boolean(journey?.deepLane);
-  
-  return NextResponse.json({
-    text: agentText || "Let's figure out what you want to build.",
-    journey: { ...journey, mode: "recommend" },
-    toolUi: inDeepLane ? null : toolUi,
-    vibeContext: { ...(vibeContext ?? {}), skillMD },
-  });
+
+const inDeepLane = Boolean(journey?.deepLane);
+const deepLaneStep =
+  typeof (journey as any)?.deepLane?.step === "number"
+    ? ((journey as any).deepLane.step as number)
+    : undefined;
+
+// Suppress cards after the agent has made a recommendation (not just during deep lane questions)
+const agentMadeRecommendation = /(^|\n)\s*i\s*(would\s*)?recommend\b/i.test(agentText);
+const deepLaneComplete = typeof deepLaneStep === "number" && deepLaneStep >= 2;
+
+const suppressOutcomeCards = Boolean(journey?.deepLane) && (agentMadeRecommendation || deepLaneComplete);
+
+return NextResponse.json({
+  text: agentText || "Let's figure out what you want to build.",
+  journey: { ...journey, mode: "recommend" },
+  toolUi: suppressOutcomeCards ? null : (inDeepLane ? null : toolUi),
+  vibeContext: { ...(vibeContext ?? {}), skillMD },
+});
 }
 
     // ------------------------------------------------------------------

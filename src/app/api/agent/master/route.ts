@@ -155,7 +155,7 @@ export async function POST(req: NextRequest) {
     } as any;
 
     // 5) Always start with Master Router
-    const master = mastra.getAgent("vibeRouterAgent" as const);
+    const master = mastra.getAgent("masterRouterAgent" as const);
     if (!master) {
       return new Response(
         JSON.stringify({
