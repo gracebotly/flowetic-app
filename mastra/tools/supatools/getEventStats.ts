@@ -125,7 +125,10 @@ export const getEventStats = createSupaTool({
   },
 });
 
-async function getSourceNames(supabase: any, sourceIds: string[]): Record<string, string> {
+async function getSourceNames(
+  supabase: any,
+  sourceIds: string[]
+): Promise<Record<string, string>> {
   const { data } = await supabase
     .from('sources')
     .select('id, name')
