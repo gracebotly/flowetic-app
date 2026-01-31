@@ -1,6 +1,6 @@
 
 import { createTool } from '@mastra/core/tools';
-import { extractAuthContext, verifyTenantAccess } from '../../lib/tenant-verification';
+import { extractAuthContext, verifyTenantAccess } from '../lib/tenant-verification';
 
 export function createSupaTool<TOut>(config: {
   id: string;

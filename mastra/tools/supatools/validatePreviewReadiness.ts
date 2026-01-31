@@ -1,7 +1,7 @@
 
 
 
-import { createSupaTool } from './_base';
+import { createSupaTool } from '../_base';
 import { createClient } from '../../lib/supabase';
 import { z } from 'zod';
 
@@ -18,7 +18,7 @@ const outputSchema = z.object({
   checks: z.object({
     hasSource: z.object({ passed: z.boolean(), message: z.string() }),
     hasEvents: z.object({ passed: z.boolean(), message: z.string(), count: z.number() }),
-    schemaReady: z.object({ passed: z.boolean(), message: z.string() }),
+    journeySession: z.object({ passed: z.boolean(), message: z.string() }),
     eventTypes: z.object({ passed: z.boolean(), message: z.string(), types: z.array(z.string()) }),
   }),
   blockers: z.array(z.string()),
@@ -77,23 +77,26 @@ export const validatePreviewReadiness = createSupaTool<z.infer<typeof outputSche
       blockers.push(`Insufficient events (${eventCount} < ${requireMinEvents}). Collect more data before generating preview.`);
     }
     
-    // Check 3: Schema ready (via journey_sessions table)
-    const { data: journey, error: journeyError } = await supabase
+    const { data: session, error: sessionError } = await supabase
       .from('journey_sessions')
-      .select('id, schema_ready')
+      .select(
+        'id, mode, source_id, entity_id, selected_outcome, selected_storyboard, selected_style_bundle_id, preview_interface_id, preview_version_id, updated_at'
+      )
       .eq('tenant_id', tenantId)
-      .order('created_at', { ascending: false })
+      .order('updated_at', { ascending: false })
       .limit(1)
       .maybeSingle();
-    
-    let schemaReady = journey?.schema_ready ?? false;
-    
+
+    if (sessionError) {
+      warnings.push(`Could not verify journey session readiness: ${sessionError.message}`);
+    }
+
+    // Conservative readiness: require at least a session and a selected source.
     if (requireSchemaReady) {
-      if (journeyError) {
-        warnings.push('Could not verify schema readiness. Proceed with caution.');
-        schemaReady = true; // Default to true if unable to check
-      } else if (!schemaReady) {
-        blockers.push('Schema not ready. Run connection backfill workflow first.');
+      if (!session) {
+        blockers.push('No journey session found. Start the journey before generating a preview.');
+      } else if (!session.source_id) {
+        blockers.push('No source selected in the current journey session.');
       }
     }
     
@@ -123,9 +126,11 @@ export const validatePreviewReadiness = createSupaTool<z.infer<typeof outputSche
           message: `${eventCount} events (minimum: ${requireMinEvents})`,
           count: eventCount,
         },
-        schemaReady: {
-          passed: schemaReady || !requireSchemaReady,
-          message: schemaReady ? 'Schema is ready' : 'Schema not ready',
+        journeySession: {
+          passed: !requireSchemaReady ? true : !!session?.source_id,
+          message: session
+            ? `session mode=${session.mode ?? '(unknown)'} sourceSelected=${!!session.source_id}`
+            : 'No session',
         },
         eventTypes: {
           passed: uniqueEventTypes.length >= 2,
