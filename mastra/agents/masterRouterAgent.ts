@@ -56,10 +56,9 @@ export const masterRouterAgent: Agent = new Agent({
 
     const platformSkill = await loadSkillMarkdown(platformType);
 
-    const businessSkill =
-      phase === "outcome" || phase === "story" || phase === "recommend" || phase === "align"
-        ? await loadNamedSkillMarkdown("business-outcomes-advisor")
-        : null;
+    const businessSkill = phase === "recommend" || phase === "align"
+      ? await loadNamedSkillMarkdown("business-outcomes-advisor")
+      : null;
 
     const phaseInstructions = getPhaseInstructions(phase, {
       platformType: String(platformType),
