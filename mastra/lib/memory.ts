@@ -25,7 +25,26 @@ function envFlag(name: string, defaultValue: boolean) {
 export function createFloweticMemory(opts: CreateFloweticMemoryOpts = {}) {
   const storage = getMastraStorage();
   const lastMessages = opts.lastMessages ?? 30;
-  const workingMemory = opts.workingMemory ?? { enabled: true };
+  const workingMemory =
+    opts.workingMemory ??
+    ({
+      enabled: true,
+      template: `# Vibe Journey State - <working_memory>
+
+## Current Phase
+- Phase: {{phase}}
+- Last Updated: {{timestamp}}
+
+## Selections Made
+- Outcome Type: {{selectedOutcome}}
+- Storyboard: {{selectedStoryboard}}
+- Style Bundle: {{selectedStyleBundleId}}
+
+## Workflow Context
+- Platform: {{platformType}}
+- Workflow Name: {{workflowName}}
+`,
+    } as const);
   
   // Enable semantic recall by default for autonomous behavior
   const semanticRecallEnabled = envFlag("MASTRA_SEMANTIC_RECALL_ENABLED", true);

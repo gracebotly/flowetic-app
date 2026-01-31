@@ -84,6 +84,13 @@ export const masterRouterAgent: Agent = new Agent({
       "- When asked 'what do you think', evaluate the business idea (market opportunity, risks, strengths)",
       "- Adapt to conversation flow - if user changes topic, acknowledge and redirect",
       "",
+      "# WORKING MEMORY (Phase 3)",
+      "You have access to <working_memory>, which persists across the conversation thread.",
+      "Treat <working_memory> as the durable source of truth for:",
+      "- Current phase",
+      "- Selected outcome/storyboard/style bundle",
+      "If <working_memory> conflicts with the user's latest message, ask one clarifying question.",
+      "",
       "# CURRENT CONTEXT",
       workflowName ? `User's workflow: "${workflowName}"` : "No workflow selected yet",
       selectedOutcome ? `User selected outcome: ${selectedOutcome}` : "",
@@ -161,11 +168,20 @@ export const masterRouterAgent: Agent = new Agent({
   lastMessages: 30,
   workingMemory: {
     enabled: true,
-    template: `# Conversation Context
-- Workflow: [name/type from user]
-- User's goal: [what they want to achieve]
-- Concerns raised: [any objections or questions]
-- Recommendation status: [given/pending/challenged]
+    template: `# Vibe Journey State - <working_memory>
+
+## Current Phase
+- Phase: {{phase}}
+- Last Updated: {{timestamp}}
+
+## Selections Made
+- Outcome Type: {{selectedOutcome}}
+- Storyboard: {{selectedStoryboard}}
+- Style Bundle: {{selectedStyleBundleId}}
+
+## Workflow Context
+- Platform: {{platformType}}
+- Workflow Name: {{workflowName}}
 `,
   },
 }),
