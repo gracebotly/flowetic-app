@@ -4,7 +4,6 @@ import { createClient } from "@/lib/supabase/server";
 import { getMastra } from "@/mastra";
 import { ensureMastraThreadId } from "@/mastra/lib/ensureMastraThread";
 import { runAgentNetworkToText } from "@/mastra/lib/runNetwork";
-import { vibeJourneyWorkflow } from "@/mastra/workflows/vibeJourneyWorkflow";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -314,7 +313,7 @@ export async function POST(req: NextRequest) {
               JSON.stringify({
                 type: "suspended",
                 status: "suspended",
-                runId: result.runId,
+                runId: workflowRunId,
                 step: result.suspended?.[0],
                 suspendPayload: result.suspendPayload ?? null,
               }),
@@ -361,7 +360,7 @@ export async function POST(req: NextRequest) {
             JSON.stringify({
               type: "suspended",
               status: "suspended",
-              runId: result.runId,
+              runId: (run as any).runId,
               step: result.suspended?.[0],
               suspendPayload: result.suspendPayload ?? null,
             }),
