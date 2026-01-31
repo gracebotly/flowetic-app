@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 // import { RequestContext } from "@mastra/core/request-context"; // Removed - invalid import
 import { createClient } from "@/lib/supabase/server";
-import { getErrorFromUnknown } from "@/lib/utils";
 import { getMastra } from "@/mastra";
 import { ensureMastraThreadId } from "@/mastra/lib/ensureMastraThread";
 import { runAgentNetworkToText } from "@/mastra/lib/runNetwork";
@@ -9,6 +8,123 @@ import { vibeJourneyWorkflow } from "@/mastra/workflows/vibeJourneyWorkflow";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+function safeParseErrorObject(obj: unknown): string {
+  if (typeof obj !== "object" || obj === null) return String(obj);
+
+  try {
+    const stringified = JSON.stringify(obj);
+    if (stringified === "{}") return String(obj);
+    return stringified;
+  } catch {
+    return String(obj);
+  }
+}
+
+type SerializedError = {
+  name: string;
+  message: string;
+  stack?: string;
+  cause?: SerializedError | unknown;
+} & Record<string, any>;
+
+type SerializableError = Error & {
+  toJSON: () => SerializedError;
+};
+
+function getErrorFromUnknown(
+  unknownErr: unknown,
+  options: {
+    fallbackMessage?: string;
+    maxDepth?: number;
+    supportSerialization?: boolean;
+    serializeStack?: boolean;
+  } = {},
+): SerializableError {
+  const merged = {
+    fallbackMessage: "Unknown error",
+    maxDepth: 5,
+    supportSerialization: true,
+    serializeStack: true,
+    ...options,
+  };
+
+  const { fallbackMessage, maxDepth, supportSerialization, serializeStack } = merged;
+
+  const addErrorToJSON = (
+    error: Error,
+    serializeStackLocal: boolean,
+    opts?: { maxDepth?: number; currentDepth?: number },
+  ) => {
+    const maxDepthLocal = opts?.maxDepth ?? 5;
+    const currentDepth = opts?.currentDepth ?? 0;
+
+    if ((error as any).toJSON) return;
+
+    if (error.cause instanceof Error && currentDepth < maxDepthLocal) {
+      addErrorToJSON(error.cause, serializeStackLocal, { maxDepth: maxDepthLocal, currentDepth: currentDepth + 1 });
+    }
+
+    Object.defineProperty(error, "toJSON", {
+      value: function (this: Error) {
+        const json: SerializedError = { message: this.message, name: this.name };
+        if (serializeStackLocal && this.stack !== undefined) json.stack = this.stack;
+
+        if (this.cause !== undefined) {
+          const c: any = this.cause;
+          if (c instanceof Error && typeof c.toJSON === "function") json.cause = c.toJSON();
+          else json.cause = this.cause;
+        }
+
+        const anyErr = this as any;
+        for (const key in anyErr) {
+          if (Object.prototype.hasOwnProperty.call(anyErr, key) && !(key in json) && key !== "toJSON") {
+            (json as any)[key] = anyErr[key];
+          }
+        }
+
+        return json;
+      },
+      enumerable: false,
+      writable: true,
+      configurable: true,
+    });
+  };
+
+  if (unknownErr instanceof Error) {
+    if (supportSerialization) addErrorToJSON(unknownErr, serializeStack, { maxDepth });
+    return unknownErr as SerializableError;
+  }
+
+  let err: Error;
+
+  if (unknownErr && typeof unknownErr === "object") {
+    const msg =
+      "message" in (unknownErr as any) && typeof (unknownErr as any).message === "string"
+        ? String((unknownErr as any).message)
+        : safeParseErrorObject(unknownErr);
+
+    const causeRaw = "cause" in (unknownErr as any) ? (unknownErr as any).cause : undefined;
+
+    let cause: any = undefined;
+    if (causeRaw !== undefined && maxDepth > 0) {
+      cause = causeRaw instanceof Error ? causeRaw : getErrorFromUnknown(causeRaw, { ...merged, maxDepth: maxDepth - 1 });
+    }
+
+    err = new Error(msg, cause ? { cause } : undefined);
+    Object.assign(err as any, unknownErr);
+    err.stack = "stack" in (unknownErr as any) && typeof (unknownErr as any).stack === "string" ? (unknownErr as any).stack : undefined;
+  } else if (typeof unknownErr === "string") {
+    err = new Error(unknownErr);
+    err.stack = undefined;
+  } else {
+    err = new Error(fallbackMessage);
+  }
+
+  if (supportSerialization) addErrorToJSON(err, serializeStack, { maxDepth });
+
+  return err as SerializableError;
+}
 
 function detectIntent(message: string) {
   const m = message.toLowerCase();
