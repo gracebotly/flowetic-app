@@ -302,7 +302,6 @@ export async function POST(req: NextRequest) {
               JSON.stringify({
                 type: "success",
                 status: "success",
-                runId: result.runId,
                 text: String((result.result as any)?.text ?? ""),
                 state: (result.result as any)?.state ?? {},
               }),
@@ -350,7 +349,6 @@ export async function POST(req: NextRequest) {
             JSON.stringify({
               type: "success",
               status: "success",
-              runId: result.runId,
               text: String((result.result as any)?.text ?? ""),
               state: (result.result as any)?.state ?? {},
             }),
