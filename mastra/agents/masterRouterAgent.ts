@@ -18,6 +18,10 @@ import { todoAdd, todoList, todoUpdate, todoComplete } from "../tools/todo";
 import { createSource, listSources, updateSource, deleteSource } from "../tools/sources";
 import { createProject, listProjects, updateProject, deleteProject } from "../tools/projects";
 import { navigateTo } from "../tools/navigation";
+import {
+  getPhaseFromRequestContext,
+  getPhaseInstructions,
+} from "./instructions/phase-instructions";
 
 export const masterRouterAgent: Agent = new Agent({
   id: "masterRouterAgent",
@@ -28,11 +32,17 @@ export const masterRouterAgent: Agent = new Agent({
       ? requestContext.get("platformType") 
       : (requestContext as any)?.platformType) || "make" as PlatformType;
     
-    const phase = String(requestContext?.get?.("phase") ?? requestContext?.get?.("mode") ?? "");
+    const phase = getPhaseFromRequestContext(requestContext);
     const selectedOutcome = String(requestContext?.get?.("selectedOutcome") ?? "");
     const workflowName = String(requestContext?.get?.("workflowName") ?? "");
     const tenantId = String(requestContext?.get?.("tenantId") ?? "");
     const userId = String(requestContext?.get?.("userId") ?? "");
+    const selectedStoryboard = String(requestContext?.get?.("selectedStoryboard") ?? "");
+    const selectedStyleBundle = String(
+      requestContext?.get?.("selectedStyleBundle") ??
+        requestContext?.get?.("selectedStyleBundleId") ??
+        "",
+    );
 
     const contextHeader = [
       "# CURRENT REQUEST CONTEXT (authoritative)",
@@ -45,10 +55,19 @@ export const masterRouterAgent: Agent = new Agent({
     ].join("\n");
 
     const platformSkill = await loadSkillMarkdown(platformType);
-    
-    const businessSkill = (phase === "outcome" || phase === "story" || phase === "recommend" || phase === "align")
-      ? await loadNamedSkillMarkdown("business-outcomes-advisor")
-      : null;
+
+    const businessSkill =
+      phase === "outcome" || phase === "story" || phase === "recommend" || phase === "align"
+        ? await loadNamedSkillMarkdown("business-outcomes-advisor")
+        : null;
+
+    const phaseInstructions = getPhaseInstructions(phase, {
+      platformType: String(platformType),
+      workflowName: workflowName || undefined,
+      selectedOutcome: selectedOutcome || undefined,
+      selectedStoryboard: selectedStoryboard || undefined,
+      selectedStyleBundle: selectedStyleBundle || undefined,
+    });
 
     const skillContent = [
       "# WHO YOU ARE",
@@ -68,7 +87,12 @@ export const masterRouterAgent: Agent = new Agent({
       "",
       "# CURRENT CONTEXT",
       workflowName ? `User's workflow: "${workflowName}"` : "No workflow selected yet",
-      selectedOutcome ? `User selected: ${selectedOutcome}` : "",
+      selectedOutcome ? `User selected outcome: ${selectedOutcome}` : "",
+      selectedStoryboard ? `User selected storyboard: ${selectedStoryboard}` : "",
+      selectedStyleBundle ? `User selected style bundle: ${selectedStyleBundle}` : "",
+      "",
+      "# CURRENT PHASE INSTRUCTIONS (Phase 2)",
+      phaseInstructions,
       "",
       "# BUSINESS OUTCOMES ADVISOR SKILL",
       businessSkill?.content || "",
