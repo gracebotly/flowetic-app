@@ -1,6 +1,7 @@
 
 import type { Agent } from "@mastra/core/agent";
 import type { RequestContext } from "@mastra/core/request-context";
+import { createFloweticSelectionCompletionScorer } from "../validation/selection-completion.scorer";
 
 type NetworkRunOptions = {
   agent: Agent;
@@ -23,11 +24,25 @@ export async function runAgentNetworkToText({
   maxSteps = 10,
 }: NetworkRunOptions): Promise<NetworkTextResult> {
   const events: any[] = [];
+  
+  const selectionScorer = createFloweticSelectionCompletionScorer({
+    requirePhaseMatch: true,
+    checkPrimitiveResultToo: true,
+  });
+
   const stream = await (agent as any).network(message, {
     maxSteps,
     toolChoice: "auto",
     requestContext,
     memory,
+    validation: {
+      scorers: [
+        {
+          scorer: selectionScorer.scorer,
+          run: selectionScorer.run,
+        },
+      ],
+    },
   });
 
   let finalText = "";

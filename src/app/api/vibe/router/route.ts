@@ -56,6 +56,7 @@ import { ensureMastraThreadId } from "@/mastra/lib/ensureMastraThread";
 import { getMastra } from "@/mastra/index";
 import { OUTCOMES } from "@/data/outcomes";
 import { runAgentNetworkToText } from "@/mastra/lib/runNetwork";
+import { vibeJourneyWorkflow } from "@/mastra/workflows/vibeJourneyWorkflow";
 
 type JourneyMode =
   | "select_entity"
@@ -363,6 +364,22 @@ Journey phases:
         requestContext.set("selectedModel", selectedModel);
       }
 
+      // -- New: set workflowName and selected values on RequestContext --
+      if (workflowName) {
+        requestContext.set('workflowName', workflowName);
+      }
+      if (journey?.selectedOutcome) {
+        requestContext.set('selectedOutcome', String(journey.selectedOutcome));
+      }
+      if (journey?.selectedStoryboard) {
+        requestContext.set('selectedStoryboard', String(journey.selectedStoryboard));
+      }
+      if (journey?.selectedStyleBundleId) {
+        requestContext.set('selectedStyleBundleId', String(journey.selectedStyleBundleId));
+        requestContext.set('selectedStyleBundle', String(journey.selectedStyleBundleId));
+      }
+      // End new block
+
       // Preserve legacy get() behavior if present (some of your code relies on it)
       const legacyGet = (runtimeContext as any).get;
       if (typeof legacyGet === "function") {
@@ -378,6 +395,15 @@ Journey phases:
     const hasSelectedEntity = Boolean(vibeContext?.entityId && vibeContext?.sourceId);
     const effectiveMode: JourneyMode =
       mode === "select_entity" && hasSelectedEntity ? "recommend" : mode;
+
+    // -- New: populate RequestContext with current phase and mode --
+    try {
+      requestContext.set('mode', effectiveMode);
+      requestContext.set('phase', effectiveMode);
+    } catch {
+      // If RequestContext is sealed, ignore errors silently
+    }
+    // End new block
 
     const deepLaneStep = journey?.deepLane?.step as number | undefined;
 
@@ -396,21 +422,18 @@ Journey phases:
 
         const mastra = getMastra();
         const master = mastra.getAgent("masterRouterAgent" as const);
-        const agentRes = await master.generate(
-          [
+        const { text: agentText } = await runAgentNetworkToText({
+          agent: master as any,
+          message: [
             "System: User answered your question. Make a confident recommendation based on what they told you.",
             workflowName ? `System: User's workflow: "${workflowName}".` : "",
             "User message:",
             userMessage,
           ].filter(Boolean).join("\n"),
-          { 
-            maxSteps: 10,
-            toolChoice: "auto",
-            requestContext,
-            memory: mastraMemory,
-          }
-        );
-        const agentText = String((agentRes as any)?.text ?? "").trim();
+          requestContext,
+          memory: mastraMemory,
+          maxSteps: 10,
+        });
 
         return NextResponse.json({
           text: agentText || "Got it. One more quick question: who will mainly use this — your team, or client?",
@@ -428,8 +451,9 @@ Journey phases:
         // Agent generates final recommendation
         const mastra = getMastra();
         const master = mastra.getAgent("masterRouterAgent" as const);
-        const agentRes = await master.generate(
-          [
+        const { text: agentText } = await runAgentNetworkToText({
+          agent: master as any,
+          message: [
             "System: User has expressed their goal. Make your final recommendation.",
             workflowName ? `System: User's workflow: "${workflowName}".` : "",
             "Their responses:",
@@ -438,14 +462,10 @@ Journey phases:
             "",
             "Recommend Dashboard or Product with 2-3 specific reasons tied to THEIR situation.",
           ].filter(Boolean).join("\n"),
-          { 
-            maxSteps: 10,
-            toolChoice: "auto",
-            requestContext,
-            memory: mastraMemory,
-          }
-        );
-        const agentText = String((agentRes as any)?.text ?? "").trim();
+          requestContext,
+          memory: mastraMemory,
+          maxSteps: 10,
+        });
 
         // CRITICAL FIX: Determine outcome from answers
         const inferredOutcome = String(answers.q1 ?? "").toLowerCase().includes("product") 
@@ -563,16 +583,13 @@ Journey phases:
       // CRITICAL: Update requestContext with selectedOutcome BEFORE calling agent
       requestContext.set("selectedOutcome", outcome);
 
-      const agentRes = await master.generate(
-        `System: User selected outcome "${outcome}". ${actionToAgentHint(userMessage)}`,
-        {
-          maxSteps: 10,
-          toolChoice: "auto",
-          requestContext,
-          memory: mastraMemory,
-        }
-      );
-      const agentText = String((agentRes as any)?.text ?? "").trim();
+      const { text: agentText } = await runAgentNetworkToText({
+        agent: master as any,
+        message: `System: User selected outcome "${outcome}". ${actionToAgentHint(userMessage)}`,
+        requestContext,
+        memory: mastraMemory,
+        maxSteps: 10,
+      });
 
       return NextResponse.json({
         text: agentText || "Great — now pick a storyboard so we lock the story before design.",
@@ -600,21 +617,18 @@ Journey phases:
 
       const mastra = getMastra();
       const master = mastra.getAgent("masterRouterAgent" as const);
-      const agentRes = await master.generate(
-        [
+      const { text: agentText } = await runAgentNetworkToText({
+        agent: master as any,
+        message: [
           "System: User clicked 'help me decide'. Evaluate their workflow and recommend an outcome.",
           workflowName ? `System: User's workflow: "${workflowName}".` : "",
           "User message (if any):",
           userMessage || "[No additional context]",
         ].filter(Boolean).join("\n"),
-        { 
-          maxSteps: 10,
-          toolChoice: "auto",
-          requestContext,
-          memory: mastraMemory,
-        }
-      );
-      const agentText = String((agentRes as any)?.text ?? "").trim();
+        requestContext,
+        memory: mastraMemory,
+        maxSteps: 10,
+      });
 
 
       return NextResponse.json({
@@ -641,6 +655,10 @@ Journey phases:
       if (journey?.selectedOutcome) {
         requestContext.set("selectedOutcome", journey.selectedOutcome);
       }
+
+      // CRITICAL: Ensure selected style bundle is present in RequestContext for downstream agent instructions
+      requestContext.set("selectedStyleBundleId", selectedId);
+      requestContext.set("selectedStyleBundle", selectedId);
 
       // Get bundle list again, pick chosen bundle
       const bundlesResult = await callTool(
@@ -762,14 +780,13 @@ Journey phases:
     "Answer their questions directly. Provide specific recommendations based on their workflow.",
   ].filter(Boolean).join("\n");
   
-  const agentRes = await master.generate(systemPrompt, {
-    maxSteps: 12,
-    toolChoice: "auto",
+  const { text: agentText } = await runAgentNetworkToText({
+    agent: master as any,
+    message: systemPrompt,
     requestContext,
-    memory: mastraMemory
+    memory: mastraMemory,
+    maxSteps: 12,
   });
-  
-  const agentText = String((agentRes as any)?.text ?? "").trim();
 
 const inDeepLane = Boolean(journey?.deepLane);
 const deepLaneStep =
@@ -824,8 +841,9 @@ return NextResponse.json({
 
       const mastra = getMastra();
       const master = mastra.getAgent("masterRouterAgent" as const);
-      const agentRes = await master.generate(
-        [
+      const { text: agentText } = await runAgentNetworkToText({
+        agent: master as any,
+        message: [
           "System: Phase 2 storyboard selection (KPI story).",
           workflowName ? `System: Selected workflow name: "${workflowName}".` : "",
           NO_ROADMAP_RULES,
@@ -834,14 +852,10 @@ return NextResponse.json({
           "- Recommend ONE storyboard by name (ROI Proof vs Reliability Ops vs Delivery/SLA) with 1 short reason.",
           "- Do NOT list metrics (the cards already show them).",
         ].filter(Boolean).join("\n"),
-        { 
-          maxSteps: 10,
-          toolChoice: "auto",
-          requestContext,
-          memory: mastraMemory,
-        }
-      );
-      const agentText = String((agentRes as any)?.text ?? "").trim();
+        requestContext,
+        memory: mastraMemory,
+        maxSteps: 10,
+      });
 
       return NextResponse.json({
         text: agentText || "Now let's pick the story this will tell. Choose the option that matches what you want to prove first.",
@@ -1072,21 +1086,60 @@ return NextResponse.json({
       });
     }
 
-    // Default fallback: process user message with router agent
     const mastra = getMastra();
-    const master = mastra.getAgent("masterRouterAgent" as const);
-    const result = await master.generate(userMessage, {
-      maxSteps: 10,
-      toolChoice: "auto",
+
+    const workflow = mastra.getWorkflow("vibeJourney" as const);
+    if (!workflow) {
+      throw new Error("WORKFLOW_NOT_FOUND: vibeJourney");
+    }
+
+    const run = await workflow.createRun();
+
+    const result = await run.start({
+      inputData: { userMessage },
       requestContext,
-      memory: mastraMemory,
+      initialState: {
+        currentPhase: effectiveMode,
+        selectedOutcome: journey?.selectedOutcome ? String(journey.selectedOutcome) : undefined,
+        selectedStoryboard: journey?.selectedStoryboard ? String(journey.selectedStoryboard) : undefined,
+        selectedStyleBundleId: journey?.selectedStyleBundleId ? String(journey.selectedStyleBundleId) : undefined,
+        platformType: vibeContext?.platformType ? String(vibeContext.platformType) : "make",
+        workflowName: workflowName ? String(workflowName) : "",
+      },
     });
 
-    const agentText = String((result as any)?.text ?? "").trim();
+    if (result.status === "failed") {
+      throw new Error(`WORKFLOW_FAILED: ${result.error?.message || "unknown"}`);
+    }
+
+    if (result.status === "suspended") {
+      // Phase 5 will implement suspend/resume. For now, surface a deterministic message.
+      return NextResponse.json({
+        text: "Waiting for your selection to continue.",
+        journey,
+        toolUi: null,
+        vibeContext: { ...(vibeContext ?? {}), skillMD },
+      });
+    }
+
+    if (result.status !== "success") {
+      throw new Error(`WORKFLOW_UNEXPECTED_STATUS: ${String((result as any).status)}`);
+    }
+
+    const wfText = String((result.result as any)?.text ?? "").trim();
+    const wfState = (result.result as any)?.state ?? {};
+
+    const nextJourney = {
+      ...journey,
+      mode: wfState.currentPhase ?? journey.mode,
+      selectedOutcome: wfState.selectedOutcome ?? journey.selectedOutcome,
+      selectedStoryboard: wfState.selectedStoryboard ?? journey.selectedStoryboard,
+      selectedStyleBundleId: wfState.selectedStyleBundleId ?? journey.selectedStyleBundleId,
+    };
 
     return NextResponse.json({
-      text: agentText || "I'm ready. Tell me what you want to do next.",
-      journey,
+      text: wfText || "I'm ready. Tell me what you want to do next.",
+      journey: nextJourney,
       toolUi: null,
       vibeContext: { ...(vibeContext ?? {}), skillMD },
     });
