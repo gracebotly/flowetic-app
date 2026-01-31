@@ -117,8 +117,8 @@ export const validatePreviewReadiness = createSupaTool<z.infer<typeof outputSche
       canProceed,
       checks: {
         hasSource: {
-          passed: hasSource && source?.status === 'active',
-          message: hasSource ? `Source "${source?.name}" is active` : 'No active source',
+          passed: !!source && source.status === 'active',
+          message: source ? `Source "${source.name}" is active` : 'No active source',
         },
         hasEvents: {
           passed: eventCount >= requireMinEvents,
