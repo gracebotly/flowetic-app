@@ -72,7 +72,7 @@ function getErrorFromUnknown(
 
         if (this.cause !== undefined) {
           const c: any = this.cause;
-          if (c instanceof Error && typeof c.toJSON === "function") json.cause = c.toJSON();
+          if (c instanceof Error && typeof (c as any).toJSON === "function") json.cause = (c as any).toJSON();
           else json.cause = this.cause;
         }
 
