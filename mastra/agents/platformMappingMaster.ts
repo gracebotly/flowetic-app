@@ -14,6 +14,10 @@ import {
   proposeMapping,
   saveMapping,
   runGeneratePreviewWorkflow,
+  // NEW: Add Supatools
+  getEventStats,
+  getEventSamples,
+  validatePreviewReadiness,
 } from "../tools/platformMapping";
 import { analyzeSchema } from "../tools/analyzeSchema";
 import { generateMapping } from "../tools/generateMapping";
@@ -88,5 +92,9 @@ export const platformMappingMaster: Agent = new Agent({
     getStyleBundles,
     getJourneySession,
     setSchemaReady,
+    // NEW: Add Supatools
+    getEventStats,
+    getEventSamples,
+    validatePreviewReadiness,
   },
 });
