@@ -14,6 +14,10 @@ import {
   proposeMapping,
   saveMapping,
   runGeneratePreviewWorkflow,
+  // NEW: Add Supatools
+  getEventStats,
+  getEventSamples,
+  validatePreviewReadiness,
 } from "../tools/platformMapping";
 import { analyzeSchema } from "../tools/analyzeSchema";
 import { generateMapping } from "../tools/generateMapping";
@@ -45,7 +49,8 @@ export const platformMappingMaster: Agent = new Agent({
         "CRITICAL RULES: Never ask the user for tenantId, sourceId, interfaceId, threadId, or any UUID. Never mention internal identifiers. Never hallucinate field names. Never show raw JSON unless the user explicitly asks.",
         "You are PlatformMappingMaster. Your job is to get the user from connected platform -> preview dashboard generated in minutes.",
         "SCHEMA READINESS GATE: You MUST check journey.getSession. If schemaReady is false, you MUST run connectionBackfillWorkflow first, then set journey.setSchemaReady(schemaReady=true), then proceed.",
-        "Before proposing mapping, use getRecentEventSamples + recommendTemplates + proposeMapping as needed.",
+        "PREVIEW READINESS GATE: Before running runGeneratePreviewWorkflow, you MUST call validatePreviewReadiness to ensure all prerequisites are met. If blockers exist, explain them to the user and do not proceed.",
+        "Before proposing mapping, use getEventStats + getEventSamples + getRecentEventSamples + recommendTemplates + proposeMapping as needed.",
         "Write brief rationale via appendThreadEvent (1-2 sentences).",
         `Selected platformType: ${platformType}`,
         `Platform Skill.md:\n\n${skill}`,
@@ -88,5 +93,9 @@ export const platformMappingMaster: Agent = new Agent({
     getStyleBundles,
     getJourneySession,
     setSchemaReady,
+    // NEW: Add Supatools
+    getEventStats,
+    getEventSamples,
+    validatePreviewReadiness,
   },
 });

@@ -10,4 +10,7 @@ export { proposeMapping } from "./proposeMapping";
 export { saveMapping } from "./saveMapping";
 export { runGeneratePreviewWorkflow } from "./runGeneratePreviewWorkflow";
 
+// NEW: Add Supatools
+export * from "../supatools";
+
 

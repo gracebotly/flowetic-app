@@ -4,6 +4,7 @@ import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { glm47Model } from "../lib/models/glm47";
 import { getMastraStorage } from "../lib/storage";
+import { getModelById } from "../lib/models/modelSelector";
 import type { RequestContext } from "@mastra/core/request-context";
 import type { PlatformType } from "../skills/loadSkill";
 import { loadSkillMarkdown, loadNamedSkillMarkdown } from "../skills/loadSkill";
@@ -19,9 +20,24 @@ import { createSource, listSources, updateSource, deleteSource } from "../tools/
 import { createProject, listProjects, updateProject, deleteProject } from "../tools/projects";
 import { navigateTo } from "../tools/navigation";
 import {
+  getStyleRecommendations,
+  getChartRecommendations,
+  getTypographyRecommendations,
+  getUXGuidelines,
+  getProductRecommendations,
+} from "../tools/uiux";
+import {
   getPhaseFromRequestContext,
   getPhaseInstructions,
 } from "./instructions/phase-instructions";
+
+// NEW: Import Supatools
+import {
+  getEventStats,
+  recommendOutcome,
+  recommendStoryboard,
+  validatePreviewReadiness,
+} from "../tools/supatools";
 
 export const masterRouterAgent: Agent = new Agent({
   id: "masterRouterAgent",
@@ -184,5 +200,16 @@ export const masterRouterAgent: Agent = new Agent({
     deleteProject,
     // Navigation
     navigateTo,
+    // UI/UX Tools
+    getStyleRecommendations,
+    getChartRecommendations,
+    getTypographyRecommendations,
+    getUXGuidelines,
+    getProductRecommendations,
+    // NEW: Add Supatools
+    getEventStats,
+    recommendOutcome,
+    recommendStoryboard,
+    validatePreviewReadiness,
   },
 });
