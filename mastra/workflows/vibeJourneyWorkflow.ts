@@ -2,6 +2,7 @@ import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 import type { RequestContext } from "@mastra/core/request-context";
 import { detectSelection } from "../validation/selection-checks";
+import { getMastra } from "../index";
 
 type SelectionKind = "entity" | "outcome" | "storyboard" | "style_bundle" | "deploy";
 
@@ -143,19 +144,17 @@ const agentResponseStep = createStep({
     text: z.string(),
     state: VibeJourneyState,
   }),
-  execute: async ({ inputData, requestContext, context }) => {
+  execute: async ({ inputData, requestContext }) => {
     // Ensure RequestContext reflects current workflow state before agent runs
     applyStateToRequestContext({ requestContext, state: inputData });
 
-    const mastra = (context as any)?.mastra;
-    const agent = mastra?.getAgent?.("masterRouterAgent" as const);
+    const mastra = getMastra();
+    const agent = mastra.getAgent("masterRouterAgent" as const);
 
     if (!agent) {
       throw new Error("AGENT_NOT_FOUND: masterRouterAgent not registered in Mastra instance");
     }
 
-    // Use the same deterministic network validation path already wired into runNetwork.ts
-    // But here we call agent.generate directly for Phase 4; the router route will use workflow for transitions.
     const res = await agent.generate(inputDataToPrompt(inputData, requestContext), {
       maxSteps: 10,
       toolChoice: "auto",
