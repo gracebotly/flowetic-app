@@ -46,12 +46,11 @@ export const validatePreviewReadiness = createSupaTool<z.infer<typeof outputSche
       .eq(sourceId ? 'id' : 'tenant_id', sourceId ?? tenantId)
       .limit(1);
 
-    const hasSource = !sourceError && sources && sources.length > 0;
-    const source = sources?.[0];
+    const source = !sourceError && sources && sources.length > 0 ? sources[0] : undefined;
     
-    if (!hasSource) {
+    if (!source) {
       blockers.push('No active source found. Connect a platform source before generating preview.');
-    } else if (source?.status !== 'active') {
+    } else if (source.status !== 'active') {
       blockers.push(`Source "${source.name}" is ${source.status}. Activate the source before generating preview.`);
     }
     
