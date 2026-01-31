@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 // import { RequestContext } from "@mastra/core/request-context"; // Removed - invalid import
 import { createClient } from "@/lib/supabase/server";
+import { getErrorFromUnknown } from "@/lib/utils";
 import { getMastra } from "@/mastra";
 import { ensureMastraThreadId } from "@/mastra/lib/ensureMastraThread";
 import { runAgentNetworkToText } from "@/mastra/lib/runNetwork";
+import { vibeJourneyWorkflow } from "@/mastra/workflows/vibeJourneyWorkflow";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,6 +41,12 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({} as any));
 
     const action = String(body?.action || "message");
+    const workflowAction = String(body?.workflowAction || "");
+    const workflowRunId = typeof body?.runId === "string" ? body.runId : undefined;
+    const workflowStep = typeof body?.step === "string" ? body.step : undefined;
+    const resumeData = body?.resumeData as
+      | { userSelection: string; selectionType: "entity" | "outcome" | "storyboard" | "style_bundle" }
+      | undefined;
 
     // Message can come from either shape
     const message =
@@ -153,6 +161,123 @@ export async function POST(req: NextRequest) {
         return obj[key];
       }
     } as any;
+
+    // 4a) Dedicated workflow handler
+    if (workflowAction === "vibeJourney") {
+      try {
+        const workflow = mastra.getWorkflow("vibeJourney" as const);
+        if (!workflow) {
+          return new Response(
+            JSON.stringify({ type: "error", code: "WORKFLOW_NOT_FOUND", message: "vibeJourney workflow not registered." }),
+            { status: 500, headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        // Resume path
+        if (workflowRunId && workflowStep && resumeData) {
+          const run = await workflow.createRun({ runId: workflowRunId } as any);
+          const result = await (run as any).resume({
+            step: workflowStep,
+            resumeData,
+          });
+
+          if (result.status === "success") {
+            return new Response(
+              JSON.stringify({
+                type: "success",
+                status: "success",
+                runId: result.runId,
+                text: String((result.result as any)?.text ?? ""),
+                state: (result.result as any)?.state ?? {},
+              }),
+              { headers: { "Content-Type": "application/json" } },
+            );
+          }
+
+          if (result.status === "suspended") {
+            return new Response(
+              JSON.stringify({
+                type: "suspended",
+                status: "suspended",
+                runId: result.runId,
+                step: result.suspended?.[0],
+                suspendPayload: result.suspendPayload ?? null,
+              }),
+              { headers: { "Content-Type": "application/json" } },
+            );
+          }
+
+          return new Response(
+            JSON.stringify({
+              type: "error",
+              code: "WORKFLOW_RESUME_FAILED",
+              message: result.error?.message || "Workflow resume failed",
+            }),
+            { status: 500, headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        // Start path
+        const run = await workflow.createRun();
+        const result = await run.start({
+          inputData: { userMessage: message || " " },
+          requestContext: runtimeContext,
+          initialState: {
+            currentPhase: "select_entity",
+            platformType: String(platformType || "other"),
+            workflowName: "",
+          },
+        } as any);
+
+        if (result.status === "success") {
+          return new Response(
+            JSON.stringify({
+              type: "success",
+              status: "success",
+              runId: result.runId,
+              text: String((result.result as any)?.text ?? ""),
+              state: (result.result as any)?.state ?? {},
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        if (result.status === "suspended") {
+          return new Response(
+            JSON.stringify({
+              type: "suspended",
+              status: "suspended",
+              runId: result.runId,
+              step: result.suspended?.[0],
+              suspendPayload: result.suspendPayload ?? null,
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        return new Response(
+          JSON.stringify({
+            type: "error",
+            code: "WORKFLOW_FAILED",
+            message: result.error?.message || "Workflow execution failed",
+          }),
+          { status: 500, headers: { "Content-Type": "application/json" } },
+        );
+      } catch (err: unknown) {
+        const e = getErrorFromUnknown(err, { fallbackMessage: "Workflow error", supportSerialization: true });
+        console.error("[/api/agent/master][vibeJourney] error", e);
+
+        return new Response(
+          JSON.stringify({
+            type: "error",
+            code: "WORKFLOW_ERROR",
+            message: e.message,
+            details: (e as any).toJSON ? (e as any).toJSON() : undefined,
+          }),
+          { status: 500, headers: { "Content-Type": "application/json" } },
+        );
+      }
+    }
 
     // 5) Always start with Master Router
     const master = mastra.getAgent("masterRouterAgent" as const);

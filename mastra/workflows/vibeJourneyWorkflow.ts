@@ -6,6 +6,18 @@ import { getMastra } from "../index";
 
 type SelectionKind = "entity" | "outcome" | "storyboard" | "style_bundle" | "deploy";
 
+const VibeJourneySuspendSchema = z.object({
+  prompt: z.string().min(1),
+  options: z.array(z.string()).default([]),
+  // Optional diagnostic string for debugging
+  error: z.string().optional(),
+});
+
+const VibeJourneyResumeSchema = z.object({
+  userSelection: z.string().min(1),
+  selectionType: z.enum(["entity", "outcome", "storyboard", "style_bundle"]),
+});
+
 const FloweticPhase = z.enum([
   "select_entity",
   "recommend",
@@ -87,6 +99,32 @@ function nextPhaseForSelection(params: {
   return null;
 }
 
+function getSelectionPrompt(phase: FloweticPhase): string {
+  const prompts: Record<FloweticPhase, string> = {
+    select_entity: "Which workflow would you like to build a dashboard for?",
+    recommend: "Would you like a Dashboard or Product outcome?",
+    align: "Which storyboard template fits your needs?",
+    style: "Which style bundle matches your brand?",
+    build_preview: "Would you like to generate a preview now?",
+    interactive_edit: "What edits would you like to make before deploying?",
+    deploy: "Ready to deploy your dashboard?",
+  };
+  return prompts[phase] ?? "Please make a selection to continue.";
+}
+
+function getSelectionOptions(phase: FloweticPhase): string[] {
+  const options: Record<FloweticPhase, string[]> = {
+    select_entity: ["workflow_v2", "make_integration", "retell_ai", "n8n_automation"],
+    recommend: ["dashboard", "product"],
+    align: ["performance_snapshot", "impact_report", "reliability_ops", "delivery_sla"],
+    style: ["healthcare_professional", "saas_modern", "ecommerce_clean", "fintech_corporate"],
+    build_preview: ["generate_preview"],
+    interactive_edit: ["deploy"],
+    deploy: ["confirm_deploy"],
+  };
+  return options[phase] ?? [];
+}
+
 const phaseTransitionStep = createStep({
   id: "phaseTransition",
   description: "Deterministically detect __ACTION__ selection tokens and advance phase + persist selections in workflow state.",
@@ -94,34 +132,73 @@ const phaseTransitionStep = createStep({
     userMessage: z.string().min(1),
   }),
   outputSchema: VibeJourneyState,
-  execute: async ({ inputData, requestContext, getInitData }) => {
-    // initialState is injected at run.start() time; we read it via getInitData() pattern
+  suspendSchema: VibeJourneySuspendSchema,
+  resumeSchema: VibeJourneyResumeSchema,
+  execute: async ({ inputData, requestContext, getInitData, resumeData, suspend }) => {
     const init = (getInitData?.() ?? {}) as {
       initialState?: Partial<VibeJourneyState>;
     };
 
     const initialState = (init?.initialState ?? {}) as Partial<VibeJourneyState>;
 
-    // Normalize into full state object
     const state: VibeJourneyState = VibeJourneyState.parse({
       ...initialState,
     });
 
-    const selection = detectSelection(inputData.userMessage);
+    // Always keep RequestContext consistent with current state
+    applyStateToRequestContext({ requestContext, state });
 
-    if (!selection) {
-      // No state change; just ensure RequestContext has the current phase for downstream agent prompt
+    // RESUME PATH: we were suspended and caller provides resumeData
+    if (resumeData) {
+      const resume = VibeJourneyResumeSchema.parse(resumeData);
+
+      // Normalize a message into the same __ACTION__ format used by detectSelection
+      const syntheticMessage = `__ACTION__:select_${resume.selectionType}:${resume.userSelection}`;
+      const selection = detectSelection(syntheticMessage);
+
+      if (!selection) {
+        return await suspend({
+          prompt: getSelectionPrompt(state.currentPhase),
+          options: getSelectionOptions(state.currentPhase),
+          error: "INVALID_RESUME_DATA: resumeData could not be parsed into a selection",
+        });
+      }
+
+      // Apply to state
+      if (selection.type === "entity") state.selectedEntity = selection.value;
+      if (selection.type === "outcome") state.selectedOutcome = selection.value;
+      if (selection.type === "storyboard") state.selectedStoryboard = selection.value;
+      if (selection.type === "style_bundle") state.selectedStyleBundleId = selection.value;
+
+      const next = nextPhaseForSelection({
+        currentPhase: state.currentPhase,
+        selectionType: selection.type as SelectionKind,
+      });
+
+      if (next) state.currentPhase = next;
+
       applyStateToRequestContext({ requestContext, state });
       return state;
     }
 
-    // Update selection fields
+    // NORMAL PATH: detect selection from userMessage
+    const selection = detectSelection(inputData.userMessage);
+
+    if (!selection) {
+      // Phase 5 behavior: explicitly suspend instead of returning same state (prevents looping)
+      return await suspend({
+        prompt: getSelectionPrompt(state.currentPhase),
+        options: getSelectionOptions(state.currentPhase),
+        error: `NO_SELECTION_DETECTED: expected selection for phase "${state.currentPhase}"`,
+      });
+    }
+
+    // Apply selection fields
     if (selection.type === "entity") state.selectedEntity = selection.value;
     if (selection.type === "outcome") state.selectedOutcome = selection.value;
     if (selection.type === "storyboard") state.selectedStoryboard = selection.value;
     if (selection.type === "style_bundle") state.selectedStyleBundleId = selection.value;
 
-    // Phase transition if valid
     const next = nextPhaseForSelection({
       currentPhase: state.currentPhase,
       selectionType: selection.type as SelectionKind,
@@ -129,9 +206,7 @@ const phaseTransitionStep = createStep({
 
     if (next) state.currentPhase = next;
 
-    // Push state into RequestContext so the agent sees authoritative phase + selections
     applyStateToRequestContext({ requestContext, state });
-
     return state;
   },
 });
