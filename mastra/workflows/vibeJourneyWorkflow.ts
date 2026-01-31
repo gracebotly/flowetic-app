@@ -3,6 +3,8 @@ import { z } from "zod";
 import type { RequestContext } from "@mastra/core/request-context";
 import { detectSelection } from "../validation/selection-checks";
 
+type SelectionKind = "entity" | "outcome" | "storyboard" | "style_bundle" | "deploy";
+
 const FloweticPhase = z.enum([
   "select_entity",
   "recommend",
@@ -69,7 +71,7 @@ function applyStateToRequestContext(params: {
 
 function nextPhaseForSelection(params: {
   currentPhase: FloweticPhase;
-  selectionType: ReturnType<typeof detectSelection>["type"];
+  selectionType: SelectionKind;
 }): FloweticPhase | null {
   const { currentPhase, selectionType } = params;
 
@@ -121,7 +123,7 @@ const phaseTransitionStep = createStep({
     // Phase transition if valid
     const next = nextPhaseForSelection({
       currentPhase: state.currentPhase,
-      selectionType: selection.type,
+      selectionType: selection.type as SelectionKind,
     });
 
     if (next) state.currentPhase = next;
