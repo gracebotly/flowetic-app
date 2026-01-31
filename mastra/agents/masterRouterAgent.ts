@@ -165,26 +165,8 @@ export const masterRouterAgent: Agent = new Agent({
     deployDashboardWorkflow,
   },
   memory: createFloweticMemory({
-  lastMessages: 30,
-  workingMemory: {
-    enabled: true,
-    template: `# Vibe Journey State - <working_memory>
-
-## Current Phase
-- Phase: {{phase}}
-- Last Updated: {{timestamp}}
-
-## Selections Made
-- Outcome Type: {{selectedOutcome}}
-- Storyboard: {{selectedStoryboard}}
-- Style Bundle: {{selectedStyleBundleId}}
-
-## Workflow Context
-- Platform: {{platformType}}
-- Workflow Name: {{workflowName}}
-`,
-  },
-}),
+    lastMessages: 30,
+  }),
   tools: {
     todoAdd,
     todoList,

@@ -374,6 +374,10 @@ Journey phases:
       if (journey?.selectedStoryboard) {
         requestContext.set('selectedStoryboard', String(journey.selectedStoryboard));
       }
+      if (journey?.selectedStyleBundleId) {
+        requestContext.set('selectedStyleBundleId', String(journey.selectedStyleBundleId));
+        requestContext.set('selectedStyleBundle', String(journey.selectedStyleBundleId));
+      }
       // End new block
 
       // Preserve legacy get() behavior if present (some of your code relies on it)
@@ -651,6 +655,10 @@ Journey phases:
       if (journey?.selectedOutcome) {
         requestContext.set("selectedOutcome", journey.selectedOutcome);
       }
+
+      // CRITICAL: Ensure selected style bundle is present in RequestContext for downstream agent instructions
+      requestContext.set("selectedStyleBundleId", selectedId);
+      requestContext.set("selectedStyleBundle", selectedId);
 
       // Get bundle list again, pick chosen bundle
       const bundlesResult = await callTool(
