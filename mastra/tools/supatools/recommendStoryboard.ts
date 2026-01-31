@@ -1,7 +1,7 @@
 
 
 
-import { createSupaTool } from '../_base';
+import { createSupaTool } from './_base';
 import { createClient } from '../../lib/supabase';
 import { z } from 'zod';
 
@@ -21,37 +21,37 @@ const outputSchema = z.object({
   reasoning: z.string(),
 });
 
-export const recommendStoryboard = createSupaTool({
+export const recommendStoryboard = createSupaTool<z.infer<typeof outputSchema>>({
   id: 'recommendStoryboard',
   description: 'Analyze event schema and patterns to recommend storyboard type. Returns top recommendation with alternatives. Used in Phase 2 storyboard selection.',
   inputSchema,
   outputSchema,
 
-  execute: async (inputData: any, context: any) => {
-    const { tenantId, sourceId, selectedOutcome } = inputData;
-
+  execute: async (rawInput: unknown) => {
+    const input = inputSchema.parse(rawInput);
+    const { tenantId, sourceId, selectedOutcome } = input;
 
     const supabase = createClient();
-    
-    // Get sample events for schema analysis
+
+    const sinceDate = new Date();
+    sinceDate.setUTCDate(sinceDate.getUTCDate() - 7);
+
     let query = supabase
       .from('events')
-      .select('type, name, value, labels, timestamp')
+      .select('type, name, value, labels', { count: 'exact' })
       .eq('tenant_id', tenantId)
+      .gte('timestamp', sinceDate.toISOString())
       .limit(200);
-    
-    if (sourceId) {
-      query = query.eq('source_id', sourceId);
-    }
-    
-    const { data: events, error } = await query;
-    
-    if (error) {
-      throw new Error(`Failed to analyze events for storyboard recommendation: ${error.message}`);
-    }
-    
-    // Analyze schema patterns
-    const eventTypes = new Set(events?.map(e => e.type) || []);
+
+    if (sourceId) query = query.eq('source_id', sourceId);
+
+    const { data: events, error, count } = await query;
+    if (error) throw new Error(`Failed to analyze events: ${error.message}`);
+
+
+    const types: string[] = (events ?? []).map((e: any) => e.type).filter(Boolean);
+    const eventTypes = new Set(types);
+
     const hasMetrics = eventTypes.has('metric');
     const hasErrors = eventTypes.has('error');
     const hasWorkflow = eventTypes.has('message') || eventTypes.has('tool_event');

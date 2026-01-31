@@ -1,36 +1,28 @@
 
 import { createTool } from '@mastra/core/tools';
-import type { RequestContext } from '@mastra/core/request-context';
-import { extractAuthContext, verifyTenantAccess } from '../lib/tenant-verification';
+import { extractAuthContext, verifyTenantAccess } from '../../lib/tenant-verification';
 
-/**
- * Base class for Supatools with automatic tenant verification
- * Reduces boilerplate and ensures consistent security
- */
-export function createSupaTool<TIn, TOut>(config: {
+export function createSupaTool<TOut>(config: {
   id: string;
   description: string;
-  inputSchema: any;
-  outputSchema: any;
-  execute: (input: TIn, context: any) => Promise<TOut>;
+  inputSchema: { parse: (input: unknown) => unknown };
+  outputSchema: unknown;
+  execute: (input: unknown, context: any) => Promise<TOut>;
 }) {
   return createTool({
-    ...config,
-    execute: async (inputData: any, context: any) => {
+    id: config.id,
+    description: config.description,
+    inputSchema: config.inputSchema as any,
+    outputSchema: config.outputSchema as any,
+    execute: async (inputData: unknown, context: any) => {
+      const { tenantId, userId } = extractAuthContext(context);
+      await verifyTenantAccess(tenantId, userId);
+
       try {
-        // Extract and verify auth context
-        const { tenantId, userId } = extractAuthContext(context);
-        await verifyTenantAccess(tenantId, userId);
-        
-        // Execute tool logic with verified context
         return await config.execute(inputData, context);
-      } catch (error: any) {
-        // Re-throw with context for debugging
-        if (error.message.startsWith('TENANT_ACCESS_DENIED') || 
-            error.message.startsWith('AUTH_CONTEXT_MISSING')) {
-          throw error;
-        }
-        throw new Error(`Supatool execution failed in ${config.id}: ${error.message}`);
+      } catch (err: any) {
+        const msg = err instanceof Error ? err.message : String(err);
+        throw new Error(`Supatool "${config.id}" failed: ${msg}`);
       }
     },
   });

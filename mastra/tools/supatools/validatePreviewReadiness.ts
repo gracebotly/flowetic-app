@@ -1,7 +1,7 @@
 
 
 
-import { createSupaTool } from '../_base';
+import { createSupaTool } from './_base';
 import { createClient } from '../../lib/supabase';
 import { z } from 'zod';
 
@@ -25,27 +25,27 @@ const outputSchema = z.object({
   warnings: z.array(z.string()),
 });
 
-export const validatePreviewReadiness = createSupaTool({
+export const validatePreviewReadiness = createSupaTool<z.infer<typeof outputSchema>>({
   id: 'validatePreviewReadiness',
   description: 'Validate all prerequisites before preview generation. Checks source, events, schema readiness, and event type coverage. Returns blockers and warnings. Use before Phase 4 to prevent failed workflows.',
   inputSchema,
   outputSchema,
 
-  execute: async (inputData: any, context: any) => {
-    const { tenantId, sourceId, requireMinEvents, requireSchemaReady } = inputData;
+  execute: async (rawInput: unknown) => {
+    const input = inputSchema.parse(rawInput);
+    const { tenantId, sourceId, requireMinEvents, requireSchemaReady } = input;
 
     const supabase = createClient();
     const blockers: string[] = [];
     const warnings: string[] = [];
-    
-    // Check 1: Source exists
-    let sourceQuery = supabase.from('sources').select('id, name, status').eq('tenant_id', tenantId);
-    if (sourceId) {
-      sourceQuery = sourceQuery.eq('id', sourceId);
-    }
-    
-    const { data: sources, error: sourceError } = await sourceQuery.limit(1);
-    
+
+    const { data: sources, error: sourceError } = await supabase
+      .from('sources')
+      .select('id, name, status')
+      .eq('tenant_id', tenantId)
+      .eq(sourceId ? 'id' : 'tenant_id', sourceId ?? tenantId)
+      .limit(1);
+
     const hasSource = !sourceError && sources && sources.length > 0;
     const source = sources?.[0];
     

@@ -1,101 +1,103 @@
 
 
 
-import { createSupaTool } from '../_base';
+import { createSupaTool } from './_base';
 import { createClient } from '../../lib/supabase';
 import { z } from 'zod';
+
+const EventType = z.enum(['message', 'metric', 'state', 'tool_event', 'error']);
 
 const inputSchema = z.object({
   tenantId: z.string().uuid(),
   sourceId: z.string().uuid().optional(),
-  type: z.enum(['message', 'metric', 'state', 'tool_event', 'error']).optional(),
-  limit: z.number().min(1).max(500).default(50),
-  sinceDays: z.number().min(1).max(365).optional(),
+  type: EventType.optional(),
+  limit: z.number().int().min(1).max(500).default(50),
+  sinceDays: z.number().int().min(1).max(365).optional(),
 });
 
-export interface EventSample {
+export type EventSample = {
   id: string;
-  type: string;
+  type: z.infer<typeof EventType>;
   name: string | null;
   value: number | null;
   unit: string | null;
   text: string | null;
-  state: any;
-  labels: any;
+  state: unknown;
+  labels: unknown;
   timestamp: string;
   sourceId: string;
-}
+};
 
 const outputSchema = z.object({
-  samples: z.array(z.object({
-    id: z.string().uuid(),
-    type: z.string(),
-    name: z.string().nullable(),
-    value: z.number().nullable(),
-    unit: z.string().nullable(),
-    text: z.string().nullable(),
-    state: z.any(),
-    labels: z.any(),
-    timestamp: z.string(),
-    sourceId: z.string().uuid(),
-  })),
+  samples: z.array(
+    z.object({
+      id: z.string().uuid(),
+      type: EventType,
+      name: z.string().nullable(),
+      value: z.number().nullable(),
+      unit: z.string().nullable(),
+      text: z.string().nullable(),
+      state: z.any().nullable(),
+      labels: z.any(),
+      timestamp: z.string(),
+      sourceId: z.string().uuid(),
+    })
+  ),
   totalCount: z.number(),
   limit: z.number(),
 });
 
-export const getEventSamples = createSupaTool({
+export const getEventSamples = createSupaTool<z.infer<typeof outputSchema>>({
   id: 'getEventSamples',
-  description: 'Get sample event records for schema analysis and template selection. Returns up to limit events with all fields. Use limit <= 500 to avoid performance issues.',
+  description:
+    'Get sample event records for schema analysis and template selection. Returns up to limit events with all fields. limit is capped at 500.',
   inputSchema,
   outputSchema,
-  execute: async (inputData: any, context: any) => {
-    const { tenantId, sourceId, type, limit, sinceDays } = inputData;
+  execute: async (rawInput: unknown) => {
+    const input = inputSchema.parse(rawInput);
+    const { tenantId, sourceId, type, limit, sinceDays } = input;
+
     const supabase = createClient();
-    
-    // Build query
+
     let query = supabase
       .from('events')
-      .select('id, type, name, value, unit, text, state, labels, timestamp, source_id')
+      .select(
+        'id, type, name, value, unit, text, state, labels, timestamp, source_id',
+        { count: 'exact' }
+      )
       .eq('tenant_id', tenantId)
       .order('timestamp', { ascending: false })
       .limit(limit);
-    
-    if (sourceId) {
-      query = query.eq('source_id', sourceId);
-    }
-    
-    if (type) {
-      query = query.eq('type', type);
-    }
-    
+
+    if (sourceId) query = query.eq('source_id', sourceId);
+    if (type) query = query.eq('type', type);
+
     if (sinceDays) {
       const sinceDate = new Date();
-      sinceDate.setDate(sinceDate.getDate() - sinceDays);
+      sinceDate.setUTCDate(sinceDate.getUTCDate() - sinceDays);
       query = query.gte('timestamp', sinceDate.toISOString());
     }
-    
-    const { data: events, error, count } = await query;
-    
-    if (error) {
-      throw new Error(`Failed to fetch event samples: ${error.message}`);
-    }
-    
-    const samples: EventSample[] = (events || []).map(e => ({
+
+    const { data, error, count } = await query;
+
+    if (error) throw new Error(`Failed to fetch event samples: ${error.message}`);
+
+    const samples: EventSample[] = (data ?? []).map((e: any) => ({
       id: e.id,
       type: e.type,
-      name: e.name,
-      value: e.value,
-      unit: e.unit,
-      text: e.text,
-      state: e.state,
-      labels: e.labels,
+      name: e.name ?? null,
+      value: e.value === null || e.value === undefined ? null : Number(e.value),
+      unit: e.unit ?? null,
+      text: e.text ?? null,
+      state: e.state ?? null,
+      labels: e.labels ?? {},
       timestamp: e.timestamp,
       sourceId: e.source_id,
     }));
-    
+
     return {
       samples,
-      totalCount: count || 0,
+      totalCount: typeof count === 'number' ? count : samples.length,
       limit,
     };
   },

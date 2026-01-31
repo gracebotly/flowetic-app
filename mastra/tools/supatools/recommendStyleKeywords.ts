@@ -3,7 +3,7 @@
 
 
 
-import { createSupaTool } from '../_base';
+import { createSupaTool } from './_base';
 import { createClient } from '../../lib/supabase';
 import { z } from 'zod';
 
@@ -29,35 +29,33 @@ const outputSchema = z.object({
   keywords: z.array(z.string()),
 });
 
-export const recommendStyleKeywords = createSupaTool({
+export const recommendStyleKeywords = createSupaTool<z.infer<typeof outputSchema>>({
   id: 'recommendStyleKeywords',
   description: 'Analyze event patterns and context to recommend style keywords (density, palette, typography). Returns recommendations grounded in data characteristics. Used in Phase 3 style bundle generation.',
   inputSchema,
   outputSchema,
 
 
-  execute: async (inputData: any, context: any) => {
-    const { tenantId, sourceId, selectedStoryboard } = inputData;
-
+  execute: async (rawInput: unknown) => {
+    const input = inputSchema.parse(rawInput);
+    const { tenantId, sourceId, selectedStoryboard } = input;
 
     const supabase = createClient();
-    
-    // Get event samples for analysis
+
+    const sinceDate = new Date();
+    sinceDate.setUTCDate(sinceDate.getUTCDate() - 3);
+
     let query = supabase
       .from('events')
-      .select('type, name, value, labels')
+      .select('type, name, value, labels', { count: 'exact' })
       .eq('tenant_id', tenantId)
+      .gte('timestamp', sinceDate.toISOString())
       .limit(500);
-    
-    if (sourceId) {
-      query = query.eq('source_id', sourceId);
-    }
-    
-    const { data: events, error } = await query;
-    
-    if (error) {
-      throw new Error(`Failed to analyze events for style recommendations: ${error.message}`);
-    }
+
+    if (sourceId) query = query.eq('source_id', sourceId);
+
+    const { data: events, error, count } = await query;
+    if (error) throw new Error(`Failed to fetch style samples: ${error.message}`);
     
     // Analyze data characteristics
     const totalEvents = events?.length || 0;
