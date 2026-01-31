@@ -321,11 +321,33 @@ export async function POST(req: NextRequest) {
             );
           }
 
+          if (result.status === "failed") {
+            return new Response(
+              JSON.stringify({
+                type: "error",
+                code: "WORKFLOW_FAILED",
+                message: result.error?.message || "Workflow execution failed",
+              }),
+              { status: 500, headers: { "Content-Type": "application/json" } },
+            );
+          }
+
+          if (result.status === "tripwire") {
+            return new Response(
+              JSON.stringify({
+                type: "error",
+                code: "WORKFLOW_TRIPWIRE",
+                message: result.tripwire?.reason || "Request blocked by workflow tripwire.",
+              }),
+              { status: 400, headers: { "Content-Type": "application/json" } },
+            );
+          }
+
           return new Response(
             JSON.stringify({
               type: "error",
-              code: "WORKFLOW_RESUME_FAILED",
-              message: result.error?.message || "Workflow resume failed",
+              code: "WORKFLOW_UNEXPECTED_STATUS",
+              message: `Unexpected workflow status: ${String((result as any).status)}`,
             }),
             { status: 500, headers: { "Content-Type": "application/json" } },
           );
@@ -368,11 +390,33 @@ export async function POST(req: NextRequest) {
           );
         }
 
+        if (result.status === "failed") {
+          return new Response(
+            JSON.stringify({
+              type: "error",
+              code: "WORKFLOW_FAILED",
+              message: result.error?.message || "Workflow execution failed",
+            }),
+            { status: 500, headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        if (result.status === "tripwire") {
+          return new Response(
+            JSON.stringify({
+              type: "error",
+              code: "WORKFLOW_TRIPWIRE",
+              message: result.tripwire?.reason || "Request blocked by workflow tripwire.",
+            }),
+            { status: 400, headers: { "Content-Type": "application/json" } },
+          );
+        }
+
         return new Response(
           JSON.stringify({
             type: "error",
-            code: "WORKFLOW_FAILED",
-            message: result.error?.message || "Workflow execution failed",
+            code: "WORKFLOW_UNEXPECTED_STATUS",
+            message: `Unexpected workflow status: ${String((result as any).status)}`,
           }),
           { status: 500, headers: { "Content-Type": "application/json" } },
         );
