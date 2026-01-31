@@ -56,6 +56,7 @@ import { ensureMastraThreadId } from "@/mastra/lib/ensureMastraThread";
 import { getMastra } from "@/mastra/index";
 import { OUTCOMES } from "@/data/outcomes";
 import { runAgentNetworkToText } from "@/mastra/lib/runNetwork";
+import { vibeJourneyWorkflow } from "@/mastra/workflows/vibeJourneyWorkflow";
 
 type JourneyMode =
   | "select_entity"
@@ -1077,21 +1078,60 @@ return NextResponse.json({
       });
     }
 
-    // Default fallback: process user message with router agent
     const mastra = getMastra();
-    const master = mastra.getAgent("masterRouterAgent" as const);
-    const result = await master.generate(userMessage, {
-      maxSteps: 10,
-      toolChoice: "auto",
+
+    const workflow = mastra.getWorkflow("vibeJourney" as const);
+    if (!workflow) {
+      throw new Error("WORKFLOW_NOT_FOUND: vibeJourney");
+    }
+
+    const run = await workflow.createRun();
+
+    const result = await run.start({
+      inputData: { userMessage },
       requestContext,
-      memory: mastraMemory,
+      initialState: {
+        currentPhase: effectiveMode,
+        selectedOutcome: journey?.selectedOutcome ? String(journey.selectedOutcome) : undefined,
+        selectedStoryboard: journey?.selectedStoryboard ? String(journey.selectedStoryboard) : undefined,
+        selectedStyleBundleId: journey?.selectedStyleBundleId ? String(journey.selectedStyleBundleId) : undefined,
+        platformType: vibeContext?.platformType ? String(vibeContext.platformType) : "make",
+        workflowName: workflowName ? String(workflowName) : "",
+      },
     });
 
-    const agentText = String((result as any)?.text ?? "").trim();
+    if (result.status === "failed") {
+      throw new Error(`WORKFLOW_FAILED: ${result.error?.message || "unknown"}`);
+    }
+
+    if (result.status === "suspended") {
+      // Phase 5 will implement suspend/resume. For now, surface a deterministic message.
+      return NextResponse.json({
+        text: "Waiting for your selection to continue.",
+        journey,
+        toolUi: null,
+        vibeContext: { ...(vibeContext ?? {}), skillMD },
+      });
+    }
+
+    if (result.status !== "success") {
+      throw new Error(`WORKFLOW_UNEXPECTED_STATUS: ${String((result as any).status)}`);
+    }
+
+    const wfText = String((result.result as any)?.text ?? "").trim();
+    const wfState = (result.result as any)?.state ?? {};
+
+    const nextJourney = {
+      ...journey,
+      mode: wfState.currentPhase ?? journey.mode,
+      selectedOutcome: wfState.selectedOutcome ?? journey.selectedOutcome,
+      selectedStoryboard: wfState.selectedStoryboard ?? journey.selectedStoryboard,
+      selectedStyleBundleId: wfState.selectedStyleBundleId ?? journey.selectedStyleBundleId,
+    };
 
     return NextResponse.json({
-      text: agentText || "I'm ready. Tell me what you want to do next.",
-      journey,
+      text: wfText || "I'm ready. Tell me what you want to do next.",
+      journey: nextJourney,
       toolUi: null,
       vibeContext: { ...(vibeContext ?? {}), skillMD },
     });

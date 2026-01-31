@@ -8,6 +8,7 @@ import { masterRouterAgent } from "./agents/masterRouterAgent";
 import { generatePreviewWorkflow } from "./workflows/generatePreview";
 import { connectionBackfillWorkflow } from "./workflows/connectionBackfill";
 import { deployDashboardWorkflow } from "./workflows/deployDashboard";
+import { vibeJourneyWorkflow } from "./workflows/vibeJourneyWorkflow";
 
 let _mastra: Mastra | null = null;
 
@@ -28,6 +29,7 @@ export function getMastra(): Mastra {
       generatePreviewWorkflow,
       connectionBackfillWorkflow,
       deployDashboardWorkflow,
+      vibeJourneyWorkflow,
     },
   });
 
