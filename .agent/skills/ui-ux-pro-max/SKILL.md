@@ -85,42 +85,29 @@ Reference these guidelines when:
 - `color-guidance` - Use accessible color palettes
 - `data-table` - Provide table alternative for accessibility
 
-## How to Use
+## Node.js Tool Access (Vercel-safe)
 
-Search specific domains using the CLI tool below.
+This skill is available via Mastra tools that read CSV data from:
 
----
+`.agent/skills/ui-ux-pro-max/data/`
 
-## Prerequisites
+### Tools
 
-Check if Python is installed:
+- `uiux.getProductRecommendations` — industry/product patterns
+- `uiux.getStyleRecommendations` — style direction recommendations
+- `uiux.getTypographyRecommendations` — font pairing recommendations
+- `uiux.getChartRecommendations` — chart type recommendations
+- `uiux.getUXGuidelines` — UX/accessibility guidelines
 
-```bash
-python3 --version || python --version
-```
-
-If Python is not installed, install it based on user's OS:
-
-**macOS:**
-```bash
-brew install python3
-```
-
-**Ubuntu/Debian:**
-```bash
-sudo apt update && sudo apt install python3
-```
-
-**Windows:**
-```powershell
-winget install Python.Python.3.12
-```
-
----
-
-## How to Use This Skill
+### Recommended Workflow
 
 When user requests UI/UX work (design, build, create, implement, review, fix, improve), follow this workflow:
+
+1) Call `uiux.getProductRecommendations` to ground industry assumptions  
+2) Call `uiux.getStyleRecommendations` to propose style directions  
+3) Call `uiux.getTypographyRecommendations` for font pairing (if needed)  
+4) Call `uiux.getUXGuidelines` to check accessibility/layout issues  
+5) Call `uiux.getChartRecommendations` for dashboard chart choices
 
 ### Step 1: Analyze User Requirements
 
@@ -132,84 +119,106 @@ Extract key information from user request:
 
 ### Step 2: Generate Design System (REQUIRED)
 
-**Always start with `--design-system`** to get comprehensive recommendations with reasoning:
+**Use UIUX Mastra tools** to get comprehensive recommendations:
 
-```bash
-python3 skills/ui-ux-pro-max/scripts/search.py "<product_type> <industry> <keywords>" --design-system [-p "Project Name"]
+```javascript
+// Industry context
+const productRecs = await uiux.getProductRecommendations({
+  productType: "beauty spa", 
+  keywords: ["wellness", "service"],
+  limit: 3
+});
+
+// Style directions  
+const styleRecs = await uiux.getStyleRecommendations({
+  productType: "beauty spa",
+  keywords: ["wellness", "service", "professional"],
+  limit: 3
+});
+
+// Typography
+const typographyRecs = await uiux.getTypographyRecommendations({
+  moodKeywords: ["elegant", "professional"],
+  category: "beauty",
+  limit: 3
+});
 ```
 
-This command:
-1. Searches 5 domains in parallel (product, style, color, landing, typography)
-2. Applies reasoning rules from `ui-reasoning.csv` to select best matches
-3. Returns complete design system: pattern, style, colors, typography, effects
-4. Includes anti-patterns to avoid
+This provides:
+1. Industry-specific product patterns and style mappings
+2. Style recommendations with colors and effects
+3. Font pairings and CSS imports
+4. Accessibility and performance considerations
 
-**Example:**
-```bash
-python3 skills/ui-ux-pro-max/scripts/search.py "beauty spa wellness service" --design-system -p "Serenity Spa"
+### Step 2b: Document Design System
+
+Store the generated design system in project documentation:
+
+```markdown
+# Project Design System
+
+## Industry Context
+[productRecs results...]
+
+## Style Directions  
+[styleRecs results...]
+
+## Typography
+[typographyRecs results...]
+
+## UX Guidelines
+[uxGuidelines results...]
 ```
 
-### Step 2b: Persist Design System (Master + Overrides Pattern)
+This creates a consistent reference that can be:
+- Saved to project docs or wiki
+- Referenced during implementation reviews
+- Used for new team member onboarding
+- Updated as the design evolves
 
-To save the design system for **hierarchical retrieval across sessions**, add `--persist`:
+### Step 3: Supplement with Detailed Recommendations
 
-```bash
-python3 skills/ui-ux-pro-max/scripts/search.py "<query>" --design-system --persist -p "Project Name"
+After getting the initial design system, use specific UIUX tools for additional details:
+
+```javascript
+// More style options
+const moreStyles = await uiux.getStyleRecommendations({
+  productType: "dashboard",
+  keywords: ["glassmorphism", "dark"],
+  limit: 5
+});
+
+// Chart recommendations
+const chartRecs = await uiux.getChartRecommendations({
+  dataType: "real-time metrics",
+  keywords: ["dashboard"],
+  accessibility: true,
+  limit: 3
+});
+
+// UX best practices
+const uxGuide = await uiux.getUXGuidelines({
+  category: "animation",
+  issue: "accessibility",
+  limit: 5
+});
+
+// Alternative fonts
+const altTypography = await uiux.getTypographyRecommendations({
+  moodKeywords: ["elegant", "luxury"],
+  category: "serif",
+  limit: 3
+});
 ```
 
-This creates:
-- `design-system/MASTER.md` — Global Source of Truth with all design rules
-- `design-system/pages/` — Folder for page-specific overrides
+### Step 4: Implementation Context
 
-**With page-specific override:**
-```bash
-python3 skills/ui-ux-pro-max/scripts/search.py "<query>" --design-system --persist -p "Project Name" --page "dashboard"
-```
+Use the recommendations based on your implementation stack:
 
-This also creates:
-- `design-system/pages/dashboard.md` — Page-specific deviations from Master
-
-**How hierarchical retrieval works:**
-1. When building a specific page (e.g., "Checkout"), first check `design-system/pages/checkout.md`
-2. If the page file exists, its rules **override** the Master file
-3. If not, use `design-system/MASTER.md` exclusively
-
-**Context-aware retrieval prompt:**
-```
-I am building the [Page Name] page. Please read design-system/MASTER.md.
-Also check if design-system/pages/[page-name].md exists.
-If the page file exists, prioritize its rules.
-If not, use the Master rules exclusively.
-Now, generate the code...
-```
-
-### Step 3: Supplement with Detailed Searches (as needed)
-
-After getting the design system, use domain searches to get additional details:
-
-```bash
-python3 skills/ui-ux-pro-max/scripts/search.py "<keyword>" --domain <domain> [-n <max_results>]
-```
-
-**When to use detailed searches:**
-
-| Need | Domain | Example |
-|------|--------|---------|
-| More style options | `style` | `--domain style "glassmorphism dark"` |
-| Chart recommendations | `chart` | `--domain chart "real-time dashboard"` |
-| UX best practices | `ux` | `--domain ux "animation accessibility"` |
-| Alternative fonts | `typography` | `--domain typography "elegant luxury"` |
-| Landing structure | `landing` | `--domain landing "hero social-proof"` |
-
-### Step 4: Stack Guidelines (Default: html-tailwind)
-
-Get implementation-specific best practices. If user doesn't specify a stack, **default to `html-tailwind`**.
-
-```bash
-python3 skills/ui-ux-pro-max/scripts/search.py "<keyword>" --stack html-tailwind
-```
-
-Available stacks: `html-tailwind`, `react`, `nextjs`, `vue`, `svelte`, `swiftui`, `react-native`, `flutter`, `shadcn`, `jetpack-compose`
+- **HTML/Tailwind**: Follow CSS utility guidelines from recommendations
+- **React/Next.js**: Apply component patterns and performance considerations  
+- **Vue**: Use composition-friendly patterns from style guides
+- **Mobile Apps**: Adapt typography and spacing for mobile contexts
 
 ---
 

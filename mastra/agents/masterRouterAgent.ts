@@ -19,6 +19,13 @@ import { createSource, listSources, updateSource, deleteSource } from "../tools/
 import { createProject, listProjects, updateProject, deleteProject } from "../tools/projects";
 import { navigateTo } from "../tools/navigation";
 import {
+  getStyleRecommendations,
+  getChartRecommendations,
+  getTypographyRecommendations,
+  getUXGuidelines,
+  getProductRecommendations,
+} from "../tools/uiux";
+import {
   getPhaseFromRequestContext,
   getPhaseInstructions,
 } from "./instructions/phase-instructions";
@@ -184,5 +191,11 @@ export const masterRouterAgent: Agent = new Agent({
     deleteProject,
     // Navigation
     navigateTo,
+    // UI/UX Tools
+    getStyleRecommendations,
+    getChartRecommendations,
+    getTypographyRecommendations,
+    getUXGuidelines,
+    getProductRecommendations,
   },
 });
