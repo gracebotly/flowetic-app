@@ -26,7 +26,11 @@ export const recommendStoryboard = createSupaTool({
   description: 'Analyze event schema and patterns to recommend storyboard type. Returns top recommendation with alternatives. Used in Phase 2 storyboard selection.',
   inputSchema,
   outputSchema,
-  execute: async ({ tenantId, sourceId, selectedOutcome }) => {
+
+  execute: async (inputData: any, context: any) => {
+    const { tenantId, sourceId, selectedOutcome } = inputData;
+
+
     const supabase = createClient();
     
     // Get sample events for schema analysis

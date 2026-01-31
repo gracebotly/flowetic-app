@@ -57,3 +57,6 @@ export {
 export { getJourneySession } from "./journey/getJourneySession";
 export { setSchemaReady } from "./journey/setSchemaReady";
 export * from "./uiux";
+
+// NEW: Supatools exports
+export * from "./supatools";

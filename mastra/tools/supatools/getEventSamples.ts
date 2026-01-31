@@ -48,7 +48,8 @@ export const getEventSamples = createSupaTool({
   description: 'Get sample event records for schema analysis and template selection. Returns up to limit events with all fields. Use limit <= 500 to avoid performance issues.',
   inputSchema,
   outputSchema,
-  execute: async ({ tenantId, sourceId, type, limit, sinceDays }) => {
+  execute: async (inputData: any, context: any) => {
+    const { tenantId, sourceId, type, limit, sinceDays } = inputData;
     const supabase = createClient();
     
     // Build query

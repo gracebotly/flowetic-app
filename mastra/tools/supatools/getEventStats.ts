@@ -32,7 +32,8 @@ export const getEventStats = createSupaTool({
   description: 'Get statistical summary of events for a tenant. Returns total count, distribution by type/source, date range, and error/metric counts. Used for data validation before dashboard generation.',
   inputSchema,
   outputSchema,
-  execute: async ({ tenantId, sourceId, type, sinceDays }) => {
+  execute: async (inputData: any, context: any) => {
+    const { tenantId, sourceId, type, sinceDays } = inputData;
     const supabase = createClient();
     
     // Calculate date cutoff

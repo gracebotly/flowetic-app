@@ -34,7 +34,12 @@ export const recommendStyleKeywords = createSupaTool({
   description: 'Analyze event patterns and context to recommend style keywords (density, palette, typography). Returns recommendations grounded in data characteristics. Used in Phase 3 style bundle generation.',
   inputSchema,
   outputSchema,
-  execute: async ({ tenantId, sourceId, selectedStoryboard }) => {
+
+
+  execute: async (inputData: any, context: any) => {
+    const { tenantId, sourceId, selectedStoryboard } = inputData;
+
+
     const supabase = createClient();
     
     // Get event samples for analysis

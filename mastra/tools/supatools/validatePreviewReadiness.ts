@@ -8,92 +8,133 @@ import { z } from 'zod';
 const inputSchema = z.object({
   tenantId: z.string().uuid(),
   sourceId: z.string().uuid().optional(),
+  requireMinEvents: z.number().min(1).default(10),
+  requireSchemaReady: z.boolean().default(true),
 });
 
 const outputSchema = z.object({
-  isReady: z.boolean(),
+  ready: z.boolean(),
+  canProceed: z.boolean(),
   checks: z.object({
-    hasEvents: z.boolean(),
-    eventsCount: z.number(),
-    hasMetrics: z.boolean(),
-    hasSufficientData: z.boolean(),
-    errorRate: z.number(),
+    hasSource: z.object({ passed: z.boolean(), message: z.string() }),
+    hasEvents: z.object({ passed: z.boolean(), message: z.string(), count: z.number() }),
+    schemaReady: z.object({ passed: z.boolean(), message: z.string() }),
+    eventTypes: z.object({ passed: z.boolean(), message: z.string(), types: z.array(z.string()) }),
   }),
-  recommendations: z.array(z.string()),
-  nextSteps: z.array(z.string()),
+  blockers: z.array(z.string()),
+  warnings: z.array(z.string()),
 });
 
 export const validatePreviewReadiness = createSupaTool({
   id: 'validatePreviewReadiness',
-  description: 'Validate if tenant has sufficient data for preview generation. Returns readiness status, data checks, and recommendations. Used before triggering preview workflow.',
+  description: 'Validate all prerequisites before preview generation. Checks source, events, schema readiness, and event type coverage. Returns blockers and warnings. Use before Phase 4 to prevent failed workflows.',
   inputSchema,
   outputSchema,
-  execute: async ({ tenantId, sourceId }) => {
+
+  execute: async (inputData: any, context: any) => {
+    const { tenantId, sourceId, requireMinEvents, requireSchemaReady } = inputData;
+
     const supabase = createClient();
+    const blockers: string[] = [];
+    const warnings: string[] = [];
     
-    // Get basic event stats
-    let query = supabase
+    // Check 1: Source exists
+    let sourceQuery = supabase.from('sources').select('id, name, status').eq('tenant_id', tenantId);
+    if (sourceId) {
+      sourceQuery = sourceQuery.eq('id', sourceId);
+    }
+    
+    const { data: sources, error: sourceError } = await sourceQuery.limit(1);
+    
+    const hasSource = !sourceError && sources && sources.length > 0;
+    const source = sources?.[0];
+    
+    if (!hasSource) {
+      blockers.push('No active source found. Connect a platform source before generating preview.');
+    } else if (source?.status !== 'active') {
+      blockers.push(`Source "${source.name}" is ${source.status}. Activate the source before generating preview.`);
+    }
+    
+    // Check 2: Has minimum events
+    let eventsQuery = supabase
       .from('events')
-      .select('type, value, timestamp')
-      .eq('tenant_id', tenantId)
-      .order('timestamp', { ascending: false })
-      .limit(100);
+      .select('id, type')
+      .eq('tenant_id', tenantId);
     
     if (sourceId) {
-      query = query.eq('source_id', sourceId);
+      eventsQuery = eventsQuery.eq('source_id', sourceId);
     }
     
-    const { data: events, error } = await query;
+    const { data: events, error: eventsError } = await eventsQuery;
     
-    if (error) {
-      throw new Error(`Failed to validate preview readiness: ${error.message}`);
+    const eventCount = events?.length || 0;
+    const eventTypes = new Set(events?.map(e => e.type) || []);
+    const uniqueEventTypes = Array.from(eventTypes);
+    
+    if (eventsError) {
+      blockers.push(`Failed to query events: ${eventsError.message}`);
+    } else if (eventCount < requireMinEvents) {
+      blockers.push(`Insufficient events (${eventCount} < ${requireMinEvents}). Collect more data before generating preview.`);
     }
     
-    const eventsCount = events?.length || 0;
-    const hasEvents = eventsCount > 0;
-    const hasMetrics = events?.some(e => e.type === 'metric') || false;
-    const errorRate = eventsCount > 0 ? (events?.filter(e => e.type === 'error').length || 0) / eventsCount : 0;
-    const hasSufficientData = eventsCount >= 10; // Minimum threshold
+    // Check 3: Schema ready (via journey_sessions table)
+    const { data: journey, error: journeyError } = await supabase
+      .from('journey_sessions')
+      .select('id, schema_ready')
+      .eq('tenant_id', tenantId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
     
-    // Generate recommendations
-    const recommendations: string[] = [];
-    const nextSteps: string[] = [];
+    let schemaReady = journey?.schema_ready ?? false;
     
-    if (!hasEvents) {
-      recommendations.push('No events found - data source needs to be connected and streaming');
-      nextSteps.push('Run connection backfill workflow', 'Verify source configuration');
-    } else if (eventsCount < 10) {
-      recommendations.push('Limited event data - more events needed for meaningful preview');
-      nextSteps.push('Wait for more events to accumulate', 'Check source connectivity');
+    if (requireSchemaReady) {
+      if (journeyError) {
+        warnings.push('Could not verify schema readiness. Proceed with caution.');
+        schemaReady = true; // Default to true if unable to check
+      } else if (!schemaReady) {
+        blockers.push('Schema not ready. Run connection backfill workflow first.');
+      }
     }
     
-    if (!hasMetrics) {
-      recommendations.push('No metric events detected - consider adding metric collection');
-      nextSteps.push('Configure metric events in source', 'Add instrumentation if needed');
+    // Check 4: Event types coverage
+    if (uniqueEventTypes.length === 0) {
+      warnings.push('No event types detected. Dashboard may be empty.');
+    } else if (uniqueEventTypes.length === 1) {
+      warnings.push(`Only "${uniqueEventTypes[0]}" event type detected. Consider waiting for more event types.`);
+    } else if (!uniqueEventTypes.includes('metric')) {
+      warnings.push('No metric events detected. Dashboard may lack quantitative data.');
     }
     
-    if (errorRate > 0.2) {
-      recommendations.push(`High error rate (${(errorRate * 100).toFixed(1)}%) - investigate source issues`);
-      nextSteps.push('Check source logs', 'Verify authentication and permissions');
-    }
-    
-    if (errorRate > 0 && errorRate <= 0.2) {
-      recommendations.push(`Moderate error rate (${(errorRate * 100).toFixed(1)}%) - monitor closely`);
-    }
-    
-    const isReady = hasEvents && hasSufficientData && errorRate < 0.3;
+    // Final verdict
+    const ready = blockers.length === 0;
+    const canProceed = ready && warnings.length < 3;
     
     return {
-      isReady,
+      ready,
+      canProceed,
       checks: {
-        hasEvents,
-        eventsCount,
-        hasMetrics,
-        hasSufficientData,
-        errorRate: Number(errorRate.toFixed(3)),
+        hasSource: {
+          passed: hasSource && source?.status === 'active',
+          message: hasSource ? `Source "${source?.name}" is active` : 'No active source',
+        },
+        hasEvents: {
+          passed: eventCount >= requireMinEvents,
+          message: `${eventCount} events (minimum: ${requireMinEvents})`,
+          count: eventCount,
+        },
+        schemaReady: {
+          passed: schemaReady || !requireSchemaReady,
+          message: schemaReady ? 'Schema is ready' : 'Schema not ready',
+        },
+        eventTypes: {
+          passed: uniqueEventTypes.length >= 2,
+          message: `${uniqueEventTypes.length} unique event types: ${uniqueEventTypes.join(', ')}`,
+          types: uniqueEventTypes,
+        },
       },
-      recommendations,
-      nextSteps,
+      blockers,
+      warnings,
     };
   },
 });

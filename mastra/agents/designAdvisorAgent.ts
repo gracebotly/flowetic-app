@@ -11,6 +11,9 @@ import { createFloweticMemory } from "../lib/memory";
 
 import { getStyleBundles } from "../tools/design";
 
+// NEW: Import Supatool
+import { recommendStyleKeywords } from "../tools/supatools";
+
 import { loadNamedSkillMarkdown } from "../skills/loadSkill";
 
 export const designAdvisorAgent: Agent = new Agent({
@@ -72,5 +75,7 @@ export const designAdvisorAgent: Agent = new Agent({
     searchDesignDatabase,
     generateDesignSystem,
     getStyleBundles,
+    // NEW: Add Supatool
+    recommendStyleKeywords,
   },
 });

@@ -27,7 +27,9 @@ export const recommendOutcome = createSupaTool({
   description: 'Analyze event patterns to recommend outcome type (dashboard vs product). Returns recommendation with confidence score and data-driven reasoning. Used in Phase 1 outcome selection.',
   inputSchema,
   outputSchema,
-  execute: async ({ tenantId, sourceId }) => {
+  execute: async (inputData: any, context: any) => {
+    const { tenantId, sourceId } = inputData;
+
     const supabase = createClient();
     
     // Get event stats

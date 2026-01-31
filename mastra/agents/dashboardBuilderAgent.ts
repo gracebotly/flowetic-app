@@ -15,6 +15,9 @@ import { reorderComponents } from "../tools/interactiveEdit/reorderComponents";
 import { todoAdd, todoList, todoUpdate, todoComplete } from "../tools/todo";
 import { getStyleBundles } from "../tools/design";
 
+// NEW: Import Supatool
+import { getEventSamples } from "../tools/supatools";
+
 export const dashboardBuilderAgent: Agent = new Agent({
   id: "dashboardBuilderAgent",
   name: "dashboardBuilderAgent",
@@ -106,5 +109,7 @@ export const dashboardBuilderAgent: Agent = new Agent({
     todoList,
     todoUpdate,
     todoComplete,
+    // NEW: Add Supatool
+    getEventSamples,
   },
 });
