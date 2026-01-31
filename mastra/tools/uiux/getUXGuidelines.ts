@@ -43,7 +43,7 @@ export const getUXGuidelines = createTool({
       .filter(Boolean)
       .join(" ");
 
-    const ranked = rankRowsByQuery({ rows, query, limit: inputData.limit });
+    const ranked = rankRowsByQuery({ rows, query, limit: inputData.limit ?? 5 });
 
     const guidelines = ranked.map((row) => ({
       category: row["Category"] || "",

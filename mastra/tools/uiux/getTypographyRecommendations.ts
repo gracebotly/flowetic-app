@@ -42,7 +42,7 @@ export const getTypographyRecommendations = createTool({
       .filter(Boolean)
       .join(" ");
 
-    const ranked = rankRowsByQuery({ rows, query, limit: inputData.limit });
+    const ranked = rankRowsByQuery({ rows, query, limit: inputData.limit ?? 3 });
 
     const recommendations = ranked.map((row) => ({
       fontPairingName: row["Font Pairing Name"] || "",
