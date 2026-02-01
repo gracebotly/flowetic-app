@@ -135,18 +135,14 @@ class VibeRouterAgent extends AbstractAgent {
         };
 
         try {
+          // REQUIRED: First event must be RUN_STARTED
+          emit(subscriber, base, { type: "RUN_STARTED" });
+
           const parsed = parseCtxEnvelope(input);
           const ctx = parsed.ctx ?? getContextFromInput(input);
           const userMessage = parsed.message;
 
-          // TEXT_MESSAGE_START
-          emit(subscriber, base, { type: "TEXT_MESSAGE_START", payload: {} });
-
           if (!ctx.userId || !ctx.tenantId) {
-            emit(subscriber, base, {
-              type: "TEXT_MESSAGE_START",
-              payload: { messageId: base.messageId },
-            });
             emit(subscriber, base, {
               type: "TEXT_MESSAGE_CONTENT",
               delta: "I'm ready, but I don't have your session context yet. Please sign in and refresh, then click Enter Vibe (or open /vibe/chat after auth).",
@@ -184,10 +180,6 @@ class VibeRouterAgent extends AbstractAgent {
             if (required && currentMode !== required) {
               const msg = `That action isn't available yet. Current phase: "${currentMode}". Required phase: "${required}".`;
 
-              emit(subscriber, base, {
-                type: "TEXT_MESSAGE_START",
-                payload: { messageId: base.messageId },
-              });
               emit(subscriber, base, {
                 type: "TEXT_MESSAGE_CONTENT",
                 delta: msg,
@@ -236,10 +228,6 @@ class VibeRouterAgent extends AbstractAgent {
 
           // Message events
           emit(subscriber, base, {
-            type: "TEXT_MESSAGE_START",
-            payload: { messageId: base.messageId },
-          });
-          emit(subscriber, base, {
             type: "TEXT_MESSAGE_CONTENT",
             delta: text,
             messageId: base.messageId,
@@ -275,10 +263,6 @@ class VibeRouterAgent extends AbstractAgent {
             ? "Our AI service is temporarily overloaded. Please wait ~10 seconds and try again."
             : raw;
 
-          emit(subscriber, base, {
-            type: "TEXT_MESSAGE_START",
-            payload: { messageId: base.messageId },
-          });
           emit(subscriber, base, {
             type: "TEXT_MESSAGE_CONTENT",
             delta: msg,
