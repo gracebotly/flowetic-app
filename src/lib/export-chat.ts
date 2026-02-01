@@ -1,120 +1,66 @@
-type ExportMessage = {
-  id: string;
-  role: "user" | "assistant" | "system";
+type LegacyMessage = {
+  id?: string;
+  role: 'user' | 'assistant' | 'system';
   content: string;
-  createdAt?: string;
 };
 
-type ExportContext = {
-  chatId: string;
-  currentPhase: string;
-  platformType?: string;
-  sourceId?: string;
-  entityId?: string;
-  selectedOutcome?: string | null;
-  selectedStoryboard?: string | null;
-  selectedStyleBundle?: string | null;
-  selectedModel?: string;
+type AiSdkPart =
+  | { type: 'text'; text: string }
+  | { type: string; [key: string]: any };
+
+type AiSdkMessage = {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  parts: AiSdkPart[];
 };
 
-/**
- * Export chat messages as Markdown file
- */
-export function exportAsMarkdown(
-  messages: ExportMessage[],
-  context: ExportContext
-): void {
-  const timestamp = new Date().toLocaleString("en-US", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
-
-  const phaseLabels: Record<string, string> = {
-    select_entity: "Entity Selection",
-    recommend: "Outcome Selection",
-    align: "Storyboard Alignment",
-    style: "Style Selection",
-    build_preview: "Building Preview",
-    interactive_edit: "Interactive Editing",
-    deploy: "Deployment",
-  };
-
-  let markdown = `# Flowetic Chat Export\n\n`;
-  markdown += `**Exported:** ${timestamp}\n`;
-  markdown += `**Chat ID:** ${context.chatId}\n`;
-  markdown += `**Phase:** ${phaseLabels[context.currentPhase] || context.currentPhase}\n`;
-
-  if (context.platformType) {
-    markdown += `**Platform:** ${context.platformType}\n`;
-  }
-  if (context.selectedOutcome) {
-    markdown += `**Selected Outcome:** ${context.selectedOutcome}\n`;
-  }
-  if (context.selectedModel) {
-    markdown += `**Model:** ${context.selectedModel}\n`;
-  }
-
-  markdown += `\n---\n\n`;
-
-  messages.forEach((msg) => {
-    markdown += `## ${msg.role}\n`;
-    markdown += `${msg.content}\n\n`;
-  });
-
-  markdown += `---\n\n`;
-  markdown += `*Exported from Getflowetic Vibe Chat*\n`;
-
-  downloadFile(
-    markdown,
-    `flowetic-chat-${Date.now()}.md`,
-    "text/markdown"
+function isAiSdkMessageArray(messages: any): messages is AiSdkMessage[] {
+  return (
+    Array.isArray(messages) &&
+    messages.length >= 0 &&
+    (messages.length === 0 ||
+      (typeof messages[0] === 'object' &&
+        messages[0] !== null &&
+        'role' in messages[0] &&
+        'parts' in messages[0] &&
+        Array.isArray((messages[0] as any).parts)))
   );
 }
 
-/**
- * Export chat messages as JSON file
- */
-export function exportAsJSON(
-  messages: ExportMessage[],
-  context: ExportContext
-): void {
-  const exportData = {
-    chatId: context.chatId,
-    exportedAt: new Date().toISOString(),
-    currentPhase: context.currentPhase,
-    context: {
-      platformType: context.platformType,
-      sourceId: context.sourceId,
-      entityId: context.entityId,
-      selectedOutcome: context.selectedOutcome,
-      selectedStoryboard: context.selectedStoryboard,
-      selectedStyleBundle: context.selectedStyleBundle,
-      selectedModel: context.selectedModel,
-    },
-    messages: messages.map((msg) => ({
-      id: msg.id,
-      role: msg.role,
-      content: msg.content,
-      createdAt: msg.createdAt || new Date().toISOString(),
-    })),
-  };
+function toLegacyMessages(messages: AiSdkMessage[] | LegacyMessage[]): LegacyMessage[] {
+  if (!isAiSdkMessageArray(messages)) {
+    return messages as LegacyMessage[];
+  }
 
-  const jsonString = JSON.stringify(exportData, null, 2);
+  return (messages as AiSdkMessage[]).map((m) => {
+    const textParts = (m.parts || []).filter((p: any) => p?.type === 'text' && typeof p?.text === 'string');
+    const toolParts = (m.parts || []).filter((p: any) => typeof p?.type === 'string' && p.type.startsWith('tool-'));
 
-  downloadFile(
-    jsonString,
-    `flowetic-chat-${Date.now()}.json`,
-    "application/json"
-  );
+    const text = textParts.map((p: any) => p.text).join('\n').trim();
+
+    // Include tool outputs in JSON export-friendly way, but keep markdown readable.
+    // We append a compact tool marker if there are tool parts and no text.
+    if (text) {
+      return { id: m.id, role: m.role, content: text };
+    }
+
+    if (toolParts.length > 0) {
+      const summary = toolParts
+        .map((p: any) => {
+          const t = p.type;
+          if (p.state === 'output-error') return `[${t}] ERROR: ${String(p.errorText || 'Unknown error')}`;
+          if (p.state === 'output-available') return `[${t}] OUTPUT`;
+          return `[${t}] ${String(p.state || 'unknown')}`;
+        })
+        .join('\n');
+
+      return { id: m.id, role: m.role, content: summary };
+    }
+
+    return { id: m.id, role: m.role, content: '' };
+  });
 }
 
-/**
- * Helper function to trigger file download
- */
 function downloadFile(content: string, filename: string, mimeType: string): void {
   const blob = new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);
@@ -125,4 +71,43 @@ function downloadFile(content: string, filename: string, mimeType: string): void
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
+}
+
+export function exportAsMarkdown(messages: AiSdkMessage[] | LegacyMessage[]): void {
+  const legacy = toLegacyMessages(messages);
+
+  const lines: string[] = [];
+  lines.push(`# Flowetic Chat Export\n\n`);
+  lines.push(`**Exported:** ${new Date().toLocaleString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  })}\n\n`);
+  lines.push(`---\n\n`);
+
+  for (const m of legacy) {
+    const header = m.role === 'user' ? '## User' : m.role === 'assistant' ? '## Assistant' : '## System';
+    lines.push(header);
+    lines.push('');
+    lines.push(m.content || '');
+    lines.push('');
+  }
+
+  lines.push(`---\n\n`);
+  lines.push(`*Exported from Getflowetic Vibe Chat*\n`);
+
+  const markdown = lines.join('\n').trim() + '\n';
+  downloadFile(markdown, `flowetic-chat-${Date.now()}.md`, "text/markdown");
+}
+
+export function exportAsJSON(messages: AiSdkMessage[] | LegacyMessage[]): void {
+  // If AI SDK, preserve original for maximal fidelity
+  const content = isAiSdkMessageArray(messages) 
+    ? JSON.stringify(messages, null, 2)
+    : JSON.stringify(messages, null, 2);
+  
+  downloadFile(content, `flowetic-chat-${Date.now()}.json`, "application/json");
 }
