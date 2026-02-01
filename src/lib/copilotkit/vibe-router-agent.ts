@@ -135,12 +135,18 @@ class VibeRouterAgent extends AbstractAgent {
         };
 
         try {
-          // REQUIRED: First event must be RUN_STARTED
+          // STEP 1: RUN_STARTED (required first event)
           emit(subscriber, base, { type: "RUN_STARTED" });
 
           const parsed = parseCtxEnvelope(input);
           const ctx = parsed.ctx ?? getContextFromInput(input);
           const userMessage = parsed.message;
+
+          // STEP 2: TEXT_MESSAGE_START (required before content)
+          emit(subscriber, base, {
+            type: "TEXT_MESSAGE_START",
+            payload: { messageId: base.messageId },
+          });
 
           if (!ctx.userId || !ctx.tenantId) {
             emit(subscriber, base, {
@@ -226,7 +232,7 @@ class VibeRouterAgent extends AbstractAgent {
 
           const text = String(result?.text || "").trim() || "OK.";
 
-          // Message events
+          // Message events (TEXT_MESSAGE_START already emitted above)
           emit(subscriber, base, {
             type: "TEXT_MESSAGE_CONTENT",
             delta: text,
@@ -238,7 +244,6 @@ class VibeRouterAgent extends AbstractAgent {
           });
 
           // If toolUi exists, emit an action/tool event that the frontend can render.
-          // We keep tool UI BELOW the chat; frontend already uses useCopilotAction("displayToolUI").
           if (result?.toolUi) {
             emit(subscriber, base, {
               type: "ACTION_CALL",
@@ -246,6 +251,7 @@ class VibeRouterAgent extends AbstractAgent {
               arguments: { toolUi: result.toolUi },
             });
           }
+          
           subscriber.complete();
         } catch (err: any) {
           const raw = err?.message ? String(err.message) : "Unknown error.";
@@ -263,14 +269,20 @@ class VibeRouterAgent extends AbstractAgent {
             ? "Our AI service is temporarily overloaded. Please wait ~10 seconds and try again."
             : raw;
 
-          emit(subscriber, base, {
+          // For error path: emit START → CONTENT → END sequence
+          const errorMessageId = generateMessageId();
+          emit(subscriber, { ...base, messageId: errorMessageId }, {
+            type: "TEXT_MESSAGE_START",
+            payload: { messageId: errorMessageId },
+          });
+          emit(subscriber, { ...base, messageId: errorMessageId }, {
             type: "TEXT_MESSAGE_CONTENT",
             delta: msg,
-            messageId: base.messageId,
+            messageId: errorMessageId,
           });
-          emit(subscriber, base, {
+          emit(subscriber, { ...base, messageId: errorMessageId }, {
             type: "TEXT_MESSAGE_END",
-            messageId: base.messageId,
+            messageId: errorMessageId,
           });
 
           subscriber.complete();
