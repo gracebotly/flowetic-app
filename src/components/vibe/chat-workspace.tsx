@@ -171,15 +171,129 @@ export function ChatWorkspace({
   const { messages: uiMessages, sendMessage: sendUiMessage, status: uiStatus, error: uiError } = useChat({});
 
   async function sendAi(text: string, extraData?: Record<string, any>) {
+    const baseData = {
+      tenantId: authContext.tenantId,
+      userId: authContext.userId,
+      journeyThreadId: threadId,
+      // If these exist in your vibeContext, include them so phase detection works:
+      platformType: (vibeContext as any)?.platformType,
+      sourceId: (vibeContext as any)?.sourceId,
+      entityId: (vibeContext as any)?.entityId,
+      externalId: (vibeContext as any)?.externalId,
+      displayName: (vibeContext as any)?.displayName,
+    };
+
     await sendUiMessage(
       { text },
-      extraData
-        ? {
-            body: {
-              data: extraData,
-            },
-          }
-        : undefined,
+      {
+        body: {
+          data: {
+            ...baseData,
+            ...(extraData ?? {}),
+          },
+        },
+      },
+    );
+  }
+
+  function renderToolPart(part: any) {
+    // Most tools will stream as tool-{toolKey}
+    // toolKey is the object key used in agent.tools: { listSources: listSourcesTool }
+    // Your screenshot shows: tool-tool-listSources
+    // That suggests your tool keys are like "tool-listSources" (includes "tool-" prefix).
+    // We'll handle both patterns.
+
+    const type: string = part?.type || '';
+    const state: string = part?.state || '';
+
+    if (!type.startsWith('tool-')) return null;
+
+    if (state !== 'output-available') {
+      return (
+        <div className="mt-2 text-xs text-white/60">
+          {type} ({state})
+        </div>
+      );
+    }
+
+    const output = part.output;
+
+    // 1) Outcome cards tool
+    // Adjust these identifiers once we confirm exact tool part type in your stream.
+    if (type === 'tool-outcomeCards' || type === 'tool-show-outcome-cards' || type === 'tool-tool-outcomeCards') {
+      // Expected shape: { options: [{id,title,description}] }
+      const payload = output;
+      if (payload?.options?.length) {
+        return (
+          <OutcomeCards
+            options={payload.options}
+            onSelect={async (id: string) => {
+              await sendAi(`__ACTION__:select_outcome:${id}`, {
+                tenantId: authContext.tenantId,
+                userId: authContext.userId,
+                journeyThreadId: threadId,
+                selectedOutcome: id,
+              });
+            }}
+            onHelpDecide={async () => {
+              await sendAi(`__ACTION__:outcome_help_me_decide`, {
+                tenantId: authContext.tenantId,
+                userId: authContext.userId,
+                journeyThreadId: threadId,
+              });
+            }}
+          />
+        );
+      }
+    }
+
+    // 2) Storyboard cards tool
+    if (type === 'tool-storyboardCards' || type === 'tool-show-storyboard-cards' || type === 'tool-tool-storyboardCards') {
+      const payload = output;
+      if (payload?.options?.length) {
+        return (
+          <StoryboardCards
+            options={payload.options}
+            onSelect={async (id: string) => {
+              await sendAi(`__ACTION__:select_storyboard:${id}`, {
+                tenantId: authContext.tenantId,
+                userId: authContext.userId,
+                journeyThreadId: threadId,
+                selectedStoryboard: id,
+              });
+            }}
+          />
+        );
+      }
+    }
+
+    // 3) Style bundles tool
+    if (type === 'tool-styleBundles' || type === 'tool-show-style-bundle-cards' || type === 'tool-tool-styleBundles') {
+      const payload = output;
+      if (payload?.bundles?.length) {
+        return (
+          <StyleBundleCards
+            bundles={payload.bundles}
+            onSelect={async (id: string) => {
+              await sendAi(`__ACTION__:select_style_bundle:${id}`, {
+                tenantId: authContext.tenantId,
+                userId: authContext.userId,
+                journeyThreadId: threadId,
+                selectedStyleBundleId: id,
+                selectedStyleBundle: id,
+              });
+            }}
+          />
+        );
+      }
+    }
+
+    // Generic fallback (what you currently see)
+    return (
+      <div className="mt-2 rounded-lg border border-white/10 bg-black/30 p-3">
+        <div className="mb-2 text-xs text-white/60">Tool: {type}</div>
+        <pre className="text-xs overflow-auto whitespace-pre-wrap">{JSON.stringify(output, null, 2)}</pre>
+      </div>
     );
   }
   
@@ -804,19 +918,10 @@ return (
                               );
                             }
 
-                            // tool-{toolKey} parts
                             if (part.type.startsWith('tool-')) {
-                              return (
-                                <div key={idx} className="mt-2 rounded-lg border border-white/10 bg-black/30 p-3">
-                                  <div className="mb-2 text-xs text-white/60">Tool: {part.type}</div>
-                                  <pre className="text-xs overflow-auto whitespace-pre-wrap">
-                                    {JSON.stringify((part as any).result || (part as any).output, null, 2)}
-                                  </pre>
-                                </div>
-                              );
+                              return <div key={idx}>{renderToolPart(part)}</div>;
                             }
 
-                            // data-* parts (writer.custom)
                             if (part.type.startsWith('data-')) {
                               return (
                                 <div key={idx} className="mt-2 rounded-lg border border-white/10 bg-black/20 p-2 text-xs text-white/80">
@@ -849,6 +954,15 @@ return (
             )}
 
             <div ref={messagesEndRef} />
+
+            {process.env.NEXT_PUBLIC_DEBUG_CHAT === 'true' ? (
+              <div className="mt-3 rounded-lg border border-white/10 bg-black/40 p-3 text-xs text-white/80">
+                <div className="mb-2 text-white/60">DEBUG: last message parts</div>
+                <pre className="overflow-auto whitespace-pre-wrap">
+                  {JSON.stringify(uiMessages?.[uiMessages.length - 1]?.parts ?? [], null, 2)}
+                </pre>
+              </div>
+            ) : null}
           </div>
 
           {/* Message input */}

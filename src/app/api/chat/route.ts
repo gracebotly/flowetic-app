@@ -11,7 +11,6 @@ export async function POST(req: Request) {
     const params = await req.json();
 
     const requestContext = new RequestContext();
-
     const data = (params as any)?.data ?? {};
     for (const [key, value] of Object.entries(data)) {
       requestContext.set(key, value as any);
@@ -22,8 +21,17 @@ export async function POST(req: Request) {
       requestContext,
     };
 
+    const mastra = getMastra();
+
+    // Helpful debug: confirm context keys present
+    if (process.env.DEBUG_CHAT_ROUTE === 'true') {
+      console.log('[api/chat] agentId=masterRouterAgent');
+      console.log('[api/chat] data keys:', Object.keys(data));
+      console.log('[api/chat] messages length:', Array.isArray((params as any)?.messages) ? (params as any).messages.length : 'missing');
+    }
+
     const stream = await handleChatStream({
-      mastra: getMastra(),
+      mastra,
       agentId: 'masterRouterAgent',
       params: enhancedParams,
     });
