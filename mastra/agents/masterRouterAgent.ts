@@ -78,11 +78,14 @@ export const masterRouterAgent: Agent = new Agent({
   }),
   instructions: async ({ requestContext }) => {
     // Type-safe access via requestContext.all (new in Mastra 1.1.0)
-    const { tenantId, userId, platformType, phase, selectedOutcome, workflowName, selectedStoryboard, selectedStyleBundle } = requestContext.all;
+    const { tenantId, userId, platformType, phase, selectedOutcome, selectedStoryboard, selectedStyleBundleId } = requestContext.all;
+    
+    // Fallback for workflowName (not in schema, might come from working memory)
+    const workflowName = requestContext.get('workflowName') as string | undefined;
     
     // Fallback for values that might not be in schema
     const safePlatformType = platformType || "make" as PlatformType;
-    const safeSelectedStyleBundle = selectedStyleBundle ||
+    const safeSelectedStyleBundle = selectedStyleBundleId ||
       String(requestContext?.get?.("selectedStyleBundle") ??
         requestContext?.get?.("selectedStyleBundleId") ??
         "");
