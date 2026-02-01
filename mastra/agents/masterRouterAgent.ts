@@ -95,7 +95,7 @@ export const masterRouterAgent: Agent = new Agent({
       "",
     ].join("\n");
 
-    const platformSkill = await loadSkillMarkdown(safePlatformType);
+    const platformSkill = await loadSkillMarkdown(safePlatformType as PlatformType);
 
     const businessSkill = phase === "recommend" || phase === "align"
       ? await loadNamedSkillMarkdown("business-outcomes-advisor")
