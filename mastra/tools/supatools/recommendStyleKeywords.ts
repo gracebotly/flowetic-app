@@ -8,10 +8,11 @@ import { createClient } from '../../lib/supabase';
 import { z } from 'zod';
 
 const inputSchema = z.object({
-  tenantId: z.string().uuid(),
   sourceId: z.string().uuid().optional(),
   selectedStoryboard: z.string().optional(),
 });
+
+
 
 const outputSchema = z.object({
   density: z.object({
@@ -35,10 +36,17 @@ export const recommendStyleKeywords = createSupaTool<z.infer<typeof outputSchema
   inputSchema,
   outputSchema,
 
-
-  execute: async (rawInput: unknown) => {
+  execute: async (rawInput: unknown, context) => {
     const input = inputSchema.parse(rawInput);
-    const { tenantId, sourceId, selectedStoryboard } = input;
+    
+    // ✅ Get tenantId from VALIDATED context, not input
+    const tenantId = context.requestContext?.get('tenantId');
+    
+    if (!tenantId) {
+      throw new Error('recommendStyleKeywords: tenantId missing from request context');
+    }
+    
+    const { sourceId, selectedStoryboard } = input;
 
     const supabase = createClient();
 

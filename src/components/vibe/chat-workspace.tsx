@@ -197,16 +197,20 @@ export function ChatWorkspace({
   }
 
   function renderToolPart(part: any) {
-    // Most tools will stream as tool-{toolKey}
-    // toolKey is the object key used in agent.tools: { listSources: listSourcesTool }
-    // Your screenshot shows: tool-tool-listSources
-    // That suggests your tool keys are like "tool-listSources" (includes "tool-" prefix).
-    // We'll handle both patterns.
-
     const type: string = part?.type || '';
     const state: string = part?.state || '';
 
     if (!type.startsWith('tool-')) return null;
+
+    // Show loading state
+    if (state === 'streaming' || state === 'pending') {
+      return (
+        <div className="mt-2 flex items-center gap-2 text-xs text-white/60">
+          <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white/60"></div>
+          <span>Running {type.replace('tool-', '')}...</span>
+        </div>
+      );
+    }
 
     if (state !== 'output-available') {
       return (
@@ -218,47 +222,46 @@ export function ChatWorkspace({
 
     const output = part.output;
 
-    // 1) Outcome cards tool
-    // Adjust these identifiers once we confirm exact tool part type in your stream.
-    if (type === 'tool-outcomeCards' || type === 'tool-show-outcome-cards' || type === 'tool-tool-outcomeCards') {
-      // Expected shape: { options: [{id,title,description}] }
-      const payload = output;
-      if (payload?.options?.length) {
+    // ERROR HANDLING: Check if output is an error
+    if (output?.error || output?.code?.includes('ERROR')) {
+      return (
+        <div className="mt-2 rounded-lg border border-red-500/30 bg-red-500/10 p-3">
+          <div className="flex items-center gap-2 text-sm font-medium text-red-200 mb-1">
+            <span className="text-red-400">⚠</span>
+            Tool Error: {type.replace('tool-', '')}
+          </div>
+          <div className="text-xs text-red-300">{output.error || output.message || 'Unknown error'}</div>
+        </div>
+      );
+    }
+
+    // 1) Outcome cards
+    if (type === 'tool-outcomeCards' || type === 'tool-showOutcomeCards') {
+      if (output?.options?.length) {
         return (
           <OutcomeCards
-            options={payload.options}
+            options={output.options}
             onSelect={async (id: string) => {
               await sendAi(`__ACTION__:select_outcome:${id}`, {
-                tenantId: authContext.tenantId,
-                userId: authContext.userId,
-                journeyThreadId: threadId,
                 selectedOutcome: id,
               });
             }}
             onHelpDecide={async () => {
-              await sendAi(`__ACTION__:outcome_help_me_decide`, {
-                tenantId: authContext.tenantId,
-                userId: authContext.userId,
-                journeyThreadId: threadId,
-              });
+              await sendAi(`__ACTION__:outcome_help_me_decide`);
             }}
           />
         );
       }
     }
 
-    // 2) Storyboard cards tool
-    if (type === 'tool-storyboardCards' || type === 'tool-show-storyboard-cards' || type === 'tool-tool-storyboardCards') {
-      const payload = output;
-      if (payload?.options?.length) {
+    // 2) Storyboard cards
+    if (type === 'tool-storyboardCards' || type === 'tool-showStoryboardCards') {
+      if (output?.options?.length) {
         return (
           <StoryboardCards
-            options={payload.options}
+            options={output.options}
             onSelect={async (id: string) => {
               await sendAi(`__ACTION__:select_storyboard:${id}`, {
-                tenantId: authContext.tenantId,
-                userId: authContext.userId,
-                journeyThreadId: threadId,
                 selectedStoryboard: id,
               });
             }}
@@ -267,18 +270,14 @@ export function ChatWorkspace({
       }
     }
 
-    // 3) Style bundles tool
-    if (type === 'tool-styleBundles' || type === 'tool-show-style-bundle-cards' || type === 'tool-tool-styleBundles') {
-      const payload = output;
-      if (payload?.bundles?.length) {
+    // 3) Style bundles
+    if (type === 'tool-styleBundles' || type === 'tool-showStyleBundleCards') {
+      if (output?.bundles?.length) {
         return (
           <StyleBundleCards
-            bundles={payload.bundles}
+            bundles={output.bundles}
             onSelect={async (id: string) => {
               await sendAi(`__ACTION__:select_style_bundle:${id}`, {
-                tenantId: authContext.tenantId,
-                userId: authContext.userId,
-                journeyThreadId: threadId,
                 selectedStyleBundleId: id,
                 selectedStyleBundle: id,
               });
@@ -288,11 +287,151 @@ export function ChatWorkspace({
       }
     }
 
-    // Generic fallback (what you currently see)
+    // 4) Event stats (show summary card instead of raw JSON)
+    if (type === 'tool-getEventStats') {
+      return (
+        <div className="mt-2 rounded-lg border border-white/10 bg-black/20 p-3">
+          <div className="text-xs font-medium text-white/80 mb-2">📊 Event Statistics</div>
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="text-white/60">Total Events:</div>
+            <div className="text-white/90 font-mono">{output.totalEvents || 0}</div>
+            <div className="text-white/60">Error Count:</div>
+            <div className="text-white/90 font-mono">{output.errorCount || 0}</div>
+            <div className="text-white/60">Metric Count:</div>
+            <div className="text-white/90 font-mono">{output.metricCount || 0}</div>
+          </div>
+          {process.env.NEXT_PUBLIC_DEBUG_CHAT === 'true' && (
+            <details className="mt-2">
+              <summary className="text-xs text-white/40 cursor-pointer">Debug: Raw Output</summary>
+              <pre className="text-xs overflow-auto whitespace-pre-wrap mt-1 text-white/60">
+                {JSON.stringify(output, null, 2)}
+              </pre>
+            </details>
+          )}
+        </div>
+      );
+    }
+
+    // 5) List sources (show source list instead of raw JSON)
+    if (type === 'tool-listSources') {
+      const sources = output?.sources || [];
+      if (!sources.length) {
+        return (
+          <div className="mt-2 rounded-lg border border-white/10 bg-black/20 p-3">
+            <div className="text-xs font-medium text-white/80 mb-2">📡 Data Sources</div>
+            <div className="text-xs text-white/60">No sources found</div>
+          </div>
+        );
+      }
+      
+      return (
+        <div className="mt-2 rounded-lg border border-white/10 bg-black/20 p-3">
+          <div className="text-xs font-medium text-white/80 mb-2">📡 Data Sources</div>
+          <div className="space-y-2">
+            {sources.map((source: any) => (
+              <div key={source.id} className="flex items-center gap-2 text-xs">
+                <div className={`w-2 h-2 rounded-full ${source.status === 'active' ? 'bg-green-500' : 'bg-yellow-500'}`}></div>
+                <span className="text-white/80">{source.name || source.id}</span>
+                <span className="text-white/40">({source.type})</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // 6) Recommendation tools (show as formatted cards)
+    if (type === 'tool-recommendOutcome') {
+      return (
+        <div className="mt-2 rounded-lg border border-white/10 bg-black/20 p-3">
+          <div className="text-xs font-medium text-white/80 mb-2">🎯 Outcome Recommendation</div>
+          <div className="text-xs text-white/90 mb-2">
+            Recommended: <span className="font-semibold capitalize text-white">{output.recommendedOutcome}</span>
+          </div>
+          <div className="text-xs text-white/60">
+            Confidence: {Math.round((output.confidence || 0) * 100)}% - {output.reasoning}
+          </div>
+        </div>
+      );
+    }
+
+    if (type === 'tool-recommendStoryboard') {
+      return (
+        <div className="mt-2 rounded-lg border border-white/10 bg-black/20 p-3">
+          <div className="text-xs font-medium text-white/80 mb-2">🎬 Storyboard Recommendation</div>
+          <div className="text-xs text-white/90 mb-2">
+            Recommended: <span className="font-semibold text-white">{output.recommendedStoryboard}</span>
+          </div>
+          <div className="text-xs text-white/60">
+            Confidence: {Math.round((output.confidence || 0) * 100)}% - {output.reasoning}
+          </div>
+        </div>
+      );
+    }
+
+    // 7) Validation tools
+    if (type === 'tool-validatePreviewReadiness') {
+      const { ready, canProceed, checks } = output;
+      return (
+        <div className="mt-2 rounded-lg border border-white/10 bg-black/20 p-3">
+          <div className="text-xs font-medium text-white/80 mb-2">✅ Preview Readiness Check</div>
+          <div className="space-y-1">
+            <div className={`text-xs ${ready ? 'text-green-400' : 'text-red-400'}`}>
+              {ready ? '✓ Ready to generate preview' : '✗ Not ready for preview'}
+            </div>
+            <div className={`text-xs ${canProceed ? 'text-green-400' : 'text-yellow-400'}`}>
+              {canProceed ? '✓ Can proceed' : '⚠ Warnings present'}
+            </div>
+            <div className="grid grid-cols-1 gap-1 mt-2">
+              <div className={`text-xs ${checks?.hasSource?.passed ? 'text-green-400' : 'text-red-400'}`}>
+                {checks?.hasSource?.passed ? '✓' : '✗'} Source: {checks?.hasSource?.message}
+              </div>
+              <div className={`text-xs ${checks?.hasEvents?.passed ? 'text-green-400' : 'text-red-400'}`}>
+                {checks?.hasEvents?.passed ? '✓' : '✗'} Events: {checks?.hasEvents?.message}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Generic fallback (enhanced)
     return (
-      <div className="mt-2 rounded-lg border border-white/10 bg-black/30 p-3">
-        <div className="mb-2 text-xs text-white/60">Tool: {type}</div>
-        <pre className="text-xs overflow-auto whitespace-pre-wrap">{JSON.stringify(output, null, 2)}</pre>
+      <div className="mt-2 rounded-lg border border-white/10 bg-black/20 p-3">
+        <div className="flex items-center justify-between mb-2">
+          <div className="text-xs text-white/60">Tool: {type.replace('tool-', '')}</div>
+          {process.env.NEXT_PUBLIC_DEBUG_CHAT === 'true' && (
+            <details className="text-xs">
+              <summary className="cursor-pointer text-white/40">Raw</summary>
+              <pre className="absolute z-50 bg-black border border-white/20 rounded p-2 text-xs text-white/80 mt-1 overflow-auto max-h-40 whitespace-pre-wrap">
+                {JSON.stringify(output, null, 2)}
+              </pre>
+            </details>
+          )}
+        </div>
+        
+        {/* Try to render common output patterns */}
+        {typeof output === 'object' && output !== null ? (
+          <div className="text-xs space-y-1">
+            {Object.entries(output).map(([key, value]) => (
+              <div key={key} className="flex items-start gap-2">
+                <span className="text-white/60 min-w-20">{key}:</span>
+                <span className="text-white/90 flex-1 break-words">
+                  {typeof value === 'string' ? value : 
+                   typeof value === 'number' ? value.toLocaleString() :
+                   typeof value === 'boolean' ? (value ? 'Yes' : 'No') :
+                   Array.isArray(value) ? `Array(${value.length})` :
+                   typeof value === 'object' && value !== null ? `Object(${Object.keys(value).length})` :
+                   'Unknown'}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-xs text-white/80">
+            {typeof output === 'string' ? output : JSON.stringify(output)}
+          </div>
+        )}
       </div>
     );
   }

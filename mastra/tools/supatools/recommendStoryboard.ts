@@ -6,10 +6,11 @@ import { createClient } from '../../lib/supabase';
 import { z } from 'zod';
 
 const inputSchema = z.object({
-  tenantId: z.string().uuid(),
   sourceId: z.string().uuid().optional(),
   selectedOutcome: z.enum(['dashboard', 'product']),
 });
+
+
 
 const outputSchema = z.object({
   recommendedStoryboard: z.string(),
@@ -27,9 +28,17 @@ export const recommendStoryboard = createSupaTool<z.infer<typeof outputSchema>>(
   inputSchema,
   outputSchema,
 
-  execute: async (rawInput: unknown) => {
+  execute: async (rawInput: unknown, context) => {
     const input = inputSchema.parse(rawInput);
-    const { tenantId, sourceId, selectedOutcome } = input;
+    
+    // ✅ Get tenantId from VALIDATED context, not input
+    const tenantId = context.requestContext?.get('tenantId');
+    
+    if (!tenantId) {
+      throw new Error('recommendStoryboard: tenantId missing from request context');
+    }
+    
+    const { sourceId, selectedOutcome } = input;
 
     const supabase = createClient();
 

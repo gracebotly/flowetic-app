@@ -6,11 +6,12 @@ import { createClient } from '../../lib/supabase';
 import { z } from 'zod';
 
 const inputSchema = z.object({
-  tenantId: z.string().uuid(),
   sourceId: z.string().uuid().optional(),
   requireMinEvents: z.number().min(1).default(10),
   requireSchemaReady: z.boolean().default(true),
 });
+
+
 
 const outputSchema = z.object({
   ready: z.boolean(),
@@ -31,9 +32,17 @@ export const validatePreviewReadiness = createSupaTool<z.infer<typeof outputSche
   inputSchema,
   outputSchema,
 
-  execute: async (rawInput: unknown) => {
+  execute: async (rawInput: unknown, context) => {
     const input = inputSchema.parse(rawInput);
-    const { tenantId, sourceId, requireMinEvents, requireSchemaReady } = input;
+    
+    // ✅ Get tenantId from VALIDATED context, not input
+    const tenantId = context.requestContext?.get('tenantId');
+    
+    if (!tenantId) {
+      throw new Error('validatePreviewReadiness: tenantId missing from request context');
+    }
+    
+    const { sourceId, requireMinEvents, requireSchemaReady } = input;
 
     const supabase = createClient();
     const blockers: string[] = [];

@@ -8,12 +8,12 @@ import { z } from 'zod';
 const EventType = z.enum(['message', 'metric', 'state', 'tool_event', 'error']);
 
 const inputSchema = z.object({
-  tenantId: z.string().uuid(),
   sourceId: z.string().uuid().optional(),
   type: EventType.optional(),
   limit: z.number().int().min(1).max(500).default(50),
   sinceDays: z.number().int().min(1).max(365).optional(),
 });
+
 
 export type EventSample = {
   id: string;
@@ -53,9 +53,18 @@ export const getEventSamples = createSupaTool<z.infer<typeof outputSchema>>({
     'Get sample event records for schema analysis and template selection. Returns up to limit events with all fields. limit is capped at 500.',
   inputSchema,
   outputSchema,
-  execute: async (rawInput: unknown) => {
+  
+  execute: async (rawInput: unknown, context) => {
     const input = inputSchema.parse(rawInput);
-    const { tenantId, sourceId, type, limit, sinceDays } = input;
+    
+    // ✅ Get tenantId from VALIDATED context, not input
+    const tenantId = context.requestContext?.get('tenantId');
+    
+    if (!tenantId) {
+      throw new Error('getEventSamples: tenantId missing from request context');
+    }
+    
+    const { sourceId, type, limit, sinceDays } = input;
 
     const supabase = createClient();
 
