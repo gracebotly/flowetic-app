@@ -30,6 +30,7 @@ import {
 import {
   getPhaseFromRequestContext,
   getPhaseInstructions,
+  type FloweticPhase,
 } from "./instructions/phase-instructions";
 
 // NEW: Import Supatools
@@ -65,7 +66,7 @@ export const masterRouterAgent: Agent = new Agent({
     displayName: z.string().optional(),
     
     // Journey state (OPTIONAL)
-    phase: z.enum(['outcome', 'story', 'style', 'preview', 'edit', 'deploy']).optional(),
+    phase: z.enum(['select_entity', 'recommend', 'align', 'style', 'build_preview', 'interactive_edit', 'deploy']).optional(),
     mode: z.enum(['fast_lane', 'deep_lane']).optional(),
     selectedOutcome: z.enum(['dashboard', 'product']).optional(),
     selectedStoryboard: z.string().optional(),
@@ -101,7 +102,7 @@ export const masterRouterAgent: Agent = new Agent({
       ? await loadNamedSkillMarkdown("business-outcomes-advisor")
       : null;
 
-    const phaseInstructions = getPhaseInstructions(phase, {
+    const phaseInstructions = getPhaseInstructions(phase as FloweticPhase, {
       platformType: String(safePlatformType),
       workflowName: workflowName || undefined,
       selectedOutcome: selectedOutcome || undefined,
