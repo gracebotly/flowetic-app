@@ -8,6 +8,8 @@ import {
 import { vibeRouterAgent } from "@/lib/copilotkit/vibe-router-agent";
 
 export const POST = async (req: NextRequest) => {
+  console.log("[CopilotKit Route] POST request received");
+  
   const copilotRuntime = new CopilotRuntime({
     agents: {
       default: vibeRouterAgent,
@@ -16,11 +18,17 @@ export const POST = async (req: NextRequest) => {
     },
   });
 
+  console.log("[CopilotKit Route] CopilotRuntime created with agents:", Object.keys(copilotRuntime.agents || {}));
+
   const { handleRequest } = copilotRuntimeNextJSAppRouterEndpoint({
     runtime: copilotRuntime,
     serviceAdapter: new ExperimentalEmptyAdapter(),
     endpoint: "/api/copilotkit",
   });
 
-  return handleRequest(req);
+  console.log("[CopilotKit Route] Calling handleRequest");
+  const response = await handleRequest(req);
+  console.log("[CopilotKit Route] handleRequest completed, status:", response.status);
+  
+  return response;
 };

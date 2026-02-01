@@ -125,7 +125,10 @@ class VibeRouterAgent extends AbstractAgent {
   // Observable return type required by AbstractAgent interface
   // RxJS version pinned to 7.8.1 in package.json resolutions
   public run(input: any): Observable<AGUIEvent> {
+    console.log("[VibeRouterAgent] run() called with input:", JSON.stringify(input).slice(0, 200));
+    
     return new Observable((subscriber: any) => {
+      console.log("[VibeRouterAgent] Observable subscribed");
       (async () => {
         const base = {
           threadId: getOrCreateThreadId(input),
@@ -133,30 +136,39 @@ class VibeRouterAgent extends AbstractAgent {
           messageId: generateMessageId(),
         };
 
+        console.log("[VibeRouterAgent] Base IDs generated:", base);
+
         try {
           // STEP 1: RUN_STARTED (required first event)
+          console.log("[VibeRouterAgent] Emitting RUN_STARTED");
           emit(subscriber, base, { type: "RUN_STARTED" });
 
           const parsed = parseCtxEnvelope(input);
           const ctx = parsed.ctx ?? getContextFromInput(input);
           const userMessage = parsed.message;
 
+          console.log("[VibeRouterAgent] Context:", { userId: ctx.userId, tenantId: ctx.tenantId, userMessage });
+
           // STEP 2: TEXT_MESSAGE_START (required before content)
+          console.log("[VibeRouterAgent] Emitting TEXT_MESSAGE_START");
           emit(subscriber, base, {
             type: "TEXT_MESSAGE_START",
             payload: { messageId: base.messageId },
           });
 
           if (!ctx.userId || !ctx.tenantId) {
+            const msg = "I'm ready, but I don't have your session context yet. Please sign in and refresh, then click Enter Vibe (or open /vibe/chat after auth).";
+            console.log("[VibeRouterAgent] No session context, sending error message");
             emit(subscriber, base, {
               type: "TEXT_MESSAGE_CONTENT",
-              delta: "I'm ready, but I don't have your session context yet. Please sign in and refresh, then click Enter Vibe (or open /vibe/chat after auth).",
+              delta: msg,
               messageId: base.messageId,
             });
             emit(subscriber, base, {
               type: "TEXT_MESSAGE_END",
               messageId: base.messageId,
             });
+            console.log("[VibeRouterAgent] Completed (no session)");
             subscriber.complete();
             return;
           }
@@ -195,11 +207,13 @@ class VibeRouterAgent extends AbstractAgent {
                 messageId: base.messageId,
               });
 
+              console.log("[VibeRouterAgent] Completed (phase gating)");
               subscriber.complete();
               return;
             }
           }
 
+          console.log("[VibeRouterAgent] Creating RequestContext");
           const requestContext = new RequestContext();
           requestContext.set("userId", ctx.userId);
           requestContext.set("tenantId", ctx.tenantId);
@@ -220,6 +234,7 @@ class VibeRouterAgent extends AbstractAgent {
           requestContext.set(MASTRA_RESOURCE_ID_KEY, ctx.tenantId);
           requestContext.set(MASTRA_THREAD_ID_KEY, ctx.journey?.threadId || ctx.journey?.mastraThreadId || ctx.threadId || "");
 
+          console.log("[VibeRouterAgent] Calling runVibeRouter");
           const result = await runVibeRouter({
             userId: ctx.userId,
             tenantId: ctx.tenantId,
@@ -229,14 +244,19 @@ class VibeRouterAgent extends AbstractAgent {
             requestContext,
           });
 
+          console.log("[VibeRouterAgent] runVibeRouter completed, result:", { hasText: !!result?.text, hasToolUi: !!result?.toolUi });
+
           const text = String(result?.text || "").trim() || "OK.";
 
           // Message events (TEXT_MESSAGE_START already emitted above)
+          console.log("[VibeRouterAgent] Emitting TEXT_MESSAGE_CONTENT");
           emit(subscriber, base, {
             type: "TEXT_MESSAGE_CONTENT",
             delta: text,
             messageId: base.messageId,
           });
+          
+          console.log("[VibeRouterAgent] Emitting TEXT_MESSAGE_END");
           emit(subscriber, base, {
             type: "TEXT_MESSAGE_END",
             messageId: base.messageId,
@@ -244,6 +264,7 @@ class VibeRouterAgent extends AbstractAgent {
 
           // If toolUi exists, emit an action/tool event that the frontend can render.
           if (result?.toolUi) {
+            console.log("[VibeRouterAgent] Emitting ACTION_CALL");
             emit(subscriber, base, {
               type: "ACTION_CALL",
               name: "displayToolUI",
@@ -251,8 +272,10 @@ class VibeRouterAgent extends AbstractAgent {
             });
           }
           
+          console.log("[VibeRouterAgent] Completed successfully");
           subscriber.complete();
         } catch (err: any) {
+          console.error("[VibeRouterAgent] Error occurred:", err);
           const raw = err?.message ? String(err.message) : "Unknown error.";
           const codeFromDetails =
             typeof err?.details?.code === "string" ? err.details.code : undefined;
@@ -270,6 +293,7 @@ class VibeRouterAgent extends AbstractAgent {
 
           // For error path: emit START → CONTENT → END sequence
           const errorMessageId = generateMessageId();
+          console.log("[VibeRouterAgent] Emitting error message");
           emit(subscriber, { ...base, messageId: errorMessageId }, {
             type: "TEXT_MESSAGE_START",
             payload: { messageId: errorMessageId },
@@ -284,12 +308,13 @@ class VibeRouterAgent extends AbstractAgent {
             messageId: errorMessageId,
           });
 
+          console.log("[VibeRouterAgent] Completed with error");
           subscriber.complete();
         }
       })();
 
       return () => {
-        // teardown no-op
+        console.log("[VibeRouterAgent] Observable unsubscribed");
       };
     });
   }
