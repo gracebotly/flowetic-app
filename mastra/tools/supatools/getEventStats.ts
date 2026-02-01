@@ -7,10 +7,15 @@ import { z } from 'zod';
 const EventType = z.enum(['message', 'metric', 'state', 'tool_event', 'error']);
 
 const inputSchema = z.object({
-  tenantId: z.string().uuid(),
   sourceId: z.string().uuid().optional(),
   type: EventType.optional(),
   sinceDays: z.number().int().min(1).max(365).default(30),
+});
+
+// NEW: Request context schema (Mastra 1.1.0 feature)
+const requestContextSchema = z.object({
+  tenantId: z.string().uuid(),  // ✅ Validated from server
+  userId: z.string().uuid(),
 });
 
 const outputSchema = z.object({
@@ -37,9 +42,19 @@ export const getEventStats = createSupaTool<z.infer<typeof outputSchema>>({
     'Get statistical summary of events for a tenant. Returns total count, distribution by type/source, date range, and error/metric counts.',
   inputSchema,
   outputSchema,
-  execute: async (rawInput: unknown) => {
+  requestContextSchema,  // ✅ Add this
+  
+  execute: async (rawInput: unknown, context) => {
     const input = inputSchema.parse(rawInput);
-    const { tenantId, sourceId, type, sinceDays } = input;
+    
+    // ✅ Get tenantId from VALIDATED context, not input
+    const tenantId = context.requestContext?.get('tenantId');
+    
+    if (!tenantId) {
+      throw new Error('getEventStats: tenantId missing from request context');
+    }
+    
+    const { sourceId, type, sinceDays } = input;
 
     const supabase = createClient();
 

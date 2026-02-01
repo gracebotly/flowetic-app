@@ -8,9 +8,14 @@ import { createClient } from '../../lib/supabase';
 import { z } from 'zod';
 
 const inputSchema = z.object({
-  tenantId: z.string().uuid(),
   sourceId: z.string().uuid().optional(),
   selectedStoryboard: z.string().optional(),
+});
+
+// NEW: Request context schema (Mastra 1.1.0 feature)
+const requestContextSchema = z.object({
+  tenantId: z.string().uuid(),  // ✅ Validated from server
+  userId: z.string().uuid(),
 });
 
 const outputSchema = z.object({
@@ -34,11 +39,19 @@ export const recommendStyleKeywords = createSupaTool<z.infer<typeof outputSchema
   description: 'Analyze event patterns and context to recommend style keywords (density, palette, typography). Returns recommendations grounded in data characteristics. Used in Phase 3 style bundle generation.',
   inputSchema,
   outputSchema,
+  requestContextSchema,  // ✅ Add this
 
-
-  execute: async (rawInput: unknown) => {
+  execute: async (rawInput: unknown, context) => {
     const input = inputSchema.parse(rawInput);
-    const { tenantId, sourceId, selectedStoryboard } = input;
+    
+    // ✅ Get tenantId from VALIDATED context, not input
+    const tenantId = context.requestContext?.get('tenantId');
+    
+    if (!tenantId) {
+      throw new Error('recommendStyleKeywords: tenantId missing from request context');
+    }
+    
+    const { sourceId, selectedStoryboard } = input;
 
     const supabase = createClient();
 

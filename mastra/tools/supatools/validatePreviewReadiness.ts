@@ -6,10 +6,15 @@ import { createClient } from '../../lib/supabase';
 import { z } from 'zod';
 
 const inputSchema = z.object({
-  tenantId: z.string().uuid(),
   sourceId: z.string().uuid().optional(),
   requireMinEvents: z.number().min(1).default(10),
   requireSchemaReady: z.boolean().default(true),
+});
+
+// NEW: Request context schema (Mastra 1.1.0 feature)
+const requestContextSchema = z.object({
+  tenantId: z.string().uuid(),  // ✅ Validated from server
+  userId: z.string().uuid(),
 });
 
 const outputSchema = z.object({
@@ -30,10 +35,19 @@ export const validatePreviewReadiness = createSupaTool<z.infer<typeof outputSche
   description: 'Validate all prerequisites before preview generation. Checks source, events, schema readiness, and event type coverage. Returns blockers and warnings. Use before Phase 4 to prevent failed workflows.',
   inputSchema,
   outputSchema,
+  requestContextSchema,  // ✅ Add this
 
-  execute: async (rawInput: unknown) => {
+  execute: async (rawInput: unknown, context) => {
     const input = inputSchema.parse(rawInput);
-    const { tenantId, sourceId, requireMinEvents, requireSchemaReady } = input;
+    
+    // ✅ Get tenantId from VALIDATED context, not input
+    const tenantId = context.requestContext?.get('tenantId');
+    
+    if (!tenantId) {
+      throw new Error('validatePreviewReadiness: tenantId missing from request context');
+    }
+    
+    const { sourceId, requireMinEvents, requireSchemaReady } = input;
 
     const supabase = createClient();
     const blockers: string[] = [];

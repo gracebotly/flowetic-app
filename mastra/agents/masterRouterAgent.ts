@@ -2,6 +2,7 @@
 
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
+import { z } from "zod";
 import { glm47Model } from "../lib/models/glm47";
 import { getMastraStorage } from "../lib/storage";
 import { getModelById } from "../lib/models/modelSelector";
@@ -43,22 +44,48 @@ export const masterRouterAgent: Agent = new Agent({
   id: "masterRouterAgent",
   name: "masterRouterAgent",
   description: "Master router agent that orchestrates sub-agents and workflows.",
-  instructions: async ({ requestContext }: { requestContext: RequestContext }) => {
-    const platformType = (typeof requestContext?.get === 'function' 
-      ? requestContext.get("platformType") 
-      : (requestContext as any)?.platformType) || "make" as PlatformType;
+  
+  // NEW: Runtime-validated request context (Mastra 1.1.0 feature)
+  requestContextSchema: z.object({
+    // Identity (REQUIRED)
+    tenantId: z.string().uuid(),
+    userId: z.string().uuid(),
+    userRole: z.enum(['admin', 'client', 'viewer']).optional(),
     
-    const phase = getPhaseFromRequestContext(requestContext);
-    const selectedOutcome = String(requestContext?.get?.("selectedOutcome") ?? "");
-    const workflowName = String(requestContext?.get?.("workflowName") ?? "");
-    const tenantId = String(requestContext?.get?.("tenantId") ?? "");
-    const userId = String(requestContext?.get?.("userId") ?? "");
-    const selectedStoryboard = String(requestContext?.get?.("selectedStoryboard") ?? "");
-    const selectedStyleBundle = String(
-      requestContext?.get?.("selectedStyleBundle") ??
+    // Thread context (REQUIRED)
+    threadId: z.string(),
+    resourceId: z.string(),
+    journeyThreadId: z.string(),
+    
+    // Platform context (OPTIONAL)
+    platformType: z.enum(['vapi', 'retell', 'n8n', 'make', 'mastra', 'crewai', 'pydantic_ai', 'other']).optional(),
+    sourceId: z.string().uuid().optional(),
+    entityId: z.string().optional(),
+    externalId: z.string().optional(),
+    displayName: z.string().optional(),
+    
+    // Journey state (OPTIONAL)
+    phase: z.enum(['outcome', 'story', 'style', 'preview', 'edit', 'deploy']).optional(),
+    mode: z.enum(['fast_lane', 'deep_lane']).optional(),
+    selectedOutcome: z.enum(['dashboard', 'product']).optional(),
+    selectedStoryboard: z.string().optional(),
+    selectedStyleBundleId: z.string().optional(),
+    densityPreset: z.enum(['compact', 'comfortable', 'spacious']).optional(),
+    paletteOverrideId: z.string().optional(),
+    
+    // Model selection (OPTIONAL)
+    selectedModel: z.string().optional(),
+  }),
+  instructions: async ({ requestContext }) => {
+    // Type-safe access via requestContext.all (new in Mastra 1.1.0)
+    const { tenantId, userId, platformType, phase, selectedOutcome, workflowName, selectedStoryboard, selectedStyleBundle } = requestContext.all;
+    
+    // Fallback for values that might not be in schema
+    const safePlatformType = platformType || "make" as PlatformType;
+    const safeSelectedStyleBundle = selectedStyleBundle ||
+      String(requestContext?.get?.("selectedStyleBundle") ??
         requestContext?.get?.("selectedStyleBundleId") ??
-        "",
-    );
+        "");
 
     const contextHeader = [
       "# CURRENT REQUEST CONTEXT (authoritative)",
@@ -70,18 +97,18 @@ export const masterRouterAgent: Agent = new Agent({
       "",
     ].join("\n");
 
-    const platformSkill = await loadSkillMarkdown(platformType);
+    const platformSkill = await loadSkillMarkdown(safePlatformType);
 
     const businessSkill = phase === "recommend" || phase === "align"
       ? await loadNamedSkillMarkdown("business-outcomes-advisor")
       : null;
 
     const phaseInstructions = getPhaseInstructions(phase, {
-      platformType: String(platformType),
+      platformType: String(safePlatformType),
       workflowName: workflowName || undefined,
       selectedOutcome: selectedOutcome || undefined,
       selectedStoryboard: selectedStoryboard || undefined,
-      selectedStyleBundle: selectedStyleBundle || undefined,
+      selectedStyleBundle: safeSelectedStyleBundle || undefined,
     });
 
     const skillContent = [
@@ -159,15 +186,13 @@ export const masterRouterAgent: Agent = new Agent({
       },
     ];
   },
-  model: ({ requestContext }: { requestContext: RequestContext }) => {
-    // Get selected model from RequestContext (defaults to GLM 4.7)
-    const selectedModelId = (typeof requestContext?.get === 'function'
-      ? requestContext.get("selectedModel")
-      : (requestContext as any)?.selectedModel) as string | undefined;
+  model: ({ requestContext }) => {
+    // Get selected model from RequestContext using type-safe access (new in Mastra 1.1.0)
+    const { selectedModel } = requestContext.all;
     
     // Import and use model selector
     const { getModelById } = require("../lib/models/modelSelector");
-    return getModelById(selectedModelId);
+    return getModelById(selectedModel);
   },
   // REQUIRED: routing primitives for Agent.network()
   agents: {

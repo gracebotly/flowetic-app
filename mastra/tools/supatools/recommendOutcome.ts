@@ -5,9 +5,14 @@ import { createClient } from '../../lib/supabase';
 import { z } from 'zod';
 
 const inputSchema = z.object({
-  tenantId: z.string().uuid(),
   sourceId: z.string().uuid().optional(),
   sinceDays: z.number().int().min(1).max(365).default(30),
+});
+
+// NEW: Request context schema (Mastra 1.1.0 feature)
+const requestContextSchema = z.object({
+  tenantId: z.string().uuid(),  // ✅ Validated from server
+  userId: z.string().uuid(),
 });
 
 const outputSchema = z.object({
@@ -28,9 +33,19 @@ export const recommendOutcome = createSupaTool<z.infer<typeof outputSchema>>({
   description: 'Analyze event patterns to recommend outcome type (dashboard vs product). Returns recommendation with confidence score and data-driven reasoning. Used in Phase 1 outcome selection.',
   inputSchema,
   outputSchema,
-  execute: async (rawInput: unknown) => {
+  requestContextSchema,  // ✅ Add this
+  
+  execute: async (rawInput: unknown, context) => {
     const input = inputSchema.parse(rawInput);
-    const { tenantId, sourceId, sinceDays } = input;
+    
+    // ✅ Get tenantId from VALIDATED context, not input
+    const tenantId = context.requestContext?.get('tenantId');
+    
+    if (!tenantId) {
+      throw new Error('recommendOutcome: tenantId missing from request context');
+    }
+    
+    const { sourceId, sinceDays } = input;
 
     const supabase = createClient();
 
