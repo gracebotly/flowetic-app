@@ -61,13 +61,11 @@ export const platformMappingMaster: Agent = new Agent({
       ].join("\n"),
     };
   },
-  model: ({ requestContext }: { requestContext: RequestContext }) => {
-    const selectedModelId = (typeof requestContext?.get === 'function'
-      ? requestContext.get("selectedModel")
-      : (requestContext as any)?.selectedModel) as string | undefined;
-    
+  model: (() => {
+    // Read selected model from environment (set by vibe-router-agent.ts)
+    const selectedModelId = process.env.SELECTED_MODEL;
     return getModelById(selectedModelId);
-  },
+  })(),
   workflows: {
     connectionBackfillWorkflow,
   },
