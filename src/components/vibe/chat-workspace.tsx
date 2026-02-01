@@ -421,7 +421,8 @@ export function ChatWorkspace({
                    typeof value === 'number' ? value.toLocaleString() :
                    typeof value === 'boolean' ? (value ? 'Yes' : 'No') :
                    Array.isArray(value) ? `Array(${value.length})` :
-                   `Object(${Object.keys(value).length})`}
+                   typeof value === 'object' && value !== null ? `Object(${Object.keys(value).length})` :
+                   'Unknown'}
                 </span>
               </div>
             ))}
