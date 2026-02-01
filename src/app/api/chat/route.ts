@@ -10,24 +10,20 @@ export async function POST(req: Request) {
   try {
     const params = await req.json();
 
-    // Build RequestContext from `params.data` (official pattern: "Passing additional data")
     const requestContext = new RequestContext();
 
-    const data = params?.data ?? {};
+    const data = (params as any)?.data ?? {};
     for (const [key, value] of Object.entries(data)) {
       requestContext.set(key, value as any);
     }
 
-    // Attach to params so tools/agents can read it
     const enhancedParams = {
       ...params,
       requestContext,
     };
 
-    const mastra = getMastra();
-
     const stream = await handleChatStream({
-      mastra,
+      mastra: getMastra(),
       agentId: 'masterRouterAgent',
       params: enhancedParams,
     });

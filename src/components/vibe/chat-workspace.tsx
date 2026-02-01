@@ -168,9 +168,7 @@ export function ChatWorkspace({
   const [isChatExpanded, setIsChatExpanded] = useState(false);
   const [selectedModel, setSelectedModel] = useState<ModelId>("glm-4.7");
   
-  const { messages: uiMessages, sendMessage: sendUiMessage, status: uiStatus, error: uiError } = useChat({
-    api: '/api/chat',
-  });
+  const { messages: uiMessages, sendMessage: sendUiMessage, status: uiStatus, error: uiError } = useChat({});
 
   async function sendAi(text: string, extraData?: Record<string, any>) {
     await sendUiMessage(
@@ -790,76 +788,65 @@ return (
                 </div>
               </motion.div>
             ) : (
-              <div className="space-y-3">
-                {uiMessages.map((m) => (
-                  <div key={m.id} className={m.role === 'user' ? 'text-right' : 'text-left'}>
-                    <div className="inline-block max-w-[90%] rounded-xl px-3 py-2 bg-white/10 text-white">
-                      {m.parts.map((part, idx) => {
-                        if (part.type === 'text') {
-                          return (
-                            <div key={idx} className="whitespace-pre-wrap">
-                              {part.text}
-                            </div>
-                          );
-                        }
+              <>
+                <div className="space-y-3">
+                  {uiMessages.map((m) => {
+                    const isUser = m.role === 'user';
+                    return (
+                      <div key={m.id} className={isUser ? 'text-right' : 'text-left'}>
+                        <div className="inline-block max-w-[90%] rounded-xl px-3 py-2 bg-white/10 text-white">
+                          {m.parts.map((part, idx) => {
+                            if (part.type === 'text') {
+                              return (
+                                <div key={idx} className="whitespace-pre-wrap">
+                                  {part.text}
+                                </div>
+                              );
+                            }
 
-                        // Tool output parts: tool-{toolKey}
-                        if (part.type.startsWith('tool-')) {
-                          if (part.state === 'output-available') {
-                            // IMPORTANT:
-                            // tool-{toolKey} uses the toolKey (object key) used when registering tools in agent.tools: { myKey: myTool }
-                            // If your tool keys differ, the part.type will differ.
-                            // We render generic JSON + you can add specific tool renderers below.
-                            return (
-                              <div key={idx} className="mt-2 rounded-lg border border-white/10 bg-black/30 p-3">
-                                <div className="mb-2 text-xs text-white/60">Tool: {part.type}</div>
-                                <pre className="text-xs overflow-auto whitespace-pre-wrap">
-                                  {JSON.stringify(part.output, null, 2)}
-                                </pre>
-                              </div>
-                            );
-                          }
+                            // tool-{toolKey} parts
+                            if (part.type.startsWith('tool-')) {
+                              return (
+                                <div key={idx} className="mt-2 rounded-lg border border-white/10 bg-black/30 p-3">
+                                  <div className="mb-2 text-xs text-white/60">Tool: {part.type}</div>
+                                  <pre className="text-xs overflow-auto whitespace-pre-wrap">
+                                    {JSON.stringify((part as any).result || (part as any).output, null, 2)}
+                                  </pre>
+                                </div>
+                              );
+                            }
 
-                          if (part.state === 'output-error') {
-                            return (
-                              <div key={idx} className="mt-2 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
-                                Tool error ({part.type}): {part.errorText || 'Unknown error'}
-                              </div>
-                            );
-                          }
+                            // data-* parts (writer.custom)
+                            if (part.type.startsWith('data-')) {
+                              return (
+                                <div key={idx} className="mt-2 rounded-lg border border-white/10 bg-black/20 p-2 text-xs text-white/80">
+                                  <div className="text-white/60">{part.type}</div>
+                                  <pre className="overflow-auto whitespace-pre-wrap">
+                                    {JSON.stringify((part as any).data, null, 2)}
+                                  </pre>
+                                </div>
+                              );
+                            }
 
-                          // input-available / input-streaming can be shown as loading
-                          return (
-                            <div key={idx} className="mt-2 text-xs text-white/60">
-                              {part.type} ({part.state})
-                            </div>
-                          );
-                        }
-
-                        // Custom data parts (data-*) – if you emit writer.custom events
-                        if (part.type.startsWith('data-')) {
-                          return (
-                            <div key={idx} className="mt-2 rounded-lg border border-white/10 bg-black/20 p-2 text-xs text-white/80">
-                              <div className="text-white/60">{part.type}</div>
-                              <pre className="overflow-auto whitespace-pre-wrap">{JSON.stringify((part as any).data, null, 2)}</pre>
-                            </div>
-                          );
-                        }
-
-                        return null;
-                      })}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {uiError ? (
-                <div className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
-                  {String(uiError.message || uiError)}
+                            return null;
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              ) : null}
 
-              
+                {uiError ? (
+                  <div className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
+                    {String((uiError as any)?.message || uiError)}
+                  </div>
+                ) : null}
+
+                {uiStatus === 'streaming' ? (
+                  <div className="mt-2 text-xs text-white/60">Thinking…</div>
+                ) : null}
+              </>
+            )}
 
             <div ref={messagesEndRef} />
           </div>
