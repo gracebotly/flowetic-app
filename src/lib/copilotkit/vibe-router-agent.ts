@@ -1,5 +1,5 @@
 
-import { AbstractAgent, AGUIEvent, AGUIRequest, AGUIOutput } from "@ag-ui/client";
+import { AbstractAgent, AGUIEvent } from "@ag-ui/client";
 import { RequestContext } from "@mastra/core/request-context";
 import { runVibeRouter } from "@/app/api/vibe/router/runner";
 import { Observable } from "rxjs";
@@ -124,7 +124,7 @@ class VibeRouterAgent extends AbstractAgent {
 
   // Observable return type required by AbstractAgent interface
   // RxJS version pinned to 7.8.1 in package.json resolutions
-  public run(input: AGUIRequest): Observable<AGUIEvent> {
+  public run(input: any): Observable<AGUIEvent> {
     return new Observable((subscriber: any) => {
       (async () => {
         const base = {
