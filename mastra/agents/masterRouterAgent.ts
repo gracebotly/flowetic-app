@@ -72,16 +72,15 @@ export const masterRouterAgent: Agent = new Agent({
     selectedStyleBundleId: z.string().optional(),
     densityPreset: z.enum(['compact', 'comfortable', 'spacious']).optional(),
     paletteOverrideId: z.string().optional(),
+    workflowName: z.string().optional(),
     
     // Model selection (OPTIONAL)
     selectedModel: z.string().optional(),
   }),
   instructions: async ({ requestContext }) => {
     // Type-safe access via requestContext.all (new in Mastra 1.1.0)
-    const { tenantId, userId, platformType, phase, selectedOutcome, selectedStoryboard, selectedStyleBundleId } = requestContext.all;
+    const { tenantId, userId, platformType, phase, selectedOutcome, workflowName, selectedStoryboard, selectedStyleBundleId } = requestContext.all;
     
-    // Fallback for workflowName (not in schema, might come from working memory)
-    const workflowName = requestContext.get('workflowName') as string | undefined;
     
     // Fallback for values that might not be in schema
     const safePlatformType = platformType || "make" as PlatformType;
