@@ -2,7 +2,7 @@
 
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
-import { glm47Model } from "../lib/models/glm47";
+import { getModelById } from "../lib/models/modelSelector";
 import { getMastraStorage } from "../lib/storage";
 import type { RequestContext } from "@mastra/core/request-context";
 import { searchDesignDatabase } from "../tools/design-system/searchDesignDatabase";
@@ -57,7 +57,13 @@ export const designAdvisorAgent: Agent = new Agent({
       },
     ];
   },
-  model: glm47Model(),
+  model: ({ requestContext }: { requestContext: RequestContext }) => {
+    const selectedModelId = (typeof requestContext?.get === 'function'
+      ? requestContext.get("selectedModel")
+      : (requestContext as any)?.selectedModel) as string | undefined;
+    
+    return getModelById(selectedModelId);
+  },
   memory: createFloweticMemory({
     lastMessages: 30,
     workingMemory: {
