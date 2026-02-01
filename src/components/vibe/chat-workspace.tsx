@@ -32,8 +32,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 
 import { createClient } from '@/lib/supabase/client';
-import { useCopilotAction } from "@copilotkit/react-core";
-import { CopilotKit } from "@copilotkit/react-core";
+import { CopilotKit, useCopilotAction, useCopilotChat } from "@copilotkit/react-core";
+import { TextMessage, MessageRole } from "@copilotkit/runtime-client-gql";
 
 import { MessageInput } from "@/components/vibe/message-input";
 import { PhaseIndicator } from "@/components/vibe/phase-indicator";
@@ -164,9 +164,7 @@ export function ChatWorkspace({
 }: ChatWorkspaceProps) {
   const router = useRouter();
   const [view, setView] = useState<ViewMode>("terminal");
-  const [input, setInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [chatMode, setChatMode] = useState<"chat" | "voice">("chat");
+  const [input, setInput] = useState("");  const [chatMode, setChatMode] = useState<"chat" | "voice">("chat");
   const [isListening, setIsListening] = useState(false);
   const [isChatExpanded, setIsChatExpanded] = useState(false);
   const [selectedModel, setSelectedModel] = useState<ModelId>("glm-4.7");
@@ -256,24 +254,51 @@ export function ChatWorkspace({
   const [densityPreset, setDensityPreset] = useState<"compact" | "comfortable" | "spacious">("comfortable");
   const [paletteOverrideId, setPaletteOverrideId] = useState<string | null>(null);
 
-  function buildCtxEnvelope(message: string) {
-    return (
-      "__FLOWETIC_CTX__:" +
-      JSON.stringify({
-        userId: authContext.userId,
-        tenantId: authContext.tenantId,
-        vibeContext,
-        journey: {
-          mode: journeyMode,
-          selectedOutcome,
-          selectedStoryboard,
-          selectedStyleBundleId,
-          densityPreset,
-          paletteOverrideId,
-        },
-      }) +
-      "\n" +
-      message
+  const { appendMessage, isLoading: copilotIsLoading } = useCopilotChat();
+
+
+
+  function buildCopilotEnvelope(userText: string) {
+    const safeVibeContext = {
+      ...(vibeContext ?? {}),
+      threadId,
+    };
+
+    const payload = {
+      userId: authContext.userId,
+      tenantId: authContext.tenantId,
+      threadId,
+      selectedModel,
+      vibeContext: safeVibeContext,
+      journey: {
+        mode: journeyMode,
+        threadId,
+        selectedOutcome,
+        selectedStoryboard,
+        selectedStyleBundleId,
+        densityPreset,
+        paletteOverrideId,
+      },
+    };
+
+    return `__FLOWETIC_CTX__:${JSON.stringify(payload)}\n${userText}`;
+  }
+
+  function stripFloweticEnvelopeForDisplay(content: string): string {
+    if (!content.startsWith("__FLOWETIC_CTX__:")) return content;
+    const idx = content.indexOf("\n");
+    if (idx === -1) return content;
+    return content.slice(idx + 1);
+  }
+
+  async function sendViaCopilotKit(userText: string) {
+    const enveloped = buildCopilotEnvelope(userText);
+
+    await appendMessage(
+      new TextMessage({
+        role: MessageRole.User,
+        content: enveloped,
+      }),
     );
   }
 
@@ -431,60 +456,11 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
       setVibeContext(enrichedCtx);
 
       try {
-        const res = await fetch("/api/vibe/router", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            userId: authContext.userId,
-            tenantId: authContext.tenantId,
-            vibeContext: { ...enrichedCtx, threadId },
-            journey: {
-              mode: "select_entity",
-              selectedOutcome: null,
-              selectedStoryboard: null,
-              selectedStyleBundleId: null,
-              densityPreset,
-              paletteOverrideId,
-            },
-            userMessage: "System: start Phase 1 outcome selection.",
-            selectedModel, // Add this line
-          }),
-        });
-
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          addLog("error", "Failed to start Phase 1", data?.error || "ROUTER_REQUEST_FAILED");
-        } else {
-          if (data?.journey?.mode) setJourneyMode(data.journey.mode);
-          setToolUi(data?.toolUi ?? null);
-
-          if (data?.vibeContext) {
-            setVibeContext((prev: any) => ({ ...(prev ?? {}), ...data.vibeContext }));
-            setVibeContextSnapshot(data.vibeContext);
-          }
-
-          const first = String(data?.text ?? "").trim();
-          if (first) {
-            // Persist assistant message like normal
-            await fetch("/api/journey-messages", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                tenantId: authContext.tenantId,
-                threadId,
-                role: "assistant",
-                content: first,
-              }),
-            });
-
-            setMessages((prev) => [
-              ...prev,
-              { id: `a-init-${Date.now()}`, role: "assistant", content: first },
-            ]);
-          }
-        }
+        // Kick off Phase 1 through CopilotKit (do NOT bypass /api/copilotkit)
+        // This ensures selectedModel + context reach vibeRouterAgent and then Mastra RequestContext consistently.
+        await sendViaCopilotKit("System: start Phase 1 outcome selection.");
       } catch (e: any) {
-        addLog("error", "Failed to start Phase 1", e?.message || "Unknown error");
+        addLog("error", "Failed to start Phase 1", e?.message || "COPILOTKIT_INIT_FAILED");
       }
 
       setVibeInitDone(true);
@@ -700,17 +676,13 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
     return text.startsWith("__ACTION__:");
   }
 
-  const sendMessage = async (userText: string) => {
-    const text = String(userText ?? "").trim();
-    if (!text || isLoading) return;
+  const sendMessage = async (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    if (copilotIsLoading) return;
 
-    const isAction = isInternalActionMessage(text);
-
-    // For action messages, show user acknowledgment FIRST
-    if (isAction) {
-      const acknowledgment = getActionAcknowledgment(text);
-      
-      // Save acknowledgment as user message
+    // Persist user message (keep existing behavior)
+    try {
       await fetch("/api/journey-messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -718,141 +690,39 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
           tenantId: authContext.tenantId,
           threadId,
           role: "user",
-          content: acknowledgment,
+          content: trimmed,
         }),
       });
-
-      // Show acknowledgment in UI immediately
-      setMessages((prev) => [
-        ...prev,
-        { id: `u-${Date.now()}`, role: "user", content: acknowledgment },
-      ]);
-    } else {
-      // Regular user message (not an action)
-      await fetch("/api/journey-messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          tenantId: authContext.tenantId,
-          threadId,
-          role: "user",
-          content: text,
-        }),
-      });
-
-      setMessages((prev) => [
-        ...prev,
-        { id: `u-${Date.now()}`, role: "user", content: text },
-      ]);
+    } catch {
+      // non-fatal
     }
 
-    if (text.startsWith("__ACTION__:select_style_bundle:")) {
+    // Keep your local UI list in sync (as your current UI renders from `messages`)
+    setMessages((prev) => [
+      ...prev,
+      { id: `u-${Date.now()}`, role: "user", content: trimmed },
+    ]);
+
+    if (trimmed.startsWith("__ACTION__:select_style_bundle:")) {
       addLog("running", "Generating preview…", "This can take ~10–30 seconds on first run.");
     }
 
-    setIsLoading(true);
+    // Send through CopilotKit (this is the critical fix)
+    // We include all required context + selectedModel in the envelope that vibe-router-agent.ts already parses.
     try {
-      const res = await fetch("/api/vibe/router", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: authContext.userId,
-          tenantId: authContext.tenantId,
-          vibeContext: { ...vibeContext, threadId },
-          journey: {
-            mode: journeyMode,
-            selectedOutcome,
-            selectedStoryboard,
-            selectedStyleBundleId,
-            densityPreset,
-            paletteOverrideId,
-          },
-          userMessage: text,
-          selectedModel, // Add this line
-        }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) throw new Error(data?.error || "ROUTER_REQUEST_FAILED");
-
-      if (data?.journey?.mode) setJourneyMode(data.journey.mode);
-      if (typeof data?.journey?.selectedOutcome !== "undefined")
-        setSelectedOutcome(data.journey.selectedOutcome);
-      if (typeof data?.journey?.selectedStoryboard !== "undefined")
-        setSelectedStoryboard(data.journey.selectedStoryboard);
-      if (typeof data?.journey?.selectedStyleBundleId !== "undefined") {
-        // Style bundle selected
-        setSelectedStyleBundleId(data.journey.selectedStyleBundleId);
-      }
-      if (typeof data?.journey?.densityPreset !== "undefined")
-        setDensityPreset(data.journey.densityPreset);
-      if (typeof data?.journey?.paletteOverrideId !== "undefined")
-        setPaletteOverrideId(data.journey.paletteOverrideId);
-
-      // Handle preview data
-      if (data?.preview) {
-        // Set preview URL and status
-        setVibeContext((prev: any) => ({
-          ...(prev ?? {}),
-          previewUrl: data.preview.url,
-          interfaceId: data.preview.interfaceId,
-          previewStatus: data.preview.status,
-        }));
-      }
-
-      setToolUi(data?.toolUi ?? null);
-
-      
-
-      if (data?.vibeContext) {
-        setVibeContext((prev: any) => ({ ...(prev ?? {}), ...data.vibeContext }));
-      }
-      if (data?.interfaceId) {
-        setVibeContext((prev: any) => (prev ? { ...prev, interfaceId: data.interfaceId } : prev));
-      }
-      if (data?.previewUrl) {
-        setVibeContext((prev: any) => (prev ? { ...prev, previewUrl: data.previewUrl } : prev));
-        setView("preview");
-        if (data?.previewVersionId) {
-          setPreviewVersionId(data.previewVersionId);
-          setVibeContext((prev: any) => (prev ? { ...prev, previewVersionId: data.previewVersionId } : prev));
-        }
-        await refreshCurrentSpec();
-      }
-
-      // Save assistant response to persistence
-      if (data.text) {
-        await fetch("/api/journey-messages", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            tenantId: authContext.tenantId,
-            threadId,
-            role: "assistant",
-            content: data.text,
-          }),
-        });
-      }
-
-      setMessages((prev) => [
-        ...prev,
-        { id: `a-${Date.now()}`, role: "assistant", content: data.text || "" },
-      ]);
+      await sendViaCopilotKit(trimmed);
     } catch (e: any) {
-      addLog("error", "Request failed", e?.message ?? "Unknown error");
+      addLog("error", "CopilotKit request failed", e?.message ?? "Unknown error");
       setMessages((prev) => [
         ...prev,
         { id: `a-${Date.now()}`, role: "assistant", content: "Request failed." },
       ]);
-    } finally {
-      setIsLoading(false);
     }
   };
 
   const sendFromInput = async () => {
     const userText = input.trim();
-    if (!userText || isLoading) return;
+    if (!userText || copilotIsLoading) return;
     setInput("");
     await sendMessage(userText);
   };
@@ -976,14 +846,16 @@ return (
                       : "bg-gray-50 border-l-4 border-gray-200 pl-4 py-2"
                   }`}>
                     <div className="text-xs font-medium text-gray-600 mb-1">{msg.role}</div>
-                    <div className="text-sm text-gray-800 whitespace-pre-wrap">{msg.content}</div>
+                    <div className="text-sm text-gray-800 whitespace-pre-wrap">
+                      {stripFloweticEnvelopeForDisplay(msg.content)}
+                    </div>
                     
                     {msg.role === "assistant" && (
                       <button
-                        onClick={() => navigator.clipboard.writeText(msg.content)}
+                        onClick={() => navigator.clipboard.writeText(stripFloweticEnvelopeForDisplay(msg.content))}
                         className="mt-2 text-xs text-gray-500 hover:text-gray-700"
                       >
-                        <CopyButton text={msg.content} />
+                        <CopyButton text={stripFloweticEnvelopeForDisplay(msg.content)} />
                       </button>
                     )}
                   </div>
@@ -1018,7 +890,7 @@ return (
               ))
             )}
 
-            {isLoading && (
+            {copilotIsLoading && (
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -1037,7 +909,7 @@ return (
             <MessageInput
               value={input}
               onChange={setInput}
-              disabled={isLoading}
+              disabled={copilotIsLoading}
               isListening={isListening}
               selectedModel={selectedModel}
               onModelSelect={setSelectedModel}
