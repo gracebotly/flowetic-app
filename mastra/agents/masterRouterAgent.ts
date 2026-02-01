@@ -137,7 +137,7 @@ export const masterRouterAgent: Agent = new Agent({
       workflowName ? `User's workflow: "${workflowName}"` : "No workflow selected yet",
       selectedOutcome ? `User selected outcome: ${selectedOutcome}` : "",
       selectedStoryboard ? `User selected storyboard: ${selectedStoryboard}` : "",
-      selectedStyleBundle ? `User selected style bundle: ${selectedStyleBundle}` : "",
+      safeSelectedStyleBundle ? `User selected style bundle: ${safeSelectedStyleBundle}` : "",
       "",
       "# CURRENT PHASE INSTRUCTIONS (Phase 2)",
       phaseInstructions,
