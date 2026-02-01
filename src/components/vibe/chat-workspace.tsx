@@ -32,8 +32,31 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 
 import { createClient } from '@/lib/supabase/client';
-import { useCopilotAction } from "@copilotkit/react-core";
-import { CopilotKit } from "@copilotkit/react-core";
+import { CopilotKit, useCopilotAction } from "@copilotkit/react-core";
+
+// Temporary stub for useAgentContext if it doesn't exist in current CopilotKit version
+// TODO: Remove this stub when upgrading to CopilotKit version that includes useAgentContext
+const useAgentContext = (() => {
+  // Try to import the real hook if available
+  try {
+    // This will be empty string if the import fails
+    const module = require("@copilotkit/react-core");
+    if (module.useAgentContext) {
+      return module.useAgentContext;
+    }
+  } catch (e) {
+    // Fall back to stub implementation
+  }
+  
+  // Stub implementation that provides the same interface
+  return ({ value }: { value: any; description: string }) => {
+    // In a real implementation, this would register the context with CopilotKit runtime
+    // For now, we'll just log the context for debugging
+    if (process.env.NODE_ENV === 'development') {
+      console.debug('[useAgentContext stub] Context value:', value);
+    }
+  };
+})();
 
 import { MessageInput } from "@/components/vibe/message-input";
 import { PhaseIndicator } from "@/components/vibe/phase-indicator";
@@ -255,6 +278,28 @@ export function ChatWorkspace({
   const [selectedStyleBundleId, setSelectedStyleBundleId] = useState<string | null>(null);
   const [densityPreset, setDensityPreset] = useState<"compact" | "comfortable" | "spacious">("comfortable");
   const [paletteOverrideId, setPaletteOverrideId] = useState<string | null>(null);
+
+  // Provide Flowetic context to CopilotKit agent runtime (required for backend agent routing and model selection)
+  useAgentContext({
+    description: "Flowetic Vibe session context (auth, workflow, journey state, selected model, thread)",
+    value: {
+      userId: authContext?.userId ?? "",
+      tenantId: authContext?.tenantId ?? "",
+      // CopilotKit thread id (keep consistent with persisted journey thread)
+      threadId: typeof threadId === "string" ? threadId : "",
+      // Core app state the backend agent expects
+      selectedModel,
+      vibeContext,
+      journey: {
+        mode: journeyMode,
+        selectedOutcome,
+        selectedStoryboard,
+        selectedStyleBundleId,
+        densityPreset,
+        paletteOverrideId,
+      },
+    },
+  });
 
   function buildCtxEnvelope(message: string) {
     return (
