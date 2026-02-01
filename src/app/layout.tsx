@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { AGUIProvider } from "@/components/providers/agui-provider";
+import { CopilotKit } from "@copilotkit/react-core";
 import "@copilotkit/react-ui/styles.css";
 
 const geistSans = Geist({
@@ -29,9 +29,9 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <AGUIProvider>
+        <CopilotKit runtimeUrl="/api/copilotkit" agent="vibeRouterAgent">
           {children}
-        </AGUIProvider>
+        </CopilotKit>
       </body>
     </html>
   );
