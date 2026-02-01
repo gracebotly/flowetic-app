@@ -6,6 +6,10 @@ import { runVibeRouter } from "@/app/api/vibe/router/runner";
 import { Observable } from "rxjs";
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from "@mastra/core/request-context";
 
+function generateMessageId(): string {
+  return `msg_${crypto.randomUUID()}`;
+}
+
 function getOrCreateThreadId(input: any): string {
   const candidate =
     input?.threadId ||
@@ -31,13 +35,28 @@ function getOrCreateRunId(input: any): string {
   return "run_" + crypto.randomUUID();
 }
 
-function emit(subscriber: any, base: { threadId: string; runId: string }, event: any) {
-  subscriber.next({
+function emit(
+  subscriber: any,
+  base: { threadId: string; runId: string; messageId: string },
+  event: any
+) {
+  const eventWithRequired = {
     ...event,
     threadId: base.threadId,
     runId: base.runId,
     timestamp: Date.now(),
-  });
+  };
+
+  // Add messageId to message-related events
+  if (
+    event.type === "TEXT_MESSAGE_START" ||
+    event.type === "TEXT_MESSAGE_CONTENT" ||
+    event.type === "TEXT_MESSAGE_END"
+  ) {
+    eventWithRequired.messageId = base.messageId;
+  }
+
+  subscriber.next(eventWithRequired);
 }
 
 type VibeAgentContext = {
@@ -112,6 +131,7 @@ class VibeRouterAgent extends AbstractAgent {
         const base = {
           threadId: getOrCreateThreadId(input),
           runId: getOrCreateRunId(input),
+          messageId: generateMessageId(),
         };
 
         try {
@@ -119,17 +139,23 @@ class VibeRouterAgent extends AbstractAgent {
           const ctx = parsed.ctx ?? getContextFromInput(input);
           const userMessage = parsed.message;
 
-          // RUN_STARTED
-          emit(subscriber, base, { type: "RUN_STARTED" });
+          // TEXT_MESSAGE_START
+          emit(subscriber, base, { type: "TEXT_MESSAGE_START", payload: {} });
 
           if (!ctx.userId || !ctx.tenantId) {
-            emit(subscriber, base, { type: "TEXT_MESSAGE_START", payload: {} });
+            emit(subscriber, base, {
+              type: "TEXT_MESSAGE_START",
+              payload: { messageId: base.messageId },
+            });
             emit(subscriber, base, {
               type: "TEXT_MESSAGE_CONTENT",
               delta: "I'm ready, but I don't have your session context yet. Please sign in and refresh, then click Enter Vibe (or open /vibe/chat after auth).",
+              messageId: base.messageId,
             });
-            emit(subscriber, base, { type: "TEXT_MESSAGE_END" });
-            emit(subscriber, base, { type: "RUN_FINISHED" });
+            emit(subscriber, base, {
+              type: "TEXT_MESSAGE_END",
+              messageId: base.messageId,
+            });
             subscriber.complete();
             return;
           }
@@ -158,10 +184,19 @@ class VibeRouterAgent extends AbstractAgent {
             if (required && currentMode !== required) {
               const msg = `That action isn't available yet. Current phase: "${currentMode}". Required phase: "${required}".`;
 
-              emit(subscriber, base, { type: "TEXT_MESSAGE_START", payload: {} });
-              emit(subscriber, base, { type: "TEXT_MESSAGE_CONTENT", delta: msg });
-              emit(subscriber, base, { type: "TEXT_MESSAGE_END" });
-              emit(subscriber, base, { type: "RUN_FINISHED" });
+              emit(subscriber, base, {
+                type: "TEXT_MESSAGE_START",
+                payload: { messageId: base.messageId },
+              });
+              emit(subscriber, base, {
+                type: "TEXT_MESSAGE_CONTENT",
+                delta: msg,
+                messageId: base.messageId,
+              });
+              emit(subscriber, base, {
+                type: "TEXT_MESSAGE_END",
+                messageId: base.messageId,
+              });
 
               subscriber.complete();
               return;
@@ -205,9 +240,19 @@ class VibeRouterAgent extends AbstractAgent {
           const text = String(result?.text || "").trim() || "OK.";
 
           // Message events
-          emit(subscriber, base, { type: "TEXT_MESSAGE_START", payload: {} });
-          emit(subscriber, base, { type: "TEXT_MESSAGE_CONTENT", delta: text });
-          emit(subscriber, base, { type: "TEXT_MESSAGE_END" });
+          emit(subscriber, base, {
+            type: "TEXT_MESSAGE_START",
+            payload: { messageId: base.messageId },
+          });
+          emit(subscriber, base, {
+            type: "TEXT_MESSAGE_CONTENT",
+            delta: text,
+            messageId: base.messageId,
+          });
+          emit(subscriber, base, {
+            type: "TEXT_MESSAGE_END",
+            messageId: base.messageId,
+          });
 
           // If toolUi exists, emit an action/tool event that the frontend can render.
           // We keep tool UI BELOW the chat; frontend already uses useCopilotAction("displayToolUI").
@@ -218,8 +263,6 @@ class VibeRouterAgent extends AbstractAgent {
               arguments: { toolUi: result.toolUi },
             });
           }
-
-          emit(subscriber, base, { type: "RUN_FINISHED" });
           subscriber.complete();
         } catch (err: any) {
           const raw = err?.message ? String(err.message) : "Unknown error.";
@@ -237,10 +280,19 @@ class VibeRouterAgent extends AbstractAgent {
             ? "Our AI service is temporarily overloaded. Please wait ~10 seconds and try again."
             : raw;
 
-          emit(subscriber, base, { type: "TEXT_MESSAGE_START", payload: {} });
-          emit(subscriber, base, { type: "TEXT_MESSAGE_CONTENT", delta: msg });
-          emit(subscriber, base, { type: "TEXT_MESSAGE_END" });
-          emit(subscriber, base, { type: "RUN_FINISHED" });
+          emit(subscriber, base, {
+            type: "TEXT_MESSAGE_START",
+            payload: { messageId: base.messageId },
+          });
+          emit(subscriber, base, {
+            type: "TEXT_MESSAGE_CONTENT",
+            delta: msg,
+            messageId: base.messageId,
+          });
+          emit(subscriber, base, {
+            type: "TEXT_MESSAGE_END",
+            messageId: base.messageId,
+          });
 
           subscriber.complete();
         }
