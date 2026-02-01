@@ -12,6 +12,7 @@ export async function runVibeRouter(args: {
   vibeContext: any;
   journey: any;
   userMessage: string;
+  selectedModel?: string; // ✅ Add this parameter
   requestContext?: any;
 }) {
   const requestContextEntries: Array<[string, unknown]> = [];
@@ -41,6 +42,7 @@ export async function runVibeRouter(args: {
     vibeContext: args.vibeContext,
     journey: args.journey,
     userMessage: args.userMessage,
+    selectedModel: args.selectedModel, // ✅ Include selectedModel
     __requestContextEntries: requestContextEntries,
   };
 

@@ -32,7 +32,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 
 import { createClient } from '@/lib/supabase/client';
-import { useCopilotAction, useCopilotChat } from "@copilotkit/react-core";
+import { useCopilotAction, useCopilotChat, useCopilotReadable } from "@copilotkit/react-core";
 import { TextMessage, MessageRole } from "@copilotkit/runtime-client-gql";
 
 import { MessageInput } from "@/components/vibe/message-input";
@@ -168,6 +168,13 @@ export function ChatWorkspace({
   const [isListening, setIsListening] = useState(false);
   const [isChatExpanded, setIsChatExpanded] = useState(false);
   const [selectedModel, setSelectedModel] = useState<ModelId>("glm-4.7");
+  
+  // ✅ ADD THIS: Expose selectedModel to CopilotKit agents
+  useCopilotReadable({
+    description: "selectedModel",
+    value: selectedModel,
+  });
+  
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [showShareModal, setShowShareModal] = useState(false);
 
