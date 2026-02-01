@@ -208,11 +208,6 @@ class VibeRouterAgent extends AbstractAgent {
           requestContext.set("tenantId", ctx.tenantId);
           if (ctx.vibeContext?.platformType) requestContext.set("platformType", ctx.vibeContext.platformType);
           if (ctx.selectedModel) requestContext.set("selectedModel", ctx.selectedModel);
-          
-          // Set environment variable for sub-agent model selection
-          if (ctx.selectedModel) {
-            process.env.SELECTED_MODEL = ctx.selectedModel;
-          }
 
           // Add journey state properties to RequestContext for agent awareness
           if (ctx.journey?.selectedOutcome) requestContext.set("selectedOutcome", ctx.journey.selectedOutcome);
