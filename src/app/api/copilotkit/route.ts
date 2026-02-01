@@ -18,7 +18,7 @@ export const POST = async (req: NextRequest) => {
     },
   });
 
-  console.log("[CopilotKit Route] CopilotRuntime created with agents:", Object.keys(copilotRuntime.agents || {}));
+  console.log("[CopilotKit Route] CopilotRuntime created");
 
   const { handleRequest } = copilotRuntimeNextJSAppRouterEndpoint({
     runtime: copilotRuntime,
