@@ -14,11 +14,6 @@ const inputSchema = z.object({
   sinceDays: z.number().int().min(1).max(365).optional(),
 });
 
-// NEW: Request context schema (Mastra 1.1.0 feature)
-const requestContextSchema = z.object({
-  tenantId: z.string().uuid(),  // ✅ Validated from server
-  userId: z.string().uuid(),
-});
 
 export type EventSample = {
   id: string;
@@ -58,7 +53,6 @@ export const getEventSamples = createSupaTool<z.infer<typeof outputSchema>>({
     'Get sample event records for schema analysis and template selection. Returns up to limit events with all fields. limit is capped at 500.',
   inputSchema,
   outputSchema,
-  requestContextSchema,  // ✅ Add this
   
   execute: async (rawInput: unknown, context) => {
     const input = inputSchema.parse(rawInput);
