@@ -32,8 +32,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 
 import { createClient } from '@/lib/supabase/client';
-import { useCopilotAction, useCopilotChat, useCopilotReadable } from "@copilotkit/react-core";
-import { TextMessage, MessageRole } from "@copilotkit/runtime-client-gql";
+import { useChat } from '@ai-sdk/react';
 
 import { MessageInput } from "@/components/vibe/message-input";
 import { PhaseIndicator } from "@/components/vibe/phase-indicator";
@@ -169,11 +168,22 @@ export function ChatWorkspace({
   const [isChatExpanded, setIsChatExpanded] = useState(false);
   const [selectedModel, setSelectedModel] = useState<ModelId>("glm-4.7");
   
-  // ✅ ADD THIS: Expose selectedModel to CopilotKit agents
-  useCopilotReadable({
-    description: "selectedModel",
-    value: selectedModel,
+  const { messages: uiMessages, sendMessage: sendUiMessage, status: uiStatus, error: uiError } = useChat({
+    api: '/api/chat',
   });
+
+  async function sendAi(text: string, extraData?: Record<string, any>) {
+    await sendUiMessage(
+      { text },
+      extraData
+        ? {
+            body: {
+              data: extraData,
+            },
+          }
+        : undefined,
+    );
+  }
   
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [showShareModal, setShowShareModal] = useState(false);
@@ -261,7 +271,6 @@ export function ChatWorkspace({
   const [densityPreset, setDensityPreset] = useState<"compact" | "comfortable" | "spacious">("comfortable");
   const [paletteOverrideId, setPaletteOverrideId] = useState<string | null>(null);
 
-  const { appendMessage, isLoading: copilotIsLoading } = useCopilotChat();
 
 
 
@@ -296,17 +305,6 @@ export function ChatWorkspace({
     const idx = content.indexOf("\n");
     if (idx === -1) return content;
     return content.slice(idx + 1);
-  }
-
-  async function sendViaCopilotKit(userText: string) {
-    const enveloped = buildCopilotEnvelope(userText);
-
-    await appendMessage(
-      new TextMessage({
-        role: MessageRole.User,
-        content: enveloped,
-      }),
-    );
   }
 
   const [toolUi, setToolUi] = useState<ToolUiPayload | null>(null);
@@ -463,11 +461,25 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
       setVibeContext(enrichedCtx);
 
       try {
-        // Kick off Phase 1 through CopilotKit (do NOT bypass /api/copilotkit)
-        // This ensures selectedModel + context reach vibeRouterAgent and then Mastra RequestContext consistently.
-        await sendViaCopilotKit("System: start Phase 1 outcome selection.");
+        // Kick off Phase 1 through AI SDK
+        await sendAi("System: start Phase 1 outcome selection.", {
+          userId: authContext.userId,
+          tenantId: authContext.tenantId,
+          threadId,
+          selectedModel,
+          vibeContext: enrichedCtx,
+          journey: {
+            mode: journeyMode,
+            threadId,
+            selectedOutcome,
+            selectedStoryboard,
+            selectedStyleBundleId,
+            densityPreset,
+            paletteOverrideId,
+          },
+        });
       } catch (e: any) {
-        addLog("error", "Failed to start Phase 1", e?.message || "COPILOTKIT_INIT_FAILED");
+        addLog("error", "Failed to start Phase 1", e?.message || "AI_SDK_INIT_FAILED");
       }
 
       setVibeInitDone(true);
@@ -594,22 +606,6 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
     }
   }
 
-  // CopilotKit tool UI integration
-  useCopilotAction({
-    name: "displayToolUI",
-    parameters: [
-      { name: "toolUi", type: "object", description: "Tool UI from vibe router" },
-    ],
-    handler: ({ toolUi }: { toolUi: object }) => {
-      if (isToolUiPayload(toolUi)) {
-        setToolUi(toolUi);
-        setView(getRightTabForToolUi(toolUi));
-      } else {
-        setToolUi(null);
-      }
-    },
-  });
-
   function addLog(type: LogType, text: string, detail?: string) {
     setLogs((prev) => [...prev, { id: crypto.randomUUID(), type, text, detail }]);
   }
@@ -621,64 +617,6 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
     router.push("/control-panel/chat");
   }
 
-  useCopilotAction({
-    name: "generatePreview",
-    description: "Generate a dashboard preview based on current context",
-    parameters: [
-      {
-        name: "instructions",
-        type: "string",
-        description: "Optional instructions for the preview generation",
-        required: false,
-      },
-    ],
-    handler: async (args) => {
-      if (!authContext.tenantId || !authContext.userId) {
-        addLog("error", "Authentication required", "Please log in to generate previews");
-        return;
-      }
-
-      const interfaceId = "demo-interface";
-
-      addLog("running", "Generating dashboard preview...", "Starting workflow execution");
-
-      try {
-        const response = await fetch('/api/agent/master', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            tenantId: authContext.tenantId,
-            userId: authContext.userId,
-            instructions: args.instructions,
-            sourceId: 'demo-source',
-            platformType: 'vapi',
-            message: args.instructions || 'Generate dashboard preview',
-          }),
-        });
-
-        const result = await response.json();
-
-        if (!response.ok) {
-          throw new Error(result.message || 'Failed to generate preview');
-        }
-
-        if (result.type === 'success') {
-          setPreviewVersionId(result.versionId);
-          addLog("success", "Preview generated successfully!", `View at: ${result.previewUrl}`);
-          setView("preview");
-          await refreshCurrentSpec();
-        } else {
-          addLog("error", "Preview generation failed", result.message);
-        }
-      } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : String(error);
-        addLog("error", "Preview generation failed", message);
-      }
-    },
-  });
-
   function isInternalActionMessage(text: string): boolean {
     return text.startsWith("__ACTION__:");
   }
@@ -686,7 +624,7 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
   const sendMessage = async (text: string) => {
     const trimmed = text.trim();
     if (!trimmed) return;
-    if (copilotIsLoading) return;
+    if (uiStatus === 'streaming') return;
 
     // Persist user message (keep existing behavior)
     try {
@@ -714,12 +652,26 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
       addLog("running", "Generating preview…", "This can take ~10–30 seconds on first run.");
     }
 
-    // Send through CopilotKit (this is the critical fix)
-    // We include all required context + selectedModel in the envelope that vibe-router-agent.ts already parses.
+    // Send through AI SDK with context data
     try {
-      await sendViaCopilotKit(trimmed);
+      await sendAi(trimmed, {
+        userId: authContext.userId,
+        tenantId: authContext.tenantId,
+        threadId,
+        selectedModel,
+        vibeContext: vibeContext ? { ...vibeContext, threadId } : undefined,
+        journey: {
+          mode: journeyMode,
+          threadId,
+          selectedOutcome,
+          selectedStoryboard,
+          selectedStyleBundleId,
+          densityPreset,
+          paletteOverrideId,
+        },
+      });
     } catch (e: any) {
-      addLog("error", "CopilotKit request failed", e?.message ?? "Unknown error");
+      addLog("error", "Chat request failed", e?.message ?? "Unknown error");
       setMessages((prev) => [
         ...prev,
         { id: `a-${Date.now()}`, role: "assistant", content: "Request failed." },
@@ -729,7 +681,7 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
 
   const sendFromInput = async () => {
     const userText = input.trim();
-    if (!userText || copilotIsLoading) return;
+    if (!userText || uiStatus === 'streaming') return;
     setInput("");
     await sendMessage(userText);
   };
@@ -838,74 +790,76 @@ return (
                 </div>
               </motion.div>
             ) : (
-              messages.map((msg, index) => (
-                <motion.div
-                  key={msg.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, delay: index * 0.05 }}
-                  className="mb-4"
-                >
-                  <div className={`rounded-lg ${
-                    msg.role === "user"
-                      ? "bg-blue-50 border-l-4 border-blue-200 pl-4 py-2"
-                      : "bg-gray-50 border-l-4 border-gray-200 pl-4 py-2"
-                  }`}>
-                    <div className="text-xs font-medium text-gray-600 mb-1">{msg.role}</div>
-                    <div className="text-sm text-gray-800 whitespace-pre-wrap">
-                      {stripFloweticEnvelopeForDisplay(msg.content)}
+              <div className="space-y-3">
+                {uiMessages.map((m) => (
+                  <div key={m.id} className={m.role === 'user' ? 'text-right' : 'text-left'}>
+                    <div className="inline-block max-w-[90%] rounded-xl px-3 py-2 bg-white/10 text-white">
+                      {m.parts.map((part, idx) => {
+                        if (part.type === 'text') {
+                          return (
+                            <div key={idx} className="whitespace-pre-wrap">
+                              {part.text}
+                            </div>
+                          );
+                        }
+
+                        // Tool output parts: tool-{toolKey}
+                        if (part.type.startsWith('tool-')) {
+                          if (part.state === 'output-available') {
+                            // IMPORTANT:
+                            // tool-{toolKey} uses the toolKey (object key) used when registering tools in agent.tools: { myKey: myTool }
+                            // If your tool keys differ, the part.type will differ.
+                            // We render generic JSON + you can add specific tool renderers below.
+                            return (
+                              <div key={idx} className="mt-2 rounded-lg border border-white/10 bg-black/30 p-3">
+                                <div className="mb-2 text-xs text-white/60">Tool: {part.type}</div>
+                                <pre className="text-xs overflow-auto whitespace-pre-wrap">
+                                  {JSON.stringify(part.output, null, 2)}
+                                </pre>
+                              </div>
+                            );
+                          }
+
+                          if (part.state === 'output-error') {
+                            return (
+                              <div key={idx} className="mt-2 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
+                                Tool error ({part.type}): {part.errorText || 'Unknown error'}
+                              </div>
+                            );
+                          }
+
+                          // input-available / input-streaming can be shown as loading
+                          return (
+                            <div key={idx} className="mt-2 text-xs text-white/60">
+                              {part.type} ({part.state})
+                            </div>
+                          );
+                        }
+
+                        // Custom data parts (data-*) – if you emit writer.custom events
+                        if (part.type.startsWith('data-')) {
+                          return (
+                            <div key={idx} className="mt-2 rounded-lg border border-white/10 bg-black/20 p-2 text-xs text-white/80">
+                              <div className="text-white/60">{part.type}</div>
+                              <pre className="overflow-auto whitespace-pre-wrap">{JSON.stringify((part as any).data, null, 2)}</pre>
+                            </div>
+                          );
+                        }
+
+                        return null;
+                      })}
                     </div>
-                    
-                    {msg.role === "assistant" && (
-                      <button
-                        onClick={() => navigator.clipboard.writeText(stripFloweticEnvelopeForDisplay(msg.content))}
-                        className="mt-2 text-xs text-gray-500 hover:text-gray-700"
-                      >
-                        <CopyButton text={stripFloweticEnvelopeForDisplay(msg.content)} />
-                      </button>
-                    )}
                   </div>
+                ))}
+              </div>
 
-                  {/* Render inline cards ONLY after the LAST assistant message */}
-                  {msg.role === "assistant" && toolUi && index === messages.length - 1 && (
-                    <>
-                      {toolUi.type === "outcome_cards" && (
-                        <OutcomeCards
-                          options={toolUi.options}
-                          onSelect={(id) => sendMessage(`__ACTION__:select_outcome:${id}`)}
-                          onHelpDecide={() => sendMessage("__ACTION__:outcome_help_me_decide")}
-                        />
-                      )}
-                      
-                      {toolUi.type === "storyboard_cards" && (
-                        <StoryboardCards
-                          options={toolUi.options}
-                          onSelect={(id) => sendMessage(`__ACTION__:select_storyboard:${id}`)}
-                        />
-                      )}
-                      
-                      {toolUi.type === "style_bundles" && (
-                        <StyleBundleCards
-                          bundles={toolUi.bundles}
-                          onSelect={(id) => sendMessage(`__ACTION__:select_style_bundle:${id}`)}
-                        />
-                      )}
-                    </>
-                  )}
-                </motion.div>
-              ))
-            )}
+              {uiError ? (
+                <div className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
+                  {String(uiError.message || uiError)}
+                </div>
+              ) : null}
 
-            {copilotIsLoading && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="mb-4 rounded-lg bg-gray-50 border-l-4 border-gray-200 pl-4 py-2"
-              >
-                <div className="text-xs font-medium text-gray-600 mb-1">assistant</div>
-                <div className="text-sm text-gray-400 animate-pulse">Thinking…</div>
-              </motion.div>
-            )}
+              
 
             <div ref={messagesEndRef} />
           </div>
@@ -915,7 +869,7 @@ return (
             <MessageInput
               value={input}
               onChange={setInput}
-              disabled={copilotIsLoading}
+              disabled={uiStatus === 'streaming'}
               isListening={isListening}
               selectedModel={selectedModel}
               onModelSelect={setSelectedModel}
