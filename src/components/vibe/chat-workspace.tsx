@@ -754,6 +754,10 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
       // non-fatal
     }
 
+    // NOTE: CopilotKit-era assistant message persistence disabled after AI SDK migration.
+    // Assistant responses now come from uiMessages parts, not data.text.
+    // TODO: Re-implement persistence from uiMessages parts if needed.
+
     // Keep your local UI list in sync (as your current UI renders from `messages`)
     setMessages((prev) => [
       ...prev,
@@ -1266,17 +1270,7 @@ return (
               {/* Markdown Export */}
               <button
                 onClick={() => {
-                  exportAsMarkdown(messages, {
-                    chatId: threadId,
-                    currentPhase: journeyMode,
-                    platformType: vibeContext?.platformType,
-                    sourceId: vibeContext?.sourceId,
-                    entityId: vibeContext?.entityId,
-                    selectedOutcome,
-                    selectedStoryboard,
-                    selectedStyleBundle: selectedStyleBundleId,
-                    selectedModel,
-                  });
+                  exportAsMarkdown(uiMessages as any);
                   setShowShareModal(false);
                 }}
                 className="w-full flex items-start gap-4 p-4 rounded-lg border-2 border-gray-200 hover:border-blue-500 hover:bg-blue-50 transition-all group"
@@ -1295,17 +1289,7 @@ return (
               {/* JSON Export */}
               <button
                 onClick={() => {
-                  exportAsJSON(messages, {
-                    chatId: threadId,
-                    currentPhase: journeyMode,
-                    platformType: vibeContext?.platformType,
-                    sourceId: vibeContext?.sourceId,
-                    entityId: vibeContext?.entityId,
-                    selectedOutcome,
-                    selectedStoryboard,
-                    selectedStyleBundle: selectedStyleBundleId,
-                    selectedModel,
-                  });
+                  exportAsJSON(uiMessages as any);
                   setShowShareModal(false);
                 }}
                 className="w-full flex items-start gap-4 p-4 rounded-lg border-2 border-gray-200 hover:border-purple-500 hover:bg-purple-50 transition-all group"
