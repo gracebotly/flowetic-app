@@ -84,11 +84,7 @@ export const masterRouterAgent: Agent = new Agent({
     
     // Fallback for values that might not be in schema
     const safePlatformType = platformType || "make" as PlatformType;
-    const safeSelectedStyleBundle = selectedStyleBundleId ||
-      String(requestContext?.get?.("selectedStyleBundle") ??
-        requestContext?.get?.("selectedStyleBundleId") ??
-        "");
-
+    const safeSelectedStyleBundle = selectedStyleBundleId || "";
     const contextHeader = [
       "# CURRENT REQUEST CONTEXT (authoritative)",
       userId ? `userId: ${userId}` : "userId: (missing)",
