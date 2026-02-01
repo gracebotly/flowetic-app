@@ -10,11 +10,7 @@ const inputSchema = z.object({
   selectedOutcome: z.enum(['dashboard', 'product']),
 });
 
-// NEW: Request context schema (Mastra 1.1.0 feature)
-const requestContextSchema = z.object({
-  tenantId: z.string().uuid(),  // ✅ Validated from server
-  userId: z.string().uuid(),
-});
+
 
 const outputSchema = z.object({
   recommendedStoryboard: z.string(),
@@ -31,7 +27,6 @@ export const recommendStoryboard = createSupaTool<z.infer<typeof outputSchema>>(
   description: 'Analyze event schema and patterns to recommend storyboard type. Returns top recommendation with alternatives. Used in Phase 2 storyboard selection.',
   inputSchema,
   outputSchema,
-  requestContextSchema,  // ✅ Add this
 
   execute: async (rawInput: unknown, context) => {
     const input = inputSchema.parse(rawInput);

@@ -9,11 +9,7 @@ const inputSchema = z.object({
   sinceDays: z.number().int().min(1).max(365).default(30),
 });
 
-// NEW: Request context schema (Mastra 1.1.0 feature)
-const requestContextSchema = z.object({
-  tenantId: z.string().uuid(),  // ✅ Validated from server
-  userId: z.string().uuid(),
-});
+
 
 const outputSchema = z.object({
   recommendedOutcome: z.enum(['dashboard', 'product']),
@@ -33,7 +29,6 @@ export const recommendOutcome = createSupaTool<z.infer<typeof outputSchema>>({
   description: 'Analyze event patterns to recommend outcome type (dashboard vs product). Returns recommendation with confidence score and data-driven reasoning. Used in Phase 1 outcome selection.',
   inputSchema,
   outputSchema,
-  requestContextSchema,  // ✅ Add this
   
   execute: async (rawInput: unknown, context) => {
     const input = inputSchema.parse(rawInput);

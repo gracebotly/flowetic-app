@@ -11,11 +11,7 @@ const inputSchema = z.object({
   requireSchemaReady: z.boolean().default(true),
 });
 
-// NEW: Request context schema (Mastra 1.1.0 feature)
-const requestContextSchema = z.object({
-  tenantId: z.string().uuid(),  // ✅ Validated from server
-  userId: z.string().uuid(),
-});
+
 
 const outputSchema = z.object({
   ready: z.boolean(),
@@ -35,7 +31,6 @@ export const validatePreviewReadiness = createSupaTool<z.infer<typeof outputSche
   description: 'Validate all prerequisites before preview generation. Checks source, events, schema readiness, and event type coverage. Returns blockers and warnings. Use before Phase 4 to prevent failed workflows.',
   inputSchema,
   outputSchema,
-  requestContextSchema,  // ✅ Add this
 
   execute: async (rawInput: unknown, context) => {
     const input = inputSchema.parse(rawInput);

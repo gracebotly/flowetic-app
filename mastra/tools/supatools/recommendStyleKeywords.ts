@@ -12,11 +12,7 @@ const inputSchema = z.object({
   selectedStoryboard: z.string().optional(),
 });
 
-// NEW: Request context schema (Mastra 1.1.0 feature)
-const requestContextSchema = z.object({
-  tenantId: z.string().uuid(),  // ✅ Validated from server
-  userId: z.string().uuid(),
-});
+
 
 const outputSchema = z.object({
   density: z.object({
@@ -39,7 +35,6 @@ export const recommendStyleKeywords = createSupaTool<z.infer<typeof outputSchema
   description: 'Analyze event patterns and context to recommend style keywords (density, palette, typography). Returns recommendations grounded in data characteristics. Used in Phase 3 style bundle generation.',
   inputSchema,
   outputSchema,
-  requestContextSchema,  // ✅ Add this
 
   execute: async (rawInput: unknown, context) => {
     const input = inputSchema.parse(rawInput);
