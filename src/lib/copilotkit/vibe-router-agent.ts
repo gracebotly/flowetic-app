@@ -86,12 +86,22 @@ function getLastUserMessage(input: any): string {
 
 function getContextFromInput(input: any): VibeAgentContext {
   const ctx = (input?.context ?? {}) as Partial<VibeAgentContext>;
+  
+  // Extract selectedModel from CopilotKit readables (priority 1)
+  const readables = input?.context?.readables || [];
+  const selectedModelReadable = readables.find((r: any) => 
+    r.description === "selectedModel" || 
+    r.description?.includes("selected LLM model") ||
+    r.description?.includes("model")
+  );
+  const selectedModelFromReadables = selectedModelReadable?.value;
+  
   return {
     userId: String(ctx.userId || ""),
     tenantId: String(ctx.tenantId || ""),
     vibeContext: ctx.vibeContext ?? null,
     journey: ctx.journey ?? null,
-    selectedModel: ctx.selectedModel,
+    selectedModel: selectedModelFromReadables || ctx.selectedModel, // Prioritize readables over context
   };
 }
 
@@ -147,7 +157,15 @@ class VibeRouterAgent extends AbstractAgent {
           const ctx = parsed.ctx ?? getContextFromInput(input);
           const userMessage = parsed.message;
 
-          console.log("[VibeRouterAgent] Context:", { userId: ctx.userId, tenantId: ctx.tenantId, userMessage });
+          console.log("[VibeRouterAgent] Context:", { 
+            userId: ctx.userId, 
+            tenantId: ctx.tenantId, 
+            selectedModel: ctx.selectedModel,
+            modelSource: ctx.selectedModel 
+              ? (input?.context?.readables?.find((r: any) => r.description === "selectedModel") ? "readables" : "context") 
+              : "none", 
+            userMessage 
+          });
 
           // STEP 2: TEXT_MESSAGE_START (required before content)
           console.log("[VibeRouterAgent] Emitting TEXT_MESSAGE_START");
@@ -241,6 +259,7 @@ class VibeRouterAgent extends AbstractAgent {
             vibeContext: ctx.vibeContext,
             journey: ctx.journey,
             userMessage,
+            selectedModel: ctx.selectedModel, // ✅ Pass selectedModel here
             requestContext,
           });
 
