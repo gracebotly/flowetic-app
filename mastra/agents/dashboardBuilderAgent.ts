@@ -84,11 +84,10 @@ export const dashboardBuilderAgent: Agent = new Agent({
       },
     ];
   },
-  model: (() => {
-    // Read selected model from environment (set by vibe-router-agent.ts)
-    const selectedModelId = process.env.SELECTED_MODEL;
+  model: ({ requestContext }: { requestContext: RequestContext }) => {
+    const selectedModelId = requestContext.get("selectedModel") as string | undefined;
     return getModelById(selectedModelId);
-  })(),
+  },
   memory: createFloweticMemory({
     lastMessages: 30,
     workingMemory: {

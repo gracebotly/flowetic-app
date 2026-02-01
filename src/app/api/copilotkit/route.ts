@@ -2,27 +2,23 @@
 import { NextRequest } from "next/server";
 import {
   CopilotRuntime,
-  ExperimentalEmptyAdapter,
   copilotRuntimeNextJSAppRouterEndpoint,
+  ExperimentalEmptyAdapter,
 } from "@copilotkit/runtime";
 import { vibeRouterAgent } from "@/lib/copilotkit/vibe-router-agent";
 
-
-export const runtime = "nodejs";
-
-
 export const POST = async (req: NextRequest) => {
+  console.log("[CopilotKit Route] POST request received");
+  
   const copilotRuntime = new CopilotRuntime({
     agents: {
-      // Alias for clients/components that default to "default"
       default: vibeRouterAgent,
-      // Canonical Flowetic agent id
       vibe: vibeRouterAgent,
-      // REQUIRED for UI components calling useAgent("vibeRouterAgent")
       vibeRouterAgent: vibeRouterAgent,
     },
   });
 
+  console.log("[CopilotKit Route] CopilotRuntime created");
 
   const { handleRequest } = copilotRuntimeNextJSAppRouterEndpoint({
     runtime: copilotRuntime,
@@ -30,6 +26,9 @@ export const POST = async (req: NextRequest) => {
     endpoint: "/api/copilotkit",
   });
 
-
-  return handleRequest(req);
+  console.log("[CopilotKit Route] Calling handleRequest");
+  const response = await handleRequest(req);
+  console.log("[CopilotKit Route] handleRequest completed, status:", response.status);
+  
+  return response;
 };

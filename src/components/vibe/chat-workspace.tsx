@@ -32,7 +32,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 
 import { createClient } from '@/lib/supabase/client';
-import { CopilotKit, useCopilotAction, useCopilotChat } from "@copilotkit/react-core";
+import { useCopilotAction, useCopilotChat } from "@copilotkit/react-core";
 import { TextMessage, MessageRole } from "@copilotkit/runtime-client-gql";
 
 import { MessageInput } from "@/components/vibe/message-input";
@@ -738,7 +738,6 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
   }
 
 return (
-  <CopilotKit runtimeUrl="/api/copilotkit" agent="vibeRouterAgent">
     <div className="flex h-screen w-full overflow-hidden bg-[#0b1220]">
       {/* Left mini-rail */}
       <div className="absolute left-4 top-4 z-[60] flex flex-col gap-2">
@@ -1273,6 +1272,5 @@ return (
         </div>
       )}
     </div>
-  </CopilotKit>
-);
+  );
 }
