@@ -290,6 +290,15 @@ Journey phases:
 - Phase 6: Deploy
 `;
 
+    // Build workflow context string if skill markdown is available
+    const workflowContext = vibeContext?.skillMD 
+      ? `## Workflow Context
+The following workflow documentation is available:
+${vibeContext.skillMD}
+
+Use this documentation to guide the workflow execution and decision making.` 
+      : '';
+
     const enhancedSystemPrompt = baseSystemPrompt + workflowContext;
 
     // Ensure Mastra thread exists and get Mastra thread ID
