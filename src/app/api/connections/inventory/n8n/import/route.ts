@@ -108,7 +108,7 @@ export async function POST(req: Request) {
     await indexWorkflowToWorkspace(workspace, {
       sourceId,
       externalId: String(wf.id),
-      displayName: String(wf.name ?? `Workflow ${w.id}`),
+      displayName: String(wf.name ?? `Workflow ${wf.id}`),
       entityKind: 'workflow',
       content: JSON.stringify(wf.nodes || wf),
     });
