@@ -1,3 +1,2 @@
 
-// Export all skills
-export * from './loadSkill';
+// Skills are now discovered automatically by Mastra Workspace

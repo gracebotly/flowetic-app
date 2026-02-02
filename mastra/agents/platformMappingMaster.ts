@@ -4,7 +4,7 @@ import { Memory } from "@mastra/memory";
 import { getModelById } from "../lib/models/modelSelector";
 import { getMastraStorage } from "../lib/storage";
 import type { RequestContext } from "@mastra/core/request-context";
-import { loadSkillMarkdown, PlatformType } from "../skills/loadSkill";
+
 import { createFloweticMemory } from "../lib/memory";
 import {
   appendThreadEvent,
@@ -39,9 +39,7 @@ export const platformMappingMaster: Agent = new Agent({
       (typeof requestContext?.get === 'function' 
         ? requestContext.get("platformType") 
         : (requestContext as any)?.platformType) || "make"
-    ) as PlatformType;
-    
-    const skill = await loadSkillMarkdown(platformType);
+    );
 
     return {
       role: "system" as const,
@@ -53,7 +51,7 @@ export const platformMappingMaster: Agent = new Agent({
         "Before proposing mapping, use getEventStats + getEventSamples + getRecentEventSamples + recommendTemplates + proposeMapping as needed.",
         "Write brief rationale via appendThreadEvent (1-2 sentences).",
         `Selected platformType: ${platformType}`,
-        `Platform Skill.md:\n\n${skill}`,
+        "Note: Platform-specific skills are now discovered automatically by Workspace",
         "When user asks to generate/preview, call runGeneratePreviewWorkflow only AFTER schemaReady is true and mapping is complete.",
         "BEHAVIOR:",
         "- When you have enough information to proceed, proceed without asking for confirmation.",
