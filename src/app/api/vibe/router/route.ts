@@ -257,6 +257,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "MISSING_AUTH_CONTEXT" }, { status: 400 });
     }
 
+    console.log("[api/vibe/router] incoming vibeContext summary", {
+      tenantId,
+      userId,
+      platformType: vibeContext?.platformType,
+      sourceId: vibeContext?.sourceId,
+      entityId: vibeContext?.entityId,
+      externalId: vibeContext?.externalId,
+      displayName: vibeContext?.displayName,
+      hasSkillMD: typeof vibeContext?.skillMD === "string" && vibeContext.skillMD.length > 0,
+    });
+
     const platformType = vibeContext?.platformType || "other";
     const sourceId = vibeContext?.sourceId;
 
@@ -266,7 +277,7 @@ export async function POST(req: NextRequest) {
       platformType,
       sourceId,
       get: (key: string) => {
-        const obj: any = { userId, tenantId, platformType, sourceId };
+        const obj: any = { userId, tenantId, platformType, sourceId, skillMD: vibeContext?.skillMD, workflowName: vibeContext?.displayName ?? vibeContext?.externalId };
         return obj[key];
       }
     } as any;
