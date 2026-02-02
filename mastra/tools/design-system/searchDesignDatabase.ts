@@ -39,7 +39,7 @@ export const searchDesignDatabase = createTool({
         return { success: false, output: "", error: `NO_DATA_FOR_DOMAIN:${inputData.domain}` };
       }
 
-      const ranked = rankRowsByQuery({
+      const ranked = await rankRowsByQuery({
         rows,
         query: inputData.query,
         limit: inputData.maxResults ?? 3,
