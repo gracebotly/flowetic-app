@@ -1,6 +1,6 @@
 
-import { workspace } from '@/mastra/workspace';
 import { parse } from 'csv-parse/sync';
+import { createClient } from '@supabase/supabase-js';
 
 export type UIUXCSVRow = Record<string, string>;
 
@@ -16,33 +16,58 @@ const FILE_MAP: Record<string, string> = {
   'web-interface': 'web-interface.csv',
 };
 
-/**
- * Load CSV from workspace filesystem.
- * CSV files are at: /skills/ui-ux-pro-max/data/{filename}
- */
+const cache = new Map<string, UIUXCSVRow[]>();
+
+function getSupabaseClient() {
+  const url =
+    process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    process.env.SUPABASE_URL ||
+    process.env.VITE_SUPABASE_URL;
+
+  const anonKey =
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    process.env.SUPABASE_ANON_KEY;
+
+  if (!url || !anonKey) {
+    throw new Error(
+      'SUPABASE_ENV_MISSING: require NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY (or SUPABASE_URL/SUPABASE_ANON_KEY)'
+    );
+  }
+
+  return createClient(url, anonKey);
+}
+
 export async function loadUIUXCSV(domain: string): Promise<UIUXCSVRow[]> {
+  // validate domain early (same behavior as before)
   const filename = FILE_MAP[domain];
   if (!filename) {
     console.error(`[uiux] Unknown domain: ${domain}`);
     return [];
   }
 
-  const filePath = `/skills/ui-ux-pro-max/data/${filename}`;
+  // cache
+  const cached = cache.get(domain);
+  if (cached) return cached;
+
   try {
-    if (!workspace.filesystem) {
-      console.error(`[uiux] Workspace filesystem is not configured`);
+    const supabase = getSupabaseClient();
+
+    const { data, error } = await supabase
+      .from('uiux_data')
+      .select('row_data')
+      .eq('domain', domain);
+
+    if (error) {
+      console.error(`[uiux] Failed to query uiux_data for domain=${domain}`, error);
       return [];
     }
-    
-    const content = await workspace.filesystem.readFile(filePath, { encoding: 'utf-8' }) as string;
-    const records: UIUXCSVRow[] = parse(content, {
-      columns: true,
-      skip_empty_lines: true,
-      trim: true,
-    });
-    return records;
+
+    const rows = (data ?? []).map((r: any) => (r?.row_data ?? {}) as UIUXCSVRow);
+
+    cache.set(domain, rows);
+    return rows;
   } catch (err) {
-    console.error(`[uiux] Failed to read CSV: ${filePath}`, err);
+    console.error(`[uiux] Failed to load UI/UX data from Supabase for domain=${domain}`, err);
     return [];
   }
 }
@@ -53,4 +78,11 @@ export async function loadAllUIUXCSV(): Promise<Record<string, UIUXCSVRow[]>> {
     result[domain] = await loadUIUXCSV(domain);
   }
   return result;
+}
+
+/**
+ * Clear in-memory cache (useful for testing or if data is updated)
+ */
+export function clearUIUXCache(): void {
+  cache.clear();
 }

@@ -1,33 +1,27 @@
-import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+import { Workspace } from '@mastra/core/workspace';
 
 /**
- * Main workspace instance for Flowetic app.
- * 
- * Configuration:
- * - Filesystem: Local disk storage at workspace path
- * - Skills: Agent Skills spec for platform instructions
- * - BM25: Keyword search for indexed workflows (Phase 3)
- * 
- * Features:
- * - Filesystem tools: read, write, list, delete files
- * - Skill discovery: Automatic SKILL.md discovery in workspace/skills/
- * - Search: BM25 keyword search (enabled for workflow indexing)
+ * Skills-only Workspace for serverless environments.
+ *
+ * This workspace provides ONLY skills - no filesystem and no sandbox.
+ * This configuration is compatible with Vercel serverless functions because:
+ * - Skills are loaded read-only at initialization
+ * - No persistent filesystem is required
+ * - No filesystem tools are exposed to agents
+ *
+ * The skills are located at /workspace/skills and are loaded via LocalSkillSource.
+ * Agents can search and use these skills but cannot read/write files.
  */
 export const workspace = new Workspace({
   id: 'flowetic-workspace',
   name: 'Flowetic Workspace',
   
-  // Filesystem: Local disk storage
-  filesystem: new LocalFilesystem({
-    basePath: process.env.WORKSPACE_PATH || './workspace',
-  }),
-  
   // Skills: Agent Skills spec directories
   skills: ['/skills'],
   
-  // BM25 search for workflow indexing (Phase 3)
+  // BM25 search for skill-based recommendations (still works without filesystem)
   bm25: true,
   
-  // Auto-index: Will be configured in Phase 3
-  autoIndexPaths: [], // Empty for now, configured in Phase 3
+  // Note: No filesystem or sandbox configured for serverless compatibility
+  // Skills are loaded read-only from /workspace/skills at initialization
 });

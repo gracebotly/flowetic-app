@@ -11,7 +11,8 @@
     "build:mastra": "mastra build --dir ./mastra",
     "start": "next start",
     "lint": "eslint",
-    "typecheck": "tsc --noEmit --pretty false"
+    "typecheck": "tsc --noEmit --pretty false",
+    "import-uiux-data": "tsx scripts/import-uiux-data-to-supabase.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^2.0.0",
