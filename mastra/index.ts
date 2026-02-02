@@ -1,5 +1,6 @@
 import { Mastra } from "@mastra/core/mastra";
 import { getMastraStorage } from "./lib/storage";
+import { ensureUIUXSearchInitialized } from './tools/uiux/initUIUXSearch';
 
 // Register real Mastra agents (NOT AG-UI AbstractAgent wrappers)
 import { masterRouterAgent } from "./agents/masterRouterAgent";
@@ -12,6 +13,11 @@ import { generatePreviewWorkflow } from "./workflows/generatePreview";
 import { connectionBackfillWorkflow } from "./workflows/connectionBackfill";
 import { deployDashboardWorkflow } from "./workflows/deployDashboard";
 import { vibeJourneyWorkflow } from "./workflows/vibeJourneyWorkflow";
+
+// Initialize UI/UX search indexing (lazy initialization on first use)
+ensureUIUXSearchInitialized().catch(err => {
+  console.error('Failed to initialize UI/UX search:', err);
+});
 
 let _mastra: Mastra | null = null;
 

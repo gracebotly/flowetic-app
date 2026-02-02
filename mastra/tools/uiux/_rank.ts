@@ -1,31 +1,59 @@
 
-import type { UIUXCSVRow } from "./loadUIUXCSV";
+import { workspace } from '@/mastra/workspace';
+import { ensureUIUXSearchInitialized } from './initUIUXSearch';
 
-export function rankRowsByQuery(params: {
+export type UIUXCSVRow = Record<string, string>;
+
+/**
+ * Rank rows by query using Workspace BM25 search.
+ * Replaces the previous token-based ranking with more accurate semantic search.
+ */
+export async function rankRowsByQuery(params: {
   rows: UIUXCSVRow[];
   query: string;
   limit: number;
-}): UIUXCSVRow[] {
+}): Promise<UIUXCSVRow[]> {
   const { rows, query, limit } = params;
 
-  const tokens = query
-    .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, " ")
-    .split(/\s+/)
-    .filter((t) => t.length > 2);
+  // Ensure search is initialized (lazy initialization)
+  await ensureUIUXSearchInitialized();
 
-  if (tokens.length === 0) return [];
+  // If no query, return first N rows
+  if (!query || query.trim().length === 0) {
+    return rows.slice(0, limit);
+  }
 
-  const scored = rows
-    .map((row) => {
-      const text = Object.values(row).join(" ").toLowerCase();
-      const score = tokens.reduce((sum, token) => (text.includes(token) ? sum + 1 : sum), 0);
-      return { row, score };
-    })
-    .filter((r) => r.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit)
-    .map((r) => r.row);
+  try {
+    // Search using Workspace BM25
+    const results = await workspace.search(query, {
+      topK: limit,
+      mode: 'bm25',
+    });
 
-  return scored;
+    // Extract row data from metadata
+    const matchedRows: UIUXCSVRow[] = [];
+    const matchedIndices = new Set<number>();
+    
+    for (const result of results) {
+      const row = result.metadata?.row as UIUXCSVRow | undefined;
+      const index = result.metadata?.rowIndex as number | undefined;
+      
+      if (row && index !== undefined) {
+        matchedRows.push(row);
+        matchedIndices.add(index);
+      }
+    }
+
+    // If we got fewer results than requested, pad with original rows
+    if (matchedRows.length < limit && matchedRows.length < rows.length) {
+      const additionalRows = rows.filter((_, i) => !matchedIndices.has(i)).slice(0, limit - matchedRows.length);
+      matchedRows.push(...additionalRows);
+    }
+
+    return matchedRows;
+  } catch (err) {
+    console.error('[uiux] Search failed, falling back to original rows:', err);
+    // Fallback: return first N rows if search fails
+    return rows.slice(0, limit);
+  }
 }
