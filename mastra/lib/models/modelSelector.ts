@@ -3,6 +3,8 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { glm47Model } from "./glm47";
 
+let didLogModel = false;
+
 /**
  * Model configuration for Getflowetic
  * Uses AI SDK v5 provider factories for compatibility with Mastra v1.0.4
@@ -97,7 +99,10 @@ export function getModelById(modelId: ModelId | string | undefined): any {
     return defaultConfig.factory(); // ✅ Call factory
   }
 
-  console.log(`[ModelSelector] Using model: ${config.displayName} (${config.id})`);
+  if (!didLogModel) {
+    didLogModel = true;
+    console.log(`[ModelSelector] Using model: ${config.displayName} (${config.id})`);
+  }
   return config.factory(); // ✅ Call factory function to create fresh instance
 }
 

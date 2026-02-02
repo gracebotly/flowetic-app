@@ -148,6 +148,16 @@ export async function POST(req: Request) {
       mastra,
       agentId: 'masterRouterAgent',
       params: enhancedParams,
+      defaultOptions: {
+        // Hard cap concurrency to avoid Z.ai 1302 throttling
+        toolCallConcurrency: 1,
+
+        // Reduce overall step budget to stay within Vercel limits
+        maxSteps: 5,
+
+        // Keep tool usage automatic, but now serialized
+        toolChoice: "auto",
+      },
     });
     
     return createUIMessageStreamResponse({ stream });
