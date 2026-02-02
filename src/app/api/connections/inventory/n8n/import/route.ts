@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { decryptSecret } from "@/lib/secrets";
+import { workspace } from '@/mastra/workspace';
+import { indexWorkflowToWorkspace, clearSourceWorkflows } from '@/mastra/lib/workflowIndexer';
 
 export const runtime = "nodejs";
 
@@ -97,6 +99,20 @@ export async function POST(req: Request) {
 
   const raw = await res.json().catch(() => null);
   const workflows = extractWorkflows(raw);
+
+  // ADD: Clear existing workflows for this source (replace mode)
+  await clearSourceWorkflows(workspace, sourceId);
+
+  // ADD: Index each workflow to workspace
+  for (const wf of workflows) {
+    await indexWorkflowToWorkspace(workspace, {
+      sourceId,
+      externalId: String(wf.id),
+      displayName: String(wf.name ?? `Workflow ${wf.id}`),
+      entityKind: 'workflow',
+      content: JSON.stringify(wf.nodes || wf),
+    });
+  }
 
   // IMPORTANT: don't silently "succeed" with 0 unless it is truly empty.
   // If your instance has workflows but you still see 0, you'll now have a clear response.

@@ -14,7 +14,7 @@ import { getStyleBundles } from "../tools/design";
 // NEW: Import Supatool
 import { recommendStyleKeywords } from "../tools/supatools";
 
-import { loadNamedSkillMarkdown } from "../skills/loadSkill";
+
 
 export const designAdvisorAgent: Agent = new Agent({
   id: "designAdvisorAgent",
@@ -26,14 +26,9 @@ export const designAdvisorAgent: Agent = new Agent({
     const phase = (requestContext.get("phase") as string | undefined) ?? "editing";
     const platformType = (requestContext.get("platformType") as string | undefined) ?? "make";
     
-    // Load ui-ux-pro-max skill (replaces frontend-design)
-    const skill = await loadNamedSkillMarkdown("ui-ux-pro-max");
+    // Note: UI/UX Pro Max skill is now discovered automatically by Workspace
 
     return [
-      {
-        role: "system",
-        content: `UI/UX Pro Max Skill.md:\n\n${skill.content}`,
-      },
       {
         role: "system",
         content:

@@ -7,7 +7,7 @@ export type UIUXCSVRow = Record<string, string>;
 
 const ROOT_PATH =
   process.env.UI_UX_PRO_MAX_ROOT ??
-  path.join(process.cwd(), ".agent", "skills", "ui-ux-pro-max", "data");
+  path.join(process.cwd(), "workspace", "skills", "ui-ux-pro-max", "data");
 
 const FILE_MAP: Record<string, string> = {
   style: "styles.csv",
