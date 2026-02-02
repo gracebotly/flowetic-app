@@ -1,8 +1,8 @@
 
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { workspace } from '../../../../../mastra/workspace';
-import { indexWorkflowToWorkspace, clearSourceWorkflows } from '../../../../../mastra/lib/workflowIndexer';
+import { workspace } from '../../../../../../mastra/workspace';
+import { indexWorkflowToWorkspace, clearSourceWorkflows } from '../../../../../../mastra/lib/workflowIndexer';
 
 export const runtime = "nodejs";
 
