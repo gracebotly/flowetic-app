@@ -1,12 +1,24 @@
 
 import { handleChatStream } from '@mastra/ai-sdk';
 import { createUIMessageStreamResponse } from 'ai';
-import { RequestContext } from '@mastra/core/request-context';
+import {
+  RequestContext,
+  MASTRA_RESOURCE_ID_KEY,
+  MASTRA_THREAD_ID_KEY,
+} from '@mastra/core/request-context';
 import { createClient } from '@/lib/supabase/server';
 import { getMastra } from '@/mastra';
 import { ensureMastraThreadId } from '@/mastra/lib/ensureMastraThread';
 
 export const maxDuration = 30;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let t: any;
+  const timeout = new Promise<T>((_, reject) => {
+    t = setTimeout(() => reject(new Error(`TIMEOUT_${label}_${ms}ms`)), ms);
+  });
+  return Promise.race([promise.finally(() => clearTimeout(t)), timeout]);
+}
 
 export async function POST(req: Request) {
   try {
@@ -14,21 +26,25 @@ export async function POST(req: Request) {
     
     // 1. SERVER-SIDE AUTH (CRITICAL: Never trust client data)
     const supabase = await createClient();
-    const { data: { session }, error: authError } = await supabase.auth.getSession();
-    
-    if (authError || !session?.user) {
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !user) {
       return new Response(
         JSON.stringify({ error: 'Unauthorized' }),
         { status: 401, headers: { 'Content-Type': 'application/json' } }
       );
     }
-    
-    const userId = session.user.id;
+
+    const userId = user.id;
     
     // 2. VALIDATE TENANT MEMBERSHIP (CRITICAL: Prevent cross-tenant access)
-    const clientProvidedTenantId = (params as any)?.data?.tenantId;
-    
-    if (!clientProvidedTenantId) {
+    const clientData = (params as any)?.data ?? {};
+    const clientProvidedTenantId =
+      clientData?.tenantId ??
+      (params as any)?.tenantId ??
+      null;
+
+    if (!clientProvidedTenantId || typeof clientProvidedTenantId !== 'string') {
       return new Response(
         JSON.stringify({ error: 'Missing tenantId in request' }),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
@@ -87,8 +103,11 @@ export async function POST(req: Request) {
     requestContext.set('resourceId', userId);
     requestContext.set('journeyThreadId', clientJourneyThreadId);
     
+    // Force Mastra memory/tool operations to use validated IDs (reserved keys)
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, userId);
+    requestContext.set(MASTRA_THREAD_ID_KEY, mastraThreadId);
+    
     // SAFE: These are non-security-critical context values we can trust from client
-    const clientData = (params as any)?.data ?? {};
     const safeClientKeys = [
       'platformType',
       'sourceId',
@@ -115,6 +134,9 @@ export async function POST(req: Request) {
     const enhancedParams = {
       ...params,
       requestContext,
+      // Force non-network execution in serverless: use Agent.generate() path.
+      // If the handler ignores this, behavior remains unchanged.
+      mode: "generate",
     };
     
     const mastra = getMastra();
@@ -130,11 +152,25 @@ export async function POST(req: Request) {
       });
     }
     
-    const stream = await handleChatStream({
-      mastra,
-      agentId: 'masterRouterAgent',
-      params: enhancedParams,
-    });
+    const stream = await withTimeout(
+      handleChatStream({
+        mastra,
+        agentId: 'masterRouterAgent',
+        params: enhancedParams,
+        defaultOptions: {
+          // Hard cap concurrency to avoid Z.ai 1302 throttling
+          toolCallConcurrency: 1,
+
+          // Reduce overall step budget to stay within Vercel limits
+          maxSteps: 5,
+
+          // Keep tool usage automatic, but now serialized
+          toolChoice: "auto",
+        },
+      }),
+      25000,
+      "api_chat_stream"
+    );
     
     return createUIMessageStreamResponse({ stream });
     

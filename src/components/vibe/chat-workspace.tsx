@@ -912,6 +912,7 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
       await sendAi(trimmed, {
         userId: authContext.userId,
         tenantId: authContext.tenantId,
+        journeyThreadId: threadId, // <-- REQUIRED by /api/chat to create stable Mastra thread
         threadId,
         selectedModel,
         vibeContext: vibeContext ? { ...vibeContext, threadId } : undefined,

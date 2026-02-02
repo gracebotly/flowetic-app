@@ -2,6 +2,7 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { createClient } from "@supabase/supabase-js";
+import { createClient as createServerClient } from "@/lib/supabase/server";
 import { SourcePublic, SourcePlatformType, SourceMethod, SourceStatus } from "./types";
 
 function createServiceRoleClient() {
@@ -30,7 +31,7 @@ export const listSources = createTool({
     sources: z.array(SourcePublic),
   }),
   execute: async (inputData) => {
-    const supabase = createServiceRoleClient();
+    const supabase = await createServerClient();
     const { tenantId } = inputData;
 
     const { data, error } = await supabase
