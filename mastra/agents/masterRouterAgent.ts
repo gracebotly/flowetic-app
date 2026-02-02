@@ -7,9 +7,8 @@ import { glm47Model } from "../lib/models/glm47";
 import { getMastraStorage } from "../lib/storage";
 import { getModelById } from "../lib/models/modelSelector";
 import type { RequestContext } from "@mastra/core/request-context";
-import type { PlatformType } from "../skills/loadSkill";
-import { loadSkillMarkdown, loadNamedSkillMarkdown } from "../skills/loadSkill";
 import { createFloweticMemory } from "../lib/memory";
+import { workspace } from '../workspace';  // ← ADD THIS IMPORT
 import { platformMappingMaster } from "./platformMappingMaster";
 import { dashboardBuilderAgent } from "./dashboardBuilderAgent";
 import { designAdvisorAgent } from "./designAdvisorAgent";
@@ -84,7 +83,7 @@ export const masterRouterAgent: Agent = new Agent({
     
     
     // Fallback for values that might not be in schema
-    const safePlatformType = platformType || "make" as PlatformType;
+    const safePlatformType = platformType || "make";
     const safeSelectedStyleBundle = selectedStyleBundleId || "";
     const contextHeader = [
       "# CURRENT REQUEST CONTEXT (authoritative)",
@@ -95,12 +94,6 @@ export const masterRouterAgent: Agent = new Agent({
       selectedOutcome ? `selectedOutcome: ${selectedOutcome}` : "selectedOutcome: (missing)",
       "",
     ].join("\n");
-
-    const platformSkill = await loadSkillMarkdown(safePlatformType as PlatformType);
-
-    const businessSkill = phase === "recommend" || phase === "align"
-      ? await loadNamedSkillMarkdown("business-outcomes-advisor")
-      : null;
 
     const phaseInstructions = getPhaseInstructions(phase as FloweticPhase, {
       platformType: String(safePlatformType),
@@ -142,11 +135,10 @@ export const masterRouterAgent: Agent = new Agent({
       "# CURRENT PHASE INSTRUCTIONS (Phase 2)",
       phaseInstructions,
       "",
-      "# BUSINESS OUTCOMES ADVISOR SKILL",
-      businessSkill?.content || "",
+      "# WORKSPACE SKILLS",
+      "Workspace provides automatic skill discovery from workspace/skills/ directory.",
+      "Platform-specific knowledge and business advisor skills are available through the workspace.",
       "",
-      "# PLATFORM KNOWLEDGE",
-      platformSkill || "",
       "",
       "# TOOL USAGE GUIDELINES",
       "- When calling TODO tools, always ensure tenantId and threadId are passed from RequestContext",
@@ -207,6 +199,7 @@ export const masterRouterAgent: Agent = new Agent({
   memory: createFloweticMemory({
     lastMessages: 30,
   }),
+  workspace,  // ← ADD THIS LINE (after existing properties, before closing brace)
   tools: {
     todoAdd,
     todoList,

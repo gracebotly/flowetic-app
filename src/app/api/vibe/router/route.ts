@@ -5,7 +5,6 @@ import { RequestContext } from "@mastra/core/request-context";
 import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
-import { loadSkill } from "@/mastra/skills/loadSkill";
 
 function isConcurrencyLimitError(err: any): boolean {
   const msg = String(err?.message ?? "");
@@ -261,43 +260,17 @@ export async function POST(req: NextRequest) {
     const platformType = vibeContext?.platformType || "other";
     const sourceId = vibeContext?.sourceId;
 
-    const skillMD = await loadSkill(platformType);
-
     const runtimeContext = {
       userId,
       tenantId,
       platformType,
       sourceId,
-      skillMD,
       get: (key: string) => {
-        const obj: any = { userId, tenantId, platformType, sourceId, skillMD };
+        const obj: any = { userId, tenantId, platformType, sourceId };
         return obj[key];
       }
     } as any;
 
-    // Enhance system prompt with workflow context
-    let workflowContext = "";
-    if (vibeContext?.skillMD) {
-      workflowContext = `
-
-## INDEXED WORKFLOW CONTEXT
-
-You are helping build a dashboard for this specific workflow:
-
-${vibeContext.skillMD}
-
-**CRITICAL INSTRUCTIONS:**
-1. Your recommendations MUST reference this workflow's actual capabilities, data points, and business purpose
-2. DO NOT give generic advice - be specific about what this workflow does
-3. When recommending outcomes, explain HOW this workflow's data maps to the outcome
-4. Use plain business language - avoid technical jargon like "schema", "API", "integration"
-5. Reference specific workflow steps, triggers, or outputs when explaining your recommendation
-
-Platform: ${vibeContext.platformType}
-Source ID: ${vibeContext.sourceId}
-${vibeContext.entityId ? `Entity ID: ${vibeContext.entityId}` : ''}
-`;
-    }
 
     const baseSystemPrompt = `You are the Getflowetic vibe agent helping agencies build client dashboards from AI automation workflows.
 
@@ -439,7 +412,7 @@ Journey phases:
           text: agentText || "Got it. One more quick question: who will mainly use this — your team, or client?",
           journey: nextJourney,
           toolUi: null, // KEEP cards hidden during deep lane
-          vibeContext: { ...(vibeContext ?? {}), skillMD },
+          vibeContext: { ...(vibeContext ?? {}) },
           progress: { show: false }, // Hide progress during consultation
         });
       }
@@ -510,7 +483,7 @@ Journey phases:
           text: agentText || "Based on your answers, I recommend starting with a Dashboard. Now let's pick the story this will tell.",
           journey: nextJourney,
           toolUi,
-          vibeContext: { ...(vibeContext ?? {}), skillMD },
+          vibeContext: { ...(vibeContext ?? {}) },
           progress: { 
             show: true, // Agent controls when to show progress
             currentStep: nextJourney.mode === "consultation" ? undefined : 1 // Hide step during consultation
@@ -595,7 +568,7 @@ Journey phases:
         text: agentText || "Great — now pick a storyboard so we lock the story before design.",
         journey: nextJourney,
         toolUi: storyboardToolUi,
-        vibeContext: { ...(vibeContext ?? {}), skillMD },
+        vibeContext: { ...(vibeContext ?? {}) },
         progress: { show: true, currentStep: 2 },
       });
     }
@@ -635,7 +608,7 @@ Journey phases:
         text: agentText || "No problem! Quick question: is this mainly to prove results to a client (retention dashboard), or to sell access as a product?",
         journey: deepLaneJourney,
         toolUi: null, // ← CHANGED: Don't show cards during deep lane questions
-        vibeContext: { ...(vibeContext ?? {}), skillMD },
+        vibeContext: { ...(vibeContext ?? {}) },
         progress: { show: false },
       });
     }
@@ -683,7 +656,7 @@ Journey phases:
         text: `Locked in: **${bundle.name}** (${bundle.palette.name}). Generating your preview now...`,
         journey: { ...journey, selectedStyleBundleId: selectedId, mode: "build_preview" },
         toolUi: null,
-        vibeContext: { ...(vibeContext ?? {}), skillMD },
+        vibeContext: { ...(vibeContext ?? {}) },
       });
     }
 
@@ -730,7 +703,7 @@ Journey phases:
           })),
         },
         debug: { sources: bundlesResult.sources },
-        vibeContext: { ...(vibeContext ?? {}), skillMD },
+        vibeContext: { ...(vibeContext ?? {}) },
       });
     }
 
@@ -804,7 +777,7 @@ return NextResponse.json({
   text: agentText || "Let's figure out what you want to build.",
   journey: { ...journey, mode: "recommend" },
   toolUi: suppressOutcomeCards ? null : (inDeepLane ? null : toolUi),
-  vibeContext: { ...(vibeContext ?? {}), skillMD },
+  vibeContext: { ...(vibeContext ?? {}) },
 });
 }
 
@@ -861,7 +834,7 @@ return NextResponse.json({
         text: agentText || "Now let's pick the story this will tell. Choose the option that matches what you want to prove first.",
         journey: { ...journey, mode: "align" },
         toolUi,
-        vibeContext: { ...(vibeContext ?? {}), skillMD },
+        vibeContext: { ...(vibeContext ?? {}) },
       });
     }
 
@@ -897,7 +870,7 @@ return NextResponse.json({
           })),
         },
         debug: { sources: bundlesResult.sources },
-        vibeContext: { ...(vibeContext ?? {}), skillMD },
+        vibeContext: { ...(vibeContext ?? {}) },
       });
     }
 
@@ -973,7 +946,6 @@ return NextResponse.json({
           interfaceId,
           // leave previewUrl as-is; it should be set by the workflow/tool side if implemented
           previewUrl: vibeContext?.previewUrl ?? journey?.previewUrl ?? null,
-          skillMD,
         },
         preview: journey?.previewUrl || vibeContext?.previewUrl
           ? {
@@ -1082,7 +1054,7 @@ return NextResponse.json({
         toolUi: null,
         previewUrl: result.previewUrl,
         previewVersionId: result.previewVersionId,
-        vibeContext: { ...(vibeContext ?? {}), skillMD },
+        vibeContext: { ...(vibeContext ?? {}) },
       });
     }
 
@@ -1118,7 +1090,7 @@ return NextResponse.json({
         text: "Waiting for your selection to continue.",
         journey,
         toolUi: null,
-        vibeContext: { ...(vibeContext ?? {}), skillMD },
+        vibeContext: { ...(vibeContext ?? {}) },
       });
     }
 
@@ -1141,7 +1113,7 @@ return NextResponse.json({
       text: wfText || "I'm ready. Tell me what you want to do next.",
       journey: nextJourney,
       toolUi: null,
-      vibeContext: { ...(vibeContext ?? {}), skillMD },
+      vibeContext: { ...(vibeContext ?? {}) },
     });
   } catch (err: any) {
     const message = String(err?.message || "UNKNOWN_ROUTER_ERROR");
