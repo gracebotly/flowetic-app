@@ -1,6 +1,8 @@
 
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { workspace } from '../../../../../mastra/workspace';
+import { indexWorkflowToWorkspace, clearSourceWorkflows } from '../../../../../mastra/lib/workflowIndexer';
 
 export const runtime = "nodejs";
 
@@ -44,6 +46,21 @@ export async function POST(req: Request) {
   }
 
   const inventory = Array.isArray(listJson?.inventoryEntities) ? listJson.inventoryEntities : [];
+  
+  // ADD: Clear existing workflows for this source
+  await clearSourceWorkflows(workspace, sourceId);
+
+  // ADD: Index each workflow to workspace
+  for (const wf of inventory) {
+    await indexWorkflowToWorkspace(workspace, {
+      sourceId,
+      externalId: String(wf.externalId),
+      displayName: String(wf.displayName || ""),
+      entityKind: String(wf.entityKind || "assistant"),
+      content: JSON.stringify(wf),
+    });
+  }
+
   const now = new Date().toISOString();
 
   const byExternalId = new Map<string, any>();
