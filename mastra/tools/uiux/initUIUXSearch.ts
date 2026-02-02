@@ -78,6 +78,11 @@ async function loadCSV(domain: string): Promise<Record<string, string>[]> {
 
   const filePath = `/skills/ui-ux-pro-max/data/${filename}`;
   try {
+    if (!workspace.filesystem) {
+      console.error(`[uiux] Workspace filesystem is not configured`);
+      return [];
+    }
+    
     const { parse } = await import('csv-parse/sync');
     const content = await workspace.filesystem.readFile(filePath, { encoding: 'utf-8' }) as string;
     const rows = parse(content, {

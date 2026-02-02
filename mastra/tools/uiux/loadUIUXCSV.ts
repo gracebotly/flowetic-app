@@ -29,6 +29,11 @@ export async function loadUIUXCSV(domain: string): Promise<UIUXCSVRow[]> {
 
   const filePath = `/skills/ui-ux-pro-max/data/${filename}`;
   try {
+    if (!workspace.filesystem) {
+      console.error(`[uiux] Workspace filesystem is not configured`);
+      return [];
+    }
+    
     const content = await workspace.filesystem.readFile(filePath, { encoding: 'utf-8' }) as string;
     const records: UIUXCSVRow[] = parse(content, {
       columns: true,
