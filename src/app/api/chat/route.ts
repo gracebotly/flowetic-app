@@ -12,6 +12,14 @@ import { ensureMastraThreadId } from '@/mastra/lib/ensureMastraThread';
 
 export const maxDuration = 30;
 
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let t: any;
+  const timeout = new Promise<T>((_, reject) => {
+    t = setTimeout(() => reject(new Error(`TIMEOUT_${label}_${ms}ms`)), ms);
+  });
+  return Promise.race([promise.finally(() => clearTimeout(t)), timeout]);
+}
+
 export async function POST(req: Request) {
   try {
     const params = await req.json();
@@ -144,21 +152,25 @@ export async function POST(req: Request) {
       });
     }
     
-    const stream = await handleChatStream({
-      mastra,
-      agentId: 'masterRouterAgent',
-      params: enhancedParams,
-      defaultOptions: {
-        // Hard cap concurrency to avoid Z.ai 1302 throttling
-        toolCallConcurrency: 1,
+    const stream = await withTimeout(
+      handleChatStream({
+        mastra,
+        agentId: 'masterRouterAgent',
+        params: enhancedParams,
+        defaultOptions: {
+          // Hard cap concurrency to avoid Z.ai 1302 throttling
+          toolCallConcurrency: 1,
 
-        // Reduce overall step budget to stay within Vercel limits
-        maxSteps: 5,
+          // Reduce overall step budget to stay within Vercel limits
+          maxSteps: 5,
 
-        // Keep tool usage automatic, but now serialized
-        toolChoice: "auto",
-      },
-    });
+          // Keep tool usage automatic, but now serialized
+          toolChoice: "auto",
+        },
+      }),
+      25000,
+      "api_chat_stream"
+    );
     
     return createUIMessageStreamResponse({ stream });
     

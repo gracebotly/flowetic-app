@@ -99,7 +99,7 @@ export function getModelById(modelId: ModelId | string | undefined): any {
     return defaultConfig.factory(); // ✅ Call factory
   }
 
-  if (!didLogModel) {
+  if (!didLogModel && process.env.NODE_ENV !== "production") {
     didLogModel = true;
     console.log(`[ModelSelector] Using model: ${config.displayName} (${config.id})`);
   }
