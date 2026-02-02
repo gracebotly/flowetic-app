@@ -1,26 +1,25 @@
 
-import fs from "node:fs/promises";
-import path from "node:path";
-import { parse } from "csv-parse/sync";
+import { workspace } from '@/mastra/workspace';
+import { parse } from 'csv-parse/sync';
 
 export type UIUXCSVRow = Record<string, string>;
 
-const ROOT_PATH =
-  process.env.UI_UX_PRO_MAX_ROOT ??
-  path.join(process.cwd(), "workspace", "skills", "ui-ux-pro-max", "data");
-
 const FILE_MAP: Record<string, string> = {
-  style: "styles.csv",
-  color: "colors.csv",
-  chart: "charts.csv",
-  landing: "landing.csv",
-  product: "products.csv",
-  ux: "ux-guidelines.csv",
-  typography: "typography.csv",
-  icons: "icons.csv",
-  "web-interface": "web-interface.csv",
+  style: 'styles.csv',
+  color: 'colors.csv',
+  chart: 'charts.csv',
+  landing: 'landing.csv',
+  product: 'products.csv',
+  ux: 'ux-guidelines.csv',
+  typography: 'typography.csv',
+  icons: 'icons.csv',
+  'web-interface': 'web-interface.csv',
 };
 
+/**
+ * Load CSV from workspace filesystem.
+ * CSV files are at: /skills/ui-ux-pro-max/data/{filename}
+ */
 export async function loadUIUXCSV(domain: string): Promise<UIUXCSVRow[]> {
   const filename = FILE_MAP[domain];
   if (!filename) {
@@ -28,10 +27,9 @@ export async function loadUIUXCSV(domain: string): Promise<UIUXCSVRow[]> {
     return [];
   }
 
-  const filePath = path.join(ROOT_PATH, filename);
-
+  const filePath = `/skills/ui-ux-pro-max/data/${filename}`;
   try {
-    const content = await fs.readFile(filePath, "utf-8");
+    const content = await workspace.filesystem.readFile(filePath, { encoding: 'utf-8' }) as string;
     const records: UIUXCSVRow[] = parse(content, {
       columns: true,
       skip_empty_lines: true,

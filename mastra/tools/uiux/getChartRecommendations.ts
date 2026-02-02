@@ -43,7 +43,7 @@ export const getChartRecommendations = createTool({
       .filter(Boolean)
       .join(" ");
 
-    const ranked = rankRowsByQuery({ rows, query, limit: inputData.limit ?? 3 });
+    const ranked = await rankRowsByQuery({ rows, query, limit: inputData.limit ?? 3 });
 
     const recommendations = ranked.map((row) => ({
       dataType: row["Data Type"] || "",
