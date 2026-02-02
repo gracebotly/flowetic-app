@@ -3,7 +3,7 @@ import type { Agent } from "@mastra/core/agent";
 import type { RequestContext } from "@mastra/core/request-context";
 import { createFloweticSelectionCompletionScorer } from "../validation/selection-completion.scorer";
 
-type NetworkRunOptions = {
+type GenerateRunOptions = {
   agent: Agent;
   message: string;
   requestContext: RequestContext;
@@ -11,9 +11,9 @@ type NetworkRunOptions = {
   maxSteps?: number;
 };
 
-type NetworkTextResult = {
+type GenerateTextResult = {
   text: string;
-  events: any[];
+  steps?: any[];
 };
 
 export async function runAgentNetworkToText({
@@ -22,71 +22,37 @@ export async function runAgentNetworkToText({
   requestContext,
   memory,
   maxSteps = 10,
-}: NetworkRunOptions): Promise<NetworkTextResult> {
-  const events: any[] = [];
-  
+}: GenerateRunOptions): Promise<GenerateTextResult> {
+  // NOTE:
+  // We keep the exported function name `runAgentNetworkToText` to avoid touching
+  // all callsites. Internally we now use Agent.generate() (Mastra v1 + AI SDK v5).
+  //
+  // This is intentional: network orchestration is causing excessive repeated model
+  // resolution and higher variance execution time in serverless environments.
+
   const selectionScorer = createFloweticSelectionCompletionScorer({
     requirePhaseMatch: true,
     checkPrimitiveResultToo: true,
   });
 
-  const stream = await (agent as any).network(message, {
+  const result = await (agent as any).generate(message, {
     maxSteps,
     toolChoice: "auto",
     requestContext,
     memory,
-    validation: {
-      scorers: [
-        {
-          scorer: selectionScorer.scorer,
-          run: selectionScorer.run,
-        },
-      ],
+    // Keep your existing validation/scorer behavior (generate supports scorers)
+    scorers: {
+      "flowetic-selection-completion": {
+        scorer: selectionScorer.scorer,
+        // sampling intentionally omitted (default behavior)
+      },
     },
+    // Return scorer data is not needed for UI; keep minimal payload.
+    returnScorerData: false,
   });
 
-  let finalText = "";
-
-  for await (const chunk of stream) {
-    events.push(chunk);
-
-    // Best-effort extraction across mastra versions/event shapes
-    const type = chunk?.type;
-    if (type === "network-execution-event-step-finish") {
-      const text =
-        chunk?.payload?.result?.text ??
-        chunk?.payload?.result?.output?.text ??
-        chunk?.payload?.result?.final?.text ??
-        chunk?.payload?.result?.content ??
-        "";
-      if (typeof text === "string" && text.trim()) finalText = text.trim();
-    }
-
-    // Some versions may just emit a final output event
-    if (type === "agent-execution-end") {
-      const text =
-        chunk?.payload?.result?.text ??
-        chunk?.payload?.result?.output?.text ??
-        "";
-      if (typeof text === "string" && text.trim()) finalText = text.trim();
-    }
-  }
-
-  if (!finalText) {
-    // Fallback: try last event payload search
-    for (let i = events.length - 1; i >= 0; i--) {
-      const e = events[i];
-      const candidate =
-        e?.payload?.result?.text ??
-        e?.payload?.result?.output?.text ??
-        e?.payload?.text ??
-        "";
-      if (typeof candidate === "string" && candidate.trim()) {
-        finalText = candidate.trim();
-        break;
-      }
-    }
-  }
-
-  return { text: finalText, events };
+  return {
+    text: (result?.text ?? "").trim(),
+    steps: result?.steps,
+  };
 }

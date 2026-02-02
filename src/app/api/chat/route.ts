@@ -115,6 +115,9 @@ export async function POST(req: Request) {
     const enhancedParams = {
       ...params,
       requestContext,
+      // Force non-network execution in serverless: use Agent.generate() path.
+      // If the handler ignores this, behavior remains unchanged.
+      mode: "generate",
     };
     
     const mastra = getMastra();
