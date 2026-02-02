@@ -4,6 +4,9 @@ import { getMastraStorage } from "./lib/storage";
 // Register real Mastra agents (NOT AG-UI AbstractAgent wrappers)
 import { masterRouterAgent } from "./agents/masterRouterAgent";
 
+// Workspace instance for skill discovery and file management
+import { workspace } from "./workspace";
+
 // Workflows
 import { generatePreviewWorkflow } from "./workflows/generatePreview";
 import { connectionBackfillWorkflow } from "./workflows/connectionBackfill";
@@ -22,6 +25,10 @@ export function getMastra(): Mastra {
 
   _mastra = new Mastra({
     storage: getMastraStorage(),
+    
+    // Global workspace - all agents inherit this unless overridden
+    workspace,
+    
     agents: {
       masterRouterAgent,
     },
