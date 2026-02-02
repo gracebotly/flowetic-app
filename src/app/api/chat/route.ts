@@ -1,7 +1,11 @@
 
 import { handleChatStream } from '@mastra/ai-sdk';
 import { createUIMessageStreamResponse } from 'ai';
-import { RequestContext } from '@mastra/core/request-context';
+import {
+  RequestContext,
+  MASTRA_RESOURCE_ID_KEY,
+  MASTRA_THREAD_ID_KEY,
+} from '@mastra/core/request-context';
 import { createClient } from '@/lib/supabase/server';
 import { getMastra } from '@/mastra';
 import { ensureMastraThreadId } from '@/mastra/lib/ensureMastraThread';
@@ -14,21 +18,25 @@ export async function POST(req: Request) {
     
     // 1. SERVER-SIDE AUTH (CRITICAL: Never trust client data)
     const supabase = await createClient();
-    const { data: { session }, error: authError } = await supabase.auth.getSession();
-    
-    if (authError || !session?.user) {
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !user) {
       return new Response(
         JSON.stringify({ error: 'Unauthorized' }),
         { status: 401, headers: { 'Content-Type': 'application/json' } }
       );
     }
-    
-    const userId = session.user.id;
+
+    const userId = user.id;
     
     // 2. VALIDATE TENANT MEMBERSHIP (CRITICAL: Prevent cross-tenant access)
-    const clientProvidedTenantId = (params as any)?.data?.tenantId;
-    
-    if (!clientProvidedTenantId) {
+    const clientData = (params as any)?.data ?? {};
+    const clientProvidedTenantId =
+      clientData?.tenantId ??
+      (params as any)?.tenantId ??
+      null;
+
+    if (!clientProvidedTenantId || typeof clientProvidedTenantId !== 'string') {
       return new Response(
         JSON.stringify({ error: 'Missing tenantId in request' }),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
@@ -87,8 +95,11 @@ export async function POST(req: Request) {
     requestContext.set('resourceId', userId);
     requestContext.set('journeyThreadId', clientJourneyThreadId);
     
+    // Force Mastra memory/tool operations to use validated IDs (reserved keys)
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, userId);
+    requestContext.set(MASTRA_THREAD_ID_KEY, mastraThreadId);
+    
     // SAFE: These are non-security-critical context values we can trust from client
-    const clientData = (params as any)?.data ?? {};
     const safeClientKeys = [
       'platformType',
       'sourceId',
