@@ -21,7 +21,7 @@ const SEARCH_COLUMNS: Record<string, string[]> = {
 
 export const searchDesignDatabase = createTool({
   id: "designDatabase.search",
-  description: 'Search UI/UX Pro Max via Supabase (domain search). Serverless-compatible.',
+  description: "Search UI/UX Pro Max via Supabase-backed dataset (domain search).",
   inputSchema: z.object({
     query: z.string().min(1),
     domain: Domain,
@@ -33,33 +33,35 @@ export const searchDesignDatabase = createTool({
     error: z.string().optional(),
   }),
   execute: async (inputData) => {
-    const rows = await loadUIUXCSV(inputData.domain);
-    if (rows.length === 0) {
-      return { success: false, output: '', error: `No data found for domain: ${inputData.domain}` };
-    }
-
-    // Use same ranking logic as Python script
-    const ranked = rankRowsByQuery({
-      rows,
-      query: inputData.query,
-      limit: inputData.maxResults ?? 3,
-    });
-
-    // Format output as ASCII table (similar to Python script)
-    let output = '';
-    for (const row of ranked) {
-      output += '─'.repeat(60) + '\n';
-      for (const [key, value] of Object.entries(row)) {
-        output += `${key}: ${value}\n`;
+    try {
+      const rows = await loadUIUXCSV(inputData.domain);
+      if (!rows.length) {
+        return { success: false, output: "", error: `NO_DATA_FOR_DOMAIN:${inputData.domain}` };
       }
-      output += '─'.repeat(60) + '\n\n';
-    }
 
-    if (ranked.length === 0) {
-      output = `No results found for query: "${inputData.query}" in domain: ${inputData.domain}`;
-    }
+      const ranked = rankRowsByQuery({
+        rows,
+        query: inputData.query,
+        limit: inputData.maxResults ?? 3,
+      });
 
-    return { success: true, output: output.trim() };
+      if (!ranked.length) {
+        return { success: true, output: `No results for "${inputData.query}" in ${inputData.domain}.` };
+      }
+
+      // Keep output format simple + stable
+      const output = ranked
+        .map((row) =>
+          Object.entries(row)
+            .map(([k, v]) => `${k}: ${v}`)
+            .join("\n")
+        )
+        .join("\n\n---\n\n");
+
+      return { success: true, output };
+    } catch (e: any) {
+      return { success: false, output: "", error: e?.message ?? "DESIGN_DB_SEARCH_FAILED" };
+    }
   },
 });
 

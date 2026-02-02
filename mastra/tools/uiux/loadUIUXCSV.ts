@@ -1,5 +1,4 @@
 
-import { workspace } from '@/mastra/workspace';
 import { parse } from 'csv-parse/sync';
 import { createClient } from '@supabase/supabase-js';
 
@@ -17,53 +16,60 @@ const FILE_MAP: Record<string, string> = {
   'web-interface': 'web-interface.csv',
 };
 
-// In-memory cache to avoid repeated queries
 const cache = new Map<string, UIUXCSVRow[]>();
 
-/**
- * Get Supabase client for UI/UX data queries
- */
 function getSupabaseClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
+  const url =
+    process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    process.env.SUPABASE_URL ||
+    process.env.VITE_SUPABASE_URL;
 
-  if (!supabaseUrl || !supabaseKey) {
-    throw new Error('SUPABASE_CREDENTIALS_MISSING: Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY');
+  const anonKey =
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    process.env.SUPABASE_ANON_KEY;
+
+  if (!url || !anonKey) {
+    throw new Error(
+      'SUPABASE_ENV_MISSING: require NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY (or SUPABASE_URL/SUPABASE_ANON_KEY)'
+    );
   }
 
-  return createClient(supabaseUrl, supabaseKey);
+  return createClient(url, anonKey);
 }
 
-/**
- * Load UI/UX CSV data from Supabase (serverless-compatible)
- * 
- * @param domain - Domain name (e.g., 'style', 'color', 'chart', 'ux', 'typography')
- * @returns Array of CSV rows as Record<string, string>
- */
 export async function loadUIUXCSV(domain: string): Promise<UIUXCSVRow[]> {
-  // Check cache first
-  if (cache.has(domain)) {
-    return cache.get(domain)!;
-  }
-
-  const supabase = getSupabaseClient();
-
-  const { data, error } = await supabase
-    .from('uiux_data')
-    .select('row_data')
-    .eq('domain', domain);
-
-  if (error) {
-    console.error(`[uiux] Failed to load domain ${domain}:`, error);
+  // validate domain early (same behavior as before)
+  const filename = FILE_MAP[domain];
+  if (!filename) {
+    console.error(`[uiux] Unknown domain: ${domain}`);
     return [];
   }
 
-  const rows = data?.map(row => row.row_data as UIUXCSVRow) || [];
+  // cache
+  const cached = cache.get(domain);
+  if (cached) return cached;
 
-  // Cache result
-  cache.set(domain, rows);
+  try {
+    const supabase = getSupabaseClient();
 
-  return rows;
+    const { data, error } = await supabase
+      .from('uiux_data')
+      .select('row_data')
+      .eq('domain', domain);
+
+    if (error) {
+      console.error(`[uiux] Failed to query uiux_data for domain=${domain}`, error);
+      return [];
+    }
+
+    const rows = (data ?? []).map((r: any) => (r?.row_data ?? {}) as UIUXCSVRow);
+
+    cache.set(domain, rows);
+    return rows;
+  } catch (err) {
+    console.error(`[uiux] Failed to load UI/UX data from Supabase for domain=${domain}`, err);
+    return [];
+  }
 }
 
 export async function loadAllUIUXCSV(): Promise<Record<string, UIUXCSVRow[]>> {
