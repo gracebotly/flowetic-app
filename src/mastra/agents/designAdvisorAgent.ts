@@ -26,6 +26,7 @@ const recommendStyleKeywords = {
 };
 
 export const designAdvisorAgent = new Agent({
+  id: "designAdvisorAgent",
   name: "Design Advisor",
   instructions: "You are a design system expert. Help users choose appropriate design styles, colors, and typography for their dashboards.",
   tools: {
