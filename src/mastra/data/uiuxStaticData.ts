@@ -431,7 +431,7 @@ export function searchUIUXData(
   query: string,
   domain: 'style' | 'color' | 'typography' | 'product',
   maxResults: number = 3
-): any[] {
+): (StyleEntry | ColorEntry | TypographyEntry | ProductEntry)[] {
   const queryTerms = query.toLowerCase().split(/\s+/).filter(t => t.length >= 2);
 
   let data: any[];
@@ -462,7 +462,7 @@ export function searchUIUXData(
   const scored = data.map(entry => {
     let score = 0;
     const entryText = searchFields
-      .map(f => String(entry[f] || ''))
+      .map(f => String((entry as any)[f] || ''))
       .join(' ')
       .toLowerCase();
 
