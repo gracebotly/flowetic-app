@@ -4,7 +4,6 @@
 
 
 import { createSupaTool } from '../_base';
-import { createClient } from '../../lib/supabase';
 import { createAuthenticatedClient } from '../../lib/supabase';
 import { z } from 'zod';
 
