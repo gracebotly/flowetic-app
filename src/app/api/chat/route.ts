@@ -103,6 +103,17 @@ export async function POST(req: Request) {
     requestContext.set('resourceId', userId);
     requestContext.set('journeyThreadId', clientJourneyThreadId);
     
+    // ✅ ADD THESE 3 LINES FOR AUTHENTICATED SUPABASE CLIENT IN TOOLS
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      return new Response(
+        JSON.stringify({ error: 'Missing session token' }),
+        { status: 401, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+    requestContext.set('supabaseAccessToken', session.access_token);
+    requestContext.set('userEmail', user.email || 'unknown');
+    
     // Force Mastra memory/tool operations to use validated IDs (reserved keys)
     requestContext.set(MASTRA_RESOURCE_ID_KEY, userId);
     requestContext.set(MASTRA_THREAD_ID_KEY, mastraThreadId);
