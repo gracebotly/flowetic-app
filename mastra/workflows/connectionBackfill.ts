@@ -134,8 +134,7 @@ export const connectionBackfillWorkflow = createWorkflow({
         }
         
         const result = await normalizeEvents.execute(
-          { 
-            tenantId: inputData.tenantId,
+          {
             platformType: inputData.platformType as 'vapi' | 'n8n' | 'make' | 'retell',
             sourceId: inputData.sourceId,
             rawEvents: inputData.events
@@ -286,8 +285,7 @@ export const connectionBackfillWorkflow = createWorkflow({
         }
         
         const result = await updateJourneySchemaReady.execute(
-          { 
-            tenantId: inputData.tenantId,
+          {
             threadId: inputData.threadId,
             schemaReady: true
           },
@@ -345,7 +343,6 @@ export const connectionBackfillWorkflow = createWorkflow({
         
         const result = await appendThreadEvent.execute(
           {
-            tenantId: inputData.tenantId,
             threadId: inputData.threadId,
             type: "state",
             message: "Connection backfill completed successfully",

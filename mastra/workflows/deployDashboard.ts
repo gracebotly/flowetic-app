@@ -417,7 +417,6 @@ export const deployDashboardWorkflow = createWorkflow({
 
         await appendThreadEvent.execute(
           {
-            tenantId: inputData.tenantId,
             threadId: inputData.threadId,
             type: "state",
             message: "Deployment initiated",
