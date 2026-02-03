@@ -24,7 +24,7 @@ export const setSchemaReady = createTool({
   }),
   execute: async (inputData, context) => {
     // 1. Get access token
-    const accessToken = context?.requestContext?.get('supabaseAccessToken');
+    const accessToken = context?.requestContext?.get('supabaseAccessToken') as string;
     if (!accessToken) {
       throw new Error('[setSchemaReady]: Missing authentication token');
     }

@@ -24,7 +24,7 @@ export const deleteProject = createTool({
   }),
   execute: async (inputData, context) => {
     // 1. Get access token from context
-    const accessToken = context?.requestContext?.get('supabaseAccessToken');
+    const accessToken = context?.requestContext?.get('supabaseAccessToken') as string;
     if (!accessToken) {
       throw new Error(
         '[deleteProject]: Missing authentication token. ' +
