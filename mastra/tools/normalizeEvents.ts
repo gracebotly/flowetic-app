@@ -12,7 +12,7 @@ export const normalizeEvents = createTool({
   description:
     "Normalize raw platform events into Flowetic events rows for Supabase insertion. Adds platform_event_id for idempotency.",
   inputSchema: z.object({
-    rawEvents: z.array(z.any()),
+    rawEvents: z.array(z.record(z.any())),
     platformType: PlatformType,
     sourceId: z.string().min(1),
   }),

@@ -17,9 +17,20 @@ export const appendThreadEvent = createTool({
     type: z.enum(["state", "tool_event", "error", "info"]),
     message: z.string().min(1),
     metadata: z.record(z.any()).optional(),
+    // NEW: Support for action buttons
+    actionButton: z.object({
+      label: z.string(),
+      action: z.enum(["start_backfill", "generate_preview", "retry"]),
+      payload: z.record(z.any()).optional(),
+    }).optional(),
   }),
   outputSchema: z.object({
     eventId: z.string().uuid(),
+    actionButton: z.object({
+      label: z.string(),
+      action: z.string(),
+      payload: z.record(z.any()).optional(),
+    }).nullable(),
   }),
   execute: async (inputData, context) => {
     // Get access token and tenant context
@@ -30,7 +41,7 @@ export const appendThreadEvent = createTool({
     const { tenantId } = extractTenantContext(context);
     const supabase = createAuthenticatedClient(accessToken);
 
-    const { threadId, interfaceId, runId, type, message, metadata } = inputData;
+    const { threadId, interfaceId, runId, type, message, metadata, actionButton } = inputData;
 
     const { data, error } = await supabase
       .from("events")
@@ -42,7 +53,11 @@ export const appendThreadEvent = createTool({
         name: "thread_event",
         text: message,
         state: metadata ?? null,
-        labels: { threadId },
+        // Store actionButton in labels if provided
+        labels: {
+          threadId,
+          ...(actionButton ? { actionButton } : {}),
+        },
         timestamp: new Date().toISOString(),
       })
       .select("id")
@@ -50,7 +65,10 @@ export const appendThreadEvent = createTool({
 
     if (error) throw new Error(error.message);
 
-    return { eventId: data.id };
+    return {
+      eventId: data.id,
+      actionButton: actionButton ?? null,
+    };
   },
 });
 
