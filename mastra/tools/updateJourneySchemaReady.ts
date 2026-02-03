@@ -4,23 +4,29 @@
 
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
-import { createClient } from "../lib/supabase";
+import { createAuthenticatedClient } from "../lib/supabase";
+import { extractTenantContext } from "../lib/tenant-verification";
 
 export const updateJourneySchemaReady = createTool({
   id: "updateJourneySchemaReady",
   description:
     "Marks journey session schemaReady=true for tenant/thread. Uses journey_sessions as source of truth for gating.",
   inputSchema: z.object({
-    tenantId: z.string().min(1),
     threadId: z.string().min(1),
     schemaReady: z.boolean(),
   }),
   outputSchema: z.object({
     ok: z.boolean(),
   }),
-  execute: async (inputData) => {
-    const supabase = createClient();
-    const { tenantId, threadId, schemaReady } = inputData;
+  execute: async (inputData, context) => {
+    // Get access token and tenant context
+    const accessToken = context?.requestContext?.get('supabaseAccessToken') as string;
+    if (!accessToken || typeof accessToken !== 'string') {
+      throw new Error('[updateJourneySchemaReady]: Missing authentication token');
+    }
+    const { tenantId } = extractTenantContext(context);
+    const { threadId, schemaReady } = inputData;
+    const supabase = createAuthenticatedClient(accessToken);
 
     // Try common column names. If your schema differs, adjust in a follow-up.
     // Attempt 1: schema_ready boolean column

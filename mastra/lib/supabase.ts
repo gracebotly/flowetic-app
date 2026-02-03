@@ -2,10 +2,13 @@
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 
 /**
- * Standalone Supabase client for Mastra tools
- * Works in both Studio and Next.js contexts
+ * Creates an authenticated Supabase client for Mastra tools
+ * Uses the user's access token to enforce RLS policies
+ * 
+ * @param accessToken - JWT access token from user session
+ * @returns Authenticated Supabase client
  */
-export function createClient() {
+export function createAuthenticatedClient(accessToken: string) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -16,6 +19,23 @@ export function createClient() {
     );
   }
 
-  return createSupabaseClient(supabaseUrl, supabaseAnonKey);
+  return createSupabaseClient(supabaseUrl, supabaseAnonKey, {
+    global: {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  });
+}
+
+/**
+ * @deprecated Use createAuthenticatedClient instead
+ * This function creates an unauthenticated client that will fail RLS checks
+ */
+export function createClient() {
+  throw new Error(
+    'createClient() is deprecated. Use createAuthenticatedClient(accessToken) instead. ' +
+    'Access token should be retrieved from context.requestContext.get("supabaseAccessToken")'
+  );
 }
 

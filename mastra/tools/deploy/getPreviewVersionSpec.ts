@@ -1,13 +1,13 @@
 
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
-import { createClient } from "../../lib/supabase";
+import { createAuthenticatedClient } from "../../lib/supabase";
+import { extractTenantContext } from "../../lib/tenant-verification";
 
 export const getPreviewVersionSpec = createTool({
   id: "deploy.getPreviewVersionSpec",
   description: "Fetch spec_json + design_tokens and interface_id for a preview version.",
   inputSchema: z.object({
-    tenantId: z.string().min(1),
     previewVersionId: z.string().min(1),
   }),
   outputSchema: z.object({
@@ -15,13 +15,20 @@ export const getPreviewVersionSpec = createTool({
     spec_json: z.record(z.any()),
     design_tokens: z.record(z.any()),
   }),
-  execute: async (inputData) => {
-    const supabase = createClient();
+  execute: async (inputData, context) => {
+    // Get access token and tenant context
+    const accessToken = context?.requestContext?.get('supabaseAccessToken') as string;
+    if (!accessToken || typeof accessToken !== 'string') {
+      throw new Error('[getPreviewVersionSpec]: Missing authentication token');
+    }
+    const { tenantId } = extractTenantContext(context);
+    const supabase = createAuthenticatedClient(accessToken);
 
     const { data, error } = await supabase
       .from("interface_versions")
       .select("id, interface_id, spec_json, design_tokens")
       .eq("id", inputData.previewVersionId)
+      .eq("tenant_id", tenantId) // Defense-in-depth with RLS
       .maybeSingle();
 
     if (error) throw new Error(error.message);

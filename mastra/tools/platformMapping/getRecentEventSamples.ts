@@ -3,13 +3,13 @@
 
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
-import { createClient } from "../../lib/supabase";
+import { createAuthenticatedClient } from "../../lib/supabase";
+import { extractTenantContext } from "../../lib/tenant-verification";
 
 export const getRecentEventSamples = createTool({
   id: "getRecentEventSamples",
   description: "Fetch recent raw event rows for internal analysis. Do not expose raw JSON to user by default.",
   inputSchema: z.object({
-    tenantId: z.string().uuid().optional(),
     sourceId: z.string().uuid().optional(),
     lastN: z.number().int().min(1).max(500).default(100),
   }),
@@ -28,10 +28,16 @@ export const getRecentEventSamples = createTool({
     ),
   }),
   execute: async (inputData, context) => {
-    const { tenantId, sourceId, lastN } = inputData;
+    const { sourceId, lastN } = inputData;
     const sampleSize = lastN ?? 100;
 
-    const supabase = await createClient();
+    // Get access token and tenant context
+    const accessToken = context?.requestContext?.get('supabaseAccessToken') as string;
+    if (!accessToken || typeof accessToken !== 'string') {
+      throw new Error('[getRecentEventSamples]: Missing authentication token');
+    }
+    const { tenantId } = extractTenantContext(context);
+    const supabase = createAuthenticatedClient(accessToken);
 
     const { data: events, error } = await supabase
       .from("events")

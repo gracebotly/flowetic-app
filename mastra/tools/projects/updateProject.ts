@@ -7,14 +7,14 @@
 
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
-import { createClient } from "../../lib/supabase";
+import { createAuthenticatedClient } from "../../lib/supabase";
+import { extractTenantContext } from "../../lib/tenant-verification";
 import { ProjectPublic, ProjectStatus, ProjectType } from "./types";
 
 export const updateProject = createTool({
   id: "projects.update",
   description: "Update a project (name/type/status/description/publicEnabled) for a tenant.",
   inputSchema: z.object({
-    tenantId: z.string().uuid(),
     projectId: z.string().uuid(),
     name: z.string().min(1).max(120).optional(),
     type: ProjectType.optional(),
@@ -27,7 +27,13 @@ export const updateProject = createTool({
     message: z.string(),
   }),
   execute: async (inputData, context) => {
-    const supabase = await createClient();
+    // Get access token and tenant context
+    const accessToken = context?.requestContext?.get('supabaseAccessToken') as string;
+    if (!accessToken || typeof accessToken !== 'string') {
+      throw new Error('[updateProject]: Missing authentication token');
+    }
+    const { tenantId } = extractTenantContext(context);
+    const supabase = createAuthenticatedClient(accessToken);
 
     const updates: Record<string, any> = {};
     if (inputData.name !== undefined) updates.name = inputData.name;
@@ -44,7 +50,7 @@ export const updateProject = createTool({
       .from("projects")
       .update(updates)
       .eq("id", inputData.projectId)
-      .eq("tenant_id", inputData.tenantId)
+      .eq("tenant_id", tenantId)
       .select("id, tenant_id, name, type, status, description, public_enabled, created_at, updated_at")
       .single();
 

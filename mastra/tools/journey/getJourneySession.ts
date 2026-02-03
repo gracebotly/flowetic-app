@@ -3,13 +3,13 @@
 
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
-import { createClient } from "../../lib/supabase";
+import { createAuthenticatedClient } from "../../lib/supabase";
+import { extractTenantContext } from "../../lib/tenant-verification";
 
 export const getJourneySession = createTool({
   id: "journey.getSession",
   description: "Fetch journey session state for tenant/thread (source of truth for schemaReady).",
   inputSchema: z.object({
-    tenantId: z.string().min(1),
     threadId: z.string().min(1),
   }),
   outputSchema: z.object({
@@ -26,15 +26,21 @@ export const getJourneySession = createTool({
     previewInterfaceId: z.string().nullable(),
     previewVersionId: z.string().nullable(),
   }),
-  execute: async (inputData) => {
-    const supabase = createClient();
+  execute: async (inputData, context) => {
+    // Get access token and tenant context
+    const accessToken = context?.requestContext?.get('supabaseAccessToken') as string;
+    if (!accessToken || typeof accessToken !== 'string') {
+      throw new Error('[getJourneySession]: Missing authentication token');
+    }
+    const { tenantId } = extractTenantContext(context);
+    const supabase = createAuthenticatedClient(accessToken);
 
     const { data, error } = await supabase
       .from("journey_sessions")
       .select(
         "tenant_id,thread_id,platform_type,source_id,entity_id,mode,schema_ready,selected_outcome,selected_storyboard,selected_style_bundle_id,preview_interface_id,preview_version_id",
       )
-      .eq("tenant_id", inputData.tenantId)
+      .eq("tenant_id", tenantId)
       .eq("thread_id", inputData.threadId)
       .maybeSingle();
 

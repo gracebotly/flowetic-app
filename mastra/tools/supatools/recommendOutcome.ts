@@ -1,7 +1,7 @@
 
 
 import { createSupaTool } from '../_base';
-import { createClient } from '../../lib/supabase';
+import { createAuthenticatedClient } from '../../lib/supabase';
 import { z } from 'zod';
 
 const inputSchema = z.object({
@@ -29,20 +29,25 @@ export const recommendOutcome = createSupaTool<z.infer<typeof outputSchema>>({
   description: 'Analyze event patterns to recommend outcome type (dashboard vs product). Returns recommendation with confidence score and data-driven reasoning. Used in Phase 1 outcome selection.',
   inputSchema,
   outputSchema,
-  
   execute: async (rawInput: unknown, context) => {
     const input = inputSchema.parse(rawInput);
-    
+
+    // Get access token
+    const accessToken = context?.requestContext?.get('supabaseAccessToken') as string;
+    if (!accessToken || typeof accessToken !== 'string') {
+      throw new Error('[recommendOutcome]: Missing authentication');
+    }
+
     // ✅ Get tenantId from VALIDATED context, not input
     const tenantId = context.requestContext?.get('tenantId');
-    
+
     if (!tenantId) {
       throw new Error('recommendOutcome: tenantId missing from request context');
     }
-    
+
     const { sourceId, sinceDays } = input;
 
-    const supabase = createClient();
+    const supabase = createAuthenticatedClient(accessToken);
 
     const sinceDate = new Date();
     sinceDate.setUTCDate(sinceDate.getUTCDate() - sinceDays);

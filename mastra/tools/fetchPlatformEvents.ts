@@ -17,7 +17,6 @@ export const fetchPlatformEvents = createTool({
   description:
     "Fetch historical events from a connected platform API. Studio-first: uses env vars for credentials. Returns raw platform events.",
   inputSchema: z.object({
-    tenantId: z.string().min(1),
     sourceId: z.string().min(1),
     threadId: z.string().min(1),
     platformType: PlatformType,

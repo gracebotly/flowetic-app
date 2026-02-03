@@ -3,7 +3,8 @@
 
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
-import { createClient } from "../../lib/supabase";
+import { createAuthenticatedClient } from "../../lib/supabase";
+import { extractTenantContext } from "../../lib/tenant-verification";
 import { decryptSecret, encryptSecret } from "@/lib/secrets";
 import { SourceMethod, SourcePlatformType, SourcePublic, SourceStatus } from "./types";
 
@@ -12,7 +13,6 @@ export const updateSource = createTool({
   description:
     "Update an existing source. Supports updating name/status and optionally merging new credential fields into encrypted secret_hash. Never returns secrets.",
   inputSchema: z.object({
-    tenantId: z.string().uuid(),
     sourceId: z.string().uuid(),
     name: z.string().min(1).max(120).optional(),
     status: SourceStatus.optional(),
@@ -24,8 +24,14 @@ export const updateSource = createTool({
     message: z.string(),
   }),
   execute: async (inputData, context) => {
-    const supabase = await createClient();
-    const { tenantId, sourceId } = inputData;
+    // Get access token and tenant context
+    const accessToken = context?.requestContext?.get('supabaseAccessToken') as string;
+    if (!accessToken || typeof accessToken !== 'string') {
+      throw new Error('[updateSource]: Missing authentication token');
+    }
+    const { tenantId } = extractTenantContext(context);
+    const supabase = createAuthenticatedClient(accessToken);
+    const { sourceId } = inputData;
 
     const { data: existing, error: exErr } = await supabase
       .from("sources")

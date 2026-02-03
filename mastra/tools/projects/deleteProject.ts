@@ -7,45 +7,52 @@
 
 
 
-import { createTool } from "@mastra/core/tools";
-import { z } from "zod";
-import { createClient } from "../../lib/supabase";
+import { createTool } from '@mastra/core/tools';
+import { z } from 'zod';
+import { createAuthenticatedClient } from '../../lib/supabase';
+import { extractTenantContext } from '../../lib/tenant-verification';
 
 export const deleteProject = createTool({
-  id: "projects.delete",
-  description: "Delete a project by ID for a tenant.",
+  id: 'deleteProject',
+  description: 'Deletes a project by ID. Only accessible by authenticated users within their tenant.',
   inputSchema: z.object({
-    tenantId: z.string().uuid(),
-    projectId: z.string().uuid(),
+    projectId: z.string().uuid().describe('The UUID of the project to delete'),
   }),
   outputSchema: z.object({
     success: z.boolean(),
-    message: z.string(),
+    projectId: z.string(),
   }),
   execute: async (inputData, context) => {
-    const supabase = await createClient();
-    const { tenantId, projectId } = inputData;
+    // 1. Get access token from context
+    const accessToken = context?.requestContext?.get('supabaseAccessToken') as string;
+    if (!accessToken) {
+      throw new Error(
+        '[deleteProject]: Missing authentication token. ' +
+        'Ensure the API route passes supabaseAccessToken in RequestContext.'
+      );
+    }
 
-    // Pre-check so we can return PROJECT_NOT_FOUND deterministically.
-    const { data: existing, error: exErr } = await supabase
-      .from("projects")
-      .select("id")
-      .eq("id", projectId)
-      .eq("tenant_id", tenantId)
-      .maybeSingle();
+    // 2. Get tenant context
+    const { tenantId } = extractTenantContext(context);
 
-    if (exErr) throw new Error(`PROJECT_LOOKUP_FAILED: ${exErr.message}`);
-    if (!existing) throw new Error("PROJECT_NOT_FOUND");
+    // 3. Create authenticated client (RLS enforced automatically)
+    const supabase = createAuthenticatedClient(accessToken);
 
+    // 4. Delete with RLS enforcement
     const { error } = await supabase
-      .from("projects")
+      .from('projects')
       .delete()
-      .eq("id", projectId)
-      .eq("tenant_id", tenantId);
+      .eq('id', inputData.projectId)
+      .eq('tenant_id', tenantId); // Extra safety beyond RLS
 
-    if (error) throw new Error(`PROJECT_DELETE_FAILED: ${error.message}`);
+    if (error) {
+      throw new Error(`Failed to delete project: ${error.message}`);
+    }
 
-    return { success: true, message: "Project deleted successfully." };
+    return { 
+      success: true, 
+      projectId: inputData.projectId 
+    };
   },
 });
 

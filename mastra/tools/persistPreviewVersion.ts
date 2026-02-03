@@ -1,13 +1,12 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-import { createClient } from '../lib/supabase';
+import { createAuthenticatedClient } from '../lib/supabase';
+import { extractTenantContext } from '../lib/tenant-verification';
 
 export const persistPreviewVersion = createTool({
   id: 'persist-preview-version',
   description: 'Saves dashboard spec as a new interface version in Supabase',
   inputSchema: z.object({
-    tenantId: z.string().uuid(),
-    userId: z.string().uuid(),
     interfaceId: z.string().uuid().optional(),
     spec_json: z.record(z.any()),
     design_tokens: z.record(z.any()),
@@ -19,9 +18,14 @@ export const persistPreviewVersion = createTool({
     previewUrl: z.string(),
   }),
   execute: async (inputData, context) => {
-    const { tenantId, userId, interfaceId, spec_json, design_tokens, platformType } = inputData;
+    const accessToken = context?.requestContext?.get('supabaseAccessToken') as string;
+    if (!accessToken || typeof accessToken !== 'string') {
+      throw new Error('[persistPreviewVersion]: Missing authentication');
+    }
+    const { tenantId, userId } = extractTenantContext(context);
+    const supabase = createAuthenticatedClient(accessToken);
     
-    const supabase = await createClient();
+    const { interfaceId, spec_json, design_tokens, platformType } = inputData;
     
     // Create or get interface
     let finalInterfaceId = interfaceId;

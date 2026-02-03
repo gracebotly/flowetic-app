@@ -1,12 +1,12 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-import { createClient } from '../lib/supabase';
+import { createAuthenticatedClient } from '../lib/supabase';
+import { extractTenantContext } from '../lib/tenant-verification';
 
 export const analyzeSchema = createTool({
   id: 'analyze-schema',
   description: 'Analyzes event schema from a data source to detect field types and patterns',
   inputSchema: z.object({
-    tenantId: z.string().uuid(),
     sourceId: z.string().uuid(),
     sampleSize: z.number().default(100),
   }),
@@ -21,9 +21,15 @@ export const analyzeSchema = createTool({
     confidence: z.number().min(0).max(1),
   }),
   execute: async (inputData, context) => {
-    const { tenantId, sourceId, sampleSize } = inputData;
+    const { sourceId, sampleSize } = inputData;
     
-    const supabase = await createClient();
+    // Get access token and tenant context
+    const accessToken = context?.requestContext?.get('supabaseAccessToken') as string;
+    if (!accessToken || typeof accessToken !== 'string') {
+      throw new Error('[analyzeSchema]: Missing authentication token');
+    }
+    const { tenantId } = extractTenantContext(context);
+    const supabase = createAuthenticatedClient(accessToken);
     
     // Fetch sample events
     const { data: events, error } = await supabase

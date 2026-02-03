@@ -3,7 +3,8 @@
 
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
-import { createClient } from "../../lib/supabase";
+import { createAuthenticatedClient } from "../../lib/supabase";
+import { extractTenantContext } from "../../lib/tenant-verification";
 
 export const getCurrentSpec = createTool({
   id: "getCurrentSpec",
@@ -24,7 +25,13 @@ export const getCurrentSpec = createTool({
       throw new Error("interfaceId is required");
     }
 
-    const supabase = await createClient();
+    // Get access token and tenant context
+    const accessToken = context?.requestContext?.get('supabaseAccessToken') as string;
+    if (!accessToken || typeof accessToken !== 'string') {
+      throw new Error('[getCurrentSpec]: Missing authentication token');
+    }
+    const { tenantId } = extractTenantContext(context);
+    const supabase = createAuthenticatedClient(accessToken);
 
     const { data: versions, error: versionError } = await supabase
       .from("interface_versions")

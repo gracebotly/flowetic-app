@@ -2,7 +2,7 @@
 
 
 import { createSupaTool } from '../_base';
-import { createClient } from '../../lib/supabase';
+import { createAuthenticatedClient } from '../../lib/supabase';
 import { z } from 'zod';
 
 const inputSchema = z.object({
@@ -31,20 +31,25 @@ export const validatePreviewReadiness = createSupaTool<z.infer<typeof outputSche
   description: 'Validate all prerequisites before preview generation. Checks source, events, schema readiness, and event type coverage. Returns blockers and warnings. Use before Phase 4 to prevent failed workflows.',
   inputSchema,
   outputSchema,
-
   execute: async (rawInput: unknown, context) => {
     const input = inputSchema.parse(rawInput);
-    
+
+    // Get access token
+    const accessToken = context?.requestContext?.get('supabaseAccessToken') as string;
+    if (!accessToken || typeof accessToken !== 'string') {
+      throw new Error('[validatePreviewReadiness]: Missing authentication');
+    }
+
     // ✅ Get tenantId from VALIDATED context, not input
     const tenantId = context.requestContext?.get('tenantId');
-    
+
     if (!tenantId) {
       throw new Error('validatePreviewReadiness: tenantId missing from request context');
     }
-    
+
     const { sourceId, requireMinEvents, requireSchemaReady } = input;
 
-    const supabase = createClient();
+    const supabase = createAuthenticatedClient(accessToken);
     const blockers: string[] = [];
     const warnings: string[] = [];
 
@@ -74,9 +79,9 @@ export const validatePreviewReadiness = createSupaTool<z.infer<typeof outputSche
     }
     
     const { data: events, error: eventsError } = await eventsQuery;
-    
+
     const eventCount = events?.length || 0;
-    const eventTypes = new Set(events?.map(e => e.type) || []);
+    const eventTypes = new Set(events?.map((e: any) => e.type as string) || []);
     const uniqueEventTypes = Array.from(eventTypes);
     
     if (eventsError) {

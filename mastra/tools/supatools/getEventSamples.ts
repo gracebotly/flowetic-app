@@ -2,7 +2,7 @@
 
 
 import { createSupaTool } from '../_base';
-import { createClient } from '../../lib/supabase';
+import { createAuthenticatedClient } from '../../lib/supabase';
 import { z } from 'zod';
 
 const EventType = z.enum(['message', 'metric', 'state', 'tool_event', 'error']);
@@ -53,20 +53,25 @@ export const getEventSamples = createSupaTool<z.infer<typeof outputSchema>>({
     'Get sample event records for schema analysis and template selection. Returns up to limit events with all fields. limit is capped at 500.',
   inputSchema,
   outputSchema,
-  
   execute: async (rawInput: unknown, context) => {
     const input = inputSchema.parse(rawInput);
-    
+
+    // Get access token
+    const accessToken = context?.requestContext?.get('supabaseAccessToken') as string;
+    if (!accessToken || typeof accessToken !== 'string') {
+      throw new Error('[getEventSamples]: Missing authentication');
+    }
+
     // ✅ Get tenantId from VALIDATED context, not input
     const tenantId = context.requestContext?.get('tenantId');
-    
+
     if (!tenantId) {
       throw new Error('getEventSamples: tenantId missing from request context');
     }
-    
+
     const { sourceId, type, limit, sinceDays } = input;
 
-    const supabase = createClient();
+    const supabase = createAuthenticatedClient(accessToken);
 
     let query = supabase
       .from('events')

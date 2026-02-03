@@ -1,7 +1,7 @@
 
 
 import { createSupaTool } from '../_base';
-import { createClient } from '../../lib/supabase';
+import { createAuthenticatedClient } from '../../lib/supabase';
 import { z } from 'zod';
 
 const EventType = z.enum(['message', 'metric', 'state', 'tool_event', 'error']);
@@ -37,20 +37,25 @@ export const getEventStats = createSupaTool<z.infer<typeof outputSchema>>({
     'Get statistical summary of events for a tenant. Returns total count, distribution by type/source, date range, and error/metric counts.',
   inputSchema,
   outputSchema,
-  
   execute: async (rawInput: unknown, context) => {
     const input = inputSchema.parse(rawInput);
-    
+
+    // Get access token
+    const accessToken = context?.requestContext?.get('supabaseAccessToken') as string;
+    if (!accessToken || typeof accessToken !== 'string') {
+      throw new Error('[getEventStats]: Missing authentication');
+    }
+
     // ✅ Get tenantId from VALIDATED context, not input
     const tenantId = context.requestContext?.get('tenantId');
-    
+
     if (!tenantId) {
       throw new Error('getEventStats: tenantId missing from request context');
     }
-    
+
     const { sourceId, type, sinceDays } = input;
 
-    const supabase = createClient();
+    const supabase = createAuthenticatedClient(accessToken);
 
     const sinceDate = new Date();
     sinceDate.setUTCDate(sinceDate.getUTCDate() - sinceDays);

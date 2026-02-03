@@ -89,12 +89,11 @@ export const connectionBackfillWorkflow = createWorkflow({
           throw new Error("fetchPlatformEvents.execute is not available");
         }
         const result = await fetchPlatformEvents.execute(
-          { 
-            tenantId: inputData.tenantId,
+          {
             threadId: inputData.threadId,
-            platformType: inputData.platformType, 
-            sourceId: inputData.sourceId, 
-            eventCount 
+            platformType: inputData.platformType,
+            sourceId: inputData.sourceId,
+            eventCount
           },
           { requestContext }
         );
@@ -134,8 +133,7 @@ export const connectionBackfillWorkflow = createWorkflow({
         }
         
         const result = await normalizeEvents.execute(
-          { 
-            tenantId: inputData.tenantId,
+          {
             platformType: inputData.platformType as 'vapi' | 'n8n' | 'make' | 'retell',
             sourceId: inputData.sourceId,
             rawEvents: inputData.events
@@ -177,8 +175,7 @@ export const connectionBackfillWorkflow = createWorkflow({
         }
         
         const result = await storeEvents.execute(
-          { 
-            tenantId: inputData.tenantId,
+          {
             sourceId: inputData.sourceId,
             events: inputData.normalizedEvents
           },
@@ -230,8 +227,7 @@ export const connectionBackfillWorkflow = createWorkflow({
         }
         
         const result = await generateSchemaSummaryFromEvents.execute(
-          { 
-            tenantId: inputData.tenantId,
+          {
             sourceId: inputData.sourceId,
             sampleSize
           },
@@ -287,8 +283,7 @@ export const connectionBackfillWorkflow = createWorkflow({
         }
         
         const result = await updateJourneySchemaReady.execute(
-          { 
-            tenantId: inputData.tenantId,
+          {
             threadId: inputData.threadId,
             schemaReady: true
           },
@@ -346,7 +341,6 @@ export const connectionBackfillWorkflow = createWorkflow({
         
         const result = await appendThreadEvent.execute(
           {
-            tenantId: inputData.tenantId,
             threadId: inputData.threadId,
             type: "state",
             message: "Connection backfill completed successfully",

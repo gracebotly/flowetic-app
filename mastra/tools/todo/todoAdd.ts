@@ -1,7 +1,8 @@
 
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { createAuthenticatedClient } from "../../lib/supabase";
+import { extractTenantContext } from "../../lib/tenant-verification";
 
 const TodoPrioritySchema = z.enum(["low", "medium", "high", "urgent"]);
 
@@ -20,15 +21,15 @@ export const todoAdd = createTool({
   outputSchema: z.object({
     todo: z.any().nullable(),
   }),
-  execute: async (inputData: any) => {
-    const supabase = await createClient();
-
-    const { data: authData } = await supabase.auth.getUser();
-    if (!authData?.user?.id) {
-      return { todo: null };
+  execute: async (inputData: any, context: any) => {
+    const accessToken = context?.requestContext?.get('supabaseAccessToken') as string;
+    if (!accessToken || typeof accessToken !== 'string') {
+      throw new Error('[todoAdd]: Missing authentication');
     }
+    const { tenantId, userId } = extractTenantContext(context);
+    const supabase = createAuthenticatedClient(accessToken);
 
-    const { tenantId, threadId, title, description, priority, tags, parentId } = inputData;
+    const { threadId, title, description, priority, tags, parentId } = inputData;
 
     try {
       const { data, error } = await supabase

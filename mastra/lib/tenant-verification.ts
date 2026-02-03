@@ -1,46 +1,47 @@
-import { createClient } from './supabase';
-import type { RequestContext } from '@mastra/core/request-context';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
-/**
- * Verify tenant membership before executing any Supatool
- * Returns user role if authorized, throws error if unauthorized
- */
-export async function verifyTenantAccess(
-  tenantId: string,
-  userId: string
-): Promise<{ role: string }> {
-  const supabase = createClient();
-  
-  const { data, error } = await supabase
-    .from('memberships')
-    .select('role')
-    .eq('tenant_id', tenantId)
-    .eq('user_id', userId)
-    .single();
-    
-  if (error || !data) {
-    throw new Error('TENANT_ACCESS_DENIED: User is not authorized for this tenant');
-  }
-  
-  return data;
+interface TenantContext {
+  tenantId: string;
+  userId: string;
 }
 
 /**
- * Extract tenant and user context from requestContext
+ * Extracts tenant context from RequestContext
  * Throws error if context is missing
  */
-export function extractAuthContext(context: any): { tenantId: string; userId: string } {
-  const requestContext = context?.requestContext || context;
-  const tenantId = typeof requestContext?.get === 'function'
-    ? requestContext.get('tenantId')
-    : (requestContext as any)?.tenantId;
-  const userId = typeof requestContext?.get === 'function'
-    ? requestContext.get('userId')
-    : (requestContext as any)?.userId;
-    
+export function extractTenantContext(context: any): TenantContext {
+  const tenantId = context?.requestContext?.get('tenantId');
+  const userId = context?.requestContext?.get('userId');
+
   if (!tenantId || !userId) {
-    throw new Error('AUTH_CONTEXT_MISSING: tenantId and userId are required in requestContext');
+    throw new Error(
+      'Missing tenant context. Ensure tenantId and userId are set in RequestContext. ' +
+      'This usually means the API route did not pass authentication context to the tool.'
+    );
   }
-  
+
   return { tenantId, userId };
+}
+
+/**
+ * Verifies that the authenticated user has access to the specified tenant
+ * Optional extra security check beyond RLS
+ */
+export async function verifyTenantAccess(
+  supabase: SupabaseClient,
+  tenantId: string,
+  userId: string
+): Promise<void> {
+  const { data, error } = await supabase
+    .from('clients')
+    .select('id')
+    .eq('id', tenantId)
+    .single();
+
+  if (error || !data) {
+    throw new Error(
+      `TENANT_ACCESS_DENIED: User ${userId} cannot access tenant ${tenantId}. ` +
+      `Error: ${error?.message || 'Tenant not found'}`
+    );
+  }
 }
