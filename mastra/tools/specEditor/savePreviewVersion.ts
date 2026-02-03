@@ -27,18 +27,14 @@ export const savePreviewVersion = createTool({
     if (!accessToken || typeof accessToken !== 'string') {
       throw new Error('[savePreviewVersion]: Missing authentication token');
     }
-    const { tenantId } = extractTenantContext(context);
+    const { tenantId, userId } = extractTenantContext(context);
     const supabase = createAuthenticatedClient(accessToken);
 
-    // Get tenantId and userId from request context, not from context.get()
-    const requestContext = (context as any).requestContext;
-    const tenantId = requestContext?.get("tenantId") as string | undefined;
-    const userId = requestContext?.get("userId") as string | undefined;
-    const platformType = (requestContext?.get("platformType") as string | undefined) ?? "make";
+    const platformType = (context?.requestContext?.get("platformType") as string | undefined) ?? "make";
 
     if (!tenantId || !userId) throw new Error("AUTH_REQUIRED");
 
-    const finalInterfaceId = interfaceId ?? (requestContext?.get("interfaceId") as string | undefined) ?? undefined;
+    const finalInterfaceId = interfaceId ?? (context?.requestContext?.get("interfaceId") as string | undefined) ?? undefined;
 
     const { data: version, error: versionError } = await supabase
       .from("interface_versions")
