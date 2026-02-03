@@ -18,9 +18,14 @@ export const persistPreviewVersion = createTool({
     previewUrl: z.string(),
   }),
   execute: async (inputData, context) => {
-    const { tenantId, userId, interfaceId, spec_json, design_tokens, platformType } = inputData;
+    const accessToken = context?.requestContext?.get('supabaseAccessToken') as string;
+    if (!accessToken || typeof accessToken !== 'string') {
+      throw new Error('[persistPreviewVersion]: Missing authentication');
+    }
+    const { tenantId, userId } = extractTenantContext(context);
+    const supabase = createAuthenticatedClient(accessToken);
     
-    const supabase = await createClient();
+    const { interfaceId, spec_json, design_tokens, platformType } = inputData;
     
     // Create or get interface
     let finalInterfaceId = interfaceId;

@@ -2,7 +2,8 @@
 
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
-import { createClient } from "../lib/supabase";
+import { createAuthenticatedClient } from "../../lib/supabase";
+import { extractTenantContext } from "../../lib/tenant-verification";
 
 export const storeEvents = createTool({
   id: "storeEvents",
@@ -18,8 +19,13 @@ export const storeEvents = createTool({
     skipped: z.number().int(),
     errors: z.array(z.string()),
   }),
-  execute: async (inputData) => {
-    const supabase = createClient();
+  execute: async (inputData, context) => {
+    const accessToken = context?.requestContext?.get('supabaseAccessToken') as string;
+    if (!accessToken || typeof accessToken !== 'string') {
+      throw new Error('[storeEvents]: Missing authentication');
+    }
+    const { tenantId } = extractTenantContext(context);
+    const supabase = createAuthenticatedClient(accessToken);
     const rows = inputData.events ?? [];
 
     if (!rows.length) return { stored: 0, skipped: 0, errors: [] };

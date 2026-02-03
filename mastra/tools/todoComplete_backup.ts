@@ -1,7 +1,8 @@
 
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { createAuthenticatedClient } from "../../lib/supabase";
+import { extractTenantContext } from "../../lib/tenant-verification";
 import { TodoItemSchema, TodoPrioritySchema } from "./types";
 
 export const todoAdd = createTool({
@@ -20,8 +21,13 @@ export const todoAdd = createTool({
     todo: TodoItemSchema,
   }),
   execute: async (inputData: any, context: any) => {
-    const supabase = await createClient();
-    const { tenantId, threadId, title, description, priority, tags, parentId } = inputData;
+    const accessToken = context?.requestContext?.get('supabaseAccessToken') as string;
+    if (!accessToken || typeof accessToken !== 'string') {
+      throw new Error('[todoComplete_backup]: Missing authentication');
+    }
+    const { tenantId, userId } = extractTenantContext(context);
+    const supabase = createAuthenticatedClient(accessToken);
+    const { threadId, title, description, priority, tags, parentId } = inputData;
 
     const { data, error } = await supabase
       .from("todos")

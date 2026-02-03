@@ -33,8 +33,13 @@ export const todoUpdate = createTool({
     }),
   }),
   execute: async (inputData, context) => {
-    const supabase = createClient();
-    const { tenantId, threadId, todoId, ...patch } = inputData;
+    const accessToken = context?.requestContext?.get('supabaseAccessToken') as string;
+    if (!accessToken || typeof accessToken !== 'string') {
+      throw new Error('[todoUpdate]: Missing authentication');
+    }
+    const { tenantId, userId } = extractTenantContext(context);
+    const supabase = createAuthenticatedClient(accessToken);
+    const { threadId, todoId, ...patch } = inputData;
 
     const { data, error } = await supabase
       .from("todos")
