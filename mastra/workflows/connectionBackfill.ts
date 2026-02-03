@@ -230,8 +230,7 @@ export const connectionBackfillWorkflow = createWorkflow({
         }
         
         const result = await generateSchemaSummaryFromEvents.execute(
-          { 
-            tenantId: inputData.tenantId,
+          {
             sourceId: inputData.sourceId,
             sampleSize
           },
