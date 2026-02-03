@@ -1,72 +1,161 @@
 
 
 
-import { createTool } from '@mastra/core/tools';
+import { createSupaTool } from '../_base';
+import { createClient } from '../../lib/supabase';
 import { z } from 'zod';
-import { createAuthenticatedClient } from '../../lib/supabase';
-import { extractTenantContext } from '../../lib/tenant-verification';
 
-export const validatePreviewReadiness = createTool({
+const inputSchema = z.object({
+  sourceId: z.string().uuid().optional(),
+  requireMinEvents: z.number().min(1).default(10),
+  requireSchemaReady: z.boolean().default(true),
+});
+
+
+
+const outputSchema = z.object({
+  ready: z.boolean(),
+  canProceed: z.boolean(),
+  checks: z.object({
+    hasSource: z.object({ passed: z.boolean(), message: z.string() }),
+    hasEvents: z.object({ passed: z.boolean(), message: z.string(), count: z.number() }),
+    journeySession: z.object({ passed: z.boolean(), message: z.string() }),
+    eventTypes: z.object({ passed: z.boolean(), message: z.string(), types: z.array(z.string()) }),
+  }),
+  blockers: z.array(z.string()),
+  warnings: z.array(z.string()),
+});
+
+export const validatePreviewReadiness = createSupaTool<z.infer<typeof outputSchema>>({
   id: 'validatePreviewReadiness',
-  description: 'Validates if a preview interface is ready for deployment by checking all associated journey schemas',
-  inputSchema: z.object({
-    interfaceId: z.string().uuid().describe('The interface ID to validate'),
+  description: 'Validate all prerequisites before preview generation. Checks source, events, schema readiness, and event type coverage. Returns blockers and warnings. Use before Phase 4 to prevent failed workflows.',
+  inputSchema,
+  outputSchema,
+  requestContextSchema: z.object({
+    tenantId: z.string(),
+    userId: z.string(),
   }),
-  outputSchema: z.object({
-    ready: z.boolean(),
-    interfaceId: z.string(),
-    schemasCount: z.number(),
-    readySchemasCount: z.number(),
-  }),
-  execute: async (inputData, context) => {
-    // 1. Get access token
-    const accessToken = context?.requestContext?.get('supabaseAccessToken') as string;
-    if (!accessToken) {
-      throw new Error('[validatePreviewReadiness]: Missing authentication token');
+
+  execute: async (rawInput: unknown, context) => {
+    const input = inputSchema.parse(rawInput);
+    
+    // ✅ Get tenantId from VALIDATED context, not input
+    const tenantId = context.requestContext?.get('tenantId');
+    
+    if (!tenantId) {
+      throw new Error('validatePreviewReadiness: tenantId missing from request context');
     }
+    
+    const { sourceId, requireMinEvents, requireSchemaReady } = input;
 
-    // 2. Get tenant context
-    const { tenantId } = extractTenantContext(context);
+    const supabase = createClient();
+    const blockers: string[] = [];
+    const warnings: string[] = [];
 
-    // 3. Create authenticated client
-    const supabase = createAuthenticatedClient(accessToken);
-
-    // 4. Get interface with RLS enforcement
-    const { data: interface_, error: interfaceError } = await supabase
-      .from('interfaces')
-      .select('id, journey_id')
-      .eq('id', inputData.interfaceId)
+    const { data: sources, error: sourceError } = await supabase
+      .from('sources')
+      .select('id, name, status')
       .eq('tenant_id', tenantId)
-      .single();
+      .eq(sourceId ? 'id' : 'tenant_id', sourceId ?? tenantId)
+      .limit(1);
 
-    if (interfaceError || !interface_) {
-      throw new Error(
-        `Interface not found or access denied: ${interfaceError?.message || 'Not found'}`
-      );
+    const source = !sourceError && sources && sources.length > 0 ? sources[0] : undefined;
+    
+    if (!source) {
+      blockers.push('No active source found. Connect a platform source before generating preview.');
+    } else if (source.status !== 'active') {
+      blockers.push(`Source "${source.name}" is ${source.status}. Activate the source before generating preview.`);
     }
-
-    // 5. Check all schemas for this journey with RLS enforcement
-    const { data: schemas, error: schemasError } = await supabase
-      .from('journey_schemas')
-      .select('id, ready')
-      .eq('journey_id', interface_.journey_id)
+    
+    // Check 2: Has minimum events
+    let eventsQuery = supabase
+      .from('events')
+      .select('id, type')
       .eq('tenant_id', tenantId);
+    
+    if (sourceId) {
+      eventsQuery = eventsQuery.eq('source_id', sourceId);
+    }
+    
+    const { data: events, error: eventsError } = await eventsQuery;
+    
+    const eventCount = events?.length || 0;
+    const eventTypes = new Set(events?.map(e => e.type) || []);
+    const uniqueEventTypes = Array.from(eventTypes);
+    
+    if (eventsError) {
+      blockers.push(`Failed to query events: ${eventsError.message}`);
+    } else if (eventCount < requireMinEvents) {
+      blockers.push(`Insufficient events (${eventCount} < ${requireMinEvents}). Collect more data before generating preview.`);
+    }
+    
+    const { data: session, error: sessionError } = await supabase
+      .from('journey_sessions')
+      .select(
+        'id, mode, source_id, entity_id, selected_outcome, selected_storyboard, selected_style_bundle_id, preview_interface_id, preview_version_id, updated_at'
+      )
+      .eq('tenant_id', tenantId)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-    if (schemasError) {
-      throw new Error(`Failed to check schemas: ${schemasError.message}`);
+    if (sessionError) {
+      warnings.push(`Could not verify journey session readiness: ${sessionError.message}`);
     }
 
-    const schemasCount = schemas?.length ?? 0;
-    const readySchemasCount = schemas?.filter(s => s.ready).length ?? 0;
-    const allReady = schemasCount > 0 && schemasCount === readySchemasCount;
-
+    // Conservative readiness: require at least a session and a selected source.
+    if (requireSchemaReady) {
+      if (!session) {
+        blockers.push('No journey session found. Start the journey before generating a preview.');
+      } else if (!session.source_id) {
+        blockers.push('No source selected in the current journey session.');
+      }
+    }
+    
+    // Check 4: Event types coverage
+    if (uniqueEventTypes.length === 0) {
+      warnings.push('No event types detected. Dashboard may be empty.');
+    } else if (uniqueEventTypes.length === 1) {
+      warnings.push(`Only "${uniqueEventTypes[0]}" event type detected. Consider waiting for more event types.`);
+    } else if (!uniqueEventTypes.includes('metric')) {
+      warnings.push('No metric events detected. Dashboard may lack quantitative data.');
+    }
+    
+    // Final verdict
+    const ready = blockers.length === 0;
+    const canProceed = ready && warnings.length < 3;
+    
     return {
-      ready: allReady,
-      interfaceId: inputData.interfaceId,
-      schemasCount,
-      readySchemasCount,
+      ready,
+      canProceed,
+      checks: {
+        hasSource: {
+          passed: !!source && source.status === 'active',
+          message: source ? `Source "${source.name}" is active` : 'No active source',
+        },
+        hasEvents: {
+          passed: eventCount >= requireMinEvents,
+          message: `${eventCount} events (minimum: ${requireMinEvents})`,
+          count: eventCount,
+        },
+        journeySession: {
+          passed: !requireSchemaReady ? true : !!session?.source_id,
+          message: session
+            ? `session mode=${session.mode ?? '(unknown)'} sourceSelected=${!!session.source_id}`
+            : 'No session',
+        },
+        eventTypes: {
+          passed: uniqueEventTypes.length >= 2,
+          message: `${uniqueEventTypes.length} unique event types: ${uniqueEventTypes.join(', ')}`,
+          types: uniqueEventTypes,
+        },
+      },
+      blockers,
+      warnings,
     };
   },
 });
+
+
 
 

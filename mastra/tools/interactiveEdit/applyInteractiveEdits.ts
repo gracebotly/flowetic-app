@@ -37,6 +37,13 @@ export const applyInteractiveEdits = createTool({
     previewUrl: z.string().url(),
     previewVersionId: z.string().uuid(),
   }),
+  requestContextSchema: z.object({
+    tenantId: z.string(),
+    userId: z.string(),
+    supabaseAccessToken: z.string(),
+    interfaceId: z.string().optional(),
+    platformType: z.string().optional(),
+  }),
   execute: async (inputData, context) => {
     const { tenantId, userId, interfaceId, platformType, actions } = inputData;
 
