@@ -127,9 +127,9 @@ export const getStyleBundles = createTool({
     const query = `${platformType} ${dashboardKind} ${audience === "ops" ? "technical ops" : "client-facing"} ${notes || ""}`.trim();
 
     try {
-      // Search for relevant styles and colors
-      const matchedStyles = searchUIUXData(query, "style", 4);
-      const matchedColors = searchUIUXData(query, "color", 4);
+      // Search for relevant styles and colors (cast to specific types)
+      const matchedStyles = searchUIUXData(query, "style", 4) as StyleEntry[];
+      const matchedColors = searchUIUXData(query, "color", 4) as ColorEntry[];
 
       // Build 4 bundles
       const bundles: StyleBundle[] = [];
