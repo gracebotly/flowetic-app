@@ -1,6 +1,6 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
-import { searchUIUXData, STYLES, COLORS, TYPOGRAPHY, PRODUCTS } from "@/mastra/data/uiuxStaticData";
+import { searchUIUXData, STYLES, COLORS, TYPOGRAPHY, PRODUCTS } from "../../data/uiuxStaticData";
 
 /**
  * Search UI/UX Pro Max static data.

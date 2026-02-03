@@ -1,7 +1,6 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
-import { generateDesignSystem, searchDesignDatabase } from "@/mastra/tools/design-system";
-import { callTool } from "../../lib/callTool";
+import { searchUIUXData, STYLES, COLORS, type StyleEntry, type ColorEntry } from "../../data/uiuxStaticData";
 
 function hexToRgb(hex: string): [number, number, number] {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
@@ -36,239 +35,78 @@ function stableId(input: string) {
     .slice(0, 64);
 }
 
-function extractHexes(text: string): string[] {
-  return text.match(/#[0-9a-fA-F]{6}/g) ?? [];
-}
-
-function pickPreviewImage(styleText: string): string {
-  const t = styleText.toLowerCase();
+function pickPreviewImage(styleName: string): string {
+  const t = styleName.toLowerCase();
   if (t.includes("glass")) return "/style-previews/glassmorphism.png";
-  if (t.includes("brutal")) return "/style-previews/brutalism.png";
-  if (t.includes("neo") || t.includes("neumorph") || t.includes("soft ui")) return "/style-previews/neumorphism.png";
-  if (t.includes("minimal")) return "/style-previews/minimalism.png";
+  if (t.includes("brutal") || t.includes("neubrutalism")) return "/style-previews/brutalism.png";
+  if (t.includes("neumorph") || t.includes("soft")) return "/style-previews/neumorphism.png";
   if (t.includes("dark")) return "/style-previews/dark-mode.png";
+  if (t.includes("bento")) return "/style-previews/bento-grid.png";
   return "/style-previews/minimalism.png";
 }
 
-function bundleFromHexes(opts: {
-  idSeed: string;
-  name: string;
-  description: string;
-  tags: string[];
-  styleTextForPreview: string;
-  hexes: string[];
-}): StyleBundle {
-  const paletteHex = (opts.hexes.length >= 5 ? opts.hexes.slice(0, 5) : []).concat(
-    ["#2563EB", "#22C55E", "#F8FAFC", "#FFFFFF", "#0F172A"].slice(Math.max(0, 5 - opts.hexes.length)),
-  );
-
+function buildBundle(
+  style: StyleEntry,
+  color: ColorEntry,
+  bundleName: string,
+  description: string,
+  tags: string[],
+  density: "compact" | "comfortable" | "spacious" = "comfortable"
+): StyleBundle {
   return {
-    id: stableId(opts.idSeed),
-    name: opts.name,
-    description: opts.description,
-    previewImageUrl: pickPreviewImage(opts.styleTextForPreview),
+    id: stableId(bundleName),
+    name: bundleName,
+    description,
+    previewImageUrl: pickPreviewImage(style.name),
     palette: {
-      name: "UI/UX Pro Max",
+      name: color.productType,
       swatches: [
-        { name: "Primary", hex: paletteHex[0]!, rgb: hexToRgb(paletteHex[0]!) },
-        { name: "Accent", hex: paletteHex[1]!, rgb: hexToRgb(paletteHex[1]!) },
-        { name: "Background", hex: paletteHex[2]!, rgb: hexToRgb(paletteHex[2]!) },
-        { name: "Surface", hex: paletteHex[3]!, rgb: hexToRgb(paletteHex[3]!) },
-        { name: "Text", hex: paletteHex[4]!, rgb: hexToRgb(paletteHex[4]!) },
+        { name: "Primary", hex: color.primary, rgb: hexToRgb(color.primary) },
+        { name: "Secondary", hex: color.secondary, rgb: hexToRgb(color.secondary) },
+        { name: "CTA", hex: color.cta, rgb: hexToRgb(color.cta) },
+        { name: "Background", hex: color.background, rgb: hexToRgb(color.background) },
+        { name: "Text", hex: color.text, rgb: hexToRgb(color.text) },
       ],
     },
-    densityPreset: "comfortable",
-    tags: opts.tags,
+    densityPreset: density,
+    tags,
     designTokens: {
-      "theme.color.primary": paletteHex[0]!,
-      "theme.color.accent": paletteHex[1]!,
-      "theme.color.background": paletteHex[2]!,
-      "theme.color.surface": paletteHex[3]!,
-      "theme.color.text": paletteHex[4]!,
-      "theme.spacing.base": 10,
-      "theme.radius.md": 12,
-      "theme.shadow.card": "soft",
+      "theme.color.primary": color.primary,
+      "theme.color.secondary": color.secondary,
+      "theme.color.cta": color.cta,
+      "theme.color.background": color.background,
+      "theme.color.text": color.text,
+      "theme.spacing.base": density === "compact" ? 8 : density === "spacious" ? 14 : 10,
+      "theme.radius.md": style.name.includes("Brutal") ? 0 : 8,
+      "theme.shadow.card": style.name.includes("Glass") ? "glass" : "soft",
     },
   };
 }
 
+// Fallback bundles when search returns nothing
 function fallbackBundles(): StyleBundle[] {
+  const minimalStyle = STYLES.find(s => s.id === "minimalism") || STYLES[0]!;
+  const darkStyle = STYLES.find(s => s.id === "dark-mode") || STYLES[2]!;
+  const glassStyle = STYLES.find(s => s.id === "glassmorphism") || STYLES[0]!;
+  const brutalStyle = STYLES.find(s => s.id === "brutalism") || STYLES[4]!;
+
+  const saasColor = COLORS.find(c => c.id === "saas-b2b") || COLORS[0]!;
+  const darkColor = COLORS.find(c => c.id === "agency-premium") || COLORS[8]!;
+  const aiColor = COLORS.find(c => c.id === "ai-chatbot-platform") || COLORS[4]!;
+  const ecomColor = COLORS.find(c => c.id === "ecommerce-general") || COLORS[3]!;
+
   return [
-    {
-      id: "agency-premium-glass",
-      name: "Agency Premium (Glass)",
-      description: "High-end, client-ready, soft depth and clean charts",
-      previewImageUrl: "/style-previews/glassmorphism.png",
-      palette: {
-        name: "Premium Neutral",
-        swatches: [
-          { name: "Primary", hex: "#2563EB", rgb: [37, 99, 235] },
-          { name: "Accent", hex: "#22C55E", rgb: [34, 197, 94] },
-          { name: "Background", hex: "#F8FAFC", rgb: [248, 250, 252] },
-          { name: "Surface", hex: "#FFFFFF", rgb: [255, 255, 255] },
-          { name: "Text", hex: "#0F172A", rgb: [15, 23, 42] },
-        ],
-      },
-      densityPreset: "comfortable",
-      tags: ["Client-facing", "Premium", "Clean"],
-      designTokens: {
-        "theme.radius.md": 14,
-        "theme.shadow.card": "soft",
-        "theme.spacing.base": 10,
-        "theme.color.primary": "#2563EB",
-        "theme.color.accent": "#22C55E",
-        "theme.color.background": "#F8FAFC",
-        "theme.color.surface": "#FFFFFF",
-        "theme.color.text": "#0F172A",
-      },
-    },
-    {
-      id: "modern-dark-saas",
-      name: "Modern SaaS (Dark)",
-      description: "Sleek, high contrast, great for ops + reliability",
-      previewImageUrl: "/style-previews/dark-mode.png",
-      palette: {
-        name: "Dark SaaS",
-        swatches: [
-          { name: "Primary", hex: "#60A5FA", rgb: [96, 165, 250] },
-          { name: "Accent", hex: "#F472B6", rgb: [244, 114, 182] },
-          { name: "Background", hex: "#0B1220", rgb: [11, 18, 32] },
-          { name: "Surface", hex: "#111827", rgb: [17, 24, 39] },
-          { name: "Text", hex: "#E5E7EB", rgb: [229, 231, 235] },
-        ],
-      },
-      densityPreset: "comfortable",
-      tags: ["Ops", "Modern", "High contrast"],
-      designTokens: {
-        "theme.radius.md": 12,
-        "theme.shadow.card": "medium",
-        "theme.spacing.base": 10,
-        "theme.color.primary": "#60A5FA",
-        "theme.color.accent": "#F472B6",
-        "theme.color.background": "#0B1220",
-        "theme.color.surface": "#111827",
-        "theme.color.text": "#E5E7EB",
-      },
-    },
-    {
-      id: "minimal-report",
-      name: "Minimal Report",
-      description: "Executive report feel, low noise, strong hierarchy",
-      previewImageUrl: "/style-previews/minimalism.png",
-      palette: {
-        name: "Slate Minimal",
-        swatches: [
-          { name: "Primary", hex: "#334155", rgb: [51, 65, 85] },
-          { name: "Accent", hex: "#0EA5E9", rgb: [14, 165, 233] },
-          { name: "Background", hex: "#F9FAFB", rgb: [249, 250, 251] },
-          { name: "Surface", hex: "#FFFFFF", rgb: [255, 255, 255] },
-          { name: "Text", hex: "#111827", rgb: [17, 24, 39] },
-        ],
-      },
-      densityPreset: "comfortable",
-      tags: ["Client-facing", "Report", "Minimal"],
-      designTokens: {
-        "theme.radius.md": 10,
-        "theme.shadow.card": "none",
-        "theme.spacing.base": 12,
-        "theme.color.primary": "#334155",
-        "theme.color.accent": "#0EA5E9",
-        "theme.color.background": "#F9FAFB",
-        "theme.color.surface": "#FFFFFF",
-        "theme.color.text": "#111827",
-      },
-    },
-    {
-      id: "bold-startup",
-      name: "Bold Startup",
-      description: "Punchy, high energy, looks like a real SaaS product",
-      previewImageUrl: "/style-previews/brutalism.png",
-      palette: {
-        name: "Startup Bold",
-        swatches: [
-          { name: "Primary", hex: "#F97316", rgb: [249, 115, 22] },
-          { name: "Accent", hex: "#A78BFA", rgb: [167, 139, 250] },
-          { name: "Background", hex: "#0B0F19", rgb: [11, 15, 25] },
-          { name: "Surface", hex: "#111827", rgb: [17, 24, 39] },
-          { name: "Text", hex: "#F9FAFB", rgb: [249, 250, 251] },
-        ],
-      },
-      densityPreset: "comfortable",
-      tags: ["SaaS", "Bold", "High energy"],
-      designTokens: {
-        "theme.radius.md": 8,
-        "theme.shadow.card": "hard",
-        "theme.spacing.base": 10,
-        "theme.color.primary": "#F97316",
-        "theme.color.accent": "#A78BFA",
-        "theme.color.background": "#0B0F19",
-        "theme.color.surface": "#111827",
-        "theme.color.text": "#F9FAFB",
-      },
-    },
+    buildBundle(minimalStyle, saasColor, "Professional Clean", "Clean, minimal dashboard for business clients", ["Client-facing", "Professional", "Clean"], "comfortable"),
+    buildBundle(darkStyle, darkColor, "Premium Dark", "High-contrast dark theme for premium feel", ["Premium", "Dark", "Modern"], "comfortable"),
+    buildBundle(glassStyle, aiColor, "Glass Premium", "Glassmorphism with AI-inspired colors", ["Premium", "Glass", "AI"], "comfortable"),
+    buildBundle(brutalStyle, ecomColor, "Bold Startup", "Bold, energetic design for differentiation", ["Bold", "Startup", "Energetic"], "comfortable"),
   ];
-}
-
-// Parse function is intentionally conservative; it tries to extract palette hexes if present.
-// If parsing fails, returns safe fallback bundles.
-function parseBundlesFromText(text: string): StyleBundle[] | null {
-  const lines = text.split("\n").map((l) => l.trim());
-  const hexes = text.match(/#[0-9a-fA-F]{6}/g) ?? [];
-
-  // If we don't even see colors, don't pretend.
-  if (hexes.length < 8) return null;
-
-  // Create 4 bundles by slicing hexes into 5-color palettes.
-  const bundles: StyleBundle[] = [];
-  const names = [
-    { name: "Agency Premium (Glass)", preview: "/style-previews/glassmorphism.png", tags: ["Client-facing", "Premium", "Clean"] },
-    { name: "Modern SaaS (Dark)", preview: "/style-previews/dark-mode.png", tags: ["Ops", "Modern", "High contrast"] },
-    { name: "Minimal Report", preview: "/style-previews/minimalism.png", tags: ["Client-facing", "Report", "Minimal"] },
-    { name: "Bold Startup", preview: "/style-previews/brutalism.png", tags: ["SaaS", "Bold", "High energy"] },
-  ];
-
-  for (let i = 0; i < 4; i++) {
-    const paletteHex = hexes.slice(i * 5, i * 5 + 5);
-    if (paletteHex.length < 5) break;
-
-    const bundleName = names[i]!.name;
-    bundles.push({
-      id: stableId(bundleName),
-      name: bundleName,
-      description: "RAG-recommended bundle based on your dashboard goals.",
-      previewImageUrl: names[i]!.preview,
-      palette: {
-        name: "RAG Palette",
-        swatches: [
-          { name: "Primary", hex: paletteHex[0]!, rgb: hexToRgb(paletteHex[0]!) },
-          { name: "Accent", hex: paletteHex[1]!, rgb: hexToRgb(paletteHex[1]!) },
-          { name: "Background", hex: paletteHex[2]!, rgb: hexToRgb(paletteHex[2]!) },
-          { name: "Surface", hex: paletteHex[3]!, rgb: hexToRgb(paletteHex[3]!) },
-          { name: "Text", hex: paletteHex[4]!, rgb: hexToRgb(paletteHex[4]!) },
-        ],
-      },
-      densityPreset: "comfortable",
-      tags: names[i]!.tags,
-      designTokens: {
-        "theme.color.primary": paletteHex[0]!,
-        "theme.color.accent": paletteHex[1]!,
-        "theme.color.background": paletteHex[2]!,
-        "theme.color.surface": paletteHex[3]!,
-        "theme.color.text": paletteHex[4]!,
-        "theme.spacing.base": 10,
-        "theme.radius.md": 12,
-        "theme.shadow.card": "soft",
-      },
-    });
-  }
-
-  return bundles.length === 4 ? bundles : null;
 }
 
 export const getStyleBundles = createTool({
   id: "design.getStyleBundles",
   description:
-    "Return 4 style+palette bundles (visual-card ready) grounded in UI/UX Pro Max catalog. Used during Phase 3 (required style selection).",
+    "Return 4 style+palette bundles for dashboard design. Uses UI/UX Pro Max static data. Used during Phase 3 (style selection).",
   inputSchema: z.object({
     platformType: z.string().min(1),
     outcome: z.enum(["dashboard", "product"]),
@@ -280,119 +118,109 @@ export const getStyleBundles = createTool({
     bundles: z.array(StyleBundle).length(4),
     sources: z.array(z.object({ kind: z.string(), note: z.string() })).default([]),
   }),
-  execute: async (inputData, context) => {
-    console.log("[TOOL][design.getStyleBundles] HYBRID inputs:", inputData);
+  execute: async (inputData) => {
+    console.log("[TOOL][design.getStyleBundles] STATIC inputs:", inputData);
 
-    const baseQuery =
-      `${inputData.platformType} ${inputData.dashboardKind} ` +
-      `${inputData.outcome} audience=${inputData.audience}. ` +
-      `Prefer premium client-ready style bundles. Notes: ${inputData.notes ?? ""}`;
+    const { platformType, audience, dashboardKind, notes } = inputData;
 
-    // 1) Primary recommendation from design system generator
-    const primaryRes = await callTool(
-      generateDesignSystem,
-      { query: baseQuery, format: "markdown", persist: false },
-      { requestContext: (context as any)?.requestContext ?? (context as any) ?? {} }
-    );
+    // Build search query
+    const query = `${platformType} ${dashboardKind} ${audience === "ops" ? "technical ops" : "client-facing"} ${notes || ""}`.trim();
 
-    const primaryText = primaryRes?.success ? String(primaryRes.output || "") : "";
-    console.log("[TOOL][design.getStyleBundles] primary chars:", primaryText.length);
+    try {
+      // Search for relevant styles and colors
+      const matchedStyles = searchUIUXData(query, "style", 4);
+      const matchedColors = searchUIUXData(query, "color", 4);
 
-    // 2) Alternates via domain searches
-    const altStyleRes = await callTool(
-      searchDesignDatabase,
-      { query: `${inputData.platformType} premium dashboard style`, domain: "style", maxResults: 3 },
-      { requestContext: (context as any)?.requestContext ?? (context as any) ?? {} }
-    );
-    const oppositeStyleRes = await callTool(
-      searchDesignDatabase,
-      { query: `${inputData.platformType} high-contrast bold brutalism dashboard`, domain: "style", maxResults: 3 },
-      { requestContext: (context as any)?.requestContext ?? (context as any) ?? {} }
-    );
-    const platformColorRes = await callTool(
-      searchDesignDatabase,
-      { query: `${inputData.platformType} dashboard color palette`, domain: "color", maxResults: 3 },
-      { requestContext: (context as any)?.requestContext ?? (context as any) ?? {} }
-    );
+      // Build 4 bundles
+      const bundles: StyleBundle[] = [];
 
-    const altStyleText = altStyleRes?.success ? String(altStyleRes.output || "") : "";
-    const oppositeStyleText = oppositeStyleRes?.success ? String(oppositeStyleRes.output || "") : "";
-    const platformColorText = platformColorRes?.success ? String(platformColorRes.output || "") : "";
+      // Bundle 1: Primary recommendation (best match)
+      const primaryStyle = matchedStyles[0] || STYLES.find(s => s.id === "minimalism")!;
+      const primaryColor = matchedColors[0] || COLORS.find(c => c.id === "saas-b2b")!;
+      bundles.push(buildBundle(
+        primaryStyle,
+        primaryColor,
+        `${primaryStyle.name} - Primary`,
+        `Recommended: ${primaryStyle.bestFor}`,
+        ["Primary", "Recommended", audience === "client" ? "Client-ready" : "Ops"],
+        audience === "ops" ? "compact" : "comfortable"
+      ));
 
-    const sources: Array<{ kind: string; note: string }> = [];
-    sources.push({ kind: "python", note: "generateDesignSystem(--design-system -f markdown)" });
-    sources.push({ kind: "python", note: "searchDesignDatabase(--domain style)" });
-    sources.push({ kind: "python", note: "searchDesignDatabase(--domain color)" });
+      // Bundle 2: Alternative (second best or different aesthetic)
+      const altStyle = matchedStyles[1] || STYLES.find(s => s.id === "executive-dashboard")!;
+      const altColor = matchedColors[1] || COLORS.find(c => c.id === "workflow-automation")!;
+      bundles.push(buildBundle(
+        altStyle,
+        altColor,
+        `${altStyle.name} - Alternative`,
+        `Alternative: ${altStyle.bestFor}`,
+        ["Alternative", "Safe"],
+        "comfortable"
+      ));
 
-    // Build 4 bundles from extracted hexes; fallback per-card if needed
-    const bundles: StyleBundle[] = [];
+      // Bundle 3: Opposite aesthetic (for differentiation)
+      const oppositeStyle = audience === "client"
+        ? STYLES.find(s => s.id === "dark-mode")!
+        : STYLES.find(s => s.id === "glassmorphism")!;
+      const oppositeColor = audience === "client"
+        ? COLORS.find(c => c.id === "agency-premium")!
+        : COLORS.find(c => c.id === "ai-chatbot-platform")!;
+      bundles.push(buildBundle(
+        oppositeStyle,
+        oppositeColor,
+        `${oppositeStyle.name} - Contrast`,
+        `Contrasting: ${oppositeStyle.bestFor}`,
+        ["Contrast", "Differentiated"],
+        audience === "ops" ? "compact" : "comfortable"
+      ));
 
-    const primaryHexes = extractHexes(primaryText);
-    if (primaryText && primaryHexes.length >= 3) {
-      bundles.push(
-        bundleFromHexes({
-          idSeed: "primary-design-system",
-          name: "Primary Recommendation",
-          description: "Recommended by UI/UX Pro Max design system generator.",
-          tags: ["Primary", "Recommended", "Client-ready"],
-          styleTextForPreview: primaryText,
-          hexes: primaryHexes,
-        }),
-      );
-    } else {
-      bundles.push(fallbackBundles()[0]!);
+      // Bundle 4: Platform-specific
+      const platformStyles: Record<string, string> = {
+        n8n: "dark-mode",
+        make: "minimalism",
+        vapi: "real-time-monitoring",
+        retell: "minimalism",
+        woocommerce: "executive-dashboard",
+      };
+      const platformColors: Record<string, string> = {
+        n8n: "workflow-automation",
+        make: "workflow-automation",
+        vapi: "call-center-voice",
+        retell: "call-center-voice",
+        woocommerce: "ecommerce-general",
+      };
+
+      const platformStyleId = platformStyles[platformType.toLowerCase()] || "minimalism";
+      const platformColorId = platformColors[platformType.toLowerCase()] || "saas-b2b";
+      const platformStyle = STYLES.find(s => s.id === platformStyleId) || STYLES[0]!;
+      const platformColorEntry = COLORS.find(c => c.id === platformColorId) || COLORS[0]!;
+
+      bundles.push(buildBundle(
+        platformStyle,
+        platformColorEntry,
+        `${platformType} Optimized`,
+        `Optimized for ${platformType} dashboards`,
+        ["Platform", platformType, "Aligned"],
+        "comfortable"
+      ));
+
+      // Validate and return
+      const validated = z.array(StyleBundle).length(4).parse(bundles);
+
+      return {
+        bundles: validated,
+        sources: [
+          { kind: "static", note: "UI/UX Pro Max static data (serverless)" },
+        ],
+      };
+    } catch (err) {
+      console.error("[TOOL][design.getStyleBundles] Error, using fallbacks:", err);
+      return {
+        bundles: fallbackBundles(),
+        sources: [
+          { kind: "fallback", note: "Using fallback bundles due to error" },
+        ],
+      };
     }
-
-    const altHexes = extractHexes(altStyleText + "\n" + platformColorText);
-    if (altHexes.length >= 3) {
-      bundles.push(
-        bundleFromHexes({
-          idSeed: "alt-similar-style",
-          name: "Alternative (Similar)",
-          description: "Alternative premium style + compatible palette.",
-          tags: ["Alternative", "Premium", "Safe"],
-          styleTextForPreview: altStyleText,
-          hexes: altHexes,
-        }),
-      );
-    } else {
-      bundles.push(fallbackBundles()[1]!);
-    }
-
-    const oppHexes = extractHexes(oppositeStyleText + "\n" + platformColorText);
-    if (oppHexes.length >= 3) {
-      bundles.push(
-        bundleFromHexes({
-          idSeed: "opposite-aesthetic",
-          name: "Opposite Aesthetic",
-          description: "Contrasting look for stronger differentiation.",
-          tags: ["Opposite", "Bold", "Differentiated"],
-          styleTextForPreview: oppositeStyleText,
-          hexes: oppHexes,
-        }),
-      );
-    } else {
-      bundles.push(fallbackBundles()[2]!);
-    }
-
-    const platformHexes = extractHexes(platformColorText + "\n" + primaryText);
-    if (platformHexes.length >= 3) {
-      bundles.push(
-        bundleFromHexes({
-          idSeed: "platform-specific",
-          name: "Platform-Specific",
-          description: "Palette aligned with your platform + matching style.",
-          tags: ["Platform", "Aligned", "Consistent"],
-          styleTextForPreview: primaryText,
-          hexes: platformHexes,
-        }),
-      );
-    } else {
-      bundles.push(fallbackBundles()[3]!);
-    }
-
-    // Validate output against schema before returning
-    const validated = z.array(StyleBundle).length(4).parse(bundles);
-    return { bundles: validated, sources };
   },
 });
