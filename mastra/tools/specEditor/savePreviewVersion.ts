@@ -19,6 +19,12 @@ export const savePreviewVersion = createTool({
     versionId: z.string().uuid(),
     previewUrl: z.string(),
   }),
+  requestContextSchema: z.object({
+    tenantId: z.string(),
+    userId: z.string(),
+    platformType: z.string().optional(),
+    interfaceId: z.string().optional(),
+  }),
   execute: async (inputData, context) => {
     const { spec_json, design_tokens, interfaceId } = inputData;
 

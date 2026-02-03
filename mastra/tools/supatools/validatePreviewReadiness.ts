@@ -31,6 +31,10 @@ export const validatePreviewReadiness = createSupaTool<z.infer<typeof outputSche
   description: 'Validate all prerequisites before preview generation. Checks source, events, schema readiness, and event type coverage. Returns blockers and warnings. Use before Phase 4 to prevent failed workflows.',
   inputSchema,
   outputSchema,
+  requestContextSchema: z.object({
+    tenantId: z.string(),
+    userId: z.string(),
+  }),
 
   execute: async (rawInput: unknown, context) => {
     const input = inputSchema.parse(rawInput);
