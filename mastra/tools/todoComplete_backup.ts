@@ -1,8 +1,8 @@
 
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
-import { createAuthenticatedClient } from "../../lib/supabase";
-import { extractTenantContext } from "../../lib/tenant-verification";
+import { createAuthenticatedClient } from "../lib/supabase";
+import { extractTenantContext } from "../lib/tenant-verification";
 import { TodoItemSchema, TodoPrioritySchema } from "./types";
 
 export const todoAdd = createTool({
