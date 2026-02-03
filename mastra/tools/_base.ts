@@ -1,4 +1,3 @@
-// Import the correctly named function
 import { createTool } from '@mastra/core/tools';
 import { extractTenantContext, verifyTenantAccess } from '../lib/tenant-verification';
 
@@ -15,13 +14,13 @@ export function createSupaTool<TOut>(config: {
     inputSchema: config.inputSchema,
     outputSchema: config.outputSchema,
     execute: async (inputData, context) => {
-      // Get access token
-      const accessToken = context?.requestContext?.get('supabaseAccessToken');
-      if (!accessToken) {
+      // Get access token with type assertion
+      const accessToken = context?.requestContext?.get('supabaseAccessToken') as string;
+      if (!accessToken || typeof accessToken !== 'string') {
         throw new Error(`[${config.id}]: Missing authentication token`);
       }
 
-      // Get tenant context (using correct function name)
+      // Get tenant context
       const { tenantId } = extractTenantContext(context);
 
       // Create authenticated client
