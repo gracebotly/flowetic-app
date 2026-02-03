@@ -1,13 +1,12 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-import { createClient } from '../lib/supabase';
+import { createAuthenticatedClient } from '../lib/supabase';
+import { extractTenantContext } from '../lib/tenant-verification';
 
 export const persistPreviewVersion = createTool({
   id: 'persist-preview-version',
   description: 'Saves dashboard spec as a new interface version in Supabase',
   inputSchema: z.object({
-    tenantId: z.string().uuid(),
-    userId: z.string().uuid(),
     interfaceId: z.string().uuid().optional(),
     spec_json: z.record(z.any()),
     design_tokens: z.record(z.any()),

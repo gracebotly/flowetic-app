@@ -40,7 +40,7 @@ export const recommendStoryboard = createSupaTool<z.infer<typeof outputSchema>>(
     
     const { sourceId, selectedOutcome } = input;
 
-    const supabase = createClient();
+    const supabase = createAuthenticatedClient(accessToken);
 
     const sinceDate = new Date();
     sinceDate.setUTCDate(sinceDate.getUTCDate() - 7);

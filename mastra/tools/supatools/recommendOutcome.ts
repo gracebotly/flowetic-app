@@ -42,7 +42,7 @@ export const recommendOutcome = createSupaTool<z.infer<typeof outputSchema>>({
     
     const { sourceId, sinceDays } = input;
 
-    const supabase = createClient();
+    const supabase = createAuthenticatedClient(accessToken);
 
     const sinceDate = new Date();
     sinceDate.setUTCDate(sinceDate.getUTCDate() - sinceDays);

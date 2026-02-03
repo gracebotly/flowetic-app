@@ -48,7 +48,7 @@ export const recommendStyleKeywords = createSupaTool<z.infer<typeof outputSchema
     
     const { sourceId, selectedStoryboard } = input;
 
-    const supabase = createClient();
+    const supabase = createAuthenticatedClient(accessToken);
 
     const sinceDate = new Date();
     sinceDate.setUTCDate(sinceDate.getUTCDate() - 3);

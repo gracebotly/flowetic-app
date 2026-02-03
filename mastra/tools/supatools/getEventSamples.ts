@@ -66,7 +66,7 @@ export const getEventSamples = createSupaTool<z.infer<typeof outputSchema>>({
     
     const { sourceId, type, limit, sinceDays } = input;
 
-    const supabase = createClient();
+    const supabase = createAuthenticatedClient(accessToken);
 
     let query = supabase
       .from('events')

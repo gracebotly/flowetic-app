@@ -3,7 +3,8 @@
 
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
-import { createClient } from "../lib/supabase";
+import { createAuthenticatedClient } from "../lib/supabase";
+import { extractTenantContext } from "../lib/tenant-verification";
 
 function inferType(v: any): string {
   if (v === null || v === undefined) return "null";
@@ -25,7 +26,6 @@ export const generateSchemaSummaryFromEvents = createTool({
   description:
     "Analyze stored events rows to infer a simple schema summary (fields, types, eventTypes, frequencies) for Phase 1 routing.",
   inputSchema: z.object({
-    tenantId: z.string().min(1),
     sourceId: z.string().min(1),
     sampleSize: z.number().int().min(1).max(500).default(100),
   }),
@@ -43,9 +43,15 @@ export const generateSchemaSummaryFromEvents = createTool({
     confidence: z.number().min(0).max(1),
   }),
   execute: async (inputData, context) => {
-    const { tenantId, sourceId, sampleSize = 100 } = inputData; // Default value
+    // Get access token and tenant context
+    const accessToken = context?.requestContext?.get('supabaseAccessToken') as string;
+    if (!accessToken || typeof accessToken !== 'string') {
+      throw new Error('[generateSchemaSummaryFromEvents]: Missing authentication token');
+    }
+    const { tenantId } = extractTenantContext(context);
+    const supabase = createAuthenticatedClient(accessToken);
 
-    const supabase = createClient();
+    const { sourceId, sampleSize = 100 } = inputData; // Default value
 
     const { data: events, error } = await supabase
       .from("events")
