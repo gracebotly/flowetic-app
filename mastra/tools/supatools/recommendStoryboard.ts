@@ -27,11 +27,6 @@ export const recommendStoryboard = createSupaTool<z.infer<typeof outputSchema>>(
   description: 'Analyze event schema and patterns to recommend storyboard type. Returns top recommendation with alternatives. Used in Phase 2 storyboard selection.',
   inputSchema,
   outputSchema,
-  requestContextSchema: z.object({
-    tenantId: z.string(),
-    userId: z.string(),
-  }),
-
   execute: async (rawInput: unknown, context) => {
     const input = inputSchema.parse(rawInput);
 

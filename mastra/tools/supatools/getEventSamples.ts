@@ -53,11 +53,6 @@ export const getEventSamples = createSupaTool<z.infer<typeof outputSchema>>({
     'Get sample event records for schema analysis and template selection. Returns up to limit events with all fields. limit is capped at 500.',
   inputSchema,
   outputSchema,
-  requestContextSchema: z.object({
-    tenantId: z.string(),
-    userId: z.string(),
-  }),
-
   execute: async (rawInput: unknown, context) => {
     const input = inputSchema.parse(rawInput);
 

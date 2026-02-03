@@ -35,11 +35,6 @@ export const recommendStyleKeywords = createSupaTool<z.infer<typeof outputSchema
   description: 'Analyze event patterns and context to recommend style keywords (density, palette, typography). Returns recommendations grounded in data characteristics. Used in Phase 3 style bundle generation.',
   inputSchema,
   outputSchema,
-  requestContextSchema: z.object({
-    tenantId: z.string(),
-    userId: z.string(),
-  }),
-
   execute: async (rawInput: unknown, context) => {
     const input = inputSchema.parse(rawInput);
 

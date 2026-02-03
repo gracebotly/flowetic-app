@@ -37,11 +37,6 @@ export const getEventStats = createSupaTool<z.infer<typeof outputSchema>>({
     'Get statistical summary of events for a tenant. Returns total count, distribution by type/source, date range, and error/metric counts.',
   inputSchema,
   outputSchema,
-  requestContextSchema: z.object({
-    tenantId: z.string(),
-    userId: z.string(),
-  }),
-
   execute: async (rawInput: unknown, context) => {
     const input = inputSchema.parse(rawInput);
 

@@ -1,13 +1,12 @@
 
 import { createTool } from '@mastra/core/tools';
-import { extractAuthContext, verifyTenantAccess } from '../lib/tenant-verification';
+import { extractTenantContext } from '../lib/tenant-verification';
 
 export function createSupaTool<TOut>(config: {
   id: string;
   description: string;
   inputSchema: { parse: (input: unknown) => unknown };
   outputSchema: unknown;
-  requestContextSchema?: unknown;
   execute: (input: unknown, context: any) => Promise<TOut>;
 }) {
   return createTool({
@@ -15,10 +14,9 @@ export function createSupaTool<TOut>(config: {
     description: config.description,
     inputSchema: config.inputSchema as any,
     outputSchema: config.outputSchema as any,
-    requestContextSchema: config.requestContextSchema as any,
     execute: async (inputData: unknown, context: any) => {
-      const { tenantId, userId } = extractAuthContext(context);
-      await verifyTenantAccess(tenantId, userId);
+      // Extract tenant context (validates presence of tenantId and userId)
+      const { tenantId, userId } = extractTenantContext(context);
 
       try {
         return await config.execute(inputData, context);

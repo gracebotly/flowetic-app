@@ -29,11 +29,6 @@ export const recommendOutcome = createSupaTool<z.infer<typeof outputSchema>>({
   description: 'Analyze event patterns to recommend outcome type (dashboard vs product). Returns recommendation with confidence score and data-driven reasoning. Used in Phase 1 outcome selection.',
   inputSchema,
   outputSchema,
-  requestContextSchema: z.object({
-    tenantId: z.string(),
-    userId: z.string(),
-  }),
-
   execute: async (rawInput: unknown, context) => {
     const input = inputSchema.parse(rawInput);
 
