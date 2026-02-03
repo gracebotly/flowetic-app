@@ -22,7 +22,13 @@ export const savePreviewVersion = createTool({
   execute: async (inputData, context) => {
     const { spec_json, design_tokens, interfaceId } = inputData;
 
-    const supabase = await createClient();
+    // Get access token and tenant context
+    const accessToken = context?.requestContext?.get('supabaseAccessToken') as string;
+    if (!accessToken || typeof accessToken !== 'string') {
+      throw new Error('[savePreviewVersion]: Missing authentication token');
+    }
+    const { tenantId } = extractTenantContext(context);
+    const supabase = createAuthenticatedClient(accessToken);
 
     // Get tenantId and userId from request context, not from context.get()
     const requestContext = (context as any).requestContext;

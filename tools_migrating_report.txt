@@ -1,0 +1,69 @@
+mastra/tools/platformMapping/getRecentEventSamples.ts:    const supabase = await createClient();
+mastra/tools/platformMapping/appendThreadEvent.ts:    const supabase = await createClient();
+mastra/tools/platformMapping/getClientContext.ts:    const supabase = await createClient();
+mastra/tools/sources/deleteSource.ts:    const supabase = await createClient();
+mastra/tools/sources/createSource.ts:    const supabase = await createClient();
+mastra/tools/sources/updateSource.ts:    const supabase = await createClient();
+mastra/tools/specEditor/getCurrentSpec.ts:    const supabase = await createClient();
+mastra/tools/specEditor/savePreviewVersion.ts:    const supabase = await createClient();
+mastra/tools/analyzeSchema.ts:    const supabase = await createClient();
+mastra/tools/journey/getJourneySession.ts:    const supabase = createClient();
+mastra/tools/updateJourneySchemaReady.ts:    const supabase = createClient();
+mastra/tools/supatools/getEventSamples.ts:    const supabase = createClient();
+mastra/tools/supatools/recommendStoryboard.ts:    const supabase = createClient();
+mastra/tools/supatools/recommendStyleKeywords.ts:    const supabase = createClient();
+mastra/tools/supatools/recommendOutcome.ts:    const supabase = createClient();
+mastra/tools/supatools/getEventStats.ts:    const supabase = createClient();
+mastra/tools/todoComplete_backup.ts:    const supabase = await createClient();
+mastra/tools/persistPreviewVersion.ts:    const supabase = await createClient();
+mastra/tools/generateSchemaSummaryFromEvents.ts:    const supabase = createClient();
+mastra/tools/projects/updateProject.ts:    const supabase = await createClient();
+mastra/tools/projects/createProject.ts:    const supabase = createClient();
+mastra/tools/projects/listProjects.ts:    const supabase = await createClient();
+mastra/tools/todo/todoAdd.ts:    const supabase = await createClient();
+mastra/tools/todo/todoUpdate.ts:    const supabase = createClient();
+mastra/tools/todo/todoList.ts:    const supabase = await createClient();
+mastra/tools/todo/todoComplete.ts:    const supabase = await createClient();
+mastra/tools/deploy/setJourneyDeployed.ts:    const supabase = createClient();
+mastra/tools/deploy/setInterfacePublished.ts:    const supabase = createClient();
+mastra/tools/deploy/createDeploymentRecord.ts:    const supabase = createClient();
+mastra/tools/deploy/getPreviewVersionSpec.ts:    const supabase = createClient();
+mastra/tools/deploy/markPreviousDeploymentsInactive.ts:    const supabase = createClient();
+mastra/tools/storeEvents.ts:    const supabase = createClient();
+=== REPORT: Tools Still Using Old createClient() Pattern ===
+
+Total tools needing migration: 33
+
+Files list:
+mastra/tools/analyzeSchema.ts
+mastra/tools/deploy/createDeploymentRecord.ts
+mastra/tools/deploy/getPreviewVersionSpec.ts
+mastra/tools/deploy/markPreviousDeploymentsInactive.ts
+mastra/tools/deploy/setInterfacePublished.ts
+mastra/tools/deploy/setJourneyDeployed.ts
+mastra/tools/generateSchemaSummaryFromEvents.ts
+mastra/tools/journey/getJourneySession.ts
+mastra/tools/persistPreviewVersion.ts
+mastra/tools/platformMapping/appendThreadEvent.ts
+mastra/tools/platformMapping/getClientContext.ts
+mastra/tools/platformMapping/getRecentEventSamples.ts
+mastra/tools/projects/createProject.ts
+mastra/tools/projects/listProjects.ts
+mastra/tools/projects/updateProject.ts
+mastra/tools/sources/createSource.ts
+mastra/tools/sources/deleteSource.ts
+mastra/tools/sources/updateSource.ts
+mastra/tools/specEditor/getCurrentSpec.ts
+mastra/tools/specEditor/savePreviewVersion.ts
+mastra/tools/storeEvents.ts
+mastra/tools/supatools/getEventSamples.ts
+mastra/tools/supatools/getEventStats.ts
+mastra/tools/supatools/recommendOutcome.ts
+mastra/tools/supatools/recommendStoryboard.ts
+mastra/tools/supatools/recommendStyleKeywords.ts
+mastra/tools/todo/todoAdd.ts
+mastra/tools/todo/todoComplete.ts
+mastra/tools/todo/todoList.ts
+mastra/tools/todo/todoUpdate.ts
+mastra/tools/todoComplete_backup.ts
+mastra/tools/updateJourneySchemaReady.ts

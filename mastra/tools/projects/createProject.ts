@@ -5,14 +5,14 @@
 
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
-import { createClient } from "../../lib/supabase";
+import { createAuthenticatedClient } from "../../lib/supabase";
+import { extractTenantContext } from "../../lib/tenant-verification";
 import { ProjectPublic, ProjectStatus, ProjectType } from "./types";
 
 export const createProject = createTool({
   id: "projects.create",
   description: "Create a new project for a tenant.",
   inputSchema: z.object({
-    tenantId: z.string().uuid(),
     name: z.string().min(1).max(120),
     type: ProjectType,
     description: z.string().max(2000).optional(),
@@ -23,13 +23,19 @@ export const createProject = createTool({
     message: z.string(),
   }),
   execute: async (inputData, context) => {
-    const supabase = createClient();
+    // Get access token and tenant context
+    const accessToken = context?.requestContext?.get('supabaseAccessToken') as string;
+    if (!accessToken || typeof accessToken !== 'string') {
+      throw new Error('[createProject]: Missing authentication token');
+    }
+    const { tenantId } = extractTenantContext(context);
+    const supabase = createAuthenticatedClient(accessToken);
     const now = new Date().toISOString();
 
     const { data, error } = await supabase
       .from("projects")
       .insert({
-        tenant_id: inputData.tenantId,
+        tenant_id: tenantId,
         name: inputData.name,
         type: inputData.type,
         status: "draft",

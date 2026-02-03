@@ -2,7 +2,8 @@
 
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
-import { createClient } from "../../lib/supabase";
+import { createAuthenticatedClient } from "../../lib/supabase";
+import { extractTenantContext } from "../../lib/tenant-verification";
 import { encryptSecret } from "@/lib/secrets";
 import { SourceMethod, SourcePlatformType, SourcePublic, SourceStatus } from "./types";
 
@@ -11,7 +12,6 @@ export const createSource = createTool({
   description:
     "Create (connect) a new source for a tenant. Stores credentials in sources.secret_hash (encrypted). Never returns secrets.",
   inputSchema: z.object({
-    tenantId: z.string().uuid(),
     type: SourcePlatformType,
     method: SourceMethod.default("api"),
     name: z.string().min(1).max(120).optional(),
@@ -25,9 +25,13 @@ export const createSource = createTool({
     message: z.string(),
   }),
   execute: async (inputData, context) => {
-    const supabase = await createClient();
-
-    const tenantId = inputData.tenantId;
+    // Get access token and tenant context
+    const accessToken = context?.requestContext?.get('supabaseAccessToken') as string;
+    if (!accessToken || typeof accessToken !== 'string') {
+      throw new Error('[createSource]: Missing authentication token');
+    }
+    const { tenantId } = extractTenantContext(context);
+    const supabase = createAuthenticatedClient(accessToken);
     const type = inputData.type;
     const method = inputData.method;
     const status = inputData.status;

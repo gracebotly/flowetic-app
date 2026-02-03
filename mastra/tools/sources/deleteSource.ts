@@ -3,13 +3,13 @@
 
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
-import { createClient } from "../../lib/supabase";
+import { createAuthenticatedClient } from "../../lib/supabase";
+import { extractTenantContext } from "../../lib/tenant-verification";
 
 export const deleteSource = createTool({
   id: "sources.delete",
   description: "Delete (disconnect) a source by ID for a tenant.",
   inputSchema: z.object({
-    tenantId: z.string().uuid(),
     sourceId: z.string().uuid(),
   }),
   outputSchema: z.object({
@@ -17,8 +17,14 @@ export const deleteSource = createTool({
     message: z.string(),
   }),
   execute: async (inputData, context) => {
-    const supabase = await createClient();
-    const { tenantId, sourceId } = inputData;
+    // Get access token and tenant context
+    const accessToken = context?.requestContext?.get('supabaseAccessToken') as string;
+    if (!accessToken || typeof accessToken !== 'string') {
+      throw new Error('[deleteSource]: Missing authentication token');
+    }
+    const { tenantId } = extractTenantContext(context);
+    const supabase = createAuthenticatedClient(accessToken);
+    const { sourceId } = inputData;
 
     // Pre-check so we can return SOURCE_NOT_FOUND deterministically.
     const { data: existing, error: exErr } = await supabase

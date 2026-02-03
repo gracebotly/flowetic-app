@@ -3,14 +3,14 @@
 
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
-import { createClient } from "../../lib/supabase";
+import { createAuthenticatedClient } from "../../lib/supabase";
+import { extractTenantContext } from "../../lib/tenant-verification";
 
 export const appendThreadEvent = createTool({
   id: "appendThreadEvent",
   description:
     "Append a brief rationale event to the thread timeline (stored in events table). Keep message 1-2 sentences.",
   inputSchema: z.object({
-    tenantId: z.string().uuid(),
     threadId: z.string(),
     interfaceId: z.string().uuid().optional(),
     runId: z.string().uuid().optional(),
@@ -22,9 +22,15 @@ export const appendThreadEvent = createTool({
     eventId: z.string().uuid(),
   }),
   execute: async (inputData, context) => {
-    const supabase = await createClient();
+    // Get access token and tenant context
+    const accessToken = context?.requestContext?.get('supabaseAccessToken') as string;
+    if (!accessToken || typeof accessToken !== 'string') {
+      throw new Error('[appendThreadEvent]: Missing authentication token');
+    }
+    const { tenantId } = extractTenantContext(context);
+    const supabase = createAuthenticatedClient(accessToken);
 
-    const { tenantId, threadId, interfaceId, runId, type, message, metadata } = inputData;
+    const { threadId, interfaceId, runId, type, message, metadata } = inputData;
 
     const { data, error } = await supabase
       .from("events")

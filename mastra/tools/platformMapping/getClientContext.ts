@@ -2,13 +2,14 @@
 
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
-import { createClient } from "../../lib/supabase";
+import { createAuthenticatedClient } from "../../lib/supabase";
+import { extractTenantContext } from "../../lib/tenant-verification";
 
 export const getClientContext = createTool({
   id: "getClientContext",
   description: "Fetch tenant context: connected sources and last event timestamp per source.",
   inputSchema: z.object({
-    tenantId: z.string().uuid().optional(),
+    // tenantId is extracted from context for security
   }),
   outputSchema: z.object({
     tenantId: z.string().uuid(),
@@ -33,15 +34,13 @@ export const getClientContext = createTool({
     ),
   }),
   execute: async (inputData, context) => {
-    // FIXED: Correct parameter destructuring - tenantId comes from inputData
-    const { tenantId } = inputData;
-
-    const supabase = await createClient();
-
-    // FIXED: Remove incorrect runtimeContext usage - context already has needed data
-    if (!tenantId) {
-      throw new Error("AUTH_REQUIRED");
+    // Get access token and tenant context
+    const accessToken = context?.requestContext?.get('supabaseAccessToken') as string;
+    if (!accessToken || typeof accessToken !== 'string') {
+      throw new Error('[getClientContext]: Missing authentication token');
     }
+    const { tenantId } = extractTenantContext(context);
+    const supabase = createAuthenticatedClient(accessToken);
 
     const { data: sources, error: sourcesError } = await supabase
       .from("sources")

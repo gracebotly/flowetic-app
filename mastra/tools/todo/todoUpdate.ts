@@ -3,7 +3,8 @@
 
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
-import { createClient } from "../../lib/supabase";
+import { createAuthenticatedClient } from "../../lib/supabase";
+import { extractTenantContext } from "../../lib/tenant-verification";
 import type { TodoItem, TodoPriority, TodoStatus } from "./types";
 
 export const todoUpdate = createTool({
