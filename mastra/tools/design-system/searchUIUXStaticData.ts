@@ -1,6 +1,16 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
-import { searchUIUXData, STYLES, COLORS, TYPOGRAPHY, PRODUCTS } from "../../data/uiuxStaticData";
+import {
+  searchUIUXData,
+  STYLES,
+  COLORS,
+  TYPOGRAPHY,
+  PRODUCTS,
+  type StyleEntry,
+  type ColorEntry,
+  type TypographyEntry,
+  type ProductEntry
+} from "../../data/uiuxStaticData";
 
 /**
  * Search UI/UX Pro Max static data.
@@ -84,10 +94,11 @@ export const generateDesignSystemStatic = createTool({
         searchUIUXData(searchQuery, "product", 1),
       ]);
 
-      const style = styles[0];
-      const color = colors[0];
-      const typography = typographies[0];
-      const product = products[0];
+      // Cast to specific types since we know what domain we searched
+      const style = styles[0] as StyleEntry | undefined;
+      const color = colors[0] as ColorEntry | undefined;
+      const typography = typographies[0] as TypographyEntry | undefined;
+      const product = products[0] as ProductEntry | undefined;
 
       // Build recommendations text
       const recommendations = [
