@@ -6,7 +6,20 @@ export const getSchemaSummary = createTool({
   id: 'getSchemaSummary',
   description: 'Summarize event schema and field types from samples',
   inputSchema: z.object({
-    samples: z.array(z.any()).describe('Event samples to analyze'),
+    samples: z.array(
+      z.object({
+        id: z.string(),
+        type: z.string(),
+        name: z.string().nullable(),
+        value: z.number().nullable(),
+        unit: z.string().nullable(),
+        text: z.string().nullable(),
+        state: z.any().nullable(),
+        labels: z.any().nullable(),
+        timestamp: z.string(),
+        sourceId: z.string().optional(),
+      })
+    ).describe('Event samples to analyze'),
     includeStatistics: z.boolean().default(true).describe('Include field statistics'),
   }),
   outputSchema: z.object({
