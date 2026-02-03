@@ -1,29 +1,35 @@
-
+// Import the correctly named function
 import { createTool } from '@mastra/core/tools';
-import { extractAuthContext, verifyTenantAccess } from '../lib/tenant-verification';
+import { extractTenantContext, verifyTenantAccess } from '../lib/tenant-verification';
 
 export function createSupaTool<TOut>(config: {
   id: string;
   description: string;
-  inputSchema: { parse: (input: unknown) => unknown };
-  outputSchema: unknown;
-  execute: (input: unknown, context: any) => Promise<TOut>;
+  inputSchema: any;
+  outputSchema?: any;
+  execute: (input: any, supabase: any, context: any) => Promise<TOut>;
 }) {
   return createTool({
     id: config.id,
     description: config.description,
-    inputSchema: config.inputSchema as any,
-    outputSchema: config.outputSchema as any,
-    execute: async (inputData: unknown, context: any) => {
-      const { tenantId, userId } = extractAuthContext(context);
-      await verifyTenantAccess(tenantId, userId);
-
-      try {
-        return await config.execute(inputData, context);
-      } catch (err: any) {
-        const msg = err instanceof Error ? err.message : String(err);
-        throw new Error(`Supatool "${config.id}" failed: ${msg}`);
+    inputSchema: config.inputSchema,
+    outputSchema: config.outputSchema,
+    execute: async (inputData, context) => {
+      // Get access token
+      const accessToken = context?.requestContext?.get('supabaseAccessToken');
+      if (!accessToken) {
+        throw new Error(`[${config.id}]: Missing authentication token`);
       }
+
+      // Get tenant context (using correct function name)
+      const { tenantId } = extractTenantContext(context);
+
+      // Create authenticated client
+      const { createAuthenticatedClient } = await import('../lib/supabase');
+      const supabase = createAuthenticatedClient(accessToken);
+
+      // Execute the tool's logic
+      return await config.execute(inputData, supabase, context);
     },
   });
 }
