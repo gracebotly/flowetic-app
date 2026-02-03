@@ -10,7 +10,6 @@ export const todoComplete = createTool({
   id: "todo.complete",
   description: "Mark a todo as completed.",
   inputSchema: z.object({
-    tenantId: z.string().uuid(),
     threadId: z.string().min(1),
     todoId: z.string().uuid(),
   }),

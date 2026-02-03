@@ -89,12 +89,11 @@ export const connectionBackfillWorkflow = createWorkflow({
           throw new Error("fetchPlatformEvents.execute is not available");
         }
         const result = await fetchPlatformEvents.execute(
-          { 
-            tenantId: inputData.tenantId,
+          {
             threadId: inputData.threadId,
-            platformType: inputData.platformType, 
-            sourceId: inputData.sourceId, 
-            eventCount 
+            platformType: inputData.platformType,
+            sourceId: inputData.sourceId,
+            eventCount
           },
           { requestContext }
         );
@@ -176,8 +175,7 @@ export const connectionBackfillWorkflow = createWorkflow({
         }
         
         const result = await storeEvents.execute(
-          { 
-            tenantId: inputData.tenantId,
+          {
             sourceId: inputData.sourceId,
             events: inputData.normalizedEvents
           },

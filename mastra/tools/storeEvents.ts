@@ -11,7 +11,6 @@ export const storeEvents = createTool({
     "Bulk insert normalized events into Supabase events table. Skips duplicates via (source_id, platform_event_id) unique index.",
   inputSchema: z.object({
     events: z.array(z.record(z.any())),
-    tenantId: z.string().min(1),
     sourceId: z.string().min(1),
   }),
   outputSchema: z.object({

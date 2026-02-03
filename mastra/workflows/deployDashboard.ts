@@ -80,7 +80,7 @@ export const deployDashboardWorkflow = createWorkflow({
         }
         
         const pv = await getPreviewVersionSpec.execute(
-          { tenantId: inputData.tenantId, previewVersionId: inputData.previewVersionId },
+          { previewVersionId: inputData.previewVersionId },
           { requestContext }
         );
 
@@ -180,7 +180,6 @@ export const deployDashboardWorkflow = createWorkflow({
         
         const result = await createDeploymentRecord.execute(
           {
-            tenantId: inputData.tenantId,
             interfaceId: inputData.interfaceId,
             previewVersionId: inputData.previewVersionId
           },
@@ -237,7 +236,6 @@ export const deployDashboardWorkflow = createWorkflow({
         
         const result = await markPreviousDeploymentsInactive.execute(
           {
-            tenantId: inputData.tenantId,
             interfaceId: inputData.interfaceId,
             keepDeploymentId: inputData.deploymentId
           },
@@ -296,7 +294,6 @@ export const deployDashboardWorkflow = createWorkflow({
         
         const result = await setInterfacePublished.execute(
           {
-            tenantId: inputData.tenantId,
             interfaceId: inputData.interfaceId,
             previewVersionId: inputData.previewVersionId
           },
@@ -355,7 +352,6 @@ export const deployDashboardWorkflow = createWorkflow({
 
         const result = await generatePortalUrl.execute(
           {
-            tenantId: inputData.tenantId,
             interfaceId: inputData.interfaceId,
             deploymentId: inputData.deploymentId
           },
@@ -434,7 +430,6 @@ export const deployDashboardWorkflow = createWorkflow({
 
         const result = await setJourneyDeployed.execute(
           {
-            tenantId: inputData.tenantId,
             threadId: inputData.threadId,
             interfaceId: inputData.interfaceId,
             deploymentId: inputData.deploymentId,
@@ -491,7 +486,6 @@ export const deployDashboardWorkflow = createWorkflow({
           
           const result = await todoComplete.execute(
             {
-              tenantId: inputData.tenantId,
               threadId: inputData.threadId,
               todoId: "deploy"
             },
@@ -548,7 +542,6 @@ export const deployDashboardWorkflow = createWorkflow({
           
           const result = await todoComplete.execute(
             {
-              tenantId: inputData.tenantId,
               threadId: inputData.threadId,
               todoId: "deploy"
             },

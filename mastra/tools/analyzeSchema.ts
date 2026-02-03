@@ -7,7 +7,6 @@ export const analyzeSchema = createTool({
   id: 'analyze-schema',
   description: 'Analyzes event schema from a data source to detect field types and patterns',
   inputSchema: z.object({
-    tenantId: z.string().uuid(),
     sourceId: z.string().uuid(),
     sampleSize: z.number().default(100),
   }),
