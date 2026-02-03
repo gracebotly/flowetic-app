@@ -2,6 +2,8 @@
 
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
+import { createAuthenticatedClient } from "../lib/supabase";
+import { extractTenantContext } from "../lib/tenant-verification";
 
 const PlatformType = z.enum(["vapi", "n8n", "make", "retell"]);
 
@@ -13,14 +15,20 @@ export const normalizeEvents = createTool({
     rawEvents: z.array(z.any()),
     platformType: PlatformType,
     sourceId: z.string().min(1),
-    tenantId: z.string().min(1),
   }),
   outputSchema: z.object({
     normalizedEvents: z.array(z.record(z.any())),
     count: z.number().int(),
   }),
-  execute: async (inputData) => {
-    const { rawEvents, platformType, sourceId, tenantId } = inputData;
+  execute: async (inputData, context) => {
+    // Get access token and tenant context
+    const accessToken = context?.requestContext?.get('supabaseAccessToken') as string;
+    if (!accessToken || typeof accessToken !== 'string') {
+      throw new Error('[normalizeEvents]: Missing authentication');
+    }
+
+    const { tenantId } = extractTenantContext(context);
+    const { rawEvents, platformType, sourceId } = inputData;
 
     // IMPORTANT:
     // We normalize into the existing 'events' table schema used in this repo.
