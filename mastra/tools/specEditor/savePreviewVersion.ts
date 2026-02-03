@@ -4,6 +4,8 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { persistPreviewVersion } from "../persistPreviewVersion";
 import { createClient } from '@/lib/supabase/client';
+import { createAuthenticatedClient } from "../../lib/supabase";
+import { extractTenantContext } from "../../lib/tenant-verification";
 
 export const savePreviewVersion = createTool({
   id: "savePreviewVersion",
