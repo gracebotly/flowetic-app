@@ -2,6 +2,26 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { searchUIUXData, STYLES, COLORS, type StyleEntry, type ColorEntry } from "../../data/uiuxStaticData";
 
+// ============================================================
+// CACHE: Style bundles are static data - cache to avoid recomputation
+// ============================================================
+interface CacheEntry {
+  bundles: StyleBundle[];
+  timestamp: number;
+}
+
+const BUNDLE_CACHE = new Map<string, CacheEntry>();
+const CACHE_TTL = 1000 * 60 * 60; // 1 hour (static data, could be longer)
+
+function getCacheKey(input: {
+  platformType: string;
+  outcome: string;
+  audience: string;
+  dashboardKind: string;
+}): string {
+  return `${input.platformType}:${input.outcome}:${input.audience}:${input.dashboardKind}`;
+}
+
 function hexToRgb(hex: string): [number, number, number] {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
   return result
@@ -121,7 +141,20 @@ export const getStyleBundles = createTool({
   execute: async (inputData) => {
     console.log("[TOOL][design.getStyleBundles] STATIC inputs:", inputData);
 
-    const { platformType, audience, dashboardKind, notes } = inputData;
+    const { platformType, outcome, audience, dashboardKind, notes } = inputData;
+
+    // ========== CACHE CHECK ==========
+    const cacheKey = getCacheKey({ platformType, outcome, audience, dashboardKind });
+    const cached = BUNDLE_CACHE.get(cacheKey);
+
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      console.log("[TOOL][design.getStyleBundles] CACHE HIT - returning cached bundles");
+      return {
+        bundles: cached.bundles,
+        sources: [{ kind: "static-cached", note: "UI/UX Pro Max static data (cached)" }],
+      };
+    }
+    // ========== END CACHE CHECK ==========
 
     // Build search query
     const query = `${platformType} ${dashboardKind} ${audience === "ops" ? "technical ops" : "client-facing"} ${notes || ""}`.trim();
@@ -206,6 +239,11 @@ export const getStyleBundles = createTool({
 
       // Validate and return
       const validated = z.array(StyleBundle).length(4).parse(bundles);
+
+      // ========== CACHE STORE ==========
+      BUNDLE_CACHE.set(cacheKey, { bundles: validated, timestamp: Date.now() });
+      console.log("[TOOL][design.getStyleBundles] CACHE MISS - stored new bundles");
+      // ========== END CACHE STORE ==========
 
       return {
         bundles: validated,
