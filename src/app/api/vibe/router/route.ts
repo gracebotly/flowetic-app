@@ -45,12 +45,10 @@ import { dashboardBuilderAgent } from "@/mastra/agents/dashboardBuilderAgent";
 
 
 import { todoAdd, todoList } from "@/mastra/tools/todo";
-import { getStyleBundles } from "@/mastra/tools/design/getStyleBundles";
 import { applyInteractiveEdits } from "@/mastra/tools/interactiveEdit";
 import { getCurrentSpec, applySpecPatch } from "@/mastra/tools/specEditor";
 import { callTool } from "@/mastra/lib/callTool";
 
-import { getOutcomes } from "@/mastra/tools/outcomes";
 import { ensureMastraThreadId } from "@/mastra/lib/ensureMastraThread";
 import { getMastra } from "@/mastra/index";
 import { OUTCOMES } from "@/data/outcomes";
@@ -89,22 +87,22 @@ function dedupeStringsByMetricId(labels: string[]): string[] {
 }
 
 /**
- * Maps business outcome IDs to the style bundle type expected by getStyleBundles tool.
+ * Maps business outcome IDs to the style bundle type expected by style bundle generation.
  * Bridges business layer (user selection) with technical layer (design system).
- * 
+ *
  * @param outcomeId - Outcome ID from OUTCOMES catalog or user selection
- * @returns 'dashboard' | 'product' for getStyleBundles tool
+ * @returns 'dashboard' | 'product' for style bundle generation
  */
 function mapOutcomeToStyleType(outcomeId: string | undefined | null): 'dashboard' | 'product' {
   const normalized = String(outcomeId || "").trim().toLowerCase();
-  
+
   if (!normalized) {
     return 'dashboard'; // Default fallback
   }
-  
+
   // Look up outcome in OUTCOMES catalog to use its category
   const outcome = OUTCOMES.find((o: any) => o?.id === normalized);
-  
+
   if (outcome?.category) {
     // Map category to style type
     if (outcome.category === 'product') {
@@ -113,17 +111,141 @@ function mapOutcomeToStyleType(outcomeId: string | undefined | null): 'dashboard
     // Both 'dashboard' and 'operations' map to 'dashboard'
     return 'dashboard';
   }
-  
+
   // Fallback: keyword-based heuristics if category missing
-  if (normalized.includes('product') || 
-      normalized.includes('portal') || 
+  if (normalized.includes('product') ||
+      normalized.includes('portal') ||
       normalized.includes('saas') ||
       normalized.includes('marketplace')) {
     return 'product';
   }
-  
+
   // Default: dashboard (most common case)
   return 'dashboard';
+}
+
+/**
+ * Generate 4 deterministic style bundles for the style selection phase.
+ * This replaces the deleted getStyleBundles tool with inline implementation.
+ */
+function generateStyleBundles() {
+  return {
+    bundles: [
+      {
+        id: "professional-clean",
+        name: "Professional Clean",
+        description: "Clean, minimal dashboard for business clients",
+        previewImageUrl: "/style-previews/minimalism.png",
+        palette: {
+          name: "SaaS B2B",
+          swatches: [
+            { name: "Primary", hex: "#2563EB", rgb: [37, 99, 235] },
+            { name: "Secondary", hex: "#64748B", rgb: [100, 116, 139] },
+            { name: "CTA", hex: "#10B981", rgb: [16, 185, 129] },
+            { name: "Background", hex: "#F8FAFC", rgb: [248, 250, 252] },
+            { name: "Text", hex: "#0F172A", rgb: [15, 23, 42] },
+          ],
+        },
+        densityPreset: "comfortable" as const,
+        tags: ["Client-facing", "Professional", "Clean"],
+        designTokens: {
+          "theme.color.primary": "#2563EB",
+          "theme.color.secondary": "#64748B",
+          "theme.color.cta": "#10B981",
+          "theme.color.background": "#F8FAFC",
+          "theme.color.text": "#0F172A",
+          "theme.spacing.base": 10,
+          "theme.radius.md": 8,
+          "theme.shadow.card": "soft",
+        },
+      },
+      {
+        id: "premium-dark",
+        name: "Premium Dark",
+        description: "High-contrast dark theme for premium feel",
+        previewImageUrl: "/style-previews/dark-mode.png",
+        palette: {
+          name: "Agency Premium",
+          swatches: [
+            { name: "Primary", hex: "#60A5FA", rgb: [96, 165, 250] },
+            { name: "Secondary", hex: "#A78BFA", rgb: [167, 139, 250] },
+            { name: "CTA", hex: "#F472B6", rgb: [244, 114, 182] },
+            { name: "Background", hex: "#0B1220", rgb: [11, 18, 32] },
+            { name: "Text", hex: "#E5E7EB", rgb: [229, 231, 235] },
+          ],
+        },
+        densityPreset: "comfortable" as const,
+        tags: ["Premium", "Dark", "Modern"],
+        designTokens: {
+          "theme.color.primary": "#60A5FA",
+          "theme.color.secondary": "#A78BFA",
+          "theme.color.cta": "#F472B6",
+          "theme.color.background": "#0B1220",
+          "theme.color.text": "#E5E7EB",
+          "theme.spacing.base": 10,
+          "theme.radius.md": 8,
+          "theme.shadow.card": "soft",
+        },
+      },
+      {
+        id: "glass-premium",
+        name: "Glass Premium",
+        description: "Glassmorphism with AI-inspired colors",
+        previewImageUrl: "/style-previews/glassmorphism.png",
+        palette: {
+          name: "AI Platform",
+          swatches: [
+            { name: "Primary", hex: "#3B82F6", rgb: [59, 130, 246] },
+            { name: "Secondary", hex: "#8B5CF6", rgb: [139, 92, 246] },
+            { name: "CTA", hex: "#06B6D4", rgb: [6, 182, 212] },
+            { name: "Background", hex: "#F9FAFB", rgb: [249, 250, 251] },
+            { name: "Text", hex: "#111827", rgb: [17, 24, 39] },
+          ],
+        },
+        densityPreset: "comfortable" as const,
+        tags: ["Premium", "Glass", "AI"],
+        designTokens: {
+          "theme.color.primary": "#3B82F6",
+          "theme.color.secondary": "#8B5CF6",
+          "theme.color.cta": "#06B6D4",
+          "theme.color.background": "#F9FAFB",
+          "theme.color.text": "#111827",
+          "theme.spacing.base": 10,
+          "theme.radius.md": 8,
+          "theme.shadow.card": "glass",
+        },
+      },
+      {
+        id: "bold-startup",
+        name: "Bold Startup",
+        description: "Bold, energetic design for differentiation",
+        previewImageUrl: "/style-previews/brutalism.png",
+        palette: {
+          name: "Ecommerce",
+          swatches: [
+            { name: "Primary", hex: "#EF4444", rgb: [239, 68, 68] },
+            { name: "Secondary", hex: "#F59E0B", rgb: [245, 158, 11] },
+            { name: "CTA", hex: "#10B981", rgb: [16, 185, 129] },
+            { name: "Background", hex: "#FFFFFF", rgb: [255, 255, 255] },
+            { name: "Text", hex: "#1F2937", rgb: [31, 41, 55] },
+          ],
+        },
+        densityPreset: "comfortable" as const,
+        tags: ["Bold", "Startup", "Energetic"],
+        designTokens: {
+          "theme.color.primary": "#EF4444",
+          "theme.color.secondary": "#F59E0B",
+          "theme.color.cta": "#10B981",
+          "theme.color.background": "#FFFFFF",
+          "theme.color.text": "#1F2937",
+          "theme.spacing.base": 10,
+          "theme.radius.md": 0,
+          "theme.shadow.card": "soft",
+        },
+      },
+    ],
+    sources: [{ kind: "static", note: "Deterministic style bundles (inline)" }],
+  };
 }
 
 type ToolUi =
@@ -156,8 +278,7 @@ type ToolUi =
       density: "compact" | "comfortable" | "spacious";
     };
 
-// Type definition for getOutcomes tool result
-// Matches the outputSchema defined in mastra/tools/outcomes/getOutcomes.ts
+// Type definition for outcome results
 type GetOutcomesResult = {
   outcomes: Array<{
     id: string;
@@ -653,18 +774,8 @@ Use this documentation to guide the workflow execution and decision making.`
       requestContext.set("selectedStyleBundleId", selectedId);
       requestContext.set("selectedStyleBundle", selectedId);
 
-      // Get bundle list again, pick chosen bundle
-      const bundlesResult = await callTool(
-        getStyleBundles,
-        {
-          platformType,
-          outcome: mapOutcomeToStyleType(journey?.selectedOutcome),
-          audience: "client",
-          dashboardKind: "workflow-activity",
-          notes: "User selected a bundle; return the same set for token extraction.",
-        }, // inputData
-        { requestContext } // context
-      );
+      // Get bundle list (deterministic, no agent required)
+      const bundlesResult = generateStyleBundles();
 
       const bundle = bundlesResult.bundles.find((b: any) => b.id === selectedId);
       if (!bundle) {
@@ -695,17 +806,8 @@ Use this documentation to guide the workflow execution and decision making.`
 
       const nextJourney = { ...journey, selectedStoryboard: storyboardId, mode: "style" };
 
-      const bundlesResult = await callTool(
-        getStyleBundles,
-        {
-          platformType,
-          outcome: mapOutcomeToStyleType(nextJourney?.selectedOutcome),
-          audience: "client",
-          dashboardKind: "workflow-activity",
-          notes: "Return premium style+palette bundles appropriate for agency white-label client delivery.",
-        }, // inputData
-        { requestContext } // context
-      );
+      // Get style bundles (deterministic, no agent required)
+      const bundlesResult = generateStyleBundles();
 
       return NextResponse.json({
         text: "Perfect. Now choose a style bundle (required) so your preview looks premium immediately.",
@@ -834,20 +936,11 @@ Use this documentation to guide the workflow execution and decision making.`
     }
 
     // ------------------------------------------------------------------
-    // Phase: style (RAG -> 4 bundles)
+    // Phase: style (deterministic bundles)
     // ------------------------------------------------------------------
     if (effectiveMode === "style") {
-      const bundlesResult = await callTool(
-        getStyleBundles,
-        {
-          platformType,
-          outcome: mapOutcomeToStyleType(journey?.selectedOutcome),
-          audience: "client",
-          dashboardKind: "workflow-activity",
-          notes: "Return premium style+palette bundles appropriate for agency white-label client delivery.",
-        }, // inputData
-        { requestContext } // context
-      );
+      // Get style bundles (deterministic, no agent required)
+      const bundlesResult = generateStyleBundles();
 
       return NextResponse.json({
         text: "Choose a style bundle (required). This sets the look + palette so the preview feels sellable immediately.",
