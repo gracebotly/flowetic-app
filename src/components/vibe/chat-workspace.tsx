@@ -242,9 +242,12 @@ export function ChatWorkspace({
   });
 
   async function sendAi(text: string, extraData?: Record<string, any>) {
-    // AI SDK v5: sendMessage just takes the text content
+    // AI SDK v5: sendMessage expects a UIMessage object
     // All context (tenantId, userId, etc.) is handled by DefaultChatTransport
-    await sendUiMessage(text);
+    await sendUiMessage({
+      role: 'user',
+      parts: [{ type: 'text', text }],
+    });
   }
 
   /**
