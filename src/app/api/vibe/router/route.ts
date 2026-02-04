@@ -743,36 +743,16 @@ Use this documentation to guide the workflow execution and decision making.`
     // Phase: recommend (Phase 1 — platform-specific outcomes)
     // ------------------------------------------------------------------
     if (effectiveMode === "recommend") {
-  const outcomesResult = (await callTool(getOutcomes, { platformType }, { requestContext })) as GetOutcomesResult;
-  
-  type OutcomeType = GetOutcomesResult['outcomes'][number];
-  const dashboardOutcome = outcomesResult.outcomes.find(o => o.category === 'dashboard');
-  const productOutcome = outcomesResult.outcomes.find(o => o.category === 'product');
-  const coreOutcomes = [dashboardOutcome, productOutcome].filter((o): o is OutcomeType => o !== undefined && o !== null);
-  
-  const toolUi: ToolUi = {
-    type: "outcome_cards",
-    title: "Outcome + Monetization Strategy",
-    options: coreOutcomes.map((o) => ({
-      id: o.id,
-      title: o.name,
-      description: o.description,
-      previewImageUrl: o.previewImageUrl,
-      tags: o.tags,
-    })),
-  };
-
   const workflowName = String(vibeContext?.displayName ?? vibeContext?.externalId ?? "").trim();
   const mastra = getMastra();
   const master = mastra.getAgent("masterRouterAgent" as const);
-  
-  // Trust the agent and Business Outcomes Advisor skill
+
   const systemPrompt = [
     workflowName ? `User's workflow: "${workflowName}"` : "",
     "Help the user select the right outcome (Dashboard vs Product).",
-    "Answer their questions directly. Provide specific recommendations based on their workflow.",
+    "Keep it conversational and brief.",
   ].filter(Boolean).join("\n");
-  
+
   const { text: agentText } = await runAgentNetworkToText({
     agent: master as any,
     message: systemPrompt,
@@ -781,55 +761,35 @@ Use this documentation to guide the workflow execution and decision making.`
     maxSteps: 12,
   });
 
-const inDeepLane = Boolean(journey?.deepLane);
-const deepLaneStep =
-  typeof (journey as any)?.deepLane?.step === "number"
-    ? ((journey as any).deepLane.step as number)
-    : undefined;
+  const inDeepLane = Boolean(journey?.deepLane);
+  const suppressChoices = inDeepLane; // Hide during deep lane questions
 
-// Suppress cards after the agent has made a recommendation (not just during deep lane questions)
-const agentMadeRecommendation = /(^|\n)\s*i\s*(would\s*)?recommend\b/i.test(agentText);
-const deepLaneComplete = typeof deepLaneStep === "number" && deepLaneStep >= 2;
-
-const suppressOutcomeCards = Boolean(journey?.deepLane) && (agentMadeRecommendation || deepLaneComplete);
-
-return NextResponse.json({
-  text: agentText || "Let's figure out what you want to build.",
-  journey: { ...journey, mode: "recommend" },
-  toolUi: suppressOutcomeCards ? null : (inDeepLane ? null : toolUi),
-  vibeContext: { ...(vibeContext ?? {}) },
-});
+  return NextResponse.json({
+    text: agentText || "Based on your workflow, I recommend building either:\n\n1. 📊 **Dashboard** - Prove ROI to your clients\n2. 🚀 **Product** - Build a sellable tool\n\nWhich sounds right?",
+    journey: { ...journey, mode: "recommend" },
+    choices: suppressChoices ? undefined : [
+      {
+        id: "dashboard",
+        label: "Dashboard",
+        emoji: "📊",
+        description: "Prove ROI and retention"
+      },
+      {
+        id: "product",
+        label: "Product",
+        emoji: "🚀",
+        description: "Build sellable asset"
+      },
+    ],
+    helpAvailable: !suppressChoices,
+    vibeContext: { ...(vibeContext ?? {}) },
+  });
 }
 
     // ------------------------------------------------------------------
     // Phase: align (Phase 2 — storyboard cards)
     // ------------------------------------------------------------------
     if (effectiveMode === "align") {
-      const toolUi: ToolUi = {
-        type: "storyboard_cards",
-        title: "Choose your KPI Storyboard",
-        options: [
-          {
-            id: "roi_proof",
-            title: "ROI Proof (Client-facing)",
-            description: "Prove automation value and time saved to drive renewals.",
-            kpis: dedupeStringsByMetricId(["Tasks automated", "Time saved", "Success rate", "Executions over time", "Most recent runs"]),
-          },
-          {
-            id: "reliability_ops",
-            title: "Reliability Ops (Agency-facing)",
-            description: "Operate and debug reliability across workflows quickly.",
-            kpis: dedupeStringsByMetricId(["Failure count", "Success rate", "Recent errors", "Avg runtime", "Slowest runs"]),
-          },
-          {
-            id: "delivery_sla",
-            title: "Delivery / SLA (Client-facing)",
-            description: "Show delivery health and turnaround time trends.",
-            kpis: dedupeStringsByMetricId(["Runs completed", "Avg turnaround time", "Incidents this week", "Last successful run", "Status trend"]),
-          },
-        ],
-      };
-
       const workflowName = String(vibeContext?.displayName ?? vibeContext?.externalId ?? "").trim();
 
       const mastra = getMastra();
@@ -837,13 +797,9 @@ return NextResponse.json({
       const { text: agentText } = await runAgentNetworkToText({
         agent: master as any,
         message: [
-          "System: Phase 2 storyboard selection (KPI story).",
-          workflowName ? `System: Selected workflow name: "${workflowName}".` : "",
-          NO_ROADMAP_RULES,
-          "Output requirements:",
-          "- 1 sentence: 'Now we pick the story this will tell.'",
-          "- Recommend ONE storyboard by name (ROI Proof vs Reliability Ops vs Delivery/SLA) with 1 short reason.",
-          "- Do NOT list metrics (the cards already show them).",
+          "System: Phase 2 storyboard selection.",
+          workflowName ? `System: Workflow: "${workflowName}".` : "",
+          "Briefly recommend ONE storyboard with 1 reason, then ask them to choose.",
         ].filter(Boolean).join("\n"),
         requestContext,
         memory: mastraMemory,
@@ -851,9 +807,28 @@ return NextResponse.json({
       });
 
       return NextResponse.json({
-        text: agentText || "Now let's pick the story this will tell. Choose the option that matches what you want to prove first.",
+        text: agentText || "What story do you want this dashboard to tell?",
         journey: { ...journey, mode: "align" },
-        toolUi,
+        choices: [
+          {
+            id: "roi_proof",
+            label: "ROI Proof",
+            emoji: "💰",
+            description: "Show time/money saved"
+          },
+          {
+            id: "reliability_ops",
+            label: "Reliability",
+            emoji: "🛡️",
+            description: "Prove uptime & performance"
+          },
+          {
+            id: "delivery_sla",
+            label: "Speed",
+            emoji: "⚡",
+            description: "Highlight fast delivery"
+          },
+        ],
         vibeContext: { ...(vibeContext ?? {}) },
       });
     }
