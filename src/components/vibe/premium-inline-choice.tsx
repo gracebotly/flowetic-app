@@ -8,8 +8,8 @@ import { useState } from "react";
 interface Choice {
   id: string;
   label: string;
-  emoji: string;
-  description: string;
+  emoji?: string;
+  description?: string;
   tags?: string[];
 }
 
@@ -56,13 +56,15 @@ export function PremiumInlineChoice({
             }}
           >
             <div className="flex items-start gap-4">
-              <motion.div
-                className="text-4xl"
-                animate={hoveredId === choice.id ? { scale: 1.2 } : { scale: 1 }}
-                transition={{ type: "spring", stiffness: 300 }}
-              >
-                {choice.emoji}
-              </motion.div>
+              {choice.emoji && (
+                <motion.div
+                  className="text-4xl"
+                  animate={hoveredId === choice.id ? { scale: 1.2 } : { scale: 1 }}
+                  transition={{ type: "spring", stiffness: 300 }}
+                >
+                  {choice.emoji}
+                </motion.div>
+              )}
 
               <div className="flex-1">
                 <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
@@ -77,7 +79,9 @@ export function PremiumInlineChoice({
                     </motion.div>
                   )}
                 </h3>
-                <p className="text-sm text-gray-600 mt-1">{choice.description}</p>
+                {choice.description && (
+                  <p className="text-sm text-gray-600 mt-1">{choice.description}</p>
+                )}
 
                 {choice.tags && choice.tags.length > 0 && (
                   <div className="flex flex-wrap gap-2 mt-3">
