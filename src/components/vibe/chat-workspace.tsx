@@ -53,6 +53,14 @@ type JourneyMode =
   | "interactive_edit"
   | "deploy";
 
+// Phase modes that use deterministic /api/vibe/router (no agent tool calls)
+const PHASE_MODES: JourneyMode[] = ["select_entity", "recommend", "align", "style"];
+
+// Helper function to determine routing
+function shouldUsePhaseRouter(mode: JourneyMode): boolean {
+  return PHASE_MODES.includes(mode);
+}
+
 type ToolUiPayload =
   | {
       type: "outcome_cards";
@@ -193,6 +201,7 @@ export function ChatWorkspace({
   const [isListening, setIsListening] = useState(false);
   const [isChatExpanded, setIsChatExpanded] = useState(false);
   const [selectedModel, setSelectedModel] = useState<ModelId>("glm-4.7");
+  const [isLoadingPhase, setIsLoadingPhase] = useState(false);
   
   const { messages: uiMessages, sendMessage: sendUiMessage, status: uiStatus, error: uiError } = useChat({});
 
@@ -730,7 +739,7 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
   const sendMessage = async (text: string) => {
     const trimmed = text.trim();
     if (!trimmed) return;
-    if (uiStatus === 'streaming') return;
+    if (uiStatus === 'streaming' || isLoadingPhase) return;
 
     // Persist user message (keep existing behavior)
     try {
@@ -748,10 +757,6 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
       // non-fatal
     }
 
-    // NOTE: CopilotKit-era assistant message persistence disabled after AI SDK migration.
-    // Assistant responses now come from uiMessages parts, not data.text.
-    // TODO: Re-implement persistence from uiMessages parts if needed.
-
     // Keep your local UI list in sync (as your current UI renders from `messages`)
     setMessages((prev) => [
       ...prev,
@@ -762,31 +767,120 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
       addLog("running", "Generating preview…", "This can take ~10–30 seconds on first run.");
     }
 
-    // Send through AI SDK with context data
-    try {
-      await sendAi(trimmed, {
-        userId: authContext.userId,
-        tenantId: authContext.tenantId,
-        journeyThreadId: threadId, // <-- REQUIRED by /api/chat to create stable Mastra thread
-        threadId,
-        selectedModel,
-        vibeContext: vibeContext ? { ...vibeContext, threadId } : undefined,
-        journey: {
-          mode: journeyMode,
+    // HYBRID ROUTING: Phase modes use /api/vibe/router (deterministic)
+    // Open-ended modes use /api/chat (streaming agent)
+    if (shouldUsePhaseRouter(journeyMode)) {
+      setIsLoadingPhase(true);
+
+      try {
+        const response = await fetch("/api/vibe/router", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: authContext.userId,
+            tenantId: authContext.tenantId,
+            journeyThreadId: threadId,
+            userMessage: trimmed,
+            selectedModel,
+            vibeContext: vibeContext ? { ...vibeContext, threadId } : {},
+            journey: {
+              mode: journeyMode,
+              threadId,
+              selectedOutcome,
+              selectedStoryboard,
+              selectedStyleBundleId,
+              densityPreset,
+              paletteOverrideId,
+            },
+          }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || "Phase router request failed");
+        }
+
+        // Add assistant response
+        if (data.text) {
+          setMessages((prev) => [
+            ...prev,
+            { id: `a-${Date.now()}`, role: "assistant", content: data.text },
+          ]);
+        }
+
+        // Render choices/cards based on response
+        if (data.choices) {
+          // Convert choices to toolUi format for rendering
+          setToolUi({
+            type: "outcome_choices" as any,
+            choices: data.choices,
+            helpAvailable: data.helpAvailable
+          } as any);
+        } else if (data.storyboards) {
+          setToolUi({
+            type: "storyboard_cards",
+            options: data.storyboards
+          } as any);
+        } else if (data.toolUi?.type === "style_bundles") {
+          setToolUi(data.toolUi as any);
+        } else if (data.toolUi) {
+          setToolUi(data.toolUi as any);
+        } else {
+          // Clear toolUi if no UI components returned
+          setToolUi(null);
+        }
+
+        // Handle journey updates
+        if (data.journey) {
+          if (data.journey.mode) setJourneyMode(data.journey.mode);
+          if (data.journey.selectedOutcome !== undefined) setSelectedOutcome(data.journey.selectedOutcome);
+          if (data.journey.selectedStoryboard !== undefined) setSelectedStoryboard(data.journey.selectedStoryboard);
+          if (data.journey.selectedStyleBundleId !== undefined) setSelectedStyleBundleId(data.journey.selectedStyleBundleId);
+        }
+
+        // Handle vibeContext updates
+        if (data.vibeContext) {
+          setVibeContext((prev: any) => ({ ...prev, ...data.vibeContext }));
+        }
+
+      } catch (error: any) {
+        addLog("error", "Phase router failed", error.message);
+        setMessages((prev) => [
+          ...prev,
+          { id: `a-${Date.now()}`, role: "assistant", content: "Sorry, something went wrong." },
+        ]);
+      } finally {
+        setIsLoadingPhase(false);
+      }
+    }
+    // OPEN-ENDED MODE: Use streaming chat
+    else {
+      try {
+        await sendAi(trimmed, {
+          userId: authContext.userId,
+          tenantId: authContext.tenantId,
+          journeyThreadId: threadId,
           threadId,
-          selectedOutcome,
-          selectedStoryboard,
-          selectedStyleBundleId,
-          densityPreset,
-          paletteOverrideId,
-        },
-      });
-    } catch (e: any) {
-      addLog("error", "Chat request failed", e?.message ?? "Unknown error");
-      setMessages((prev) => [
-        ...prev,
-        { id: `a-${Date.now()}`, role: "assistant", content: "Request failed." },
-      ]);
+          selectedModel,
+          vibeContext: vibeContext ? { ...vibeContext, threadId } : undefined,
+          journey: {
+            mode: journeyMode,
+            threadId,
+            selectedOutcome,
+            selectedStoryboard,
+            selectedStyleBundleId,
+            densityPreset,
+            paletteOverrideId,
+          },
+        });
+      } catch (e: any) {
+        addLog("error", "Chat request failed", e?.message ?? "Unknown error");
+        setMessages((prev) => [
+          ...prev,
+          { id: `a-${Date.now()}`, role: "assistant", content: "Request failed." },
+        ]);
+      }
     }
   };
 
@@ -1066,6 +1160,89 @@ return (
                     );
                   })}
                 </div>
+
+                {/* Render toolUi from phase router */}
+                {toolUi && (
+                  <div className="mt-3">
+                    {toolUi.type === "outcome_choices" && (toolUi as any).choices && (
+                      <InlineChoice
+                        choices={(toolUi as any).choices}
+                        onSelect={async (id: string) => {
+                          setSelectedOutcome(id as any);
+                          setToolUi(null);
+                          await sendMessage(`__ACTION__:select_outcome:${id}`);
+                        }}
+                        onHelp={(toolUi as any).helpAvailable ? async () => {
+                          setToolUi(null);
+                          await sendMessage("__ACTION__:outcome_help_me_decide");
+                        } : undefined}
+                      />
+                    )}
+
+                    {toolUi.type === "storyboard_cards" && toolUi.options && (
+                      <div className="grid gap-3">
+                        {toolUi.options.map((option: any) => (
+                          <button
+                            key={option.id}
+                            onClick={async () => {
+                              setSelectedStoryboard(option.id);
+                              setToolUi(null);
+                              await sendMessage(`__ACTION__:select_storyboard:${option.id}`);
+                            }}
+                            className="text-left rounded-lg border border-gray-200 p-4 hover:border-blue-500 hover:bg-blue-50 transition-all"
+                          >
+                            <div className="font-medium text-gray-900 mb-1">{option.title}</div>
+                            <div className="text-sm text-gray-600 mb-2">{option.description}</div>
+                            {option.kpis && option.kpis.length > 0 && (
+                              <div className="flex flex-wrap gap-1">
+                                {option.kpis.map((kpi: string, idx: number) => (
+                                  <span key={idx} className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded">
+                                    {kpi}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {toolUi.type === "style_bundles" && toolUi.bundles && (
+                      <div className="grid gap-3">
+                        {toolUi.bundles.map((bundle: any) => (
+                          <button
+                            key={bundle.id}
+                            onClick={async () => {
+                              setSelectedStyleBundleId(bundle.id);
+                              setToolUi(null);
+                              await sendMessage(`__ACTION__:select_style_bundle:${bundle.id}`);
+                            }}
+                            className="text-left rounded-lg border border-gray-200 p-4 hover:border-blue-500 hover:bg-blue-50 transition-all"
+                          >
+                            <div className="font-medium text-gray-900 mb-1">{bundle.name}</div>
+                            <div className="text-sm text-gray-600 mb-2">{bundle.description}</div>
+                            {bundle.palette && (
+                              <div className="flex gap-1 mt-2">
+                                {bundle.palette.swatches?.slice(0, 5).map((swatch: any, idx: number) => (
+                                  <div
+                                    key={idx}
+                                    className="w-6 h-6 rounded border border-gray-300"
+                                    style={{ backgroundColor: swatch.hex }}
+                                    title={swatch.name}
+                                  />
+                                ))}
+                              </div>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {isLoadingPhase && (
+                  <div className="mt-2 text-xs text-white/60">Processing…</div>
+                )}
 
                 {uiError ? (
                   <div className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
