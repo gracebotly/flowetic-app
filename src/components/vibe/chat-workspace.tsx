@@ -956,7 +956,7 @@ return (
                       <div key={`${m.id}-${messageIdx}`} className={isUser ? 'text-right mb-4' : 'text-left mb-4'}>
                         <div className={cn(
                           "inline-block max-w-[90%] rounded-xl px-4 py-2",
-                          isUser ? "bg-indigo-600 text-white" : "bg-white/10 text-white"
+                          isUser ? "bg-indigo-600 text-white" : "bg-gray-100 text-gray-900"
                         )}>
                           {m.parts?.map((part, idx) => {
 
@@ -1020,7 +1020,7 @@ return (
                             // ✅ SHOW: Text content (THIS IS THE CRITICAL FIX!)
                             if (part.type === 'text') {
                               return (
-                                <div key={idx} className="whitespace-pre-wrap prose prose-sm max-w-none prose-invert">
+                                <div key={idx} className="whitespace-pre-wrap prose prose-sm max-w-none">
                                   {part.text}
                                 </div>
                               );
