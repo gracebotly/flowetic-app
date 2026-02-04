@@ -208,43 +208,48 @@ export function ChatWorkspace({
   const { messages: uiMessages, sendMessage: sendUiMessage, status: uiStatus, error: uiError } = useChat({
     transport: new DefaultChatTransport({
       api: '/api/chat',
-      prepareSendMessagesRequest({ messages }) {
-        return {
-          body: {
-            // AI SDK v5: All fields go inside body
-            messages,
-            tenantId: authContext.tenantId,
-            userId: authContext.userId,
-            journeyThreadId: threadId,
-            selectedModel,
-            // Vibe context fields
-            platformType: vibeContext?.platformType,
-            sourceId: vibeContext?.sourceId,
-            entityId: vibeContext?.entityId,
-            externalId: vibeContext?.externalId,
-            displayName: vibeContext?.displayName,
-            entityKind: vibeContext?.entityKind,
-            skillMD: vibeContext?.skillMD,
-            // Journey state
-            phase: journeyMode,
-            selectedOutcome,
-            selectedStoryboard,
-            selectedStyleBundleId,
-            densityPreset,
-            paletteOverrideId,
-          },
-        };
-      },
     }),
   });
 
   async function sendAi(text: string, extraData?: Record<string, any>) {
-    // AI SDK v5: sendMessage expects a UIMessage object
-    // All context (tenantId, userId, etc.) is handled by DefaultChatTransport
-    await sendUiMessage({
-      role: 'user',
-      parts: [{ type: 'text', text }],
-    });
+    // AI SDK v5: Pass dynamic context in the second argument of sendMessage
+    // Request-level options are evaluated at call time, avoiding stale closures
+
+    if (!authContext.tenantId || !authContext.userId) {
+      console.warn('[sendAi] Auth not ready - tenantId or userId missing');
+      return;
+    }
+
+    const payload = {
+      tenantId: authContext.tenantId,
+      userId: authContext.userId,
+      journeyThreadId: threadId,
+      selectedModel,
+      // Vibe context fields
+      platformType: vibeContext?.platformType,
+      sourceId: vibeContext?.sourceId,
+      entityId: vibeContext?.entityId,
+      externalId: vibeContext?.externalId,
+      displayName: vibeContext?.displayName,
+      entityKind: vibeContext?.entityKind,
+      skillMD: vibeContext?.skillMD,
+      // Journey state
+      phase: journeyMode,
+      selectedOutcome,
+      selectedStoryboard,
+      selectedStyleBundleId,
+      densityPreset,
+      paletteOverrideId,
+      ...extraData,
+    };
+
+    await sendUiMessage(
+      {
+        role: 'user',
+        parts: [{ type: 'text', text }],
+      },
+      { body: payload }
+    );
   }
 
   /**
