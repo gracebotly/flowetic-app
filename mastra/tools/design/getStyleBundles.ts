@@ -148,11 +148,13 @@ export const getStyleBundles = createTool({
           colors:
             bundle.palette?.swatches
               ?.slice(0, 3)
-              .map((s) => s.hex)
+              .map((s: any) => s.hex)
               .join(" / ") || "Colors",
           style: bundle.description,
           typography:
-            bundle.designTokens?.["font.family.sans"] || "Inter",
+            (bundle as any).designTokens?.["font.family.sans"] ||
+            (bundle as any).tokens?.["font.family.sans"] ||
+            "Inter",
           bestFor: bundle.tags?.join(", ") || "General use",
           fullOutput: JSON.stringify(bundle, null, 2),
         })),
