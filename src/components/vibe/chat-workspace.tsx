@@ -403,7 +403,7 @@ export function ChatWorkspace({
   const [vibeInitDone, setVibeInitDone] = useState(false);
 
   const [journeyMode, setJourneyMode] = useState<JourneyMode>("select_entity");
-  const [selectedOutcome, setSelectedOutcome] = useState<"dashboard" | "tool" | "form" | "product" | null>(null);
+  const [selectedOutcome, setSelectedOutcome] = useState<"dashboard" | "product" | null>(null);
   const [selectedStoryboard, setSelectedStoryboard] = useState<string | null>(null);
   const [selectedStyleBundleId, setSelectedStyleBundleId] = useState<string | null>(null);
   const [densityPreset, setDensityPreset] = useState<"compact" | "comfortable" | "spacious">("comfortable");
@@ -703,7 +703,13 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
 
     // restore journey fields
     if (s.mode) setJourneyMode(s.mode);
-    if (typeof s.selected_outcome !== "undefined") setSelectedOutcome(s.selected_outcome);
+    if (typeof s.selected_outcome !== "undefined") {
+      // Validate that the value matches the agent schema
+      const validOutcomes: Array<"dashboard" | "product"> = ["dashboard", "product"];
+      if (validOutcomes.includes(s.selected_outcome as any)) {
+        setSelectedOutcome(s.selected_outcome);
+      }
+    }
     if (typeof s.selected_storyboard !== "undefined") setSelectedStoryboard(s.selected_storyboard);
     if (typeof s.selected_style_bundle_id !== "undefined") setSelectedStyleBundleId(s.selected_style_bundle_id);
     if (typeof s.density_preset !== "undefined") setDensityPreset(s.density_preset);
@@ -977,9 +983,20 @@ return (
                                   key={idx}
                                   choices={(part as any).data?.choices || (part as any).choices || []}
                                   onSelect={async (id) => {
-                                    setSelectedOutcome(id as "dashboard" | "product" | "tool" | "form");
+                                    // Map outcome IDs to their categories for the agent schema
+                                    // The agent expects 'dashboard' or 'product', not the specific outcome ID
+                                    const categoryMap: Record<string, "dashboard" | "product"> = {
+                                      workflow_ops: "dashboard",
+                                      call_analytics: "dashboard",
+                                      voice_analytics: "dashboard",
+                                      workflow_product: "product",
+                                      voice_product: "product",
+                                    };
+                                    const category = categoryMap[id] || (id.includes("product") ? "product" : "dashboard");
+
+                                    setSelectedOutcome(category);
                                     setJourneyMode("align");
-                                    await sendAi(`I selected ${id}`);
+                                    await sendAi(`I selected ${id}`);  // Still send the specific ID in the message
                                   }}
                                   onHelp={
                                     (part as any).data?.helpAvailable || (part as any).helpAvailable
@@ -1063,7 +1080,17 @@ return (
                       <InlineChoice
                         choices={toolUi.choices}
                         onSelect={async (id: string) => {
-                          setSelectedOutcome(id as any);
+                          // Map outcome IDs to their categories for the agent schema
+                          const categoryMap: Record<string, "dashboard" | "product"> = {
+                            workflow_ops: "dashboard",
+                            call_analytics: "dashboard",
+                            voice_analytics: "dashboard",
+                            workflow_product: "product",
+                            voice_product: "product",
+                          };
+                          const category = categoryMap[id] || (id.includes("product") ? "product" : "dashboard");
+
+                          setSelectedOutcome(category);
                           setToolUi(null);
                           await sendMessage(`__ACTION__:select_outcome:${id}`);
                         }}
