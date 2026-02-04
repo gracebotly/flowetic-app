@@ -36,11 +36,18 @@ export const getOutcomes = createTool({
       console.log('[getOutcomes] Dashboard outcome:', !!dashboardOutcome);
       console.log('[getOutcomes] Product outcome:', !!productOutcome);
 
-      // ✅ STREAM CUSTOM UI DATA
+      // ✅ STREAM TEXT + CUSTOM UI DATA
       if (dashboardOutcome && productOutcome && context?.writer) {
         console.log('[getOutcomes] Attempting to stream custom UI...');
 
         try {
+          // Stream text first
+          await context.writer.write({
+            type: "text-delta",
+            textDelta: "I've found two outcome types that work well for your workflow:\n\n"
+          });
+
+          // Then stream custom UI
           await context.writer.custom({
             type: "data-outcome-choices",
             choices: [
