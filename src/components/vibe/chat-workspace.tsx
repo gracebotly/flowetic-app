@@ -956,7 +956,7 @@ return (
                             }
 
                             // ✅ SHOW: Reasoning indicator
-                            if (part.type === 'reasoning-delta' || part.type === 'reasoning') {
+                            if (part.type === 'reasoning') {
                               return (
                                 <div key={idx} className="flex items-center gap-2 text-sm text-indigo-400 my-2">
                                   <motion.div
