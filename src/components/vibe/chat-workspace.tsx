@@ -1047,7 +1047,7 @@ return (
                             // ✅ SHOW: Text content (THIS IS THE CRITICAL FIX!)
                             if (part.type === 'text') {
                               return (
-                                <div key={idx} className="whitespace-pre-wrap prose prose-sm max-w-none">
+                                <div key={idx} className="whitespace-pre-wrap prose prose-sm max-w-none prose-gray">
                                   {part.text}
                                 </div>
                               );
@@ -1062,9 +1062,9 @@ return (
 
                   {/* Show "Thinking..." when streaming OR when last message has no text */}
                   {(uiStatus === 'streaming' || (dedupedMessages.length > 0 && dedupedMessages[dedupedMessages.length - 1].role === 'assistant' && !dedupedMessages[dedupedMessages.length - 1].parts?.some(p => p.type === 'text'))) && (
-                    <div className="flex items-center gap-2 text-sm text-white/60 my-2">
+                    <div className="flex items-center gap-2 text-sm text-gray-500 my-2">
                       <motion.div
-                        className="w-3 h-3 bg-white/40 rounded-full"
+                        className="w-3 h-3 bg-indigo-500 rounded-full"
                         animate={{ scale: [1, 1.2, 1] }}
                         transition={{ duration: 1.5, repeat: Infinity }}
                       />
