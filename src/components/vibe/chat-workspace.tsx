@@ -79,6 +79,16 @@ type ToolUiPayload =
       }>;
     }
   | {
+      type: "outcome_choices";
+      choices: Array<{
+        id: string;
+        label: string;
+        emoji?: string;
+        description?: string;
+      }>;
+      helpAvailable?: boolean;
+    }
+  | {
       type: "style_bundles";
       title?: string;
       bundles: Array<{
@@ -813,15 +823,15 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
         if (data.choices) {
           // Convert choices to toolUi format for rendering
           setToolUi({
-            type: "outcome_choices" as any,
+            type: "outcome_choices",
             choices: data.choices,
             helpAvailable: data.helpAvailable
-          } as any);
+          });
         } else if (data.storyboards) {
           setToolUi({
             type: "storyboard_cards",
             options: data.storyboards
-          } as any);
+          });
         } else if (data.toolUi?.type === "style_bundles") {
           setToolUi(data.toolUi as any);
         } else if (data.toolUi) {
@@ -1164,15 +1174,15 @@ return (
                 {/* Render toolUi from phase router */}
                 {toolUi && (
                   <div className="mt-3">
-                    {toolUi.type === "outcome_choices" && (toolUi as any).choices && (
+                    {toolUi.type === "outcome_choices" && toolUi.choices && (
                       <InlineChoice
-                        choices={(toolUi as any).choices}
+                        choices={toolUi.choices}
                         onSelect={async (id: string) => {
                           setSelectedOutcome(id as any);
                           setToolUi(null);
                           await sendMessage(`__ACTION__:select_outcome:${id}`);
                         }}
-                        onHelp={(toolUi as any).helpAvailable ? async () => {
+                        onHelp={toolUi.helpAvailable ? async () => {
                           setToolUi(null);
                           await sendMessage("__ACTION__:outcome_help_me_decide");
                         } : undefined}
