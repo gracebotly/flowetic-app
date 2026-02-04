@@ -144,7 +144,7 @@ export const getStyleBundles = createTool({
     const { platformType, outcome, audience, dashboardKind, notes } = inputData;
 
     // ========== CACHE CHECK ==========
-    const cacheKey = getCacheKey({ platformType, outcome: outcome ?? 'default', audience, dashboardKind: dashboardKind ?? 'default' });
+    const cacheKey = getCacheKey({ platformType, outcome: outcome ?? 'default', audience: audience ?? 'default', dashboardKind: dashboardKind ?? 'default' });
     const cached = BUNDLE_CACHE.get(cacheKey);
 
     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
