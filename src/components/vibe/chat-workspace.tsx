@@ -210,27 +210,29 @@ export function ChatWorkspace({
       api: '/api/chat',
       prepareSendMessagesRequest({ messages }) {
         return {
-          // AI SDK v5: Don't wrap in 'body', return fields directly
-          messages,
-          tenantId: authContext.tenantId,
-          userId: authContext.userId,
-          journeyThreadId: threadId,
-          selectedModel,
-          // Vibe context fields
-          platformType: vibeContext?.platformType,
-          sourceId: vibeContext?.sourceId,
-          entityId: vibeContext?.entityId,
-          externalId: vibeContext?.externalId,
-          displayName: vibeContext?.displayName,
-          entityKind: vibeContext?.entityKind,
-          skillMD: vibeContext?.skillMD,
-          // Journey state
-          phase: journeyMode,
-          selectedOutcome,
-          selectedStoryboard,
-          selectedStyleBundleId,
-          densityPreset,
-          paletteOverrideId,
+          body: {
+            // AI SDK v5: All fields go inside body
+            messages,
+            tenantId: authContext.tenantId,
+            userId: authContext.userId,
+            journeyThreadId: threadId,
+            selectedModel,
+            // Vibe context fields
+            platformType: vibeContext?.platformType,
+            sourceId: vibeContext?.sourceId,
+            entityId: vibeContext?.entityId,
+            externalId: vibeContext?.externalId,
+            displayName: vibeContext?.displayName,
+            entityKind: vibeContext?.entityKind,
+            skillMD: vibeContext?.skillMD,
+            // Journey state
+            phase: journeyMode,
+            selectedOutcome,
+            selectedStoryboard,
+            selectedStyleBundleId,
+            densityPreset,
+            paletteOverrideId,
+          },
         };
       },
     }),
