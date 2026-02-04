@@ -198,7 +198,12 @@ export async function POST(req: Request) {
       "api_chat_stream"
     );
     
-    return createUIMessageStreamResponse({ stream });
+    // AI SDK v5: Pass originalMessages to prevent duplicate assistant messages
+    // See: https://ai-sdk.dev/docs/troubleshooting/repeated-assistant-messages
+    return createUIMessageStreamResponse({
+      stream,
+      originalMessages: params.messages,
+    });
     
   } catch (error: any) {
     console.error('[api/chat] Unexpected error:', error);
