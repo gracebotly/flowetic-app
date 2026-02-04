@@ -23,7 +23,6 @@ import { analyzeSchema } from "../tools/analyzeSchema";
 import { generateMapping } from "../tools/generateMapping";
 import { getSchemaSummary } from "../tools/platformMapping/getSchemaSummary";
 
-import { getStyleBundles } from "../tools/design";
 import { getJourneySession } from "../tools/journey/getJourneySession";
 import { setSchemaReady } from "../tools/journey/setSchemaReady";
 import { connectionBackfillWorkflow } from "../workflows/connectionBackfill";
@@ -91,7 +90,6 @@ export const platformMappingMaster: Agent = new Agent({
     proposeMapping,
     saveMapping,
     runGeneratePreviewWorkflow,
-    getStyleBundles,
     getJourneySession,
     setSchemaReady,
     // NEW: Add Supatools

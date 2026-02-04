@@ -9,8 +9,6 @@ import { searchDesignDatabase } from "../tools/design-system/searchDesignDatabas
 import { generateDesignSystem } from "../tools/design-system/generateDesignSystem";
 import { createFloweticMemory } from "../lib/memory";
 
-import { getStyleBundles } from "../tools/design";
-
 // NEW: Import Supatool
 import { recommendStyleKeywords } from "../tools/supatools";
 
@@ -72,7 +70,6 @@ export const designAdvisorAgent: Agent = new Agent({
   tools: {
     searchDesignDatabase,
     generateDesignSystem,
-    getStyleBundles,
     // NEW: Add Supatool
     recommendStyleKeywords,
   },
