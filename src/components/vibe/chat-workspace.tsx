@@ -634,6 +634,19 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
     }
   }, [authContext.userId, authContext.tenantId]);
 
+  // ✅ DEBUG: Console logging
+  useEffect(() => {
+    if (process.env.NEXT_PUBLIC_DEBUG_CHAT === 'true' && uiMessages.length > 0) {
+      const lastMessage = uiMessages[uiMessages.length - 1];
+      console.group('🔍 Chat Debug');
+      console.log('Last message:', lastMessage);
+      console.log('Parts:', lastMessage?.parts);
+      console.log('Journey mode:', journeyMode);
+      console.log('Status:', uiStatus);
+      console.groupEnd();
+    }
+  }, [uiMessages, journeyMode, uiStatus]);
+
   async function loadSessions() {
     if (!authContext.userId || !authContext.tenantId) return;
     const res = await fetch(`/api/journey-sessions?tenantId=${authContext.tenantId}&userId=${authContext.userId}`);
@@ -932,13 +945,29 @@ return (
                               );
                             }
 
-                            // Hide tool-call and tool-result parts from user view
+                            // ✅ HIDE: Tool calls and results
                             if (part.type === 'tool-call' || part.type === 'tool-result') {
                               return null;
                             }
 
+                            // ✅ HIDE: All tool execution parts
                             if (part.type.startsWith('tool-')) {
-                              return <div key={idx}>{renderToolPart(part)}</div>;
+                              return null; // Hide all tool-* parts
+                            }
+
+                            // ✅ SHOW: Reasoning indicator
+                            if (part.type === 'reasoning-delta' || part.type === 'reasoning') {
+                              return (
+                                <div key={idx} className="flex items-center gap-2 text-sm text-indigo-400 my-2">
+                                  <motion.div
+                                    animate={{ rotate: 360 }}
+                                    transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                                  >
+                                    <Sparkles className="w-4 h-4" />
+                                  </motion.div>
+                                  <span>Thinking...</span>
+                                </div>
+                              );
                             }
 
                             // Check for toolUi in data parts (disabled - now using InlineChoice/DesignSystemPair)
@@ -1171,14 +1200,7 @@ return (
 
             <div ref={messagesEndRef} />
 
-            {process.env.NEXT_PUBLIC_DEBUG_CHAT === 'true' ? (
-              <div className="mt-3 rounded-lg border border-white/10 bg-black/40 p-3 text-xs text-white/80">
-                <div className="mb-2 text-white/60">DEBUG: last message parts</div>
-                <pre className="overflow-auto whitespace-pre-wrap">
-                  {JSON.stringify(uiMessages?.[uiMessages.length - 1]?.parts ?? [], null, 2)}
-                </pre>
-              </div>
-            ) : null}
+            {/* Debug moved to console - check F12 */}
           </div>
 
           {/* Message input */}
