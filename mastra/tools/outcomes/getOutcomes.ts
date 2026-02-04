@@ -118,7 +118,7 @@ export const getOutcomes = createTool({
           },
         ],
         helpAvailable: true,
-      });
+      } as any);
     }
 
     return {

@@ -165,7 +165,7 @@ export const getStyleBundles = createTool({
             fullOutput: JSON.stringify(bundle, null, 2),
           })),
           hasMore: cached.bundles.length > 2,
-        });
+        } as any);
       }
 
       return {
@@ -279,7 +279,7 @@ export const getStyleBundles = createTool({
             fullOutput: JSON.stringify(bundle, null, 2),
           })),
           hasMore: validated.length > 2,
-        });
+        } as any);
       }
 
       return {
@@ -307,7 +307,7 @@ export const getStyleBundles = createTool({
             fullOutput: JSON.stringify(bundle, null, 2),
           })),
           hasMore: fallbacks.length > 2,
-        });
+        } as any);
       }
 
       return {
