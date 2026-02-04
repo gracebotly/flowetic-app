@@ -179,8 +179,8 @@ export async function POST(req: Request) {
         mastra,
         agentId: 'masterRouterAgent',
         params: enhancedParams,
-        sendStart: true,        // ← CRITICAL: Enable start events
-        sendFinish: true,       // ← CRITICAL: Enable finish events
+        sendStart: false,       // ← DISABLED: step-start events trigger duplicate message bug
+        sendFinish: true,       // ← Keep finish events for completion detection
         sendReasoning: false,   // ← Keep reasoning hidden
         sendSources: false,     // ← Keep sources hidden
         defaultOptions: {
