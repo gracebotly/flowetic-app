@@ -148,25 +148,27 @@ export const getStyleBundles = createTool({
       // Then stream custom UI
       await context.writer.custom({
         type: "data-design-system-pair",
-        systems: firstTwo.map((bundle) => ({
-          id: bundle.id,
-          name: bundle.name,
-          emoji: "🎨",
-          colors:
-            bundle.palette?.swatches
-              ?.slice(0, 3)
-              .map((s: any) => s.hex)
-              .join(" / ") || "Colors",
-          style: bundle.description,
-          typography:
-            (bundle as any).designTokens?.["font.family.sans"] ||
-            (bundle as any).tokens?.["font.family.sans"] ||
-            "Inter",
-          bestFor: bundle.tags?.join(", ") || "General use",
-          fullOutput: JSON.stringify(bundle, null, 2),
-        })),
-        hasMore: bundles.length > 2,
-      } as any); // Type assertion - AI SDK preserves properties at runtime
+        data: {
+          systems: firstTwo.map((bundle) => ({
+            id: bundle.id,
+            name: bundle.name,
+            emoji: "🎨",
+            colors:
+              bundle.palette?.swatches
+                ?.slice(0, 3)
+                .map((s: any) => s.hex)
+                .join(" / ") || "Colors",
+            style: bundle.description,
+            typography:
+              (bundle as any).designTokens?.["font.family.sans"] ||
+              (bundle as any).tokens?.["font.family.sans"] ||
+              "Inter",
+            bestFor: bundle.tags?.join(", ") || "General use",
+            fullOutput: JSON.stringify(bundle, null, 2),
+          })),
+          hasMore: bundles.length > 2,
+        },
+      });
     }
 
     return {
