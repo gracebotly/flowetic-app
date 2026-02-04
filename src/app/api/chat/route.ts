@@ -179,6 +179,10 @@ export async function POST(req: Request) {
         mastra,
         agentId: 'masterRouterAgent',
         params: enhancedParams,
+        sendStart: true,        // ← CRITICAL: Enable start events
+        sendFinish: true,       // ← CRITICAL: Enable finish events
+        sendReasoning: false,   // ← Keep reasoning hidden
+        sendSources: false,     // ← Keep sources hidden
         defaultOptions: {
           // Hard cap concurrency to avoid Z.ai 1302 throttling
           toolCallConcurrency: 1,
