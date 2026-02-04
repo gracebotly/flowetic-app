@@ -134,7 +134,18 @@ export async function POST(req: Request) {
       'paletteOverrideId',
       'selectedModel',
     ];
-    
+
+    // Map displayName to workflowName for agent instructions
+    const workflowName = clientData.displayName || clientData.externalId;
+    if (workflowName) {
+      requestContext.set('workflowName', String(workflowName));
+    }
+
+    // Also preserve skillMD for platform-specific knowledge
+    if (clientData.skillMD) {
+      requestContext.set('skillMD', clientData.skillMD);
+    }
+
     for (const key of safeClientKeys) {
       if (clientData[key] !== undefined) {
         requestContext.set(key, clientData[key]);

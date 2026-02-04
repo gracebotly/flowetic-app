@@ -39,6 +39,8 @@ import {
   recommendStoryboard,
   validatePreviewReadiness,
 } from "../tools/supatools";
+import { getOutcomes } from "../tools/outcomes";
+import { getStyleBundles } from "../tools/design/getStyleBundles";
 
 export const masterRouterAgent: Agent = new Agent({
   id: "masterRouterAgent",
@@ -51,29 +53,32 @@ export const masterRouterAgent: Agent = new Agent({
     tenantId: z.string().uuid(),
     userId: z.string().uuid(),
     userRole: z.enum(['admin', 'client', 'viewer']).optional(),
-    
+    userEmail: z.string().optional(),
+    supabaseAccessToken: z.string().optional(),
+
     // Thread context (REQUIRED)
     threadId: z.string(),
     resourceId: z.string(),
     journeyThreadId: z.string(),
-    
+
     // Platform context (OPTIONAL)
-    platformType: z.enum(['vapi', 'retell', 'n8n', 'make', 'mastra', 'crewai', 'pydantic_ai', 'other']).optional(),
+    platformType: z.enum(['vapi', 'retell', 'n8n', 'make', 'mastra', 'crewai', 'pydantic_ai', 'activepieces', 'other']).optional(),
     sourceId: z.string().uuid().optional(),
     entityId: z.string().optional(),
     externalId: z.string().optional(),
     displayName: z.string().optional(),
-    
+    entityKind: z.string().optional(),
+    skillMD: z.string().optional(),
+
     // Journey state (OPTIONAL)
     phase: z.enum(['select_entity', 'recommend', 'align', 'style', 'build_preview', 'interactive_edit', 'deploy']).optional(),
-    mode: z.enum(['fast_lane', 'deep_lane']).optional(),
-    selectedOutcome: z.enum(['dashboard', 'product']).optional(),
-    selectedStoryboard: z.string().optional(),
-    selectedStyleBundleId: z.string().optional(),
+    selectedOutcome: z.enum(['dashboard', 'product']).optional().nullable(),
+    selectedStoryboard: z.string().optional().nullable(),
+    selectedStyleBundleId: z.string().optional().nullable(),
     densityPreset: z.enum(['compact', 'comfortable', 'spacious']).optional(),
-    paletteOverrideId: z.string().optional(),
+    paletteOverrideId: z.string().optional().nullable(),
     workflowName: z.string().optional(),
-    
+
     // Model selection (OPTIONAL)
     selectedModel: z.string().optional(),
   }),
@@ -228,5 +233,8 @@ export const masterRouterAgent: Agent = new Agent({
     recommendOutcome,
     recommendStoryboard,
     validatePreviewReadiness,
+    // ADD THESE:
+    getOutcomes,
+    getStyleBundles,
   },
 });

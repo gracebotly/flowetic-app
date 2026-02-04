@@ -197,24 +197,32 @@ export function ChatWorkspace({
   const { messages: uiMessages, sendMessage: sendUiMessage, status: uiStatus, error: uiError } = useChat({});
 
   async function sendAi(text: string, extraData?: Record<string, any>) {
-    const baseData = {
-      tenantId: authContext.tenantId,
-      userId: authContext.userId,
-      journeyThreadId: threadId,
-      // If these exist in your vibeContext, include them so phase detection works:
-      platformType: (vibeContext as any)?.platformType,
-      sourceId: (vibeContext as any)?.sourceId,
-      entityId: (vibeContext as any)?.entityId,
-      externalId: (vibeContext as any)?.externalId,
-      displayName: (vibeContext as any)?.displayName,
-    };
-
+    // CRITICAL: Send COMPLETE vibeContext, not individual fields
     await sendUiMessage(
       { text },
       {
         body: {
           data: {
-            ...baseData,
+            tenantId: authContext.tenantId,
+            userId: authContext.userId,
+            journeyThreadId: threadId,
+            selectedModel,
+            // Send ALL vibeContext fields (this was the bug!)
+            platformType: vibeContext?.platformType,
+            sourceId: vibeContext?.sourceId,
+            entityId: vibeContext?.entityId,
+            externalId: vibeContext?.externalId,
+            displayName: vibeContext?.displayName,
+            entityKind: vibeContext?.entityKind,
+            skillMD: vibeContext?.skillMD,
+            // Journey state
+            phase: journeyMode,
+            selectedOutcome,
+            selectedStoryboard,
+            selectedStyleBundleId,
+            densityPreset,
+            paletteOverrideId,
+            // Merge any additional data
             ...(extraData ?? {}),
           },
         },
