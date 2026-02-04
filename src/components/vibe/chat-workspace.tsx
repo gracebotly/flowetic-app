@@ -217,7 +217,6 @@ export function ChatWorkspace({
             skillMD: vibeContext?.skillMD,
             // Journey state
             phase: journeyMode,
-            mode: journeyMode,
             selectedOutcome,
             selectedStoryboard,
             selectedStyleBundleId,
