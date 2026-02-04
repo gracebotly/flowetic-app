@@ -57,28 +57,35 @@ type JourneyMode =
 type ToolUiPayload =
   | {
       type: "outcome_cards";
-      title: string;
+      title?: string;
       options: Array<{
         id: string;
         title: string;
         description: string;
+        previewImageUrl?: string;
+        tags?: string[];
+        metrics?: {
+          primary: string[];
+          secondary: string[];
+        };
+        category?: "dashboard" | "product" | "operations";
       }>;
     }
   | {
       type: "style_bundles";
-      title: string;
+      title?: string;
       bundles: Array<{
         id: string;
         name: string;
         description: string;
-        previewImageUrl: string;
-        palette: { name: string; swatches: Array<{ name: string; hex: string }> };
-        tags: string[];
+        previewImageUrl?: string;
+        palette?: { name: string; swatches: Array<{ name: string; hex: string }> };
+        tags?: string[];
       }>;
     }
   | {
       type: "todos";
-      title: string;
+      title?: string;
       items: Array<{
         id: string;
         title: string;
@@ -88,7 +95,7 @@ type ToolUiPayload =
     }
   | {
       type: "interactive_edit_panel";
-      title: string;
+      title?: string;
       interfaceId: string;
       widgets: Array<{
         id: string;
@@ -105,7 +112,7 @@ type ToolUiPayload =
     }
   | {
       type: "storyboard_cards";
-      title: string;
+      title?: string;
       options: Array<{
         id: string;
         title: string;
@@ -196,6 +203,117 @@ export function ChatWorkspace({
         },
       },
     );
+  }
+
+  /**
+   * Render toolUi object from router response
+   * This handles the toolUi format returned by /api/vibe/router
+   */
+  function renderToolUi(toolUi: ToolUiPayload | null | undefined) {
+    if (!toolUi || !toolUi.type) return null;
+
+    // 1) Outcome cards
+    if (toolUi.type === 'outcome_cards') {
+      if (!toolUi.options || toolUi.options.length === 0) return null;
+
+      return (
+        <OutcomeCards
+          options={toolUi.options}
+          onSelect={async (id: string) => {
+            await sendAi(`__ACTION__:select_outcome:${id}`, {
+              selectedOutcome: id,
+            });
+          }}
+          onHelpDecide={async () => {
+            await sendAi(`__ACTION__:outcome_help_me_decide`);
+          }}
+        />
+      );
+    }
+
+    // 2) Storyboard cards
+    if (toolUi.type === 'storyboard_cards') {
+      if (!toolUi.options || toolUi.options.length === 0) return null;
+
+      return (
+        <StoryboardCards
+          options={toolUi.options}
+          onSelect={async (id: string) => {
+            await sendAi(`__ACTION__:select_storyboard:${id}`, {
+              selectedStoryboard: id,
+            });
+          }}
+        />
+      );
+    }
+
+    // 3) Style bundles
+    if (toolUi.type === 'style_bundles') {
+      if (!toolUi.bundles || toolUi.bundles.length === 0) return null;
+
+      return (
+        <StyleBundleCards
+          bundles={toolUi.bundles}
+          onSelect={async (id: string) => {
+            await sendAi(`__ACTION__:select_style_bundle:${id}`, {
+              selectedStyleBundleId: id,
+              selectedStyleBundle: id,
+            });
+          }}
+        />
+      );
+    }
+
+    // 4) Todos
+    if (toolUi.type === 'todos' && toolUi.items) {
+      return (
+        <div className="mt-4 space-y-2">
+          <span className="text-sm font-medium text-white/80">{toolUi.title || 'Tasks'}</span>
+          <div className="space-y-2">
+            {toolUi.items.map((item: any) => (
+              <div
+                key={item.id}
+                className="p-3 rounded-lg bg-white/5 border border-white/10 flex items-center gap-3"
+              >
+                <div className={cn(
+                  "h-2 w-2 rounded-full",
+                  item.status === 'completed' ? 'bg-green-500' :
+                  item.status === 'in_progress' ? 'bg-yellow-500' :
+                  'bg-gray-500'
+                )} />
+                <span className="text-sm text-white/90">{item.title}</span>
+                {item.priority && (
+                  <span className={cn(
+                    "ml-auto px-2 py-0.5 text-xs rounded-full",
+                    item.priority === 'high' ? 'bg-red-500/20 text-red-400' :
+                    item.priority === 'medium' ? 'bg-yellow-500/20 text-yellow-400' :
+                    'bg-gray-500/20 text-gray-400'
+                  )}>
+                    {item.priority}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // 5) Interactive edit panel (future phase)
+    if (toolUi.type === 'interactive_edit_panel') {
+      return (
+        <div className="mt-4 p-4 rounded-lg bg-white/5 border border-white/10">
+          <span className="text-sm font-medium text-white/80 mb-2 block">
+            {toolUi.title || 'Interactive Edit Panel'}
+          </span>
+          <span className="text-xs text-white/60">
+            Edit panel UI coming soon (Phase 6)
+          </span>
+        </div>
+      );
+    }
+
+    return null;
   }
 
   function renderToolPart(part: any) {
@@ -302,7 +420,7 @@ export function ChatWorkspace({
             <div className="text-white/60">Metric Count:</div>
             <div className="text-white/90 font-mono">{output.metricCount || 0}</div>
           </div>
-          {process.env.NEXT_PUBLIC_DEBUG_CHAT === 'true' && (
+          {(showDebug || process.env.NEXT_PUBLIC_DEBUG_CHAT === 'true') && (
             <details className="mt-2">
               <summary className="text-xs text-white/40 cursor-pointer">Debug: Raw Output</summary>
               <pre className="text-xs overflow-auto whitespace-pre-wrap mt-1 text-white/60">
@@ -397,21 +515,24 @@ export function ChatWorkspace({
       );
     }
 
-    // Generic fallback (enhanced)
+    // Generic fallback - hide unless debug mode is on
+    if (!showDebug && process.env.NEXT_PUBLIC_DEBUG_CHAT !== 'true') {
+      return null;
+    }
+
+    // Generic fallback (enhanced) - shown only in debug mode
     return (
       <div className="mt-2 rounded-lg border border-white/10 bg-black/20 p-3">
         <div className="flex items-center justify-between mb-2">
-          <div className="text-xs text-white/60">Tool: {type.replace('tool-', '')}</div>
-          {process.env.NEXT_PUBLIC_DEBUG_CHAT === 'true' && (
-            <details className="text-xs">
-              <summary className="cursor-pointer text-white/40">Raw</summary>
-              <pre className="absolute z-50 bg-black border border-white/20 rounded p-2 text-xs text-white/80 mt-1 overflow-auto max-h-40 whitespace-pre-wrap">
-                {JSON.stringify(output, null, 2)}
-              </pre>
-            </details>
-          )}
+          <div className="text-xs text-white/60">[DEBUG] Tool: {type.replace('tool-', '')}</div>
+          <details className="text-xs">
+            <summary className="cursor-pointer text-white/40">Raw JSON</summary>
+            <pre className="absolute z-50 bg-black border border-white/20 rounded p-2 text-xs text-white/80 mt-1 overflow-auto max-h-40 whitespace-pre-wrap">
+              {JSON.stringify(output, null, 2)}
+            </pre>
+          </details>
         </div>
-        
+
         {/* Try to render common output patterns */}
         {typeof output === 'object' && output !== null ? (
           <div className="text-xs space-y-1">
@@ -419,7 +540,7 @@ export function ChatWorkspace({
               <div key={key} className="flex items-start gap-2">
                 <span className="text-white/60 min-w-20">{key}:</span>
                 <span className="text-white/90 flex-1 break-words">
-                  {typeof value === 'string' ? value : 
+                  {typeof value === 'string' ? value :
                    typeof value === 'number' ? value.toLocaleString() :
                    typeof value === 'boolean' ? (value ? 'Yes' : 'No') :
                    Array.isArray(value) ? `Array(${value.length})` :
@@ -1052,6 +1173,9 @@ return (
                 <div className="space-y-3">
                   {uiMessages.map((m) => {
                     const isUser = m.role === 'user';
+                    // Check if message has toolUi in experimental_data or data
+                    const messageToolUi = (m as any)?.experimental_data?.toolUi || (m as any)?.data?.toolUi || (m as any)?.toolUi;
+
                     return (
                       <div key={m.id} className={isUser ? 'text-right' : 'text-left'}>
                         <div className="inline-block max-w-[90%] rounded-xl px-3 py-2 bg-white/10 text-white">
@@ -1068,10 +1192,21 @@ return (
                               return <div key={idx}>{renderToolPart(part)}</div>;
                             }
 
+                            // Check for toolUi in data parts
+                            if (part.type === 'data-toolUi' || part.type === 'data-tool-ui') {
+                              const partToolUi = (part as any)?.data?.toolUi || (part as any)?.toolUi;
+                              if (partToolUi) {
+                                return <div key={idx}>{renderToolUi(partToolUi)}</div>;
+                              }
+                            }
+
                             if (part.type.startsWith('data-')) {
+                              // Hide debug JSON by default
+                              if (!showDebug) return null;
+
                               return (
                                 <div key={idx} className="mt-2 rounded-lg border border-white/10 bg-black/20 p-2 text-xs text-white/80">
-                                  <div className="text-white/60">{part.type}</div>
+                                  <div className="text-white/60">[DEBUG] {part.type}</div>
                                   <pre className="overflow-auto whitespace-pre-wrap">
                                     {JSON.stringify((part as any).data, null, 2)}
                                   </pre>
@@ -1081,6 +1216,9 @@ return (
 
                             return null;
                           })}
+
+                          {/* Render toolUi if present on message level */}
+                          {messageToolUi && renderToolUi(messageToolUi)}
                         </div>
                       </div>
                     );
