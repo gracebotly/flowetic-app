@@ -210,32 +210,27 @@ export function ChatWorkspace({
       api: '/api/chat',
       prepareSendMessagesRequest({ messages }) {
         return {
-          body: {
-            messages,
-            tenantId: authContext.tenantId,
-            userId: authContext.userId,
-            data: {
-              tenantId: authContext.tenantId,
-              userId: authContext.userId,
-              journeyThreadId: threadId,
-              selectedModel,
-              // Send ALL vibeContext fields
-              platformType: vibeContext?.platformType,
-              sourceId: vibeContext?.sourceId,
-              entityId: vibeContext?.entityId,
-              externalId: vibeContext?.externalId,
-              displayName: vibeContext?.displayName,
-              entityKind: vibeContext?.entityKind,
-              skillMD: vibeContext?.skillMD,
-              // Journey state
-              phase: journeyMode,
-              selectedOutcome,
-              selectedStoryboard,
-              selectedStyleBundleId,
-              densityPreset,
-              paletteOverrideId,
-            },
-          },
+          // AI SDK v5: Don't wrap in 'body', return fields directly
+          messages,
+          tenantId: authContext.tenantId,
+          userId: authContext.userId,
+          journeyThreadId: threadId,
+          selectedModel,
+          // Vibe context fields
+          platformType: vibeContext?.platformType,
+          sourceId: vibeContext?.sourceId,
+          entityId: vibeContext?.entityId,
+          externalId: vibeContext?.externalId,
+          displayName: vibeContext?.displayName,
+          entityKind: vibeContext?.entityKind,
+          skillMD: vibeContext?.skillMD,
+          // Journey state
+          phase: journeyMode,
+          selectedOutcome,
+          selectedStoryboard,
+          selectedStyleBundleId,
+          densityPreset,
+          paletteOverrideId,
         };
       },
     }),
