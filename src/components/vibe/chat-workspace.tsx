@@ -242,11 +242,9 @@ export function ChatWorkspace({
   });
 
   async function sendAi(text: string, extraData?: Record<string, any>) {
-    // Simplified: useChat now handles the body data automatically
-    await sendUiMessage({
-      content: text,
-      experimental_attachments: extraData ? [extraData] : undefined,
-    });
+    // AI SDK v5: sendMessage just takes the text content
+    // All context (tenantId, userId, etc.) is handled by DefaultChatTransport
+    await sendUiMessage(text);
   }
 
   /**
