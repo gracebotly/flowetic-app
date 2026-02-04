@@ -955,7 +955,7 @@ return (
                                   key={idx}
                                   choices={(part as any).data?.choices || (part as any).choices || []}
                                   onSelect={async (id) => {
-                                    setSelectedOutcome(id);
+                                    setSelectedOutcome(id as "dashboard" | "product" | "tool" | "form");
                                     setJourneyMode("align");
                                     await sendAi(`I selected ${id}`);
                                   }}
@@ -979,7 +979,7 @@ return (
                                     key={idx}
                                     systems={systems as [any, any]}
                                     hasMore={(part as any).data?.hasMore || (part as any).hasMore}
-                                    onSelect={async (id) => {
+                                    onSelect={async (id: string) => {
                                       setSelectedStyleBundleId(id);
                                       await sendAi(`I selected style ${id}`);
                                     }}
@@ -1117,10 +1117,6 @@ return (
                   <div className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
                     {String((uiError as any)?.message || uiError)}
                   </div>
-                ) : null}
-
-                {uiStatus === 'streaming' ? (
-                  <div className="mt-2 text-xs text-white/60">Thinking…</div>
                 ) : null}
               </>
             )}
