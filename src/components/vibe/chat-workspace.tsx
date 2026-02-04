@@ -961,8 +961,8 @@ return (
                                   }}
                                   onHelp={
                                     (part as any).data?.helpAvailable || (part as any).helpAvailable
-                                      ? async () => {
-                                          await sendAi("Help me decide");
+                                      ? () => {
+                                          void sendAi("Help me decide");
                                         }
                                       : undefined
                                   }
@@ -985,8 +985,8 @@ return (
                                     }}
                                     onShowMore={
                                       (part as any).data?.hasMore || (part as any).hasMore
-                                        ? async () => {
-                                            await sendAi("Show different styles");
+                                        ? () => {
+                                            void sendAi("Show different styles");
                                           }
                                         : undefined
                                     }
@@ -1045,9 +1045,9 @@ return (
                           setToolUi(null);
                           await sendMessage(`__ACTION__:select_outcome:${id}`);
                         }}
-                        onHelp={toolUi.helpAvailable ? async () => {
+                        onHelp={toolUi.helpAvailable ? () => {
                           setToolUi(null);
-                          await sendMessage("__ACTION__:outcome_help_me_decide");
+                          void sendMessage("__ACTION__:outcome_help_me_decide");
                         } : undefined}
                       />
                     )}
