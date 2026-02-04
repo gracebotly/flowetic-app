@@ -211,6 +211,16 @@ export function ChatWorkspace({
     }),
   });
 
+  // Deduplicate messages by ID (workaround for Mastra + AI SDK v5 bug #9370)
+  // This filters out duplicate message IDs, keeping the latest version of each
+  const dedupedMessages = useMemo(() => {
+    const seen = new Map<string, (typeof uiMessages)[number]>();
+    for (const msg of uiMessages) {
+      seen.set(msg.id, msg);
+    }
+    return Array.from(seen.values());
+  }, [uiMessages]);
+
   async function sendAi(text: string, extraData?: Record<string, any>) {
     // AI SDK v5: Pass dynamic context in the second argument of sendMessage
     // Request-level options are evaluated at call time, avoiding stale closures
@@ -949,7 +959,7 @@ return (
             ) : (
               <>
                 <div className="space-y-3">
-                  {uiMessages.map((m, messageIdx) => {
+                  {dedupedMessages.map((m, messageIdx) => {
                     const isUser = m.role === 'user';
 
                     return (
@@ -1034,7 +1044,7 @@ return (
                   })}
 
                   {/* Show "Thinking..." when streaming OR when last message has no text */}
-                  {(uiStatus === 'streaming' || (uiMessages.length > 0 && uiMessages[uiMessages.length - 1].role === 'assistant' && !uiMessages[uiMessages.length - 1].parts?.some(p => p.type === 'text'))) && (
+                  {(uiStatus === 'streaming' || (dedupedMessages.length > 0 && dedupedMessages[dedupedMessages.length - 1].role === 'assistant' && !dedupedMessages[dedupedMessages.length - 1].parts?.some(p => p.type === 'text'))) && (
                     <div className="flex items-center gap-2 text-sm text-white/60 my-2">
                       <motion.div
                         className="w-3 h-3 bg-white/40 rounded-full"
