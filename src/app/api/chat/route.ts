@@ -7,10 +7,10 @@ import {
   MASTRA_THREAD_ID_KEY,
 } from '@mastra/core/request-context';
 import { createClient } from '@/lib/supabase/server';
-import { getMastra } from '@/mastra';
+import { getMastraSingleton } from '@/mastra/singleton';
 import { ensureMastraThreadId } from '@/mastra/lib/ensureMastraThread';
 
-export const maxDuration = 30;
+export const maxDuration = 300; // Fluid Compute + Hobby = 300s max
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   let t: any;
@@ -150,7 +150,7 @@ export async function POST(req: Request) {
       mode: "generate",
     };
     
-    const mastra = getMastra();
+    const mastra = getMastraSingleton();
     
     if (process.env.DEBUG_CHAT_ROUTE === 'true') {
       console.log('[api/chat] Authorized request:', {
@@ -179,7 +179,7 @@ export async function POST(req: Request) {
           toolChoice: "auto",
         },
       }),
-      25000,
+      290000,  // 290s - leave 10s buffer for response
       "api_chat_stream"
     );
     
