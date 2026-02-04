@@ -38,13 +38,13 @@ export const getOutcomes = createTool({
 
       // ✅ STREAM TEXT + CUSTOM UI DATA
       if (dashboardOutcome && productOutcome && context?.writer) {
-        console.log('[getOutcomes] Attempting to stream custom UI...');
+        console.log('[getOutcomes] Attempting to stream text + custom UI...');
 
         try {
-          // Stream text first
+          // CRITICAL: Stream text FIRST (Mastra requirement)
           await context.writer.write({
             type: "text-delta",
-            textDelta: "I've found two outcome types that work well for your workflow:\n\n"
+            textDelta: "I found two options for your workflow:\n\n"
           });
 
           // Then stream custom UI
