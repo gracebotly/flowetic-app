@@ -204,40 +204,41 @@ export function ChatWorkspace({
   const [isChatExpanded, setIsChatExpanded] = useState(false);
   const [selectedModel, setSelectedModel] = useState<ModelId>("glm-4.7");
   
-  const { messages: uiMessages, sendMessage: sendUiMessage, status: uiStatus, error: uiError } = useChat({});
+  const { messages: uiMessages, sendMessage: sendUiMessage, status: uiStatus, error: uiError } = useChat({
+    api: '/api/chat',
+    body: {
+      tenantId: authContext.tenantId,
+      userId: authContext.userId,
+      data: {
+        tenantId: authContext.tenantId,
+        userId: authContext.userId,
+        journeyThreadId: threadId,
+        selectedModel,
+        // Send ALL vibeContext fields
+        platformType: vibeContext?.platformType,
+        sourceId: vibeContext?.sourceId,
+        entityId: vibeContext?.entityId,
+        externalId: vibeContext?.externalId,
+        displayName: vibeContext?.displayName,
+        entityKind: vibeContext?.entityKind,
+        skillMD: vibeContext?.skillMD,
+        // Journey state
+        phase: journeyMode,
+        selectedOutcome,
+        selectedStoryboard,
+        selectedStyleBundleId,
+        densityPreset,
+        paletteOverrideId,
+      },
+    },
+  });
 
   async function sendAi(text: string, extraData?: Record<string, any>) {
-    // CRITICAL: Send COMPLETE vibeContext, not individual fields
-    await sendUiMessage(
-      { text },
-      {
-        body: {
-          data: {
-            tenantId: authContext.tenantId,
-            userId: authContext.userId,
-            journeyThreadId: threadId,
-            selectedModel,
-            // Send ALL vibeContext fields (this was the bug!)
-            platformType: vibeContext?.platformType,
-            sourceId: vibeContext?.sourceId,
-            entityId: vibeContext?.entityId,
-            externalId: vibeContext?.externalId,
-            displayName: vibeContext?.displayName,
-            entityKind: vibeContext?.entityKind,
-            skillMD: vibeContext?.skillMD,
-            // Journey state
-            phase: journeyMode,
-            selectedOutcome,
-            selectedStoryboard,
-            selectedStyleBundleId,
-            densityPreset,
-            paletteOverrideId,
-            // Merge any additional data
-            ...(extraData ?? {}),
-          },
-        },
-      },
-    );
+    // Simplified: useChat now handles the body data automatically
+    await sendUiMessage({
+      content: text,
+      experimental_attachments: extraData ? [extraData] : undefined,
+    });
   }
 
   /**
