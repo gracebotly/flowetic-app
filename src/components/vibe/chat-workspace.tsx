@@ -618,6 +618,7 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
   ]);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const logsEndRef = useRef<HTMLDivElement | null>(null);
+  const prevStatusRef = useRef<string>('');
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -634,18 +635,32 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
     }
   }, [authContext.userId, authContext.tenantId]);
 
-  // ✅ DEBUG: Console logging
+  // ✅ SMART DEBUG: Only logs when status actually changes
   useEffect(() => {
-    if (process.env.NEXT_PUBLIC_DEBUG_CHAT === 'true' && uiMessages.length > 0) {
-      const lastMessage = uiMessages[uiMessages.length - 1];
-      console.group('🔍 Chat Debug');
-      console.log('Last message:', lastMessage);
-      console.log('Parts:', lastMessage?.parts);
-      console.log('Journey mode:', journeyMode);
-      console.log('Status:', uiStatus);
-      console.groupEnd();
+    // Only run in development with debug enabled
+    if (process.env.NODE_ENV === 'development' && process.env.NEXT_PUBLIC_DEBUG_CHAT === 'true') {
+      // Only log when status changes (prevents infinite loops)
+      if (uiStatus !== prevStatusRef.current) {
+        console.group('🔍 Chat Debug - Status Change');
+        console.log('Status changed:', prevStatusRef.current, '→', uiStatus);
+        console.log('Journey mode:', journeyMode);
+        console.log('Total messages:', uiMessages.length);
+
+        if (uiMessages.length > 0) {
+          const lastMsg = uiMessages[uiMessages.length - 1];
+          console.log('Last message:', {
+            id: lastMsg.id,
+            role: lastMsg.role,
+            partsCount: lastMsg.parts?.length || 0,
+            parts: lastMsg.parts,
+          });
+        }
+
+        console.groupEnd();
+        prevStatusRef.current = uiStatus;
+      }
     }
-  }, [uiMessages, journeyMode, uiStatus]);
+  }, [uiStatus, journeyMode, uiMessages]);
 
   async function loadSessions() {
     if (!authContext.userId || !authContext.tenantId) return;
