@@ -1,21 +1,19 @@
-
-
 "use client";
 
 import { motion } from "framer-motion";
-import { 
-  BarChart3, 
-  TrendingUp, 
-  Package, 
-  Users, 
-  Zap, 
+import {
+  BarChart3,
+  TrendingUp,
+  Package,
+  Users,
+  Zap,
   Shield,
-  Check,
   ArrowRight,
-  Sparkles
+  Sparkles,
+  CheckCircle2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Card, Badge, Metric } from "@tremor/react";
+import { Card, Badge, Metric, Text } from "@tremor/react";
 
 interface OutcomeCardsProps {
   options: Array<{
@@ -34,7 +32,6 @@ interface OutcomeCardsProps {
   onHelpDecide?: () => void;
 }
 
-// Icon mapping for metrics
 const metricIcons: Record<string, any> = {
   call_volume: BarChart3,
   success_rate: TrendingUp,
@@ -44,170 +41,136 @@ const metricIcons: Record<string, any> = {
   default: Shield,
 };
 
-// Category color schemes
 const categoryColors = {
   dashboard: {
-    gradient: "from-blue-500/20 via-cyan-500/20 to-blue-600/20",
-    border: "border-blue-500/50",
-    badge: "bg-blue-500/10 text-blue-600 border-blue-500/20",
-    glow: "shadow-blue-500/20",
+    bg: "bg-gradient-to-br from-blue-500/10 via-cyan-500/5 to-blue-600/10",
+    border: "border-blue-500/30 hover:border-blue-400/50",
+    badge: "bg-blue-500/10 text-blue-400 border-blue-400/20",
+    glow: "hover:shadow-xl hover:shadow-blue-500/20",
+    icon: "text-blue-400",
   },
   product: {
-    gradient: "from-purple-500/20 via-pink-500/20 to-purple-600/20",
-    border: "border-purple-500/50",
-    badge: "bg-purple-500/10 text-purple-600 border-purple-500/20",
-    glow: "shadow-purple-500/20",
+    bg: "bg-gradient-to-br from-purple-500/10 via-pink-500/5 to-purple-600/10",
+    border: "border-purple-500/30 hover:border-purple-400/50",
+    badge: "bg-purple-500/10 text-purple-400 border-purple-400/20",
+    glow: "hover:shadow-xl hover:shadow-purple-500/20",
+    icon: "text-purple-400",
   },
   operations: {
-    gradient: "from-emerald-500/20 via-teal-500/20 to-emerald-600/20",
-    border: "border-emerald-500/50",
-    badge: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
-    glow: "shadow-emerald-500/20",
+    bg: "bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-emerald-600/10",
+    border: "border-emerald-500/30 hover:border-emerald-400/50",
+    badge: "bg-emerald-500/10 text-emerald-400 border-emerald-400/20",
+    glow: "hover:shadow-xl hover:shadow-emerald-500/20",
+    icon: "text-emerald-400",
   },
 };
 
 export function OutcomeCards({ options, onSelect, onHelpDecide }: OutcomeCardsProps) {
   return (
-    <div className="space-y-6">
-      {/* Header with help option */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Sparkles className="h-5 w-5 text-blue-500" />
-          <h3 className="text-lg font-semibold">Choose Your Outcome</h3>
+    <div className="w-full space-y-6 py-4">
+      {/* Header */}
+      <div className="flex items-center justify-between px-1">
+        <div className="flex items-center gap-3">
+          <Sparkles className="h-5 w-5 text-blue-400" />
+          <div>
+            <h3 className="text-lg font-semibold text-white">Choose Your Outcome</h3>
+            <Text className="text-sm text-gray-400">Select what you want to build first</Text>
+          </div>
         </div>
         {onHelpDecide && (
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={onHelpDecide}
-            className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 transition-all"
           >
-            Need help deciding? <ArrowRight className="h-4 w-4" />
+            Need help deciding?
+            <ArrowRight className="h-4 w-4" />
           </motion.button>
         )}
       </div>
 
-      {/* Premium card grid */}
+      {/* Premium Card Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {options.map((outcome, index) => {
           const category = outcome.category || "dashboard";
           const colors = categoryColors[category];
-          const primaryMetric = outcome.metrics?.primary?.[0] || "default";
-          const MetricIcon = metricIcons[primaryMetric] || metricIcons.default;
+          const primaryMetrics = outcome.metrics?.primary?.slice(0, 3) || [];
+          const Icon = metricIcons[primaryMetrics[0]] || metricIcons.default;
 
           return (
             <motion.div
               key={outcome.id}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.1, duration: 0.4 }}
-              whileHover={{ y: -8, scale: 1.02 }}
-              className="group relative"
+              transition={{ delay: index * 0.1 }}
+              whileHover={{ y: -4 }}
+              className="group"
             >
-              {/* Glow effect on hover */}
-              <div
-                className={cn(
-                  "absolute -inset-1 rounded-2xl bg-gradient-to-r opacity-0 blur-xl transition-all duration-500 group-hover:opacity-100",
-                  colors.gradient
-                )}
-              />
-
-              {/* Main card */}
               <Card
                 className={cn(
-                  "relative overflow-hidden border-2 cursor-pointer transition-all duration-300",
-                  "bg-white dark:bg-gray-900",
+                  "relative overflow-hidden cursor-pointer transition-all duration-300",
+                  "border-2",
+                  colors.bg,
                   colors.border,
-                  "hover:shadow-2xl",
-                  colors.glow
+                  colors.glow,
+                  "backdrop-blur-sm"
                 )}
+                decoration="top"
+                decorationColor="slate"
                 onClick={() => onSelect(outcome.id)}
               >
-                {/* Preview image with overlay */}
-                {outcome.previewImageUrl && (
-                  <div className="relative h-48 overflow-hidden rounded-t-lg mb-4 -mt-6 -mx-6">
-                    {/* Shimmer loading effect */}
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-shimmer" />
-                    
-                    {/* Image with parallax */}
-                    <motion.img
-                      src={outcome.previewImageUrl}
-                      alt={outcome.title}
-                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
-                      whileHover={{ scale: 1.1 }}
-                    />
+                {/* Gradient Overlay */}
+                <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
 
-                    {/* Gradient overlay */}
-                    <div className={cn(
-                      "absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent"
-                    )} />
-
-                    {/* Category badge on image */}
-                    <div className="absolute top-4 right-4">
-                      <Badge
-                        className={cn(
-                          "border backdrop-blur-sm",
-                          colors.badge
-                        )}
-                      >
-                        {category}
-                      </Badge>
-                    </div>
-
-                    {/* Metric icon */}
-                    <div className="absolute bottom-4 left-4">
-                      <div className="p-3 rounded-xl bg-white/10 backdrop-blur-md border border-white/20">
-                        <MetricIcon className="h-6 w-6 text-white" />
+                {/* Content */}
+                <div className="relative space-y-4">
+                  {/* Header with Icon */}
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className={cn(
+                        "p-3 rounded-xl",
+                        colors.badge,
+                        "border"
+                      )}>
+                        <Icon className={cn("h-6 w-6", colors.icon)} />
+                      </div>
+                      <div>
+                        <h4 className="text-lg font-semibold text-white">
+                          {outcome.title}
+                        </h4>
+                        <Badge size="xs" color="slate" className="mt-1">
+                          {category}
+                        </Badge>
                       </div>
                     </div>
                   </div>
-                )}
-
-                {/* Content */}
-                <div className="space-y-4">
-                  {/* Title */}
-                  <div className="flex items-start justify-between gap-2">
-                    <h4 className="text-lg font-semibold tracking-tight group-hover:text-blue-600 transition-colors">
-                      {outcome.title}
-                    </h4>
-                    <motion.div
-                      className="opacity-0 group-hover:opacity-100 transition-opacity"
-                      whileHover={{ x: 4 }}
-                    >
-                      <ArrowRight className="h-5 w-5 text-blue-500" />
-                    </motion.div>
-                  </div>
 
                   {/* Description */}
-                  <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+                  <Text className="text-sm text-gray-300 leading-relaxed">
                     {outcome.description}
-                  </p>
+                  </Text>
 
-                  {/* Primary metrics with animated badges */}
-                  {outcome.metrics?.primary && outcome.metrics.primary.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {outcome.metrics.primary.slice(0, 3).map((metric, idx) => {
-                        const Icon = metricIcons[metric] || metricIcons.default;
+                  {/* Metrics Preview */}
+                  {primaryMetrics.length > 0 && (
+                    <div className="flex flex-wrap gap-2 pt-2 border-t border-white/5">
+                      {primaryMetrics.map((metric, idx) => {
+                        const MetricIcon = metricIcons[metric] || metricIcons.default;
                         return (
-                          <motion.div
-                            key={metric}
-                            initial={{ opacity: 0, scale: 0.8 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            transition={{ delay: index * 0.1 + idx * 0.05 }}
-                            whileHover={{ scale: 1.1 }}
+                          <Badge
+                            key={idx}
+                            size="sm"
+                            color="slate"
+                            className={cn(
+                              "flex items-center gap-1.5 px-2.5 py-1",
+                              colors.badge
+                            )}
                           >
-                            <Badge
-                              className={cn(
-                                "border backdrop-blur-sm flex items-center gap-1.5",
-                                colors.badge
-                              )}
-                            >
-                              <Icon className="h-3 w-3" />
-                              <span className="text-xs font-medium">
-                                {metric.replace(/_/g, " ")}
-                              </span>
-                            </Badge>
-                          </motion.div>
+                            <MetricIcon className="h-3 w-3" />
+                            <span className="text-xs font-medium capitalize">
+                              {metric.replace(/_/g, " ")}
+                            </span>
+                          </Badge>
                         );
                       })}
                     </div>
@@ -215,11 +178,11 @@ export function OutcomeCards({ options, onSelect, onHelpDecide }: OutcomeCardsPr
 
                   {/* Tags */}
                   {outcome.tags && outcome.tags.length > 0 && (
-                    <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-200 dark:border-gray-800">
+                    <div className="flex flex-wrap gap-2">
                       {outcome.tags.map((tag) => (
                         <span
                           key={tag}
-                          className="px-2 py-1 text-xs rounded-md bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"
+                          className="px-2 py-1 text-xs rounded-md bg-white/5 text-gray-400 border border-white/10"
                         >
                           {tag}
                         </span>
@@ -227,13 +190,13 @@ export function OutcomeCards({ options, onSelect, onHelpDecide }: OutcomeCardsPr
                     </div>
                   )}
 
-                  {/* Selection indicator */}
+                  {/* Selection CTA */}
                   <motion.div
-                    className="flex items-center gap-2 text-sm font-medium text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="flex items-center justify-end gap-2 pt-2 text-sm font-medium text-white/60 group-hover:text-white transition-colors"
                     whileHover={{ x: 4 }}
                   >
-                    <Check className="h-4 w-4" />
-                    Select this outcome
+                    <span>Select this outcome</span>
+                    <CheckCircle2 className="h-4 w-4" />
                   </motion.div>
                 </div>
               </Card>
@@ -244,4 +207,3 @@ export function OutcomeCards({ options, onSelect, onHelpDecide }: OutcomeCardsPr
     </div>
   );
 }
-

@@ -162,7 +162,8 @@ export function ChatWorkspace({
   requestOpenConversationsKey,
 }: ChatWorkspaceProps) {
   const router = useRouter();
-  const [view, setView] = useState<ViewMode>("terminal");
+  const [view, setView] = useState<ViewMode>("preview");
+  const [showDebug, setShowDebug] = useState<boolean>(false);
   const [input, setInput] = useState("");  const [chatMode, setChatMode] = useState<"chat" | "voice">("chat");
   const [isListening, setIsListening] = useState(false);
   const [isChatExpanded, setIsChatExpanded] = useState(false);
@@ -1456,6 +1457,40 @@ return (
             </div>
           </div>
         </div>
+      )}
+
+      {/* Debug Toggle - Bottom Right */}
+      {(uiStatus === "loading" || showDebug) && (
+        <motion.button
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={() => setShowDebug(!showDebug)}
+          className="fixed bottom-6 right-6 z-50 p-3 rounded-full bg-gray-900/80 backdrop-blur-sm border border-gray-700/50 text-gray-400 hover:text-white hover:border-gray-600 transition-all shadow-xl"
+        >
+          <TerminalIcon className="h-5 w-5" />
+        </motion.button>
+      )}
+
+      {/* Debug Panel */}
+      {showDebug && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 20 }}
+          className="fixed bottom-24 right-6 w-96 max-h-96 overflow-auto rounded-xl bg-black/95 backdrop-blur-sm border border-gray-800 p-4 shadow-2xl z-40"
+        >
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs font-medium text-gray-400">Debug Info</span>
+            <button onClick={() => setShowDebug(false)} className="text-gray-500 hover:text-gray-300">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <pre className="text-xs text-green-400 font-mono overflow-auto">
+            {JSON.stringify({ phase: journeyMode, vibeContext, status: uiStatus }, null, 2)}
+          </pre>
+        </motion.div>
       )}
     </div>
   );
