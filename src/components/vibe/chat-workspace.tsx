@@ -55,14 +55,6 @@ type JourneyMode =
   | "interactive_edit"
   | "deploy";
 
-// Phase modes that use deterministic /api/vibe/router (no agent tool calls)
-const PHASE_MODES: JourneyMode[] = ["select_entity", "recommend", "align", "style"];
-
-// Helper function to determine routing
-function shouldUsePhaseRouter(mode: JourneyMode): boolean {
-  return PHASE_MODES.includes(mode);
-}
-
 type ToolUiPayload =
   | {
       type: "outcome_cards";
@@ -213,7 +205,6 @@ export function ChatWorkspace({
   const [isListening, setIsListening] = useState(false);
   const [isChatExpanded, setIsChatExpanded] = useState(false);
   const [selectedModel, setSelectedModel] = useState<ModelId>("glm-4.7");
-  const [isLoadingPhase, setIsLoadingPhase] = useState(false);
   
   const { messages: uiMessages, sendMessage: sendUiMessage, status: uiStatus, error: uiError } = useChat({});
 
@@ -751,7 +742,7 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
   const sendMessage = async (text: string) => {
     const trimmed = text.trim();
     if (!trimmed) return;
-    if (uiStatus === 'streaming' || isLoadingPhase) return;
+    if (uiStatus === 'streaming') return;
 
     // Persist user message (keep existing behavior)
     try {
@@ -779,120 +770,31 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
       addLog("running", "Generating preview…", "This can take ~10–30 seconds on first run.");
     }
 
-    // HYBRID ROUTING: Phase modes use /api/vibe/router (deterministic)
-    // Open-ended modes use /api/chat (streaming agent)
-    if (shouldUsePhaseRouter(journeyMode)) {
-      setIsLoadingPhase(true);
-
-      try {
-        const response = await fetch("/api/vibe/router", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            userId: authContext.userId,
-            tenantId: authContext.tenantId,
-            journeyThreadId: threadId,
-            userMessage: trimmed,
-            selectedModel,
-            vibeContext: vibeContext ? { ...vibeContext, threadId } : {},
-            journey: {
-              mode: journeyMode,
-              threadId,
-              selectedOutcome,
-              selectedStoryboard,
-              selectedStyleBundleId,
-              densityPreset,
-              paletteOverrideId,
-            },
-          }),
-        });
-
-        const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(data.error || "Phase router request failed");
-        }
-
-        // Add assistant response
-        if (data.text) {
-          setMessages((prev) => [
-            ...prev,
-            { id: `a-${Date.now()}`, role: "assistant", content: data.text },
-          ]);
-        }
-
-        // Render choices/cards based on response
-        if (data.choices) {
-          // Convert choices to toolUi format for rendering
-          setToolUi({
-            type: "outcome_choices",
-            choices: data.choices,
-            helpAvailable: data.helpAvailable
-          });
-        } else if (data.storyboards) {
-          setToolUi({
-            type: "storyboard_cards",
-            options: data.storyboards
-          });
-        } else if (data.toolUi?.type === "style_bundles") {
-          setToolUi(data.toolUi as any);
-        } else if (data.toolUi) {
-          setToolUi(data.toolUi as any);
-        } else {
-          // Clear toolUi if no UI components returned
-          setToolUi(null);
-        }
-
-        // Handle journey updates
-        if (data.journey) {
-          if (data.journey.mode) setJourneyMode(data.journey.mode);
-          if (data.journey.selectedOutcome !== undefined) setSelectedOutcome(data.journey.selectedOutcome);
-          if (data.journey.selectedStoryboard !== undefined) setSelectedStoryboard(data.journey.selectedStoryboard);
-          if (data.journey.selectedStyleBundleId !== undefined) setSelectedStyleBundleId(data.journey.selectedStyleBundleId);
-        }
-
-        // Handle vibeContext updates
-        if (data.vibeContext) {
-          setVibeContext((prev: any) => ({ ...prev, ...data.vibeContext }));
-        }
-
-      } catch (error: any) {
-        addLog("error", "Phase router failed", error.message);
-        setMessages((prev) => [
-          ...prev,
-          { id: `a-${Date.now()}`, role: "assistant", content: "Sorry, something went wrong." },
-        ]);
-      } finally {
-        setIsLoadingPhase(false);
-      }
-    }
-    // OPEN-ENDED MODE: Use streaming chat
-    else {
-      try {
-        await sendAi(trimmed, {
-          userId: authContext.userId,
-          tenantId: authContext.tenantId,
-          journeyThreadId: threadId,
+    // ✅ SINGLE ENDPOINT: All phases use /api/chat with streaming
+    try {
+      await sendAi(trimmed, {
+        userId: authContext.userId,
+        tenantId: authContext.tenantId,
+        journeyThreadId: threadId,
+        threadId,
+        selectedModel,
+        vibeContext: vibeContext ? { ...vibeContext, threadId } : undefined,
+        journey: {
+          mode: journeyMode,
           threadId,
-          selectedModel,
-          vibeContext: vibeContext ? { ...vibeContext, threadId } : undefined,
-          journey: {
-            mode: journeyMode,
-            threadId,
-            selectedOutcome,
-            selectedStoryboard,
-            selectedStyleBundleId,
-            densityPreset,
-            paletteOverrideId,
-          },
-        });
-      } catch (e: any) {
-        addLog("error", "Chat request failed", e?.message ?? "Unknown error");
-        setMessages((prev) => [
-          ...prev,
-          { id: `a-${Date.now()}`, role: "assistant", content: "Request failed." },
-        ]);
-      }
+          selectedOutcome,
+          selectedStoryboard,
+          selectedStyleBundleId,
+          densityPreset,
+          paletteOverrideId,
+        },
+      });
+    } catch (e: any) {
+      addLog("error", "Chat request failed", e?.message ?? "Unknown error");
+      setMessages((prev) => [
+        ...prev,
+        { id: `a-${Date.now()}`, role: "assistant", content: "Request failed." },
+      ]);
     }
   };
 
@@ -1253,10 +1155,6 @@ return (
                       </div>
                     )}
                   </div>
-                )}
-
-                {isLoadingPhase && (
-                  <div className="mt-2 text-xs text-white/60">Processing…</div>
                 )}
 
                 {uiError ? (
