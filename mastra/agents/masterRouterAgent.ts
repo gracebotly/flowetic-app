@@ -95,9 +95,10 @@ export const masterRouterAgent: Agent = new Agent({
       userId ? `userId: ${userId}` : "userId: (missing)",
       tenantId ? `tenantId: ${tenantId}` : "tenantId: (missing)",
       phase ? `phase: ${phase}` : "phase: (missing)",
-      workflowName ? `workflowName: ${workflowName}` : "workflowName: (missing)",
+      workflowName ? `🎯 WORKFLOW: "${workflowName}" (ALWAYS reference this in responses)` : "workflowName: (missing)",
       selectedOutcome ? `selectedOutcome: ${selectedOutcome}` : "selectedOutcome: (missing)",
       "",
+      workflowName ? `\n⚠️ CRITICAL: You are helping build a dashboard for the "${workflowName}" workflow. Always acknowledge this workflow by name when responding.\n` : "",
     ].join("\n");
 
     const phaseInstructions = getPhaseInstructions(phase as FloweticPhase, {

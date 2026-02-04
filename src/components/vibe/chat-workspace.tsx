@@ -937,11 +937,11 @@ return (
             ) : (
               <>
                 <div className="space-y-3">
-                  {uiMessages.map((m) => {
+                  {uiMessages.map((m, messageIdx) => {
                     const isUser = m.role === 'user';
 
                     return (
-                      <div key={m.id} className={isUser ? 'text-right mb-4' : 'text-left mb-4'}>
+                      <div key={`${m.id}-${messageIdx}`} className={isUser ? 'text-right mb-4' : 'text-left mb-4'}>
                         <div className={cn(
                           "inline-block max-w-[90%] rounded-xl px-4 py-2",
                           isUser ? "bg-indigo-600 text-white" : "bg-white/10 text-white"
@@ -1021,8 +1021,8 @@ return (
                     );
                   })}
 
-                  {/* Show "Thinking..." ONLY when actually streaming */}
-                  {uiStatus === 'streaming' && (
+                  {/* Show "Thinking..." when streaming OR when last message has no text */}
+                  {(uiStatus === 'streaming' || (uiMessages.length > 0 && uiMessages[uiMessages.length - 1].role === 'assistant' && !uiMessages[uiMessages.length - 1].parts?.some(p => p.type === 'text'))) && (
                     <div className="flex items-center gap-2 text-sm text-white/60 my-2">
                       <motion.div
                         className="w-3 h-3 bg-white/40 rounded-full"

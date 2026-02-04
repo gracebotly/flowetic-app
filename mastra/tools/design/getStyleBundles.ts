@@ -135,10 +135,17 @@ export const getStyleBundles = createTool({
       },
     ];
 
-    // ✅ STREAM CUSTOM UI DATA
+    // ✅ STREAM TEXT + CUSTOM UI DATA
     if (context?.writer && bundles.length >= 2) {
       const firstTwo = bundles.slice(0, 2);
 
+      // CRITICAL: Stream text FIRST (Mastra requirement)
+      await context.writer.write({
+        type: "text-delta",
+        textDelta: "Here are two style options tailored for you:\n\n"
+      });
+
+      // Then stream custom UI
       await context.writer.custom({
         type: "data-design-system-pair",
         systems: firstTwo.map((bundle) => ({
