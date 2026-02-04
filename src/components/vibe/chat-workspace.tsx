@@ -34,6 +34,7 @@ import { cn } from "@/lib/utils";
 
 import { createClient } from '@/lib/supabase/client';
 import { useChat } from '@ai-sdk/react';
+import { DefaultChatTransport } from 'ai';
 
 import { MessageInput } from "@/components/vibe/message-input";
 import { PhaseIndicator } from "@/components/vibe/phase-indicator";
@@ -204,20 +205,19 @@ export function ChatWorkspace({
   const [isChatExpanded, setIsChatExpanded] = useState(false);
   const [selectedModel, setSelectedModel] = useState<ModelId>("glm-4.7");
   
-  const { messages: uiMessages, sendMessage: sendUiMessage, status: uiStatus, error: uiError } = useChat({});
-
-  async function sendAi(text: string, extraData?: Record<string, any>) {
-    // CRITICAL: Send COMPLETE vibeContext, not individual fields
-    await sendUiMessage(
-      { text },
-      {
-        body: {
-          data: {
+  const { messages: uiMessages, sendMessage: sendUiMessage, status: uiStatus, error: uiError } = useChat({
+    transport: new DefaultChatTransport({
+      api: '/api/chat',
+      prepareSendMessagesRequest({ messages }) {
+        return {
+          body: {
+            // AI SDK v5: All fields go inside body
+            messages,
             tenantId: authContext.tenantId,
             userId: authContext.userId,
             journeyThreadId: threadId,
             selectedModel,
-            // Send ALL vibeContext fields (this was the bug!)
+            // Vibe context fields
             platformType: vibeContext?.platformType,
             sourceId: vibeContext?.sourceId,
             entityId: vibeContext?.entityId,
@@ -232,12 +232,19 @@ export function ChatWorkspace({
             selectedStyleBundleId,
             densityPreset,
             paletteOverrideId,
-            // Merge any additional data
-            ...(extraData ?? {}),
           },
-        },
+        };
       },
-    );
+    }),
+  });
+
+  async function sendAi(text: string, extraData?: Record<string, any>) {
+    // AI SDK v5: sendMessage expects a UIMessage object
+    // All context (tenantId, userId, etc.) is handled by DefaultChatTransport
+    await sendUiMessage({
+      role: 'user',
+      parts: [{ type: 'text', text }],
+    });
   }
 
   /**

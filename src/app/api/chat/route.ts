@@ -38,10 +38,10 @@ export async function POST(req: Request) {
     const userId = user.id;
     
     // 2. VALIDATE TENANT MEMBERSHIP (CRITICAL: Prevent cross-tenant access)
-    const clientData = (params as any)?.data ?? {};
+    // AI SDK v5: params are now at top level, not nested in 'data'
+    const clientData = params as any;
     const clientProvidedTenantId =
       clientData?.tenantId ??
-      (params as any)?.tenantId ??
       null;
 
     if (!clientProvidedTenantId || typeof clientProvidedTenantId !== 'string') {
@@ -74,7 +74,7 @@ export async function POST(req: Request) {
     const userRole = membership.role;
     
     // 3. GET/CREATE STABLE MASTRA THREAD
-    const clientJourneyThreadId = (params as any)?.data?.journeyThreadId || 'default-thread';
+    const clientJourneyThreadId = (params as any)?.journeyThreadId || 'default-thread';
     
     let mastraThreadId: string;
     try {
@@ -82,7 +82,7 @@ export async function POST(req: Request) {
         tenantId,
         journeyThreadId: clientJourneyThreadId,
         resourceId: userId,
-        title: (params as any)?.data?.vibeContext?.displayName || 'Dashboard Journey',
+        title: (params as any)?.displayName || 'Dashboard Journey',
       });
     } catch (threadError: any) {
       console.error('[api/chat] Failed to ensure Mastra thread:', threadError);
