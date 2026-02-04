@@ -1459,19 +1459,23 @@ return (
         </div>
       )}
 
-      {/* Debug Toggle - Bottom Right */}
-      {(uiStatus === "loading" || showDebug) && (
-        <motion.button
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 1, scale: 1 }}
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={() => setShowDebug(!showDebug)}
-          className="fixed bottom-6 right-6 z-50 p-3 rounded-full bg-gray-900/80 backdrop-blur-sm border border-gray-700/50 text-gray-400 hover:text-white hover:border-gray-600 transition-all shadow-xl"
-        >
-          <TerminalIcon className="h-5 w-5" />
-        </motion.button>
-      )}
+      {/* Debug Toggle - Always Visible */}
+      <motion.button
+        initial={{ opacity: 0, scale: 0.8 }}
+        animate={{ opacity: 1, scale: 1 }}
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
+        onClick={() => setShowDebug(!showDebug)}
+        className={cn(
+          "fixed bottom-6 right-6 z-50 p-3 rounded-full backdrop-blur-sm border transition-all shadow-xl",
+          showDebug
+            ? "bg-blue-600/90 border-blue-500 text-white"
+            : "bg-gray-900/80 border-gray-700/50 text-gray-400 hover:text-white hover:border-gray-600"
+        )}
+        title={showDebug ? "Hide debug info" : "Show debug info"}
+      >
+        <TerminalIcon className="h-5 w-5" />
+      </motion.button>
 
       {/* Debug Panel */}
       {showDebug && (
