@@ -30,15 +30,15 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
+import { cn } from "@/lib/utils";
 
 import { createClient } from '@/lib/supabase/client';
 import { useChat } from '@ai-sdk/react';
 
 import { MessageInput } from "@/components/vibe/message-input";
 import { PhaseIndicator } from "@/components/vibe/phase-indicator";
-import { OutcomeCards } from "@/components/vibe/inline-cards/outcome-cards";
-import { StoryboardCards } from "@/components/vibe/inline-cards/storyboard-cards";
-import { StyleBundleCards } from "@/components/vibe/inline-cards/style-bundle-cards";
+import { InlineChoice } from "@/components/vibe/inline-choice";
+import { DesignSystemPair } from "@/components/vibe/design-system-pair";
 import { ModelSelector, type ModelId } from "./model-selector";
 import { exportAsMarkdown, exportAsJSON } from "@/lib/export-chat";
 
@@ -56,28 +56,35 @@ type JourneyMode =
 type ToolUiPayload =
   | {
       type: "outcome_cards";
-      title: string;
+      title?: string;
       options: Array<{
         id: string;
         title: string;
         description: string;
+        previewImageUrl?: string;
+        tags?: string[];
+        metrics?: {
+          primary: string[];
+          secondary: string[];
+        };
+        category?: "dashboard" | "product" | "operations";
       }>;
     }
   | {
       type: "style_bundles";
-      title: string;
+      title?: string;
       bundles: Array<{
         id: string;
         name: string;
         description: string;
-        previewImageUrl: string;
-        palette: { name: string; swatches: Array<{ name: string; hex: string }> };
-        tags: string[];
+        previewImageUrl?: string;
+        palette?: { name: string; swatches: Array<{ name: string; hex: string }> };
+        tags?: string[];
       }>;
     }
   | {
       type: "todos";
-      title: string;
+      title?: string;
       items: Array<{
         id: string;
         title: string;
@@ -87,7 +94,7 @@ type ToolUiPayload =
     }
   | {
       type: "interactive_edit_panel";
-      title: string;
+      title?: string;
       interfaceId: string;
       widgets: Array<{
         id: string;
@@ -104,7 +111,7 @@ type ToolUiPayload =
     }
   | {
       type: "storyboard_cards";
-      title: string;
+      title?: string;
       options: Array<{
         id: string;
         title: string;
@@ -112,6 +119,24 @@ type ToolUiPayload =
         kpis: string[];
       }>;
     };
+
+type DesignSystem = {
+  id: string;
+  name: string;
+  emoji: string;
+  colors: string;
+  style: string;
+  typography: string;
+  bestFor: string;
+  fullOutput?: string;
+};
+
+type Choice = {
+  id: string;
+  label: string;
+  emoji?: string;
+  description?: string;
+};
 
 type Role = "user" | "assistant" | "system";
 
@@ -162,7 +187,8 @@ export function ChatWorkspace({
   requestOpenConversationsKey,
 }: ChatWorkspaceProps) {
   const router = useRouter();
-  const [view, setView] = useState<ViewMode>("terminal");
+  const [view, setView] = useState<ViewMode>("preview");
+  const [showDebug, setShowDebug] = useState<boolean>(false);
   const [input, setInput] = useState("");  const [chatMode, setChatMode] = useState<"chat" | "voice">("chat");
   const [isListening, setIsListening] = useState(false);
   const [isChatExpanded, setIsChatExpanded] = useState(false);
@@ -196,6 +222,16 @@ export function ChatWorkspace({
     );
   }
 
+  /**
+   * This function is no longer needed - we use InlineChoice and DesignSystemPair instead
+   * Keep it as a stub for backward compatibility with any remaining references
+   */
+  function renderToolUi(toolUi: any) {
+    // All UI rendering now happens via message.choices and message.designSystemPair
+    // This stub prevents build errors from any remaining references
+    return null;
+  }
+
   function renderToolPart(part: any) {
     const type: string = part?.type || '';
     const state: string = part?.state || '';
@@ -212,13 +248,7 @@ export function ChatWorkspace({
       );
     }
 
-    if (state !== 'output-available') {
-      return (
-        <div className="mt-2 text-xs text-white/60">
-          {type} ({state})
-        </div>
-      );
-    }
+    if (state !== 'output-available') return null;
 
     const output = part.output;
 
@@ -235,203 +265,20 @@ export function ChatWorkspace({
       );
     }
 
-    // 1) Outcome cards
-    if (type === 'tool-outcomeCards' || type === 'tool-showOutcomeCards') {
-      if (output?.options?.length) {
-        return (
-          <OutcomeCards
-            options={output.options}
-            onSelect={async (id: string) => {
-              await sendAi(`__ACTION__:select_outcome:${id}`, {
-                selectedOutcome: id,
-              });
-            }}
-            onHelpDecide={async () => {
-              await sendAi(`__ACTION__:outcome_help_me_decide`);
-            }}
-          />
-        );
-      }
+    // Only show raw tool output in debug mode
+    if (!showDebug) {
+      return null;
     }
 
-    // 2) Storyboard cards
-    if (type === 'tool-storyboardCards' || type === 'tool-showStoryboardCards') {
-      if (output?.options?.length) {
-        return (
-          <StoryboardCards
-            options={output.options}
-            onSelect={async (id: string) => {
-              await sendAi(`__ACTION__:select_storyboard:${id}`, {
-                selectedStoryboard: id,
-              });
-            }}
-          />
-        );
-      }
-    }
-
-    // 3) Style bundles
-    if (type === 'tool-styleBundles' || type === 'tool-showStyleBundleCards') {
-      if (output?.bundles?.length) {
-        return (
-          <StyleBundleCards
-            bundles={output.bundles}
-            onSelect={async (id: string) => {
-              await sendAi(`__ACTION__:select_style_bundle:${id}`, {
-                selectedStyleBundleId: id,
-                selectedStyleBundle: id,
-              });
-            }}
-          />
-        );
-      }
-    }
-
-    // 4) Event stats (show summary card instead of raw JSON)
-    if (type === 'tool-getEventStats') {
-      return (
-        <div className="mt-2 rounded-lg border border-white/10 bg-black/20 p-3">
-          <div className="text-xs font-medium text-white/80 mb-2">📊 Event Statistics</div>
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            <div className="text-white/60">Total Events:</div>
-            <div className="text-white/90 font-mono">{output.totalEvents || 0}</div>
-            <div className="text-white/60">Error Count:</div>
-            <div className="text-white/90 font-mono">{output.errorCount || 0}</div>
-            <div className="text-white/60">Metric Count:</div>
-            <div className="text-white/90 font-mono">{output.metricCount || 0}</div>
-          </div>
-          {process.env.NEXT_PUBLIC_DEBUG_CHAT === 'true' && (
-            <details className="mt-2">
-              <summary className="text-xs text-white/40 cursor-pointer">Debug: Raw Output</summary>
-              <pre className="text-xs overflow-auto whitespace-pre-wrap mt-1 text-white/60">
-                {JSON.stringify(output, null, 2)}
-              </pre>
-            </details>
-          )}
-        </div>
-      );
-    }
-
-    // 5) List sources (show source list instead of raw JSON)
-    if (type === 'tool-listSources') {
-      const sources = output?.sources || [];
-      if (!sources.length) {
-        return (
-          <div className="mt-2 rounded-lg border border-white/10 bg-black/20 p-3">
-            <div className="text-xs font-medium text-white/80 mb-2">📡 Data Sources</div>
-            <div className="text-xs text-white/60">No sources found</div>
-          </div>
-        );
-      }
-      
-      return (
-        <div className="mt-2 rounded-lg border border-white/10 bg-black/20 p-3">
-          <div className="text-xs font-medium text-white/80 mb-2">📡 Data Sources</div>
-          <div className="space-y-2">
-            {sources.map((source: any) => (
-              <div key={source.id} className="flex items-center gap-2 text-xs">
-                <div className={`w-2 h-2 rounded-full ${source.status === 'active' ? 'bg-green-500' : 'bg-yellow-500'}`}></div>
-                <span className="text-white/80">{source.name || source.id}</span>
-                <span className="text-white/40">({source.type})</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      );
-    }
-
-    // 6) Recommendation tools (show as formatted cards)
-    if (type === 'tool-recommendOutcome') {
-      return (
-        <div className="mt-2 rounded-lg border border-white/10 bg-black/20 p-3">
-          <div className="text-xs font-medium text-white/80 mb-2">🎯 Outcome Recommendation</div>
-          <div className="text-xs text-white/90 mb-2">
-            Recommended: <span className="font-semibold capitalize text-white">{output.recommendedOutcome}</span>
-          </div>
-          <div className="text-xs text-white/60">
-            Confidence: {Math.round((output.confidence || 0) * 100)}% - {output.reasoning}
-          </div>
-        </div>
-      );
-    }
-
-    if (type === 'tool-recommendStoryboard') {
-      return (
-        <div className="mt-2 rounded-lg border border-white/10 bg-black/20 p-3">
-          <div className="text-xs font-medium text-white/80 mb-2">🎬 Storyboard Recommendation</div>
-          <div className="text-xs text-white/90 mb-2">
-            Recommended: <span className="font-semibold text-white">{output.recommendedStoryboard}</span>
-          </div>
-          <div className="text-xs text-white/60">
-            Confidence: {Math.round((output.confidence || 0) * 100)}% - {output.reasoning}
-          </div>
-        </div>
-      );
-    }
-
-    // 7) Validation tools
-    if (type === 'tool-validatePreviewReadiness') {
-      const { ready, canProceed, checks } = output;
-      return (
-        <div className="mt-2 rounded-lg border border-white/10 bg-black/20 p-3">
-          <div className="text-xs font-medium text-white/80 mb-2">✅ Preview Readiness Check</div>
-          <div className="space-y-1">
-            <div className={`text-xs ${ready ? 'text-green-400' : 'text-red-400'}`}>
-              {ready ? '✓ Ready to generate preview' : '✗ Not ready for preview'}
-            </div>
-            <div className={`text-xs ${canProceed ? 'text-green-400' : 'text-yellow-400'}`}>
-              {canProceed ? '✓ Can proceed' : '⚠ Warnings present'}
-            </div>
-            <div className="grid grid-cols-1 gap-1 mt-2">
-              <div className={`text-xs ${checks?.hasSource?.passed ? 'text-green-400' : 'text-red-400'}`}>
-                {checks?.hasSource?.passed ? '✓' : '✗'} Source: {checks?.hasSource?.message}
-              </div>
-              <div className={`text-xs ${checks?.hasEvents?.passed ? 'text-green-400' : 'text-red-400'}`}>
-                {checks?.hasEvents?.passed ? '✓' : '✗'} Events: {checks?.hasEvents?.message}
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    // Generic fallback (enhanced)
+    // Debug mode: show raw JSON
     return (
       <div className="mt-2 rounded-lg border border-white/10 bg-black/20 p-3">
-        <div className="flex items-center justify-between mb-2">
-          <div className="text-xs text-white/60">Tool: {type.replace('tool-', '')}</div>
-          {process.env.NEXT_PUBLIC_DEBUG_CHAT === 'true' && (
-            <details className="text-xs">
-              <summary className="cursor-pointer text-white/40">Raw</summary>
-              <pre className="absolute z-50 bg-black border border-white/20 rounded p-2 text-xs text-white/80 mt-1 overflow-auto max-h-40 whitespace-pre-wrap">
-                {JSON.stringify(output, null, 2)}
-              </pre>
-            </details>
-          )}
+        <div className="text-xs font-medium text-white/60 mb-2">
+          [DEBUG] {type}
         </div>
-        
-        {/* Try to render common output patterns */}
-        {typeof output === 'object' && output !== null ? (
-          <div className="text-xs space-y-1">
-            {Object.entries(output).map(([key, value]) => (
-              <div key={key} className="flex items-start gap-2">
-                <span className="text-white/60 min-w-20">{key}:</span>
-                <span className="text-white/90 flex-1 break-words">
-                  {typeof value === 'string' ? value : 
-                   typeof value === 'number' ? value.toLocaleString() :
-                   typeof value === 'boolean' ? (value ? 'Yes' : 'No') :
-                   Array.isArray(value) ? `Array(${value.length})` :
-                   typeof value === 'object' && value !== null ? `Object(${Object.keys(value).length})` :
-                   'Unknown'}
-                </span>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="text-xs text-white/80">
-            {typeof output === 'string' ? output : JSON.stringify(output)}
-          </div>
-        )}
+        <pre className="text-xs text-white/40 font-mono overflow-auto max-h-96">
+          {JSON.stringify(output, null, 2)}
+        </pre>
       </div>
     );
   }
@@ -1050,6 +897,13 @@ return (
                 <div className="space-y-3">
                   {uiMessages.map((m) => {
                     const isUser = m.role === 'user';
+                    // Check if message has toolUi, choices, or designSystemPair
+                    const messageToolUi = (m as any)?.experimental_data?.toolUi || (m as any)?.data?.toolUi || (m as any)?.toolUi;
+                    const messageChoices = (m as any)?.experimental_data?.choices || (m as any)?.data?.choices || (m as any)?.choices;
+                    const messageDesignSystemPair = (m as any)?.experimental_data?.designSystemPair || (m as any)?.data?.designSystemPair || (m as any)?.designSystemPair;
+                    const helpAvailable = (m as any)?.experimental_data?.helpAvailable || (m as any)?.data?.helpAvailable || (m as any)?.helpAvailable;
+                    const hasMore = (m as any)?.experimental_data?.hasMore || (m as any)?.data?.hasMore || (m as any)?.hasMore;
+
                     return (
                       <div key={m.id} className={isUser ? 'text-right' : 'text-left'}>
                         <div className="inline-block max-w-[90%] rounded-xl px-3 py-2 bg-white/10 text-white">
@@ -1062,16 +916,92 @@ return (
                               );
                             }
 
+                            // Hide tool-call and tool-result parts from user view
+                            if (part.type === 'tool-call' || part.type === 'tool-result') {
+                              return null;
+                            }
+
                             if (part.type.startsWith('tool-')) {
                               return <div key={idx}>{renderToolPart(part)}</div>;
                             }
 
+                            // Check for toolUi in data parts (disabled - now using InlineChoice/DesignSystemPair)
+                            // if (part.type === 'data-toolUi' || part.type === 'data-tool-ui') {
+                            //   const partToolUi = (part as any)?.data?.toolUi || (part as any)?.toolUi;
+                            //   if (partToolUi) {
+                            //     return <div key={idx}>{renderToolUi(partToolUi)}</div>;
+                            //   }
+                            // }
+
                             if (part.type.startsWith('data-')) {
+                              const partData = (part as any).data || (part as any);
+
+                              // Render outcome choices
+                              if (part.type === 'data-outcome-choices' || part.type.includes('outcome-choices')) {
+                                const choices = partData.choices || [];
+                                const helpAvailable = partData.helpAvailable;
+
+                                if (choices.length > 0) {
+                                  return (
+                                    <div key={idx}>
+                                      <InlineChoice
+                                        choices={choices}
+                                        onSelect={async (id: string) => {
+                                          const phase = journeyMode || "recommend";
+                                          let action = "";
+
+                                          if (phase === "recommend") {
+                                            action = `__ACTION__:select_outcome:${id}`;
+                                          } else if (phase === "align") {
+                                            action = `__ACTION__:select_storyboard:${id}`;
+                                          } else {
+                                            action = `__ACTION__:select_${id}`;
+                                          }
+
+                                          await sendAi(action, { [`selected_${phase}`]: id });
+                                        }}
+                                        onHelp={helpAvailable ? async () => {
+                                          await sendAi("__ACTION__:help_me_decide");
+                                        } : undefined}
+                                      />
+                                    </div>
+                                  );
+                                }
+                              }
+
+                              // Render design system pairs
+                              if (part.type === 'data-design-system-pair' || part.type.includes('design-system-pair')) {
+                                const systems = partData.systems || [];
+                                const hasMore = partData.hasMore;
+
+                                if (systems.length === 2) {
+                                  return (
+                                    <div key={idx}>
+                                      <DesignSystemPair
+                                        systems={systems as [DesignSystem, DesignSystem]}
+                                        onSelect={async (id: string) => {
+                                          await sendAi(`__ACTION__:select_design_system:${id}`, {
+                                            selectedDesignSystemId: id,
+                                          });
+                                        }}
+                                        onShowMore={async () => {
+                                          await sendAi("__ACTION__:show_more_design_systems");
+                                        }}
+                                        hasMore={hasMore}
+                                      />
+                                    </div>
+                                  );
+                                }
+                              }
+
+                              // Hide other data parts by default
+                              if (!showDebug) return null;
+
                               return (
                                 <div key={idx} className="mt-2 rounded-lg border border-white/10 bg-black/20 p-2 text-xs text-white/80">
-                                  <div className="text-white/60">{part.type}</div>
+                                  <div className="text-white/60">[DEBUG] {part.type}</div>
                                   <pre className="overflow-auto whitespace-pre-wrap">
-                                    {JSON.stringify((part as any).data, null, 2)}
+                                    {JSON.stringify(partData, null, 2)}
                                   </pre>
                                 </div>
                               );
@@ -1079,6 +1009,50 @@ return (
 
                             return null;
                           })}
+
+                          {/* Render inline choices */}
+                          {messageChoices && messageChoices.length > 0 && (
+                            <InlineChoice
+                              choices={messageChoices}
+                              onSelect={async (id: string) => {
+                                // Determine action based on phase
+                                const phase = journeyMode || "recommend";
+                                let action = "";
+
+                                if (phase === "recommend") {
+                                  action = `__ACTION__:select_outcome:${id}`;
+                                } else if (phase === "align") {
+                                  action = `__ACTION__:select_storyboard:${id}`;
+                                } else {
+                                  action = `__ACTION__:select_${id}`;
+                                }
+
+                                await sendAi(action, { [`selected_${phase}`]: id });
+                              }}
+                              onHelp={helpAvailable ? async () => {
+                                await sendAi("__ACTION__:help_me_decide");
+                              } : undefined}
+                            />
+                          )}
+
+                          {/* Render design system pairs */}
+                          {messageDesignSystemPair && messageDesignSystemPair.length === 2 && (
+                            <DesignSystemPair
+                              systems={messageDesignSystemPair as [DesignSystem, DesignSystem]}
+                              onSelect={async (id: string) => {
+                                await sendAi(`__ACTION__:select_design_system:${id}`, {
+                                  selectedDesignSystemId: id,
+                                });
+                              }}
+                              onShowMore={async () => {
+                                await sendAi("__ACTION__:show_more_design_systems");
+                              }}
+                              hasMore={hasMore}
+                            />
+                          )}
+
+                          {/* Render toolUi if present on message level (disabled - now using InlineChoice/DesignSystemPair) */}
+                          {/* {messageToolUi && renderToolUi(messageToolUi)} */}
                         </div>
                       </div>
                     );
@@ -1456,6 +1430,44 @@ return (
             </div>
           </div>
         </div>
+      )}
+
+      {/* Debug Toggle - Always Visible */}
+      <motion.button
+        initial={{ opacity: 0, scale: 0.8 }}
+        animate={{ opacity: 1, scale: 1 }}
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
+        onClick={() => setShowDebug(!showDebug)}
+        className={cn(
+          "fixed bottom-6 right-6 z-50 p-3 rounded-full backdrop-blur-sm border transition-all shadow-xl",
+          showDebug
+            ? "bg-blue-600/90 border-blue-500 text-white"
+            : "bg-gray-900/80 border-gray-700/50 text-gray-400 hover:text-white hover:border-gray-600"
+        )}
+        title={showDebug ? "Hide debug info" : "Show debug info"}
+      >
+        <TerminalIcon className="h-5 w-5" />
+      </motion.button>
+
+      {/* Debug Panel */}
+      {showDebug && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 20 }}
+          className="fixed bottom-24 right-6 w-96 max-h-96 overflow-auto rounded-xl bg-black/95 backdrop-blur-sm border border-gray-800 p-4 shadow-2xl z-40"
+        >
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs font-medium text-gray-400">Debug Info</span>
+            <button onClick={() => setShowDebug(false)} className="text-gray-500 hover:text-gray-300">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <pre className="text-xs text-green-400 font-mono overflow-auto">
+            {JSON.stringify({ phase: journeyMode, vibeContext, status: uiStatus }, null, 2)}
+          </pre>
+        </motion.div>
       )}
     </div>
   );

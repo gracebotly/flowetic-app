@@ -138,7 +138,7 @@ export const getStyleBundles = createTool({
     bundles: z.array(StyleBundle).length(4),
     sources: z.array(z.object({ kind: z.string(), note: z.string() })).default([]),
   }),
-  execute: async (inputData) => {
+  execute: async (inputData, context) => {
     console.log("[TOOL][design.getStyleBundles] STATIC inputs:", inputData);
 
     const { platformType, outcome, audience, dashboardKind, notes } = inputData;
@@ -149,6 +149,25 @@ export const getStyleBundles = createTool({
 
     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
       console.log("[TOOL][design.getStyleBundles] CACHE HIT - returning cached bundles");
+
+      // Stream custom UI data for cached bundles
+      if (context?.writer && cached.bundles.length >= 2) {
+        await context.writer.custom({
+          type: "data-design-system-pair",
+          systems: cached.bundles.slice(0, 2).map((bundle) => ({
+            id: bundle.id,
+            name: bundle.name,
+            emoji: "🎨",
+            colors: `${bundle.palette.swatches[0]?.hex || "#000"} / ${bundle.palette.swatches[1]?.hex || "#fff"}`,
+            style: bundle.description,
+            typography: bundle.designTokens["font.family.sans"] as string || "Inter",
+            bestFor: bundle.tags.join(", "),
+            fullOutput: JSON.stringify(bundle, null, 2),
+          })),
+          hasMore: cached.bundles.length > 2,
+        } as any);
+      }
+
       return {
         bundles: cached.bundles,
         sources: [{ kind: "static-cached", note: "UI/UX Pro Max static data (cached)" }],
@@ -245,6 +264,24 @@ export const getStyleBundles = createTool({
       console.log("[TOOL][design.getStyleBundles] CACHE MISS - stored new bundles");
       // ========== END CACHE STORE ==========
 
+      // Stream custom UI data for design system pairs
+      if (context?.writer && validated.length >= 2) {
+        await context.writer.custom({
+          type: "data-design-system-pair",
+          systems: validated.slice(0, 2).map((bundle) => ({
+            id: bundle.id,
+            name: bundle.name,
+            emoji: "🎨",
+            colors: `${bundle.palette.swatches[0]?.hex || "#000"} / ${bundle.palette.swatches[1]?.hex || "#fff"}`,
+            style: bundle.description,
+            typography: bundle.designTokens["font.family.sans"] as string || "Inter",
+            bestFor: bundle.tags.join(", "),
+            fullOutput: JSON.stringify(bundle, null, 2),
+          })),
+          hasMore: validated.length > 2,
+        } as any);
+      }
+
       return {
         bundles: validated,
         sources: [
@@ -253,8 +290,28 @@ export const getStyleBundles = createTool({
       };
     } catch (err) {
       console.error("[TOOL][design.getStyleBundles] Error, using fallbacks:", err);
+      const fallbacks = fallbackBundles();
+
+      // Stream custom UI data for fallback bundles
+      if (context?.writer && fallbacks.length >= 2) {
+        await context.writer.custom({
+          type: "data-design-system-pair",
+          systems: fallbacks.slice(0, 2).map((bundle) => ({
+            id: bundle.id,
+            name: bundle.name,
+            emoji: "🎨",
+            colors: `${bundle.palette.swatches[0]?.hex || "#000"} / ${bundle.palette.swatches[1]?.hex || "#fff"}`,
+            style: bundle.description,
+            typography: bundle.designTokens["font.family.sans"] as string || "Inter",
+            bestFor: bundle.tags.join(", "),
+            fullOutput: JSON.stringify(bundle, null, 2),
+          })),
+          hasMore: fallbacks.length > 2,
+        } as any);
+      }
+
       return {
-        bundles: fallbackBundles(),
+        bundles: fallbacks,
         sources: [
           { kind: "fallback", note: "Using fallback bundles due to error" },
         ],

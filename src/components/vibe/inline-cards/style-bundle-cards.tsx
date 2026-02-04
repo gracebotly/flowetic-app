@@ -1,10 +1,9 @@
-
-
-
 "use client";
 
 import { motion } from "framer-motion";
-import { Palette } from "lucide-react";
+import { Palette, CheckCircle2, Sparkles } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Card, Badge, Text } from "@tremor/react";
 
 interface StyleBundleCardsProps {
   bundles: Array<{
@@ -12,7 +11,7 @@ interface StyleBundleCardsProps {
     name: string;
     description: string;
     previewImageUrl?: string;
-    palette: {
+    palette?: {
       name: string;
       swatches: Array<{ name: string; hex: string }>;
     };
@@ -23,56 +22,108 @@ interface StyleBundleCardsProps {
 
 export function StyleBundleCards({ bundles, onSelect }: StyleBundleCardsProps) {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 my-4">
-      {bundles.map((bundle, index) => (
-        <motion.button
-          key={bundle.id}
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: index * 0.1 }}
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          onClick={() => onSelect(bundle.id)}
-          className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-50 to-slate-100 p-6 border border-gray-200 hover:border-indigo-500/50 transition-all duration-500 hover:shadow-[0_20px_70px_-10px_rgba(99,102,241,0.3)] text-left"
-        >
-          <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/0 to-purple-500/0 group-hover:from-indigo-500/5 group-hover:to-purple-500/5 transition-all duration-500" />
-          <div className="relative z-10">
-            <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white">
-              <Palette size={20} />
-            </div>
-            <h3 className="text-base font-semibold text-gray-900 mb-2">
-              {bundle.name}
-            </h3>
-            <p className="text-sm text-gray-600 mb-4">{bundle.description}</p>
-            
-            <div className="flex items-center gap-2 mb-3">
-              {bundle.palette.swatches.slice(0, 5).map((swatch) => (
-                <div
-                  key={swatch.name}
-                  className="h-6 w-6 rounded-full border border-gray-300 shadow-sm"
-                  style={{ backgroundColor: swatch.hex }}
-                  title={swatch.name}
-                />
-              ))}
-            </div>
-            
-            {bundle.tags && bundle.tags.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {bundle.tags.slice(0, 3).map((tag) => (
-                  <span
-                    key={tag}
-                    className="inline-flex items-center rounded-full bg-indigo-100 px-2 py-1 text-xs font-medium text-indigo-700"
-                  >
-                    {tag}
-                  </span>
-                ))}
+    <div className="w-full space-y-6 py-4">
+      {/* Header */}
+      <div className="px-1">
+        <div className="flex items-center gap-3 mb-1">
+          <Palette className="h-5 w-5 text-purple-400" />
+          <h3 className="text-lg font-semibold text-white">Choose Your Style</h3>
+        </div>
+        <Text className="text-sm text-gray-400">Pick the visual style that matches your brand</Text>
+      </div>
+
+      {/* Style Grid (2x2) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {bundles.map((bundle, index) => (
+          <motion.div
+            key={bundle.id}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: index * 0.1 }}
+            whileHover={{ y: -4 }}
+            className="group"
+          >
+            <Card
+              className={cn(
+                "relative overflow-hidden cursor-pointer transition-all duration-300",
+                "border-2 border-white/10 hover:border-purple-400/50",
+                "bg-gradient-to-br from-white/5 to-white/[0.02]",
+                "hover:shadow-xl hover:shadow-purple-500/20",
+                "backdrop-blur-sm"
+              )}
+              onClick={() => onSelect(bundle.id)}
+            >
+              {/* Gradient Overlay */}
+              <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+
+              {/* Content */}
+              <div className="relative space-y-4">
+                {/* Header */}
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h4 className="text-lg font-semibold text-white mb-1">
+                      {bundle.name}
+                    </h4>
+                    <Text className="text-sm text-gray-400">
+                      {bundle.description}
+                    </Text>
+                  </div>
+                </div>
+
+                {/* Color Palette */}
+                {bundle.palette && bundle.palette.swatches.length > 0 && (
+                  <div className="space-y-2 pt-2 border-t border-white/5">
+                    <Text className="text-xs font-medium text-gray-400">Color Palette:</Text>
+                    <div className="flex gap-2">
+                      {bundle.palette.swatches.slice(0, 5).map((swatch, idx) => (
+                        <motion.div
+                          key={idx}
+                          whileHover={{ scale: 1.2 }}
+                          className="group/swatch relative"
+                        >
+                          <div
+                            className="h-10 w-10 rounded-lg border border-white/20 shadow-lg"
+                            style={{ backgroundColor: swatch.hex }}
+                          />
+                          {/* Tooltip */}
+                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-black/90 text-white text-xs rounded opacity-0 group-hover/swatch:opacity-100 transition-opacity whitespace-nowrap">
+                            {swatch.name}
+                          </div>
+                        </motion.div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Tags */}
+                {bundle.tags && bundle.tags.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {bundle.tags.map((tag) => (
+                      <Badge
+                        key={tag}
+                        size="xs"
+                        color="slate"
+                        className="bg-white/5 text-gray-400 border border-white/10"
+                      >
+                        {tag}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+
+                {/* Select CTA */}
+                <motion.div
+                  className="flex items-center justify-end gap-2 text-sm font-medium text-white/60 group-hover:text-white transition-colors"
+                  whileHover={{ x: 4 }}
+                >
+                  <span>Select this style</span>
+                  <CheckCircle2 className="h-4 w-4" />
+                </motion.div>
               </div>
-            )}
-          </div>
-        </motion.button>
-      ))}
+            </Card>
+          </motion.div>
+        ))}
+      </div>
     </div>
   );
 }
-
-
