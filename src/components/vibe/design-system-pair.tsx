@@ -18,7 +18,7 @@ interface DesignSystem {
 interface DesignSystemPairProps {
   systems: [DesignSystem, DesignSystem]; // Always exactly 2
   onSelect: (id: string) => void;
-  onShowMore: () => void;
+  onShowMore?: () => void;
   hasMore?: boolean;
 }
 
@@ -120,7 +120,7 @@ export function DesignSystemPair({ systems, onSelect, onShowMore, hasMore = true
       ))}
 
       {/* Show More Button */}
-      {hasMore && (
+      {hasMore && onShowMore && (
         <motion.button
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
