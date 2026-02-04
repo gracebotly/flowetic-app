@@ -53,14 +53,6 @@ type JourneyMode =
   | "interactive_edit"
   | "deploy";
 
-// Phase modes that use deterministic /api/vibe/router (no agent tool calls)
-const PHASE_MODES: JourneyMode[] = ["select_entity", "recommend", "align", "style"];
-
-// Helper function to determine routing
-function shouldUsePhaseRouter(mode: JourneyMode): boolean {
-  return PHASE_MODES.includes(mode);
-}
-
 type ToolUiPayload =
   | {
       type: "outcome_cards";
@@ -211,7 +203,6 @@ export function ChatWorkspace({
   const [isListening, setIsListening] = useState(false);
   const [isChatExpanded, setIsChatExpanded] = useState(false);
   const [selectedModel, setSelectedModel] = useState<ModelId>("glm-4.7");
-  const [isLoadingPhase, setIsLoadingPhase] = useState(false);
   
   const { messages: uiMessages, sendMessage: sendUiMessage, status: uiStatus, error: uiError } = useChat({});
 
@@ -625,6 +616,7 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
   ]);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const logsEndRef = useRef<HTMLDivElement | null>(null);
+  const prevStatusRef = useRef<string>('');
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -640,6 +632,33 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
       loadSessions();
     }
   }, [authContext.userId, authContext.tenantId]);
+
+  // ✅ SMART DEBUG: Only logs when status actually changes
+  useEffect(() => {
+    // Only run in development with debug enabled
+    if (process.env.NODE_ENV === 'development' && process.env.NEXT_PUBLIC_DEBUG_CHAT === 'true') {
+      // Only log when status changes (prevents infinite loops)
+      if (uiStatus !== prevStatusRef.current) {
+        console.group('🔍 Chat Debug - Status Change');
+        console.log('Status changed:', prevStatusRef.current, '→', uiStatus);
+        console.log('Journey mode:', journeyMode);
+        console.log('Total messages:', uiMessages.length);
+
+        if (uiMessages.length > 0) {
+          const lastMsg = uiMessages[uiMessages.length - 1];
+          console.log('Last message:', {
+            id: lastMsg.id,
+            role: lastMsg.role,
+            partsCount: lastMsg.parts?.length || 0,
+            parts: lastMsg.parts,
+          });
+        }
+
+        console.groupEnd();
+        prevStatusRef.current = uiStatus;
+      }
+    }
+  }, [uiStatus, journeyMode, uiMessages]);
 
   async function loadSessions() {
     if (!authContext.userId || !authContext.tenantId) return;
@@ -749,7 +768,7 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
   const sendMessage = async (text: string) => {
     const trimmed = text.trim();
     if (!trimmed) return;
-    if (uiStatus === 'streaming' || isLoadingPhase) return;
+    if (uiStatus === 'streaming') return;
 
     // Persist user message (keep existing behavior)
     try {
@@ -777,120 +796,31 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
       addLog("running", "Generating preview…", "This can take ~10–30 seconds on first run.");
     }
 
-    // HYBRID ROUTING: Phase modes use /api/vibe/router (deterministic)
-    // Open-ended modes use /api/chat (streaming agent)
-    if (shouldUsePhaseRouter(journeyMode)) {
-      setIsLoadingPhase(true);
-
-      try {
-        const response = await fetch("/api/vibe/router", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            userId: authContext.userId,
-            tenantId: authContext.tenantId,
-            journeyThreadId: threadId,
-            userMessage: trimmed,
-            selectedModel,
-            vibeContext: vibeContext ? { ...vibeContext, threadId } : {},
-            journey: {
-              mode: journeyMode,
-              threadId,
-              selectedOutcome,
-              selectedStoryboard,
-              selectedStyleBundleId,
-              densityPreset,
-              paletteOverrideId,
-            },
-          }),
-        });
-
-        const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(data.error || "Phase router request failed");
-        }
-
-        // Add assistant response
-        if (data.text) {
-          setMessages((prev) => [
-            ...prev,
-            { id: `a-${Date.now()}`, role: "assistant", content: data.text },
-          ]);
-        }
-
-        // Render choices/cards based on response
-        if (data.choices) {
-          // Convert choices to toolUi format for rendering
-          setToolUi({
-            type: "outcome_choices",
-            choices: data.choices,
-            helpAvailable: data.helpAvailable
-          });
-        } else if (data.storyboards) {
-          setToolUi({
-            type: "storyboard_cards",
-            options: data.storyboards
-          });
-        } else if (data.toolUi?.type === "style_bundles") {
-          setToolUi(data.toolUi as any);
-        } else if (data.toolUi) {
-          setToolUi(data.toolUi as any);
-        } else {
-          // Clear toolUi if no UI components returned
-          setToolUi(null);
-        }
-
-        // Handle journey updates
-        if (data.journey) {
-          if (data.journey.mode) setJourneyMode(data.journey.mode);
-          if (data.journey.selectedOutcome !== undefined) setSelectedOutcome(data.journey.selectedOutcome);
-          if (data.journey.selectedStoryboard !== undefined) setSelectedStoryboard(data.journey.selectedStoryboard);
-          if (data.journey.selectedStyleBundleId !== undefined) setSelectedStyleBundleId(data.journey.selectedStyleBundleId);
-        }
-
-        // Handle vibeContext updates
-        if (data.vibeContext) {
-          setVibeContext((prev: any) => ({ ...prev, ...data.vibeContext }));
-        }
-
-      } catch (error: any) {
-        addLog("error", "Phase router failed", error.message);
-        setMessages((prev) => [
-          ...prev,
-          { id: `a-${Date.now()}`, role: "assistant", content: "Sorry, something went wrong." },
-        ]);
-      } finally {
-        setIsLoadingPhase(false);
-      }
-    }
-    // OPEN-ENDED MODE: Use streaming chat
-    else {
-      try {
-        await sendAi(trimmed, {
-          userId: authContext.userId,
-          tenantId: authContext.tenantId,
-          journeyThreadId: threadId,
+    // ✅ SINGLE ENDPOINT: All phases use /api/chat with streaming
+    try {
+      await sendAi(trimmed, {
+        userId: authContext.userId,
+        tenantId: authContext.tenantId,
+        journeyThreadId: threadId,
+        threadId,
+        selectedModel,
+        vibeContext: vibeContext ? { ...vibeContext, threadId } : undefined,
+        journey: {
+          mode: journeyMode,
           threadId,
-          selectedModel,
-          vibeContext: vibeContext ? { ...vibeContext, threadId } : undefined,
-          journey: {
-            mode: journeyMode,
-            threadId,
-            selectedOutcome,
-            selectedStoryboard,
-            selectedStyleBundleId,
-            densityPreset,
-            paletteOverrideId,
-          },
-        });
-      } catch (e: any) {
-        addLog("error", "Chat request failed", e?.message ?? "Unknown error");
-        setMessages((prev) => [
-          ...prev,
-          { id: `a-${Date.now()}`, role: "assistant", content: "Request failed." },
-        ]);
-      }
+          selectedOutcome,
+          selectedStoryboard,
+          selectedStyleBundleId,
+          densityPreset,
+          paletteOverrideId,
+        },
+      });
+    } catch (e: any) {
+      addLog("error", "Chat request failed", e?.message ?? "Unknown error");
+      setMessages((prev) => [
+        ...prev,
+        { id: `a-${Date.now()}`, role: "assistant", content: "Request failed." },
+      ]);
     }
   };
 
@@ -1009,166 +939,99 @@ return (
                 <div className="space-y-3">
                   {uiMessages.map((m) => {
                     const isUser = m.role === 'user';
-                    // Check if message has toolUi, choices, or designSystemPair
-                    const messageToolUi = (m as any)?.experimental_data?.toolUi || (m as any)?.data?.toolUi || (m as any)?.toolUi;
-                    const messageChoices = (m as any)?.experimental_data?.choices || (m as any)?.data?.choices || (m as any)?.choices;
-                    const messageDesignSystemPair = (m as any)?.experimental_data?.designSystemPair || (m as any)?.data?.designSystemPair || (m as any)?.designSystemPair;
-                    const helpAvailable = (m as any)?.experimental_data?.helpAvailable || (m as any)?.data?.helpAvailable || (m as any)?.helpAvailable;
-                    const hasMore = (m as any)?.experimental_data?.hasMore || (m as any)?.data?.hasMore || (m as any)?.hasMore;
 
                     return (
-                      <div key={m.id} className={isUser ? 'text-right' : 'text-left'}>
-                        <div className="inline-block max-w-[90%] rounded-xl px-3 py-2 bg-white/10 text-white">
-                          {m.parts.map((part, idx) => {
-                            if (part.type === 'text') {
+                      <div key={m.id} className={isUser ? 'text-right mb-4' : 'text-left mb-4'}>
+                        <div className={cn(
+                          "inline-block max-w-[90%] rounded-xl px-4 py-2",
+                          isUser ? "bg-indigo-600 text-white" : "bg-white/10 text-white"
+                        )}>
+                          {m.parts?.map((part, idx) => {
+
+                            // ✅ RENDER: Custom outcome choices
+                            if (part.type === 'data-outcome-choices') {
                               return (
-                                <div key={idx} className="whitespace-pre-wrap">
-                                  {part.text}
-                                </div>
+                                <InlineChoice
+                                  key={idx}
+                                  choices={(part as any).data?.choices || (part as any).choices || []}
+                                  onSelect={async (id) => {
+                                    setSelectedOutcome(id as "dashboard" | "product" | "tool" | "form");
+                                    setJourneyMode("align");
+                                    await sendAi(`I selected ${id}`);
+                                  }}
+                                  onHelp={
+                                    (part as any).data?.helpAvailable || (part as any).helpAvailable
+                                      ? () => {
+                                          void sendAi("Help me decide");
+                                        }
+                                      : undefined
+                                  }
+                                />
                               );
                             }
 
-                            // Hide tool-call and tool-result parts from user view
-                            if (part.type === 'tool-call' || part.type === 'tool-result') {
+                            // ✅ RENDER: Custom design system pairs
+                            if (part.type === 'data-design-system-pair') {
+                              const systems = (part as any).data?.systems || (part as any).systems || [];
+                              if (systems.length === 2) {
+                                return (
+                                  <DesignSystemPair
+                                    key={idx}
+                                    systems={systems as [any, any]}
+                                    hasMore={(part as any).data?.hasMore || (part as any).hasMore}
+                                    onSelect={async (id: string) => {
+                                      setSelectedStyleBundleId(id);
+                                      await sendAi(`I selected style ${id}`);
+                                    }}
+                                    onShowMore={
+                                      (part as any).data?.hasMore || (part as any).hasMore
+                                        ? () => {
+                                            void sendAi("Show different styles");
+                                          }
+                                        : undefined
+                                    }
+                                  />
+                                );
+                              }
+                            }
+
+                            // ✅ HIDE: All tool parts
+                            if (part.type?.startsWith('tool-') || part.type === 'tool-call' || part.type === 'tool-result') {
                               return null;
                             }
 
-                            if (part.type.startsWith('tool-')) {
-                              return <div key={idx}>{renderToolPart(part)}</div>;
+                            // ✅ HIDE: Step-start and reasoning
+                            if (part.type === 'step-start' || part.type === 'reasoning') {
+                              return null;
                             }
 
-                            // Check for toolUi in data parts (disabled - now using InlineChoice/DesignSystemPair)
-                            // if (part.type === 'data-toolUi' || part.type === 'data-tool-ui') {
-                            //   const partToolUi = (part as any)?.data?.toolUi || (part as any)?.toolUi;
-                            //   if (partToolUi) {
-                            //     return <div key={idx}>{renderToolUi(partToolUi)}</div>;
-                            //   }
-                            // }
-
-                            if (part.type.startsWith('data-')) {
-                              const partData = (part as any).data || (part as any);
-
-                              // Render outcome choices
-                              if (part.type === 'data-outcome-choices' || part.type.includes('outcome-choices')) {
-                                const choices = partData.choices || [];
-                                const helpAvailable = partData.helpAvailable;
-
-                                if (choices.length > 0) {
-                                  return (
-                                    <div key={idx}>
-                                      <InlineChoice
-                                        choices={choices}
-                                        onSelect={async (id: string) => {
-                                          const phase = journeyMode || "recommend";
-                                          let action = "";
-
-                                          if (phase === "recommend") {
-                                            action = `__ACTION__:select_outcome:${id}`;
-                                          } else if (phase === "align") {
-                                            action = `__ACTION__:select_storyboard:${id}`;
-                                          } else {
-                                            action = `__ACTION__:select_${id}`;
-                                          }
-
-                                          await sendAi(action, { [`selected_${phase}`]: id });
-                                        }}
-                                        onHelp={helpAvailable ? async () => {
-                                          await sendAi("__ACTION__:help_me_decide");
-                                        } : undefined}
-                                      />
-                                    </div>
-                                  );
-                                }
-                              }
-
-                              // Render design system pairs
-                              if (part.type === 'data-design-system-pair' || part.type.includes('design-system-pair')) {
-                                const systems = partData.systems || [];
-                                const hasMore = partData.hasMore;
-
-                                if (systems.length === 2) {
-                                  return (
-                                    <div key={idx}>
-                                      <DesignSystemPair
-                                        systems={systems as [DesignSystem, DesignSystem]}
-                                        onSelect={async (id: string) => {
-                                          await sendAi(`__ACTION__:select_design_system:${id}`, {
-                                            selectedDesignSystemId: id,
-                                          });
-                                        }}
-                                        onShowMore={async () => {
-                                          await sendAi("__ACTION__:show_more_design_systems");
-                                        }}
-                                        hasMore={hasMore}
-                                      />
-                                    </div>
-                                  );
-                                }
-                              }
-
-                              // Hide other data parts by default
-                              if (!showDebug) return null;
-
+                            // ✅ SHOW: Text content (THIS IS THE CRITICAL FIX!)
+                            if (part.type === 'text') {
                               return (
-                                <div key={idx} className="mt-2 rounded-lg border border-white/10 bg-black/20 p-2 text-xs text-white/80">
-                                  <div className="text-white/60">[DEBUG] {part.type}</div>
-                                  <pre className="overflow-auto whitespace-pre-wrap">
-                                    {JSON.stringify(partData, null, 2)}
-                                  </pre>
+                                <div key={idx} className="whitespace-pre-wrap prose prose-sm max-w-none prose-invert">
+                                  {part.text}
                                 </div>
                               );
                             }
 
                             return null;
                           })}
-
-                          {/* Render inline choices */}
-                          {messageChoices && messageChoices.length > 0 && (
-                            <InlineChoice
-                              choices={messageChoices}
-                              onSelect={async (id: string) => {
-                                // Determine action based on phase
-                                const phase = journeyMode || "recommend";
-                                let action = "";
-
-                                if (phase === "recommend") {
-                                  action = `__ACTION__:select_outcome:${id}`;
-                                } else if (phase === "align") {
-                                  action = `__ACTION__:select_storyboard:${id}`;
-                                } else {
-                                  action = `__ACTION__:select_${id}`;
-                                }
-
-                                await sendAi(action, { [`selected_${phase}`]: id });
-                              }}
-                              onHelp={helpAvailable ? async () => {
-                                await sendAi("__ACTION__:help_me_decide");
-                              } : undefined}
-                            />
-                          )}
-
-                          {/* Render design system pairs */}
-                          {messageDesignSystemPair && messageDesignSystemPair.length === 2 && (
-                            <DesignSystemPair
-                              systems={messageDesignSystemPair as [DesignSystem, DesignSystem]}
-                              onSelect={async (id: string) => {
-                                await sendAi(`__ACTION__:select_design_system:${id}`, {
-                                  selectedDesignSystemId: id,
-                                });
-                              }}
-                              onShowMore={async () => {
-                                await sendAi("__ACTION__:show_more_design_systems");
-                              }}
-                              hasMore={hasMore}
-                            />
-                          )}
-
-                          {/* Render toolUi if present on message level (disabled - now using InlineChoice/DesignSystemPair) */}
-                          {/* {messageToolUi && renderToolUi(messageToolUi)} */}
                         </div>
                       </div>
                     );
                   })}
+
+                  {/* Show "Thinking..." ONLY when actually streaming */}
+                  {uiStatus === 'streaming' && (
+                    <div className="flex items-center gap-2 text-sm text-white/60 my-2">
+                      <motion.div
+                        className="w-3 h-3 bg-white/40 rounded-full"
+                        animate={{ scale: [1, 1.2, 1] }}
+                        transition={{ duration: 1.5, repeat: Infinity }}
+                      />
+                      <span>Thinking...</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Render toolUi from phase router */}
@@ -1182,9 +1045,9 @@ return (
                           setToolUi(null);
                           await sendMessage(`__ACTION__:select_outcome:${id}`);
                         }}
-                        onHelp={toolUi.helpAvailable ? async () => {
+                        onHelp={toolUi.helpAvailable ? () => {
                           setToolUi(null);
-                          await sendMessage("__ACTION__:outcome_help_me_decide");
+                          void sendMessage("__ACTION__:outcome_help_me_decide");
                         } : undefined}
                       />
                     )}
@@ -1250,32 +1113,17 @@ return (
                   </div>
                 )}
 
-                {isLoadingPhase && (
-                  <div className="mt-2 text-xs text-white/60">Processing…</div>
-                )}
-
                 {uiError ? (
                   <div className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
                     {String((uiError as any)?.message || uiError)}
                   </div>
-                ) : null}
-
-                {uiStatus === 'streaming' ? (
-                  <div className="mt-2 text-xs text-white/60">Thinking…</div>
                 ) : null}
               </>
             )}
 
             <div ref={messagesEndRef} />
 
-            {process.env.NEXT_PUBLIC_DEBUG_CHAT === 'true' ? (
-              <div className="mt-3 rounded-lg border border-white/10 bg-black/40 p-3 text-xs text-white/80">
-                <div className="mb-2 text-white/60">DEBUG: last message parts</div>
-                <pre className="overflow-auto whitespace-pre-wrap">
-                  {JSON.stringify(uiMessages?.[uiMessages.length - 1]?.parts ?? [], null, 2)}
-                </pre>
-              </div>
-            ) : null}
+            {/* Debug moved to console - check F12 */}
           </div>
 
           {/* Message input */}

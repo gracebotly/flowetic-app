@@ -26,6 +26,8 @@ import {
   getUXGuidelines,
   getProductRecommendations,
 } from "../tools/uiux";
+import { getOutcomes } from "../tools/outcomes";
+import { getStyleBundles } from "../tools/design";
 import {
   getPhaseFromRequestContext,
   getPhaseInstructions,
@@ -226,6 +228,9 @@ export const masterRouterAgent: Agent = new Agent({
     getTypographyRecommendations,
     getUXGuidelines,
     getProductRecommendations,
+    // Outcome & Style Tools
+    getOutcomes,
+    getStyleBundles,
     // NEW: Add Supatools
     getEventStats,
     recommendOutcome,
