@@ -37,9 +37,8 @@ import { useChat } from '@ai-sdk/react';
 
 import { MessageInput } from "@/components/vibe/message-input";
 import { PhaseIndicator } from "@/components/vibe/phase-indicator";
-import { OutcomeCards } from "@/components/vibe/inline-cards/outcome-cards";
-import { StoryboardCards } from "@/components/vibe/inline-cards/storyboard-cards";
-import { StyleBundleCards } from "@/components/vibe/inline-cards/style-bundle-cards";
+import { InlineChoice } from "@/components/vibe/inline-choice";
+import { DesignSystemPair } from "@/components/vibe/design-system-pair";
 import { ModelSelector, type ModelId } from "./model-selector";
 import { exportAsMarkdown, exportAsJSON } from "@/lib/export-chat";
 
@@ -120,6 +119,24 @@ type ToolUiPayload =
         kpis: string[];
       }>;
     };
+
+type DesignSystem = {
+  id: string;
+  name: string;
+  emoji: string;
+  colors: string;
+  style: string;
+  typography: string;
+  bestFor: string;
+  fullOutput?: string;
+};
+
+type Choice = {
+  id: string;
+  label: string;
+  emoji?: string;
+  description?: string;
+};
 
 type Role = "user" | "assistant" | "system";
 
@@ -332,13 +349,7 @@ export function ChatWorkspace({
       );
     }
 
-    if (state !== 'output-available') {
-      return (
-        <div className="mt-2 text-xs text-white/60">
-          {type} ({state})
-        </div>
-      );
-    }
+    if (state !== 'output-available') return null;
 
     const output = part.output;
 
@@ -355,206 +366,20 @@ export function ChatWorkspace({
       );
     }
 
-    // 1) Outcome cards
-    if (type === 'tool-outcomeCards' || type === 'tool-showOutcomeCards') {
-      if (output?.options?.length) {
-        return (
-          <OutcomeCards
-            options={output.options}
-            onSelect={async (id: string) => {
-              await sendAi(`__ACTION__:select_outcome:${id}`, {
-                selectedOutcome: id,
-              });
-            }}
-            onHelpDecide={async () => {
-              await sendAi(`__ACTION__:outcome_help_me_decide`);
-            }}
-          />
-        );
-      }
-    }
-
-    // 2) Storyboard cards
-    if (type === 'tool-storyboardCards' || type === 'tool-showStoryboardCards') {
-      if (output?.options?.length) {
-        return (
-          <StoryboardCards
-            options={output.options}
-            onSelect={async (id: string) => {
-              await sendAi(`__ACTION__:select_storyboard:${id}`, {
-                selectedStoryboard: id,
-              });
-            }}
-          />
-        );
-      }
-    }
-
-    // 3) Style bundles
-    if (type === 'tool-styleBundles' || type === 'tool-showStyleBundleCards') {
-      if (output?.bundles?.length) {
-        return (
-          <StyleBundleCards
-            bundles={output.bundles}
-            onSelect={async (id: string) => {
-              await sendAi(`__ACTION__:select_style_bundle:${id}`, {
-                selectedStyleBundleId: id,
-                selectedStyleBundle: id,
-              });
-            }}
-          />
-        );
-      }
-    }
-
-    // 4) Event stats (show summary card instead of raw JSON)
-    if (type === 'tool-getEventStats') {
-      return (
-        <div className="mt-2 rounded-lg border border-white/10 bg-black/20 p-3">
-          <div className="text-xs font-medium text-white/80 mb-2">📊 Event Statistics</div>
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            <div className="text-white/60">Total Events:</div>
-            <div className="text-white/90 font-mono">{output.totalEvents || 0}</div>
-            <div className="text-white/60">Error Count:</div>
-            <div className="text-white/90 font-mono">{output.errorCount || 0}</div>
-            <div className="text-white/60">Metric Count:</div>
-            <div className="text-white/90 font-mono">{output.metricCount || 0}</div>
-          </div>
-          {(showDebug || process.env.NEXT_PUBLIC_DEBUG_CHAT === 'true') && (
-            <details className="mt-2">
-              <summary className="text-xs text-white/40 cursor-pointer">Debug: Raw Output</summary>
-              <pre className="text-xs overflow-auto whitespace-pre-wrap mt-1 text-white/60">
-                {JSON.stringify(output, null, 2)}
-              </pre>
-            </details>
-          )}
-        </div>
-      );
-    }
-
-    // 5) List sources (show source list instead of raw JSON)
-    if (type === 'tool-listSources') {
-      const sources = output?.sources || [];
-      if (!sources.length) {
-        return (
-          <div className="mt-2 rounded-lg border border-white/10 bg-black/20 p-3">
-            <div className="text-xs font-medium text-white/80 mb-2">📡 Data Sources</div>
-            <div className="text-xs text-white/60">No sources found</div>
-          </div>
-        );
-      }
-      
-      return (
-        <div className="mt-2 rounded-lg border border-white/10 bg-black/20 p-3">
-          <div className="text-xs font-medium text-white/80 mb-2">📡 Data Sources</div>
-          <div className="space-y-2">
-            {sources.map((source: any) => (
-              <div key={source.id} className="flex items-center gap-2 text-xs">
-                <div className={`w-2 h-2 rounded-full ${source.status === 'active' ? 'bg-green-500' : 'bg-yellow-500'}`}></div>
-                <span className="text-white/80">{source.name || source.id}</span>
-                <span className="text-white/40">({source.type})</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      );
-    }
-
-    // 6) Recommendation tools (show as formatted cards)
-    if (type === 'tool-recommendOutcome') {
-      return (
-        <div className="mt-2 rounded-lg border border-white/10 bg-black/20 p-3">
-          <div className="text-xs font-medium text-white/80 mb-2">🎯 Outcome Recommendation</div>
-          <div className="text-xs text-white/90 mb-2">
-            Recommended: <span className="font-semibold capitalize text-white">{output.recommendedOutcome}</span>
-          </div>
-          <div className="text-xs text-white/60">
-            Confidence: {Math.round((output.confidence || 0) * 100)}% - {output.reasoning}
-          </div>
-        </div>
-      );
-    }
-
-    if (type === 'tool-recommendStoryboard') {
-      return (
-        <div className="mt-2 rounded-lg border border-white/10 bg-black/20 p-3">
-          <div className="text-xs font-medium text-white/80 mb-2">🎬 Storyboard Recommendation</div>
-          <div className="text-xs text-white/90 mb-2">
-            Recommended: <span className="font-semibold text-white">{output.recommendedStoryboard}</span>
-          </div>
-          <div className="text-xs text-white/60">
-            Confidence: {Math.round((output.confidence || 0) * 100)}% - {output.reasoning}
-          </div>
-        </div>
-      );
-    }
-
-    // 7) Validation tools
-    if (type === 'tool-validatePreviewReadiness') {
-      const { ready, canProceed, checks } = output;
-      return (
-        <div className="mt-2 rounded-lg border border-white/10 bg-black/20 p-3">
-          <div className="text-xs font-medium text-white/80 mb-2">✅ Preview Readiness Check</div>
-          <div className="space-y-1">
-            <div className={`text-xs ${ready ? 'text-green-400' : 'text-red-400'}`}>
-              {ready ? '✓ Ready to generate preview' : '✗ Not ready for preview'}
-            </div>
-            <div className={`text-xs ${canProceed ? 'text-green-400' : 'text-yellow-400'}`}>
-              {canProceed ? '✓ Can proceed' : '⚠ Warnings present'}
-            </div>
-            <div className="grid grid-cols-1 gap-1 mt-2">
-              <div className={`text-xs ${checks?.hasSource?.passed ? 'text-green-400' : 'text-red-400'}`}>
-                {checks?.hasSource?.passed ? '✓' : '✗'} Source: {checks?.hasSource?.message}
-              </div>
-              <div className={`text-xs ${checks?.hasEvents?.passed ? 'text-green-400' : 'text-red-400'}`}>
-                {checks?.hasEvents?.passed ? '✓' : '✗'} Events: {checks?.hasEvents?.message}
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    // Generic fallback - hide unless debug mode is on
-    if (!showDebug && process.env.NEXT_PUBLIC_DEBUG_CHAT !== 'true') {
+    // Only show raw tool output in debug mode
+    if (!showDebug) {
       return null;
     }
 
-    // Generic fallback (enhanced) - shown only in debug mode
+    // Debug mode: show raw JSON
     return (
       <div className="mt-2 rounded-lg border border-white/10 bg-black/20 p-3">
-        <div className="flex items-center justify-between mb-2">
-          <div className="text-xs text-white/60">[DEBUG] Tool: {type.replace('tool-', '')}</div>
-          <details className="text-xs">
-            <summary className="cursor-pointer text-white/40">Raw JSON</summary>
-            <pre className="absolute z-50 bg-black border border-white/20 rounded p-2 text-xs text-white/80 mt-1 overflow-auto max-h-40 whitespace-pre-wrap">
-              {JSON.stringify(output, null, 2)}
-            </pre>
-          </details>
+        <div className="text-xs font-medium text-white/60 mb-2">
+          [DEBUG] {type}
         </div>
-
-        {/* Try to render common output patterns */}
-        {typeof output === 'object' && output !== null ? (
-          <div className="text-xs space-y-1">
-            {Object.entries(output).map(([key, value]) => (
-              <div key={key} className="flex items-start gap-2">
-                <span className="text-white/60 min-w-20">{key}:</span>
-                <span className="text-white/90 flex-1 break-words">
-                  {typeof value === 'string' ? value :
-                   typeof value === 'number' ? value.toLocaleString() :
-                   typeof value === 'boolean' ? (value ? 'Yes' : 'No') :
-                   Array.isArray(value) ? `Array(${value.length})` :
-                   typeof value === 'object' && value !== null ? `Object(${Object.keys(value).length})` :
-                   'Unknown'}
-                </span>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="text-xs text-white/80">
-            {typeof output === 'string' ? output : JSON.stringify(output)}
-          </div>
-        )}
+        <pre className="text-xs text-white/40 font-mono overflow-auto max-h-96">
+          {JSON.stringify(output, null, 2)}
+        </pre>
       </div>
     );
   }
@@ -1173,8 +998,12 @@ return (
                 <div className="space-y-3">
                   {uiMessages.map((m) => {
                     const isUser = m.role === 'user';
-                    // Check if message has toolUi in experimental_data or data
+                    // Check if message has toolUi, choices, or designSystemPair
                     const messageToolUi = (m as any)?.experimental_data?.toolUi || (m as any)?.data?.toolUi || (m as any)?.toolUi;
+                    const messageChoices = (m as any)?.experimental_data?.choices || (m as any)?.data?.choices || (m as any)?.choices;
+                    const messageDesignSystemPair = (m as any)?.experimental_data?.designSystemPair || (m as any)?.data?.designSystemPair || (m as any)?.designSystemPair;
+                    const helpAvailable = (m as any)?.experimental_data?.helpAvailable || (m as any)?.data?.helpAvailable || (m as any)?.helpAvailable;
+                    const hasMore = (m as any)?.experimental_data?.hasMore || (m as any)?.data?.hasMore || (m as any)?.hasMore;
 
                     return (
                       <div key={m.id} className={isUser ? 'text-right' : 'text-left'}>
@@ -1216,6 +1045,47 @@ return (
 
                             return null;
                           })}
+
+                          {/* Render inline choices */}
+                          {messageChoices && messageChoices.length > 0 && (
+                            <InlineChoice
+                              choices={messageChoices}
+                              onSelect={async (id: string) => {
+                                // Determine action based on phase
+                                const phase = journeyMode || "recommend";
+                                let action = "";
+
+                                if (phase === "recommend") {
+                                  action = `__ACTION__:select_outcome:${id}`;
+                                } else if (phase === "align") {
+                                  action = `__ACTION__:select_storyboard:${id}`;
+                                } else {
+                                  action = `__ACTION__:select_${id}`;
+                                }
+
+                                await sendAi(action, { [`selected_${phase}`]: id });
+                              }}
+                              onHelp={helpAvailable ? async () => {
+                                await sendAi("__ACTION__:help_me_decide");
+                              } : undefined}
+                            />
+                          )}
+
+                          {/* Render design system pairs */}
+                          {messageDesignSystemPair && messageDesignSystemPair.length === 2 && (
+                            <DesignSystemPair
+                              systems={messageDesignSystemPair as [DesignSystem, DesignSystem]}
+                              onSelect={async (id: string) => {
+                                await sendAi(`__ACTION__:select_design_system:${id}`, {
+                                  selectedDesignSystemId: id,
+                                });
+                              }}
+                              onShowMore={async () => {
+                                await sendAi("__ACTION__:show_more_design_systems");
+                              }}
+                              hasMore={hasMore}
+                            />
+                          )}
 
                           {/* Render toolUi if present on message level */}
                           {messageToolUi && renderToolUi(messageToolUi)}
