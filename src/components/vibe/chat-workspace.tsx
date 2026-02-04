@@ -223,113 +223,12 @@ export function ChatWorkspace({
   }
 
   /**
-   * Render toolUi object from router response
-   * This handles the toolUi format returned by /api/vibe/router
+   * This function is no longer needed - we use InlineChoice and DesignSystemPair instead
+   * Keep it as a stub for backward compatibility with any remaining references
    */
-  function renderToolUi(toolUi: ToolUiPayload | null | undefined) {
-    if (!toolUi || !toolUi.type) return null;
-
-    // 1) Outcome cards
-    if (toolUi.type === 'outcome_cards') {
-      if (!toolUi.options || toolUi.options.length === 0) return null;
-
-      return (
-        <OutcomeCards
-          options={toolUi.options}
-          onSelect={async (id: string) => {
-            await sendAi(`__ACTION__:select_outcome:${id}`, {
-              selectedOutcome: id,
-            });
-          }}
-          onHelpDecide={async () => {
-            await sendAi(`__ACTION__:outcome_help_me_decide`);
-          }}
-        />
-      );
-    }
-
-    // 2) Storyboard cards
-    if (toolUi.type === 'storyboard_cards') {
-      if (!toolUi.options || toolUi.options.length === 0) return null;
-
-      return (
-        <StoryboardCards
-          options={toolUi.options}
-          onSelect={async (id: string) => {
-            await sendAi(`__ACTION__:select_storyboard:${id}`, {
-              selectedStoryboard: id,
-            });
-          }}
-        />
-      );
-    }
-
-    // 3) Style bundles
-    if (toolUi.type === 'style_bundles') {
-      if (!toolUi.bundles || toolUi.bundles.length === 0) return null;
-
-      return (
-        <StyleBundleCards
-          bundles={toolUi.bundles}
-          onSelect={async (id: string) => {
-            await sendAi(`__ACTION__:select_style_bundle:${id}`, {
-              selectedStyleBundleId: id,
-              selectedStyleBundle: id,
-            });
-          }}
-        />
-      );
-    }
-
-    // 4) Todos
-    if (toolUi.type === 'todos' && toolUi.items) {
-      return (
-        <div className="mt-4 space-y-2">
-          <span className="text-sm font-medium text-white/80">{toolUi.title || 'Tasks'}</span>
-          <div className="space-y-2">
-            {toolUi.items.map((item: any) => (
-              <div
-                key={item.id}
-                className="p-3 rounded-lg bg-white/5 border border-white/10 flex items-center gap-3"
-              >
-                <div className={cn(
-                  "h-2 w-2 rounded-full",
-                  item.status === 'completed' ? 'bg-green-500' :
-                  item.status === 'in_progress' ? 'bg-yellow-500' :
-                  'bg-gray-500'
-                )} />
-                <span className="text-sm text-white/90">{item.title}</span>
-                {item.priority && (
-                  <span className={cn(
-                    "ml-auto px-2 py-0.5 text-xs rounded-full",
-                    item.priority === 'high' ? 'bg-red-500/20 text-red-400' :
-                    item.priority === 'medium' ? 'bg-yellow-500/20 text-yellow-400' :
-                    'bg-gray-500/20 text-gray-400'
-                  )}>
-                    {item.priority}
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      );
-    }
-
-    // 5) Interactive edit panel (future phase)
-    if (toolUi.type === 'interactive_edit_panel') {
-      return (
-        <div className="mt-4 p-4 rounded-lg bg-white/5 border border-white/10">
-          <span className="text-sm font-medium text-white/80 mb-2 block">
-            {toolUi.title || 'Interactive Edit Panel'}
-          </span>
-          <span className="text-xs text-white/60">
-            Edit panel UI coming soon (Phase 6)
-          </span>
-        </div>
-      );
-    }
-
+  function renderToolUi(toolUi: any) {
+    // All UI rendering now happens via message.choices and message.designSystemPair
+    // This stub prevents build errors from any remaining references
     return null;
   }
 
@@ -1021,13 +920,13 @@ return (
                               return <div key={idx}>{renderToolPart(part)}</div>;
                             }
 
-                            // Check for toolUi in data parts
-                            if (part.type === 'data-toolUi' || part.type === 'data-tool-ui') {
-                              const partToolUi = (part as any)?.data?.toolUi || (part as any)?.toolUi;
-                              if (partToolUi) {
-                                return <div key={idx}>{renderToolUi(partToolUi)}</div>;
-                              }
-                            }
+                            // Check for toolUi in data parts (disabled - now using InlineChoice/DesignSystemPair)
+                            // if (part.type === 'data-toolUi' || part.type === 'data-tool-ui') {
+                            //   const partToolUi = (part as any)?.data?.toolUi || (part as any)?.toolUi;
+                            //   if (partToolUi) {
+                            //     return <div key={idx}>{renderToolUi(partToolUi)}</div>;
+                            //   }
+                            // }
 
                             if (part.type.startsWith('data-')) {
                               // Hide debug JSON by default
@@ -1087,8 +986,8 @@ return (
                             />
                           )}
 
-                          {/* Render toolUi if present on message level */}
-                          {messageToolUi && renderToolUi(messageToolUi)}
+                          {/* Render toolUi if present on message level (disabled - now using InlineChoice/DesignSystemPair) */}
+                          {/* {messageToolUi && renderToolUi(messageToolUi)} */}
                         </div>
                       </div>
                     );
