@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
+import { cn } from "@/lib/utils";
 
 import { createClient } from '@/lib/supabase/client';
 import { useChat } from '@ai-sdk/react';
