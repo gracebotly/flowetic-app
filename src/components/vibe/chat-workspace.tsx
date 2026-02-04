@@ -33,7 +33,8 @@ import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 import { createClient } from '@/lib/supabase/client';
-import { useChat, DefaultChatTransport } from 'ai/react';
+import { useChat } from '@ai-sdk/react';
+import { DefaultChatTransport } from 'ai';
 
 import { MessageInput } from "@/components/vibe/message-input";
 import { PhaseIndicator } from "@/components/vibe/phase-indicator";
