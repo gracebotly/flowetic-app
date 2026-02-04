@@ -39,6 +39,8 @@ import {
   recommendStoryboard,
   validatePreviewReadiness,
 } from "../tools/supatools";
+import { getOutcomes } from "../tools/outcomes";
+import { getStyleBundles } from "../tools/design/getStyleBundles";
 
 export const masterRouterAgent: Agent = new Agent({
   id: "masterRouterAgent",
@@ -228,5 +230,8 @@ export const masterRouterAgent: Agent = new Agent({
     recommendOutcome,
     recommendStoryboard,
     validatePreviewReadiness,
+    // ADD THESE:
+    getOutcomes,
+    getStyleBundles,
   },
 });

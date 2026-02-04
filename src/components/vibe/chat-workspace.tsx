@@ -201,12 +201,12 @@ export function ChatWorkspace({
       tenantId: authContext.tenantId,
       userId: authContext.userId,
       journeyThreadId: threadId,
-      // If these exist in your vibeContext, include them so phase detection works:
-      platformType: (vibeContext as any)?.platformType,
-      sourceId: (vibeContext as any)?.sourceId,
-      entityId: (vibeContext as any)?.entityId,
-      externalId: (vibeContext as any)?.externalId,
-      displayName: (vibeContext as any)?.displayName,
+      // CRITICAL: Include ALL vibeContext fields
+      platformType: vibeContext?.platformType,
+      sourceId: vibeContext?.sourceId,
+      entityId: vibeContext?.entityId,
+      externalId: vibeContext?.externalId,
+      displayName: vibeContext?.displayName,
     };
 
     await sendUiMessage(
