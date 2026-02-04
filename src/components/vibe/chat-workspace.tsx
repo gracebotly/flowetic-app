@@ -39,6 +39,8 @@ import { MessageInput } from "@/components/vibe/message-input";
 import { PhaseIndicator } from "@/components/vibe/phase-indicator";
 import { InlineChoice } from "@/components/vibe/inline-choice";
 import { DesignSystemPair } from "@/components/vibe/design-system-pair";
+import { PremiumInlineChoice } from "@/components/vibe/premium-inline-choice";
+import { PremiumDesignSystemPair } from "@/components/vibe/premium-design-system-pair";
 import { ModelSelector, type ModelId } from "./model-selector";
 import { exportAsMarkdown, exportAsJSON } from "@/lib/export-chat";
 
@@ -1048,7 +1050,7 @@ return (
                             if (part.type.startsWith('data-')) {
                               const partData = (part as any).data || (part as any);
 
-                              // Render outcome choices
+                              // Render outcome choices with premium UI
                               if (part.type === 'data-outcome-choices' || part.type.includes('outcome-choices')) {
                                 const choices = partData.choices || [];
                                 const helpAvailable = partData.helpAvailable;
@@ -1056,32 +1058,28 @@ return (
                                 if (choices.length > 0) {
                                   return (
                                     <div key={idx}>
-                                      <InlineChoice
+                                      <PremiumInlineChoice
                                         choices={choices}
                                         onSelect={async (id: string) => {
-                                          const phase = journeyMode || "recommend";
-                                          let action = "";
-
-                                          if (phase === "recommend") {
-                                            action = `__ACTION__:select_outcome:${id}`;
-                                          } else if (phase === "align") {
-                                            action = `__ACTION__:select_storyboard:${id}`;
-                                          } else {
-                                            action = `__ACTION__:select_${id}`;
-                                          }
-
-                                          await sendAi(action, { [`selected_${phase}`]: id });
+                                          setSelectedOutcome(id as any);
+                                          setJourneyMode("align");
+                                          await sendAi(`I selected ${id}`);
                                         }}
-                                        onHelp={helpAvailable ? async () => {
-                                          await sendAi("__ACTION__:help_me_decide");
-                                        } : undefined}
+                                        helpAvailable={helpAvailable}
+                                        onHelp={
+                                          helpAvailable
+                                            ? async () => {
+                                                await sendAi("Help me decide");
+                                              }
+                                            : undefined
+                                        }
                                       />
                                     </div>
                                   );
                                 }
                               }
 
-                              // Render design system pairs
+                              // Render design system pairs with premium UI
                               if (part.type === 'data-design-system-pair' || part.type.includes('design-system-pair')) {
                                 const systems = partData.systems || [];
                                 const hasMore = partData.hasMore;
@@ -1089,16 +1087,19 @@ return (
                                 if (systems.length === 2) {
                                   return (
                                     <div key={idx}>
-                                      <DesignSystemPair
-                                        systems={systems as [DesignSystem, DesignSystem]}
+                                      <PremiumDesignSystemPair
+                                        systems={systems as [any, any]}
                                         onSelect={async (id: string) => {
-                                          await sendAi(`__ACTION__:select_design_system:${id}`, {
-                                            selectedDesignSystemId: id,
-                                          });
+                                          setSelectedStyleBundleId(id);
+                                          await sendAi(`I selected style ${id}`);
                                         }}
-                                        onShowMore={async () => {
-                                          await sendAi("__ACTION__:show_more_design_systems");
-                                        }}
+                                        onShowMore={
+                                          hasMore
+                                            ? async () => {
+                                                await sendAi("Show different styles");
+                                              }
+                                            : undefined
+                                        }
                                         hasMore={hasMore}
                                       />
                                     </div>
@@ -1122,43 +1123,41 @@ return (
                             return null;
                           })}
 
-                          {/* Render inline choices */}
+                          {/* Render inline choices with premium UI */}
                           {messageChoices && messageChoices.length > 0 && (
-                            <InlineChoice
+                            <PremiumInlineChoice
                               choices={messageChoices}
                               onSelect={async (id: string) => {
-                                // Determine action based on phase
-                                const phase = journeyMode || "recommend";
-                                let action = "";
-
-                                if (phase === "recommend") {
-                                  action = `__ACTION__:select_outcome:${id}`;
-                                } else if (phase === "align") {
-                                  action = `__ACTION__:select_storyboard:${id}`;
-                                } else {
-                                  action = `__ACTION__:select_${id}`;
-                                }
-
-                                await sendAi(action, { [`selected_${phase}`]: id });
+                                setSelectedOutcome(id as any);
+                                setJourneyMode("align");
+                                await sendAi(`I selected ${id}`);
                               }}
-                              onHelp={helpAvailable ? async () => {
-                                await sendAi("__ACTION__:help_me_decide");
-                              } : undefined}
+                              helpAvailable={helpAvailable}
+                              onHelp={
+                                helpAvailable
+                                  ? async () => {
+                                      await sendAi("Help me decide");
+                                    }
+                                  : undefined
+                              }
                             />
                           )}
 
-                          {/* Render design system pairs */}
+                          {/* Render design system pairs with premium UI */}
                           {messageDesignSystemPair && messageDesignSystemPair.length === 2 && (
-                            <DesignSystemPair
-                              systems={messageDesignSystemPair as [DesignSystem, DesignSystem]}
+                            <PremiumDesignSystemPair
+                              systems={messageDesignSystemPair as [any, any]}
                               onSelect={async (id: string) => {
-                                await sendAi(`__ACTION__:select_design_system:${id}`, {
-                                  selectedDesignSystemId: id,
-                                });
+                                setSelectedStyleBundleId(id);
+                                await sendAi(`I selected style ${id}`);
                               }}
-                              onShowMore={async () => {
-                                await sendAi("__ACTION__:show_more_design_systems");
-                              }}
+                              onShowMore={
+                                hasMore
+                                  ? async () => {
+                                      await sendAi("Show different styles");
+                                    }
+                                  : undefined
+                              }
                               hasMore={hasMore}
                             />
                           )}
@@ -1175,17 +1174,23 @@ return (
                 {toolUi && (
                   <div className="mt-3">
                     {toolUi.type === "outcome_choices" && toolUi.choices && (
-                      <InlineChoice
+                      <PremiumInlineChoice
                         choices={toolUi.choices}
                         onSelect={async (id: string) => {
                           setSelectedOutcome(id as any);
                           setToolUi(null);
-                          await sendMessage(`__ACTION__:select_outcome:${id}`);
+                          setJourneyMode("align");
+                          await sendMessage(`I selected ${id}`);
                         }}
-                        onHelp={toolUi.helpAvailable ? async () => {
-                          setToolUi(null);
-                          await sendMessage("__ACTION__:outcome_help_me_decide");
-                        } : undefined}
+                        helpAvailable={toolUi.helpAvailable}
+                        onHelp={
+                          toolUi.helpAvailable
+                            ? async () => {
+                                setToolUi(null);
+                                await sendMessage("Help me decide");
+                              }
+                            : undefined
+                        }
                       />
                     )}
 
