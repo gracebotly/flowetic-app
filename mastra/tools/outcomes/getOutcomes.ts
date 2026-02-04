@@ -72,7 +72,7 @@ export const getOutcomes = createTool({
       dedupedMetrics: z.array(z.string()).optional(),
     }),
   }),
-  execute: async (inputData) => {
+  execute: async (inputData, context) => {
     const { platformType, category, audience, metrics } = inputData;
 
     // Filter catalog
@@ -93,6 +93,33 @@ export const getOutcomes = createTool({
 
     // Note: Metrics include both raw events and derived aggregations
     // (e.g., call_volume, success_rate are calculated from raw events)
+
+    // Stream custom UI data for outcome choices
+    const dashboardOutcome = filtered.find((o) => o.category === "dashboard");
+    const productOutcome = filtered.find((o) => o.category === "product");
+
+    if (dashboardOutcome && productOutcome && context?.writer) {
+      await context.writer.custom({
+        type: "data-outcome-choices",
+        choices: [
+          {
+            id: dashboardOutcome.id,
+            label: "Dashboard",
+            emoji: "📊",
+            description: dashboardOutcome.description,
+            tags: dashboardOutcome.tags.slice(0, 3),
+          },
+          {
+            id: productOutcome.id,
+            label: "Product",
+            emoji: "🚀",
+            description: productOutcome.description,
+            tags: productOutcome.tags.slice(0, 3),
+          },
+        ],
+        helpAvailable: true,
+      });
+    }
 
     return {
       outcomes: filtered,

@@ -916,6 +916,11 @@ return (
                               );
                             }
 
+                            // Hide tool-call and tool-result parts from user view
+                            if (part.type === 'tool-call' || part.type === 'tool-result') {
+                              return null;
+                            }
+
                             if (part.type.startsWith('tool-')) {
                               return <div key={idx}>{renderToolPart(part)}</div>;
                             }
@@ -929,14 +934,74 @@ return (
                             // }
 
                             if (part.type.startsWith('data-')) {
-                              // Hide debug JSON by default
+                              const partData = (part as any).data || (part as any);
+
+                              // Render outcome choices
+                              if (part.type === 'data-outcome-choices' || part.type.includes('outcome-choices')) {
+                                const choices = partData.choices || [];
+                                const helpAvailable = partData.helpAvailable;
+
+                                if (choices.length > 0) {
+                                  return (
+                                    <div key={idx}>
+                                      <InlineChoice
+                                        choices={choices}
+                                        onSelect={async (id: string) => {
+                                          const phase = journeyMode || "recommend";
+                                          let action = "";
+
+                                          if (phase === "recommend") {
+                                            action = `__ACTION__:select_outcome:${id}`;
+                                          } else if (phase === "align") {
+                                            action = `__ACTION__:select_storyboard:${id}`;
+                                          } else {
+                                            action = `__ACTION__:select_${id}`;
+                                          }
+
+                                          await sendAi(action, { [`selected_${phase}`]: id });
+                                        }}
+                                        onHelp={helpAvailable ? async () => {
+                                          await sendAi("__ACTION__:help_me_decide");
+                                        } : undefined}
+                                      />
+                                    </div>
+                                  );
+                                }
+                              }
+
+                              // Render design system pairs
+                              if (part.type === 'data-design-system-pair' || part.type.includes('design-system-pair')) {
+                                const systems = partData.systems || [];
+                                const hasMore = partData.hasMore;
+
+                                if (systems.length === 2) {
+                                  return (
+                                    <div key={idx}>
+                                      <DesignSystemPair
+                                        systems={systems as [DesignSystem, DesignSystem]}
+                                        onSelect={async (id: string) => {
+                                          await sendAi(`__ACTION__:select_design_system:${id}`, {
+                                            selectedDesignSystemId: id,
+                                          });
+                                        }}
+                                        onShowMore={async () => {
+                                          await sendAi("__ACTION__:show_more_design_systems");
+                                        }}
+                                        hasMore={hasMore}
+                                      />
+                                    </div>
+                                  );
+                                }
+                              }
+
+                              // Hide other data parts by default
                               if (!showDebug) return null;
 
                               return (
                                 <div key={idx} className="mt-2 rounded-lg border border-white/10 bg-black/20 p-2 text-xs text-white/80">
                                   <div className="text-white/60">[DEBUG] {part.type}</div>
                                   <pre className="overflow-auto whitespace-pre-wrap">
-                                    {JSON.stringify((part as any).data, null, 2)}
+                                    {JSON.stringify(partData, null, 2)}
                                   </pre>
                                 </div>
                               );
