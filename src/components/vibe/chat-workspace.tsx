@@ -41,6 +41,7 @@ import { PhaseIndicator } from "@/components/vibe/phase-indicator";
 import { InlineChoice } from "@/components/vibe/inline-choice";
 import { DesignSystemPair } from "@/components/vibe/design-system-pair";
 import { ReasoningBlock } from "@/components/vibe/ReasoningBlock";
+import { ErrorDisplay } from "@/components/vibe/ErrorDisplay";
 import { ModelSelector, type ModelId } from "./model-selector";
 import { exportAsMarkdown, exportAsJSON } from "@/lib/export-chat";
 
@@ -298,14 +299,14 @@ export function ChatWorkspace({
 
     // ERROR HANDLING: Check if output is an error
     if (output?.error || output?.code?.includes('ERROR')) {
+      const errorMessage = output.error || output.message || JSON.stringify(output, null, 2) || 'Unknown error';
+      const toolName = type.replace('tool-', '').replace(/_/g, ' ');
+
       return (
-        <div className="mt-2 rounded-lg border border-red-500/30 bg-red-500/10 p-3">
-          <div className="flex items-center gap-2 text-sm font-medium text-red-200 mb-1">
-            <span className="text-red-400">⚠</span>
-            Tool Error: {type.replace('tool-', '')}
-          </div>
-          <div className="text-xs text-red-300">{output.error || output.message || 'Unknown error'}</div>
-        </div>
+        <ErrorDisplay
+          error={errorMessage}
+          title={`Tool Error: ${toolName}`}
+        />
       );
     }
 
@@ -1235,9 +1236,10 @@ return (
                 )}
 
                 {uiError ? (
-                  <div className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
-                    {String((uiError as any)?.message || uiError)}
-                  </div>
+                  <ErrorDisplay
+                    error={String((uiError as any)?.message || uiError)}
+                    title="Chat Error"
+                  />
                 ) : null}
               </>
             )}
