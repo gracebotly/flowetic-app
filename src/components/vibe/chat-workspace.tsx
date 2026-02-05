@@ -40,6 +40,7 @@ import { MessageInput } from "@/components/vibe/message-input";
 import { PhaseIndicator } from "@/components/vibe/phase-indicator";
 import { InlineChoice } from "@/components/vibe/inline-choice";
 import { DesignSystemPair } from "@/components/vibe/design-system-pair";
+import { ReasoningBlock } from "@/components/vibe/ReasoningBlock";
 import { ModelSelector, type ModelId } from "./model-selector";
 import { exportAsMarkdown, exportAsJSON } from "@/lib/export-chat";
 
@@ -204,7 +205,10 @@ export function ChatWorkspace({
   const [isListening, setIsListening] = useState(false);
   const [isChatExpanded, setIsChatExpanded] = useState(false);
   const [selectedModel, setSelectedModel] = useState<ModelId>("glm-4.7");
-  
+
+  // Guard against concurrent init + user sends
+  const initSendInFlight = useRef(false);
+
   const { messages: uiMessages, sendMessage: sendUiMessage, status: uiStatus, error: uiError } = useChat({
     transport: new DefaultChatTransport({
       api: '/api/chat',
@@ -570,6 +574,15 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
     checkBackend();
   }, [authContext.userId, authContext.tenantId]);
 
+  // Auto-expand chat for Phase 1 & 2
+  useEffect(() => {
+    if (journeyMode === 'recommend' || journeyMode === 'align') {
+      setIsChatExpanded(true);
+    } else {
+      setIsChatExpanded(false);
+    }
+  }, [journeyMode]);
+
   useEffect(() => {
     async function initFromSession() {
       if (!authContext.userId || !authContext.tenantId) return;
@@ -600,6 +613,7 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
 
       try {
         // Kick off Phase 1 through AI SDK
+        initSendInFlight.current = true;
         await sendAi("System: start Phase 1 outcome selection.", {
           userId: authContext.userId,
           tenantId: authContext.tenantId,
@@ -620,6 +634,7 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
         addLog("error", "Failed to start Phase 1", e?.message || "AI_SDK_INIT_FAILED");
       }
 
+      initSendInFlight.current = false;
       setVibeInitDone(true);
     }
 
@@ -797,6 +812,7 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
     const trimmed = text.trim();
     if (!trimmed) return;
     if (uiStatus === 'streaming') return;
+    if (initSendInFlight.current) return; // Block sends while system init is in flight
 
     // Persist user message (keep existing behavior)
     try {
@@ -945,38 +961,57 @@ return (
 
           {/* Chat messages */}
           <div ref={chatContainerRef} className="flex-1 overflow-y-auto px-4 py-6">
-            {messages.length === 0 ? (
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5 }}
-                className="flex items-start gap-4 p-6 rounded-xl bg-gradient-to-r from-indigo-500/5 to-purple-500/5 border border-indigo-500/20"
-              >
-                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/50 flex-shrink-0">
-                  <Sparkles className="w-6 h-6 text-white" />
+            {dedupedMessages.length === 0 ? (
+              <div className="flex items-center justify-center h-32">
+                <div className="flex items-center gap-2 text-sm text-gray-400">
+                  <motion.div
+                    className="w-2.5 h-2.5 bg-indigo-400 rounded-full"
+                    animate={{ scale: [1, 1.2, 1] }}
+                    transition={{ duration: 1.5, repeat: Infinity }}
+                  />
+                  <span>Starting session...</span>
                 </div>
-                <div className="flex-1">
-                  <h3 className="font-semibold text-gray-900 mb-1">Dashboard Assistant</h3>
-                  <p className="text-sm text-gray-600">
-                    Start chatting to build or edit your client dashboards.
-                  </p>
-                </div>
-              </motion.div>
+              </div>
             ) : (
               <>
                 <div className="space-y-3">
                   {dedupedMessages.map((m, messageIdx) => {
                     const isUser = m.role === 'user';
 
-                    return (
-                      <div key={`${m.id}-${messageIdx}`} className={isUser ? 'text-right mb-4' : 'text-left mb-4'}>
-                        <div className={cn(
-                          "inline-block max-w-[90%] rounded-xl px-4 py-2",
-                          isUser ? "bg-indigo-600 text-white" : "bg-gray-100 text-gray-900"
-                        )}>
-                          {m.parts?.map((part, idx) => {
+                    // Hide internal system init messages from display
+                    if (isUser && m.parts?.some(p => p.type === 'text' && (p as any).text?.startsWith('System:'))) {
+                      return null;
+                    }
 
-                            // ✅ RENDER: Custom outcome choices
+                    // For assistant messages, render reasoning blocks separately
+                    if (!isUser) {
+                      const isLastMessage = messageIdx === dedupedMessages.length - 1;
+                      const isCurrentlyStreaming = uiStatus === 'streaming' && isLastMessage;
+
+                      return (
+                        <div key={`${m.id}-${messageIdx}`} className="text-left mb-4">
+                          {/* Render reasoning blocks FIRST */}
+                          {m.parts?.map((part, idx) => {
+                            if (part.type === 'reasoning' && (part as any).text) {
+                              return (
+                                <ReasoningBlock
+                                  key={`reasoning-${idx}`}
+                                  text={(part as any).text}
+                                  isStreaming={isCurrentlyStreaming}
+                                  thinkingDuration={undefined}
+                                />
+                              );
+                            }
+                            return null;
+                          })}
+
+                          {/* Then render the main message content */}
+                          <div className={cn(
+                            "inline-block max-w-[90%] rounded-xl px-4 py-2 bg-gray-100 text-gray-900"
+                          )}>
+                            {m.parts?.map((part, idx) => {
+
+                              // ✅ RENDER: Custom outcome choices
                             if (part.type === 'data-outcome-choices') {
                               return (
                                 <InlineChoice
@@ -1039,20 +1074,46 @@ return (
                               return null;
                             }
 
-                            // ✅ HIDE: Step-start and reasoning
-                            if (part.type === 'step-start' || part.type === 'reasoning') {
-                              return null;
-                            }
+                              // ✅ HIDE: Step-start
+                              if (part.type === 'step-start') {
+                                return null;
+                              }
 
-                            // ✅ SHOW: Text content (THIS IS THE CRITICAL FIX!)
+                              // ✅ HIDE: Reasoning (already rendered above)
+                              if (part.type === 'reasoning') {
+                                return null;
+                              }
+
+                              // ✅ SHOW: Text content
+                              if (part.type === 'text') {
+                                return (
+                                  <div key={idx} className="whitespace-pre-wrap prose prose-sm max-w-none prose-gray">
+                                    {(part as any).text}
+                                  </div>
+                                );
+                              }
+
+                              return null;
+                            })}
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    // For user messages, render normally
+                    return (
+                      <div key={`${m.id}-${messageIdx}`} className="text-right mb-4">
+                        <div className={cn(
+                          "inline-block max-w-[90%] rounded-xl px-4 py-2 bg-indigo-600 text-white"
+                        )}>
+                          {m.parts?.map((part, idx) => {
                             if (part.type === 'text') {
                               return (
-                                <div key={idx} className="whitespace-pre-wrap prose prose-sm max-w-none prose-gray">
-                                  {part.text}
+                                <div key={idx} className="whitespace-pre-wrap">
+                                  {(part as any).text}
                                 </div>
                               );
                             }
-
                             return null;
                           })}
                         </div>

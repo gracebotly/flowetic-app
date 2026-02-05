@@ -181,7 +181,7 @@ export async function POST(req: Request) {
         params: enhancedParams,
         sendStart: true,        // ← CRITICAL: Enable start events
         sendFinish: true,       // ← CRITICAL: Enable finish events
-        sendReasoning: false,   // ← Keep reasoning hidden
+        sendReasoning: true,    // ← Enable reasoning display
         sendSources: false,     // ← Keep sources hidden
         defaultOptions: {
           // Hard cap concurrency to avoid Z.ai 1302 throttling
