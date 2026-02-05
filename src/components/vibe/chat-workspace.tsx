@@ -37,7 +37,7 @@ import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 
 import { MessageInput } from "@/components/vibe/message-input";
-import { StatusBadge } from "@/components/vibe/status-badge";
+import { PhaseIndicator } from "@/components/vibe/phase-indicator";
 import { InlineChoice } from "@/components/vibe/inline-choice";
 import { DesignSystemPair } from "@/components/vibe/design-system-pair";
 import { ReasoningBlock } from "@/components/vibe/ReasoningBlock";
@@ -191,19 +191,6 @@ function getRightTabForToolUi(next: ToolUiPayload): ViewMode {
   if (next.type === "interactive_edit_panel") return "preview";
   // style bundles and todos are "planning/decision" items
   return "terminal";
-}
-
-function getJourneyStatus(mode: JourneyMode): "selecting" | "analyzing" | "planning" | "designing" | "building" | "refining" | "ready" {
-  const mapping = {
-    select_entity: "selecting",
-    recommend: "analyzing",
-    align: "planning",
-    style: "designing",
-    build_preview: "building",
-    interactive_edit: "refining",
-    deploy: "ready",
-  } as const;
-  return mapping[mode] || "analyzing";
 }
 
 export function ChatWorkspace({
@@ -941,10 +928,13 @@ return (
             </div>
           )}
 
-          {/* Status Badge */}
-          <div className="border-b border-gray-200 px-4 py-3 flex items-center justify-between">
-            <StatusBadge status={getJourneyStatus(journeyMode)} />
+          {/* Phase Progress Indicator */}
+          <div className="border-b border-gray-200 px-4 py-3">
+            <PhaseIndicator currentMode={journeyMode} />
+          </div>
 
+          {/* Expand button - show only in Phase 1 & 2 (separate div) */}
+          <div className="border-b border-gray-200 px-4 py-2 flex justify-end">
             {/* Expand button - show only in Phase 1 & 2 */}
             {(journeyMode === "recommend" || journeyMode === "align") && (
               <button
@@ -1003,20 +993,28 @@ return (
 
                       return (
                         <div key={`${m.id}-${messageIdx}`} className="text-left mb-4">
-                          {/* Render reasoning blocks FIRST */}
-                          {m.parts?.map((part, idx) => {
-                            if (part.type === 'reasoning' && (part as any).text) {
-                              return (
-                                <ReasoningBlock
-                                  key={`reasoning-${idx}`}
-                                  text={(part as any).text}
-                                  isStreaming={isCurrentlyStreaming}
-                                  thinkingDuration={undefined}
-                                />
-                              );
-                            }
-                            return null;
-                          })}
+                          {/* Render single reasoning block (combine all reasoning parts) */}
+                          {(() => {
+                            const reasoningParts = m.parts?.filter(
+                              (part) => part.type === 'reasoning' && (part as any).text
+                            );
+
+                            if (!reasoningParts || reasoningParts.length === 0) return null;
+
+                            // Combine all reasoning text into one block
+                            const combinedReasoningText = reasoningParts
+                              .map((part) => (part as any).text)
+                              .join('\n\n---\n\n');
+
+                            return (
+                              <ReasoningBlock
+                                key={`reasoning-combined-${m.id}`}
+                                text={combinedReasoningText}
+                                isStreaming={isCurrentlyStreaming}
+                                thinkingDuration={undefined}
+                              />
+                            );
+                          })()}
 
                           {/* Then render the main message content */}
                           <div className={cn(
