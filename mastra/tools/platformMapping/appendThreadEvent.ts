@@ -13,6 +13,7 @@ export const appendThreadEvent = createTool({
   inputSchema: z.object({
     threadId: z.string(),
     interfaceId: z.string().uuid().optional(),
+    sourceId: z.string().uuid().optional().describe("Source ID for the event (required if metadata.sourceId not provided)"),
     runId: z.string().uuid().optional(),
     type: z.enum(["state", "tool_event", "error", "info"]),
     message: z.string().min(1),
@@ -41,13 +42,17 @@ export const appendThreadEvent = createTool({
     const { tenantId } = extractTenantContext(context);
     const supabase = createAuthenticatedClient(accessToken);
 
-    const { threadId, interfaceId, runId, type, message, metadata, actionButton } = inputData;
+    const { threadId, interfaceId, sourceId: directSourceId, runId, type, message, metadata, actionButton } = inputData;
+
+    // Use direct sourceId parameter, fallback to metadata.sourceId
+    const sourceId = directSourceId ?? (metadata?.sourceId as string | undefined);
 
     const { data, error } = await supabase
       .from("events")
       .insert({
         tenant_id: tenantId,
         interface_id: interfaceId ?? null,
+        source_id: sourceId ?? null,
         run_id: runId ?? null,
         type,
         name: "thread_event",

@@ -88,13 +88,13 @@ export const generateSchemaSummaryFromEvents = createTool({
 
     const { data: existingSummary, error: existingError } = await supabase
       .from("interface_schemas")
-      .select("schema_json")
+      .select("schema_summary")
       .eq("source_id", sourceId)
       .maybeSingle();
 
     if (existingError) throw new Error(existingError.message);
 
-    let schemaJson = existingSummary?.schema_json;
+    let schemaJson = existingSummary?.schema_summary;
 
     if (!schemaJson) {
       schemaJson = {
@@ -104,7 +104,7 @@ export const generateSchemaSummaryFromEvents = createTool({
         lastUpdated: new Date().toISOString(),
       };
     } else {
-      schemaJson = existingSummary?.schema_json ?? {
+      schemaJson = existingSummary?.schema_summary ?? {
         fields: [],
         eventTypes: [],
         eventCounts: {},
@@ -113,13 +113,37 @@ export const generateSchemaSummaryFromEvents = createTool({
       schemaJson.lastUpdated = new Date().toISOString();
     }
 
-    const { error: upsertError } = await supabase
+    // First, check if a record exists for this source
+    const { data: existing } = await supabase
       .from("interface_schemas")
-      .upsert({
-        source_id: sourceId,
-        schema_json: schemaJson,
-        tenant_id: tenantId,
-      });
+      .select("id")
+      .eq("source_id", sourceId)
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
+
+    let upsertError;
+
+    if (existing) {
+      // Update existing record
+      const { error } = await supabase
+        .from("interface_schemas")
+        .update({
+          schema_summary: schemaJson,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", existing.id);
+      upsertError = error;
+    } else {
+      // Insert new record
+      const { error } = await supabase
+        .from("interface_schemas")
+        .insert({
+          source_id: sourceId,
+          schema_summary: schemaJson,
+          tenant_id: tenantId,
+        });
+      upsertError = error;
+    }
 
     if (upsertError) throw new Error(upsertError.message);
 
