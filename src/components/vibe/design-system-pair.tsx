@@ -56,7 +56,20 @@ export function DesignSystemPair({ systems, onSelect, onShowMore, hasMore = true
             <div className="space-y-2 text-xs">
               <div className="flex items-start gap-2">
                 <span className="text-white/40 min-w-[70px]">Colors:</span>
-                <span className="text-white/70">{system.colors}</span>
+                <div className="flex-1">
+                  {/* Color Swatches */}
+                  <div className="flex items-center gap-1.5 mb-1">
+                    {system.colors?.split(' / ').map((hex: string, i: number) => (
+                      <div
+                        key={i}
+                        className="w-6 h-6 rounded-full border border-white/20 shadow-sm"
+                        style={{ backgroundColor: hex.trim() }}
+                        title={hex.trim()}
+                      />
+                    ))}
+                  </div>
+                  <span className="text-white/50 text-[10px]">{system.colors}</span>
+                </div>
               </div>
               <div className="flex items-start gap-2">
                 <span className="text-white/40 min-w-[70px]">Style:</span>

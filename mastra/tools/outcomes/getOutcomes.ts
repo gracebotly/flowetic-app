@@ -50,24 +50,26 @@ export const getOutcomes = createTool({
           // Then stream custom UI
           await context.writer.custom({
             type: "data-outcome-choices",
-            choices: [
-              {
-                id: dashboardOutcome.id,
-                label: "Dashboard",
-                emoji: "📊",
-                description: dashboardOutcome.description,
-                tags: dashboardOutcome.tags?.slice(0, 3) || [],
-              },
-              {
-                id: productOutcome.id,
-                label: "Product",
-                emoji: "🚀",
-                description: productOutcome.description,
-                tags: productOutcome.tags?.slice(0, 3) || [],
-              },
-            ],
-            helpAvailable: true,
-          } as any);
+            data: {
+              choices: [
+                {
+                  id: dashboardOutcome.id,
+                  label: "Dashboard",
+                  emoji: "📊",
+                  description: dashboardOutcome.description,
+                  tags: dashboardOutcome.tags?.slice(0, 3) || [],
+                },
+                {
+                  id: productOutcome.id,
+                  label: "Product",
+                  emoji: "🚀",
+                  description: productOutcome.description,
+                  tags: productOutcome.tags?.slice(0, 3) || [],
+                },
+              ],
+              helpAvailable: true,
+            },
+          });
 
           console.log('[getOutcomes] Custom UI streamed successfully');
         } catch (streamError) {

@@ -208,43 +208,58 @@ export function ChatWorkspace({
   const { messages: uiMessages, sendMessage: sendUiMessage, status: uiStatus, error: uiError } = useChat({
     transport: new DefaultChatTransport({
       api: '/api/chat',
-      prepareSendMessagesRequest({ messages }) {
-        return {
-          body: {
-            // AI SDK v5: All fields go inside body
-            messages,
-            tenantId: authContext.tenantId,
-            userId: authContext.userId,
-            journeyThreadId: threadId,
-            selectedModel,
-            // Vibe context fields
-            platformType: vibeContext?.platformType,
-            sourceId: vibeContext?.sourceId,
-            entityId: vibeContext?.entityId,
-            externalId: vibeContext?.externalId,
-            displayName: vibeContext?.displayName,
-            entityKind: vibeContext?.entityKind,
-            skillMD: vibeContext?.skillMD,
-            // Journey state
-            phase: journeyMode,
-            selectedOutcome,
-            selectedStoryboard,
-            selectedStyleBundleId,
-            densityPreset,
-            paletteOverrideId,
-          },
-        };
-      },
     }),
   });
 
+  // Deduplicate messages by ID (workaround for Mastra + AI SDK v5 bug #9370)
+  // This filters out duplicate message IDs, keeping the latest version of each
+  const dedupedMessages = useMemo(() => {
+    const seen = new Map<string, (typeof uiMessages)[number]>();
+    for (const msg of uiMessages) {
+      seen.set(msg.id, msg);
+    }
+    return Array.from(seen.values());
+  }, [uiMessages]);
+
   async function sendAi(text: string, extraData?: Record<string, any>) {
-    // AI SDK v5: sendMessage expects a UIMessage object
-    // All context (tenantId, userId, etc.) is handled by DefaultChatTransport
-    await sendUiMessage({
-      role: 'user',
-      parts: [{ type: 'text', text }],
-    });
+    // AI SDK v5: Pass dynamic context in the second argument of sendMessage
+    // Request-level options are evaluated at call time, avoiding stale closures
+
+    if (!authContext.tenantId || !authContext.userId) {
+      console.warn('[sendAi] Auth not ready - tenantId or userId missing');
+      return;
+    }
+
+    const payload = {
+      tenantId: authContext.tenantId,
+      userId: authContext.userId,
+      journeyThreadId: threadId,
+      selectedModel,
+      // Vibe context fields
+      platformType: vibeContext?.platformType,
+      sourceId: vibeContext?.sourceId,
+      entityId: vibeContext?.entityId,
+      externalId: vibeContext?.externalId,
+      displayName: vibeContext?.displayName,
+      entityKind: vibeContext?.entityKind,
+      skillMD: vibeContext?.skillMD,
+      // Journey state
+      phase: journeyMode,
+      selectedOutcome,
+      selectedStoryboard,
+      selectedStyleBundleId,
+      densityPreset,
+      paletteOverrideId,
+      ...extraData,
+    };
+
+    await sendUiMessage(
+      {
+        role: 'user',
+        parts: [{ type: 'text', text }],
+      },
+      { body: payload }
+    );
   }
 
   /**
@@ -388,7 +403,7 @@ export function ChatWorkspace({
   const [vibeInitDone, setVibeInitDone] = useState(false);
 
   const [journeyMode, setJourneyMode] = useState<JourneyMode>("select_entity");
-  const [selectedOutcome, setSelectedOutcome] = useState<"dashboard" | "tool" | "form" | "product" | null>(null);
+  const [selectedOutcome, setSelectedOutcome] = useState<"dashboard" | "product" | null>(null);
   const [selectedStoryboard, setSelectedStoryboard] = useState<string | null>(null);
   const [selectedStyleBundleId, setSelectedStyleBundleId] = useState<string | null>(null);
   const [densityPreset, setDensityPreset] = useState<"compact" | "comfortable" | "spacious">("comfortable");
@@ -688,7 +703,13 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
 
     // restore journey fields
     if (s.mode) setJourneyMode(s.mode);
-    if (typeof s.selected_outcome !== "undefined") setSelectedOutcome(s.selected_outcome);
+    if (typeof s.selected_outcome !== "undefined") {
+      // Validate that the value matches the agent schema
+      const validOutcomes: Array<"dashboard" | "product"> = ["dashboard", "product"];
+      if (validOutcomes.includes(s.selected_outcome as any)) {
+        setSelectedOutcome(s.selected_outcome);
+      }
+    }
     if (typeof s.selected_storyboard !== "undefined") setSelectedStoryboard(s.selected_storyboard);
     if (typeof s.selected_style_bundle_id !== "undefined") setSelectedStyleBundleId(s.selected_style_bundle_id);
     if (typeof s.density_preset !== "undefined") setDensityPreset(s.density_preset);
@@ -944,14 +965,14 @@ return (
             ) : (
               <>
                 <div className="space-y-3">
-                  {uiMessages.map((m, messageIdx) => {
+                  {dedupedMessages.map((m, messageIdx) => {
                     const isUser = m.role === 'user';
 
                     return (
                       <div key={`${m.id}-${messageIdx}`} className={isUser ? 'text-right mb-4' : 'text-left mb-4'}>
                         <div className={cn(
                           "inline-block max-w-[90%] rounded-xl px-4 py-2",
-                          isUser ? "bg-indigo-600 text-white" : "bg-white/10 text-white"
+                          isUser ? "bg-indigo-600 text-white" : "bg-gray-100 text-gray-900"
                         )}>
                           {m.parts?.map((part, idx) => {
 
@@ -962,9 +983,20 @@ return (
                                   key={idx}
                                   choices={(part as any).data?.choices || (part as any).choices || []}
                                   onSelect={async (id) => {
-                                    setSelectedOutcome(id as "dashboard" | "product" | "tool" | "form");
+                                    // Map outcome IDs to their categories for the agent schema
+                                    // The agent expects 'dashboard' or 'product', not the specific outcome ID
+                                    const categoryMap: Record<string, "dashboard" | "product"> = {
+                                      workflow_ops: "dashboard",
+                                      call_analytics: "dashboard",
+                                      voice_analytics: "dashboard",
+                                      workflow_product: "product",
+                                      voice_product: "product",
+                                    };
+                                    const category = categoryMap[id] || (id.includes("product") ? "product" : "dashboard");
+
+                                    setSelectedOutcome(category);
                                     setJourneyMode("align");
-                                    await sendAi(`I selected ${id}`);
+                                    await sendAi(`I selected ${id}`);  // Still send the specific ID in the message
                                   }}
                                   onHelp={
                                     (part as any).data?.helpAvailable || (part as any).helpAvailable
@@ -1015,7 +1047,7 @@ return (
                             // ✅ SHOW: Text content (THIS IS THE CRITICAL FIX!)
                             if (part.type === 'text') {
                               return (
-                                <div key={idx} className="whitespace-pre-wrap prose prose-sm max-w-none prose-invert">
+                                <div key={idx} className="whitespace-pre-wrap prose prose-sm max-w-none prose-gray">
                                   {part.text}
                                 </div>
                               );
@@ -1029,10 +1061,10 @@ return (
                   })}
 
                   {/* Show "Thinking..." when streaming OR when last message has no text */}
-                  {(uiStatus === 'streaming' || (uiMessages.length > 0 && uiMessages[uiMessages.length - 1].role === 'assistant' && !uiMessages[uiMessages.length - 1].parts?.some(p => p.type === 'text'))) && (
-                    <div className="flex items-center gap-2 text-sm text-white/60 my-2">
+                  {(uiStatus === 'streaming' || (dedupedMessages.length > 0 && dedupedMessages[dedupedMessages.length - 1].role === 'assistant' && !dedupedMessages[dedupedMessages.length - 1].parts?.some(p => p.type === 'text'))) && (
+                    <div className="flex items-center gap-2 text-sm text-gray-500 my-2">
                       <motion.div
-                        className="w-3 h-3 bg-white/40 rounded-full"
+                        className="w-3 h-3 bg-indigo-500 rounded-full"
                         animate={{ scale: [1, 1.2, 1] }}
                         transition={{ duration: 1.5, repeat: Infinity }}
                       />
@@ -1048,7 +1080,17 @@ return (
                       <InlineChoice
                         choices={toolUi.choices}
                         onSelect={async (id: string) => {
-                          setSelectedOutcome(id as any);
+                          // Map outcome IDs to their categories for the agent schema
+                          const categoryMap: Record<string, "dashboard" | "product"> = {
+                            workflow_ops: "dashboard",
+                            call_analytics: "dashboard",
+                            voice_analytics: "dashboard",
+                            workflow_product: "product",
+                            voice_product: "product",
+                          };
+                          const category = categoryMap[id] || (id.includes("product") ? "product" : "dashboard");
+
+                          setSelectedOutcome(category);
                           setToolUi(null);
                           await sendMessage(`__ACTION__:select_outcome:${id}`);
                         }}
