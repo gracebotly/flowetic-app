@@ -40,6 +40,7 @@ import { MessageInput } from "@/components/vibe/message-input";
 import { PhaseIndicator } from "@/components/vibe/phase-indicator";
 import { InlineChoice } from "@/components/vibe/inline-choice";
 import { DesignSystemPair } from "@/components/vibe/design-system-pair";
+import { ReasoningBlock } from "@/components/vibe/ReasoningBlock";
 import { ModelSelector, type ModelId } from "./model-selector";
 import { exportAsMarkdown, exportAsJSON } from "@/lib/export-chat";
 
@@ -573,6 +574,15 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
     checkBackend();
   }, [authContext.userId, authContext.tenantId]);
 
+  // Auto-expand chat for Phase 1 & 2
+  useEffect(() => {
+    if (journeyMode === 'recommend' || journeyMode === 'align') {
+      setIsChatExpanded(true);
+    } else {
+      setIsChatExpanded(false);
+    }
+  }, [journeyMode]);
+
   useEffect(() => {
     async function initFromSession() {
       if (!authContext.userId || !authContext.tenantId) return;
@@ -973,15 +983,35 @@ return (
                       return null;
                     }
 
-                    return (
-                      <div key={`${m.id}-${messageIdx}`} className={isUser ? 'text-right mb-4' : 'text-left mb-4'}>
-                        <div className={cn(
-                          "inline-block max-w-[90%] rounded-xl px-4 py-2",
-                          isUser ? "bg-indigo-600 text-white" : "bg-gray-100 text-gray-900"
-                        )}>
-                          {m.parts?.map((part, idx) => {
+                    // For assistant messages, render reasoning blocks separately
+                    if (!isUser) {
+                      const isLastMessage = messageIdx === dedupedMessages.length - 1;
+                      const isCurrentlyStreaming = uiStatus === 'streaming' && isLastMessage;
 
-                            // ✅ RENDER: Custom outcome choices
+                      return (
+                        <div key={`${m.id}-${messageIdx}`} className="text-left mb-4">
+                          {/* Render reasoning blocks FIRST */}
+                          {m.parts?.map((part, idx) => {
+                            if (part.type === 'reasoning' && (part as any).text) {
+                              return (
+                                <ReasoningBlock
+                                  key={`reasoning-${idx}`}
+                                  text={(part as any).text}
+                                  isStreaming={isCurrentlyStreaming}
+                                  thinkingDuration={undefined}
+                                />
+                              );
+                            }
+                            return null;
+                          })}
+
+                          {/* Then render the main message content */}
+                          <div className={cn(
+                            "inline-block max-w-[90%] rounded-xl px-4 py-2 bg-gray-100 text-gray-900"
+                          )}>
+                            {m.parts?.map((part, idx) => {
+
+                              // ✅ RENDER: Custom outcome choices
                             if (part.type === 'data-outcome-choices') {
                               return (
                                 <InlineChoice
@@ -1044,20 +1074,46 @@ return (
                               return null;
                             }
 
-                            // ✅ HIDE: Step-start and reasoning
-                            if (part.type === 'step-start' || part.type === 'reasoning') {
-                              return null;
-                            }
+                              // ✅ HIDE: Step-start
+                              if (part.type === 'step-start') {
+                                return null;
+                              }
 
-                            // ✅ SHOW: Text content (THIS IS THE CRITICAL FIX!)
+                              // ✅ HIDE: Reasoning (already rendered above)
+                              if (part.type === 'reasoning') {
+                                return null;
+                              }
+
+                              // ✅ SHOW: Text content
+                              if (part.type === 'text') {
+                                return (
+                                  <div key={idx} className="whitespace-pre-wrap prose prose-sm max-w-none prose-gray">
+                                    {(part as any).text}
+                                  </div>
+                                );
+                              }
+
+                              return null;
+                            })}
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    // For user messages, render normally
+                    return (
+                      <div key={`${m.id}-${messageIdx}`} className="text-right mb-4">
+                        <div className={cn(
+                          "inline-block max-w-[90%] rounded-xl px-4 py-2 bg-indigo-600 text-white"
+                        )}>
+                          {m.parts?.map((part, idx) => {
                             if (part.type === 'text') {
                               return (
-                                <div key={idx} className="whitespace-pre-wrap prose prose-sm max-w-none prose-gray">
-                                  {part.text}
+                                <div key={idx} className="whitespace-pre-wrap">
+                                  {(part as any).text}
                                 </div>
                               );
                             }
-
                             return null;
                           })}
                         </div>
