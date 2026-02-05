@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useCallback, useRef } from 'react';
-import { chatVoice } from '@/mastra/voice/chatVoice';
 
 interface UseVoiceInputOptions {
   onTranscript: (text: string) => void;
@@ -22,6 +21,8 @@ export function useVoiceInput({ onTranscript, onError }: UseVoiceInputOptions) {
       setIsListening(true);
       setError(null);
 
+      console.log('[Voice] Requesting microphone access...');
+
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
@@ -31,6 +32,7 @@ export function useVoiceInput({ onTranscript, onError }: UseVoiceInputOptions) {
       });
 
       mediaStreamRef.current = stream;
+      console.log('[Voice] Microphone access granted');
 
       const mimeType = MediaRecorder.isTypeSupported('audio/webm')
         ? 'audio/webm'
@@ -51,27 +53,40 @@ export function useVoiceInput({ onTranscript, onError }: UseVoiceInputOptions) {
         setIsProcessing(true);
 
         try {
-          const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
-          const arrayBuffer = await audioBlob.arrayBuffer();
-          const uint8Array = new Uint8Array(arrayBuffer);
+          console.log('[Voice] Processing audio...');
 
-          const readableStream = new ReadableStream({
-            start(controller) {
-              controller.enqueue(uint8Array);
-              controller.close();
-            },
+          const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+
+          // Send to server-side API route
+          const formData = new FormData();
+          formData.append('audio', audioBlob, `recording.${mimeType.split('/')[1]}`);
+
+          console.log('[Voice] Sending to transcription API...');
+
+          const response = await fetch('/api/voice/transcribe', {
+            method: 'POST',
+            body: formData,
           });
 
-          const transcript = await chatVoice.listen(readableStream as any);
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Transcription failed');
+          }
 
-          if (transcript?.trim()) {
+          const data = await response.json();
+          const transcript = data.transcript;
+
+          console.log('[Voice] Transcript received:', transcript);
+
+          if (transcript && transcript.trim()) {
             onTranscript(transcript);
           } else {
             throw new Error('No speech detected');
           }
         } catch (err) {
-          console.error('[Voice] Error:', err);
-          setError('Failed to transcribe. Please try again.');
+          console.error('[Voice] Transcription error:', err);
+          const errorMsg = err instanceof Error ? err.message : 'Failed to transcribe';
+          setError(errorMsg);
           if (onError) onError(err as Error);
         } finally {
           setIsProcessing(false);
@@ -84,9 +99,11 @@ export function useVoiceInput({ onTranscript, onError }: UseVoiceInputOptions) {
       };
 
       mediaRecorder.start();
+      console.log('[Voice] Recording started');
 
       setTimeout(() => {
         if (mediaRecorder.state === 'recording') {
+          console.log('[Voice] Auto-stopping after 30 seconds');
           mediaRecorder.stop();
         }
       }, 30000);
@@ -110,6 +127,8 @@ export function useVoiceInput({ onTranscript, onError }: UseVoiceInputOptions) {
   }, [onTranscript, onError]);
 
   const stopListening = useCallback(() => {
+    console.log('[Voice] Stopping recording...');
+
     if (mediaRecorderRef.current?.state === 'recording') {
       mediaRecorderRef.current.stop();
     }
