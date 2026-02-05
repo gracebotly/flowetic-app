@@ -113,15 +113,37 @@ export const generateSchemaSummaryFromEvents = createTool({
       schemaJson.lastUpdated = new Date().toISOString();
     }
 
-    const { error: upsertError } = await supabase
+    // First, check if a record exists for this source
+    const { data: existing } = await supabase
       .from("interface_schemas")
-      .upsert({
-        source_id: sourceId,
-        schema_summary: schemaJson,
-        tenant_id: tenantId,
-      }, {
-        onConflict: "source_id",
-      });
+      .select("id")
+      .eq("source_id", sourceId)
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
+
+    let upsertError;
+
+    if (existing) {
+      // Update existing record
+      const { error } = await supabase
+        .from("interface_schemas")
+        .update({
+          schema_summary: schemaJson,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", existing.id);
+      upsertError = error;
+    } else {
+      // Insert new record
+      const { error } = await supabase
+        .from("interface_schemas")
+        .insert({
+          source_id: sourceId,
+          schema_summary: schemaJson,
+          tenant_id: tenantId,
+        });
+      upsertError = error;
+    }
 
     if (upsertError) throw new Error(upsertError.message);
 
