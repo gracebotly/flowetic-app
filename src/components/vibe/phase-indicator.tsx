@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle, Circle } from "lucide-react";
+import { motion } from "framer-motion";
 
 type JourneyMode =
   | "select_entity"
@@ -27,52 +27,63 @@ const PHASES = [
 
 export function PhaseIndicator({ currentMode }: PhaseIndicatorProps) {
   const currentPhaseIndex = PHASES.findIndex((p) => p.id === currentMode);
+  const progress = ((currentPhaseIndex + 1) / PHASES.length) * 100;
+
+  // Yellow line at Phase 3 (align) = step 3 of 7 = ~42.86%
+  const previewThreshold = (3 / PHASES.length) * 100;
+
+  const isBeforePreview = currentPhaseIndex < 2; // Before "align" phase
 
   return (
-    <div className="rounded-lg bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 p-3">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-semibold text-gray-700">Progress</span>
-        <span className="text-xs font-medium text-indigo-600">
-          {currentPhaseIndex + 1}/{PHASES.length}
+    <div className="w-full">
+      {/* Progress Bar Container */}
+      <div className="relative w-full h-2 bg-white dark:bg-gray-900 rounded-full overflow-hidden border border-gray-200">
+        {/* Green Progress Fill (animated) */}
+        <motion.div
+          className="absolute left-0 top-0 h-full bg-gradient-to-r from-green-400 to-green-600"
+          initial={{ width: 0 }}
+          animate={{ width: `${progress}%` }}
+          transition={{ duration: 0.6, ease: "easeOut" }}
+        />
+
+        {/* Yellow Preview Threshold Line */}
+        <div
+          className="absolute top-0 h-full w-0.5 bg-yellow-400 z-10"
+          style={{ left: `${previewThreshold}%` }}
+        >
+          {/* Yellow marker dot */}
+          <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-yellow-400 rounded-full shadow-sm" />
+        </div>
+      </div>
+
+      {/* Status Text */}
+      <div className="mt-2 flex items-center justify-between text-xs">
+        <span className="text-gray-600 dark:text-gray-400 font-medium">
+          {PHASES[currentPhaseIndex]?.label || "Processing..."}
         </span>
-      </div>
 
-      {/* Compact horizontal progress bar */}
-      <div className="flex items-center gap-1">
-        {PHASES.map((phase, index) => {
-          const isCompleted = index < currentPhaseIndex;
-          const isCurrent = index === currentPhaseIndex;
+        {isBeforePreview && (
+          <motion.span
+            className="text-yellow-600 dark:text-yellow-400"
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+          >
+            Preview will appear once you reach the yellow line
+          </motion.span>
+        )}
 
-          return (
-            <div
-              key={phase.id}
-              className="group relative flex-1"
-              title={phase.label}
-            >
-              <div
-                className={`h-2 rounded-full transition-all duration-300 ${
-                  isCurrent
-                    ? "bg-indigo-500"
-                    : isCompleted
-                    ? "bg-green-500"
-                    : "bg-gray-300"
-                }`}
-              />
-              
-              {/* Tooltip on hover */}
-              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
-                {phase.label}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+        {!isBeforePreview && currentPhaseIndex < PHASES.length - 1 && (
+          <span className="text-green-600 dark:text-green-400 font-medium">
+            Preview available
+          </span>
+        )}
 
-      {/* Current step label */}
-      <div className="mt-2 text-center">
-        <p className="text-xs font-medium text-indigo-600">
-          {PHASES[currentPhaseIndex]?.label || "In Progress"}
-        </p>
+        {currentPhaseIndex === PHASES.length - 1 && (
+          <span className="text-green-600 dark:text-green-400 font-semibold">
+            Complete ✓
+          </span>
+        )}
       </div>
     </div>
   );

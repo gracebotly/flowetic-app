@@ -41,6 +41,7 @@ import { PhaseIndicator } from "@/components/vibe/phase-indicator";
 import { InlineChoice } from "@/components/vibe/inline-choice";
 import { DesignSystemPair } from "@/components/vibe/design-system-pair";
 import { ReasoningBlock } from "@/components/vibe/ReasoningBlock";
+import { ErrorDisplay } from "@/components/vibe/ErrorDisplay";
 import { ModelSelector, type ModelId } from "./model-selector";
 import { exportAsMarkdown, exportAsJSON } from "@/lib/export-chat";
 
@@ -298,14 +299,14 @@ export function ChatWorkspace({
 
     // ERROR HANDLING: Check if output is an error
     if (output?.error || output?.code?.includes('ERROR')) {
+      const errorMessage = output.error || output.message || JSON.stringify(output, null, 2) || 'Unknown error';
+      const toolName = type.replace('tool-', '').replace(/_/g, ' ');
+
       return (
-        <div className="mt-2 rounded-lg border border-red-500/30 bg-red-500/10 p-3">
-          <div className="flex items-center gap-2 text-sm font-medium text-red-200 mb-1">
-            <span className="text-red-400">⚠</span>
-            Tool Error: {type.replace('tool-', '')}
-          </div>
-          <div className="text-xs text-red-300">{output.error || output.message || 'Unknown error'}</div>
-        </div>
+        <ErrorDisplay
+          error={errorMessage}
+          title={`Tool Error: ${toolName}`}
+        />
       );
     }
 
@@ -612,9 +613,9 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
       setVibeContext(enrichedCtx);
 
       try {
-        // Kick off Phase 1 through AI SDK
+        // Initialize dashboard journey through AI SDK
         initSendInFlight.current = true;
-        await sendAi("System: start Phase 1 outcome selection.", {
+        await sendAi("System: initialize dashboard journey.", {
           userId: authContext.userId,
           tenantId: authContext.tenantId,
           threadId,
@@ -631,7 +632,7 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
           },
         });
       } catch (e: any) {
-        addLog("error", "Failed to start Phase 1", e?.message || "AI_SDK_INIT_FAILED");
+        addLog("error", "Failed to initialize dashboard journey", e?.message || "AI_SDK_INIT_FAILED");
       }
 
       initSendInFlight.current = false;
@@ -929,9 +930,12 @@ return (
           )}
 
           {/* Phase Progress Indicator */}
-          <div className="border-b border-gray-200 px-4 py-3 flex items-center justify-between">
+          <div className="border-b border-gray-200 px-4 py-3">
             <PhaseIndicator currentMode={journeyMode} />
-            
+          </div>
+
+          {/* Expand button - show only in Phase 1 & 2 (separate div) */}
+          <div className="border-b border-gray-200 px-4 py-2 flex justify-end">
             {/* Expand button - show only in Phase 1 & 2 */}
             {(journeyMode === "recommend" || journeyMode === "align") && (
               <button
@@ -990,20 +994,28 @@ return (
 
                       return (
                         <div key={`${m.id}-${messageIdx}`} className="text-left mb-4">
-                          {/* Render reasoning blocks FIRST */}
-                          {m.parts?.map((part, idx) => {
-                            if (part.type === 'reasoning' && (part as any).text) {
-                              return (
-                                <ReasoningBlock
-                                  key={`reasoning-${idx}`}
-                                  text={(part as any).text}
-                                  isStreaming={isCurrentlyStreaming}
-                                  thinkingDuration={undefined}
-                                />
-                              );
-                            }
-                            return null;
-                          })}
+                          {/* Render single reasoning block (combine all reasoning parts) */}
+                          {(() => {
+                            const reasoningParts = m.parts?.filter(
+                              (part) => part.type === 'reasoning' && (part as any).text
+                            );
+
+                            if (!reasoningParts || reasoningParts.length === 0) return null;
+
+                            // Combine all reasoning text into one block
+                            const combinedReasoningText = reasoningParts
+                              .map((part) => (part as any).text)
+                              .join('\n\n---\n\n');
+
+                            return (
+                              <ReasoningBlock
+                                key={`reasoning-combined-${m.id}`}
+                                text={combinedReasoningText}
+                                isStreaming={isCurrentlyStreaming}
+                                thinkingDuration={undefined}
+                              />
+                            );
+                          })()}
 
                           {/* Then render the main message content */}
                           <div className={cn(
@@ -1224,9 +1236,10 @@ return (
                 )}
 
                 {uiError ? (
-                  <div className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
-                    {String((uiError as any)?.message || uiError)}
-                  </div>
+                  <ErrorDisplay
+                    error={String((uiError as any)?.message || uiError)}
+                    title="Chat Error"
+                  />
                 ) : null}
               </>
             )}
@@ -1347,7 +1360,7 @@ return (
               </div>
             ) : (
               <div className="flex items-center justify-center h-full text-gray-400">
-                <p>Preview will appear here after Phase 3</p>
+                <p>Preview will appear here once your dashboard is generated</p>
               </div>
             )}
           </div>
