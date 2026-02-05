@@ -3,6 +3,7 @@
 import { useRef } from "react";
 import { Mic, Send, Paperclip } from "lucide-react";
 import { ModelSelector, type ModelId } from "./model-selector";
+import { VoiceInputButton } from "./VoiceInputButton";
 
 export function MessageInput(props: {
   value: string;
@@ -18,6 +19,12 @@ export function MessageInput(props: {
   const fileRef = useRef<HTMLInputElement | null>(null);
   const disabled = !!props.disabled;
   const canSend = !disabled && props.value.trim().length > 0;
+
+  const handleVoiceTranscript = (transcript: string) => {
+    // Append voice transcript to current input value
+    const newValue = props.value ? `${props.value} ${transcript}` : transcript;
+    props.onChange(newValue);
+  };
 
   return (
     <div className="relative flex items-end gap-2 rounded-2xl border border-gray-200 bg-white p-3 shadow-lg transition-all duration-300 hover:shadow-xl focus-within:border-indigo-300 focus-within:shadow-indigo-500/20">
@@ -69,20 +76,10 @@ export function MessageInput(props: {
         }}
       />
 
-      <button
-        type="button"
-        aria-label="Voice input"
-        title="Voice input"
-        onClick={props.onToggleVoice}
-        className={`inline-flex h-10 w-10 items-center justify-center rounded-xl border transition-all duration-300 ${
-          props.isListening 
-            ? "border-red-300 bg-gradient-to-br from-red-50 to-pink-50 text-red-600 animate-pulse-glow" 
-            : "border-gray-200 text-gray-600 hover:bg-gradient-to-br hover:from-indigo-50 hover:to-purple-50 hover:border-indigo-300 hover:text-indigo-600"
-        } disabled:opacity-50`}
+      <VoiceInputButton
+        onTranscript={handleVoiceTranscript}
         disabled={disabled}
-      >
-        <Mic size={18} />
-      </button>
+      />
 
       <button
         type="button"
