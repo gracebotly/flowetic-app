@@ -88,13 +88,13 @@ export const generateSchemaSummaryFromEvents = createTool({
 
     const { data: existingSummary, error: existingError } = await supabase
       .from("interface_schemas")
-      .select("schema_json")
+      .select("schema_summary")
       .eq("source_id", sourceId)
       .maybeSingle();
 
     if (existingError) throw new Error(existingError.message);
 
-    let schemaJson = existingSummary?.schema_json;
+    let schemaJson = existingSummary?.schema_summary;
 
     if (!schemaJson) {
       schemaJson = {
@@ -104,7 +104,7 @@ export const generateSchemaSummaryFromEvents = createTool({
         lastUpdated: new Date().toISOString(),
       };
     } else {
-      schemaJson = existingSummary?.schema_json ?? {
+      schemaJson = existingSummary?.schema_summary ?? {
         fields: [],
         eventTypes: [],
         eventCounts: {},
@@ -117,8 +117,10 @@ export const generateSchemaSummaryFromEvents = createTool({
       .from("interface_schemas")
       .upsert({
         source_id: sourceId,
-        schema_json: schemaJson,
+        schema_summary: schemaJson,
         tenant_id: tenantId,
+      }, {
+        onConflict: "source_id",
       });
 
     if (upsertError) throw new Error(upsertError.message);
