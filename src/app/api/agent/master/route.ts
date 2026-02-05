@@ -510,7 +510,7 @@ export async function POST(req: NextRequest) {
           resource: String(userId),
           thread: String(mastraThreadId),
         },
-        maxSteps: 8,
+        maxSteps: 10, // Enable autonomous multi-step execution
       });
 
       return new Response(
@@ -532,7 +532,7 @@ export async function POST(req: NextRequest) {
     });
 
     const routerOnly = await master.generate(message, {
-      maxSteps: 6,
+      maxSteps: 10, // Enable autonomous multi-step execution
       toolChoice: "auto",
       requestContext: runtimeContext,
       memory: {

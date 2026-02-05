@@ -625,9 +625,9 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
       setVibeContext(enrichedCtx);
 
       try {
-        // Kick off Phase 1 through AI SDK
+        // Initialize dashboard journey through AI SDK
         initSendInFlight.current = true;
-        await sendAi("System: start Phase 1 outcome selection.", {
+        await sendAi("System: initialize dashboard journey.", {
           userId: authContext.userId,
           tenantId: authContext.tenantId,
           threadId,
@@ -644,7 +644,7 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
           },
         });
       } catch (e: any) {
-        addLog("error", "Failed to start Phase 1", e?.message || "AI_SDK_INIT_FAILED");
+        addLog("error", "Failed to initialize dashboard journey", e?.message || "AI_SDK_INIT_FAILED");
       }
 
       initSendInFlight.current = false;
@@ -1360,7 +1360,7 @@ return (
               </div>
             ) : (
               <div className="flex items-center justify-center h-full text-gray-400">
-                <p>Preview will appear here after Phase 3</p>
+                <p>Preview will appear here once your dashboard is generated</p>
               </div>
             )}
           </div>
