@@ -37,7 +37,7 @@ import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 
 import { MessageInput } from "@/components/vibe/message-input";
-import { PhaseIndicator } from "@/components/vibe/phase-indicator";
+import { StatusBadge } from "@/components/vibe/status-badge";
 import { InlineChoice } from "@/components/vibe/inline-choice";
 import { DesignSystemPair } from "@/components/vibe/design-system-pair";
 import { ReasoningBlock } from "@/components/vibe/ReasoningBlock";
@@ -191,6 +191,19 @@ function getRightTabForToolUi(next: ToolUiPayload): ViewMode {
   if (next.type === "interactive_edit_panel") return "preview";
   // style bundles and todos are "planning/decision" items
   return "terminal";
+}
+
+function getJourneyStatus(mode: JourneyMode): "selecting" | "analyzing" | "planning" | "designing" | "building" | "refining" | "ready" {
+  const mapping = {
+    select_entity: "selecting",
+    recommend: "analyzing",
+    align: "planning",
+    style: "designing",
+    build_preview: "building",
+    interactive_edit: "refining",
+    deploy: "ready",
+  } as const;
+  return mapping[mode] || "analyzing";
 }
 
 export function ChatWorkspace({
@@ -928,10 +941,10 @@ return (
             </div>
           )}
 
-          {/* Phase Progress Indicator */}
+          {/* Status Badge */}
           <div className="border-b border-gray-200 px-4 py-3 flex items-center justify-between">
-            <PhaseIndicator currentMode={journeyMode} />
-            
+            <StatusBadge status={getJourneyStatus(journeyMode)} />
+
             {/* Expand button - show only in Phase 1 & 2 */}
             {(journeyMode === "recommend" || journeyMode === "align") && (
               <button
