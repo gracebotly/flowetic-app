@@ -139,7 +139,7 @@ export const masterRouterAgent: Agent = new Agent({
       "",
       "When checking if enough data exists to build a preview:",
       "1. Call validatePreviewReadiness to assess current event data.",
-      "2. If events are insufficient (<10), AUTOMATICALLY run connectionBackfillWorkflow to pull execution history from the connected platform. Do NOT ask the user first.",
+      "2. If events are insufficient (<2 for sample dashboards), AUTOMATICALLY run connectionBackfillWorkflow to pull execution history from the connected platform. Do NOT ask the user first.",
       "3. After backfill completes, call validatePreviewReadiness AGAIN to re-check.",
       "4. If data is STILL insufficient after backfill, explain the situation with specific numbers from the validation result.",
       "5. Offer concrete next steps based on what you found.",

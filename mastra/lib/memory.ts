@@ -35,14 +35,12 @@ export function createFloweticMemory(opts: CreateFloweticMemoryOpts = {}) {
 - Phase: {{phase}}
 - Last Updated: {{timestamp}}
 
-## Selections Made
-- Outcome Type: {{selectedOutcome}}
-- Storyboard: {{selectedStoryboard}}
-- Style Bundle: {{selectedStyleBundleId}}
-
 ## Workflow Context
 - Platform: {{platformType}}
 - Workflow Name: {{workflowName}}
+
+## Notes
+(Record user selections, progress, and decisions here as the journey proceeds)
 `,
     } as const);
   

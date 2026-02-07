@@ -7,7 +7,7 @@ import { z } from 'zod';
 
 const inputSchema = z.object({
   sourceId: z.string().uuid().optional(),
-  requireMinEvents: z.number().min(1).default(10),
+  requireMinEvents: z.number().min(1).default(2),
   requireSchemaReady: z.boolean().default(true),
 });
 
