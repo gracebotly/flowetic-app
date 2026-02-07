@@ -876,9 +876,10 @@ export default function ConnectionsPage() {
         payload.region = selectedRegion;
       }
 
-      // n8n on your instance requires X-N8N-API-KEY header (no UI dropdown)
+      // Auto-detect n8n auth mode based on key format:
+      // JWT tokens (eyJ...) use Bearer auth; short API keys use X-N8N-API-KEY header
       if (selectedPlatform === "n8n") {
-        payload.n8nAuthMode = "header";
+        payload.n8nAuthMode = apiKey.trim().startsWith("eyJ") ? "bearer" : "header";
       }
       
       // For n8n API, normalize instanceUrl to base origin only
