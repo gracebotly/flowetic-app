@@ -64,6 +64,19 @@ const analyzeSchemaStep = createStep({
     confidence: z.number(),
   }),
   async execute({ inputData, requestContext, getStepResult, getInitData, suspend, runId }) {
+    // ═══════════════════════════════════════════════════════════
+    // FIX 2: PHASE GATE — Block preview if not in build_preview+ phase
+    // ═══════════════════════════════════════════════════════════
+    const currentPhase = requestContext?.get?.('phase') as string | undefined;
+    const PREVIEW_ALLOWED_PHASES = ['build_preview', 'interactive_edit', 'deploy'];
+
+    if (currentPhase && !PREVIEW_ALLOWED_PHASES.includes(currentPhase)) {
+      throw new Error(
+        `PHASE_GATE_BLOCKED: Cannot generate preview during "${currentPhase}" phase. ` +
+        `Complete outcome selection, storyboard alignment, and style selection first.`
+      );
+    }
+
     // Get sourceId from context (set when connection was established)
     const sourceId = requestContext.get('sourceId');
     
