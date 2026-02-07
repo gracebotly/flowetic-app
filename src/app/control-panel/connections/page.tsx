@@ -453,6 +453,9 @@ export default function ConnectionsPage() {
     // Authoritative refetch (HAR shows the app already calls this; we ensure state is set from response)
     await refreshCredentials();
 
+    // Also refresh the "All" tab so deleted source's entities disappear
+    await refreshIndexedEntities();
+
     setSaving(false);
     return true;
   }
