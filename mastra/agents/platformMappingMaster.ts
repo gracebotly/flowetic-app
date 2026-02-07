@@ -6,6 +6,7 @@ import { getMastraStorage } from "../lib/storage";
 import type { RequestContext } from "@mastra/core/request-context";
 
 import { createFloweticMemory } from "../lib/memory";
+import { loadSkillFromWorkspace } from '../lib/loadSkill';
 import {
   appendThreadEvent,
   getClientContext,
@@ -35,10 +36,13 @@ export const platformMappingMaster: Agent = new Agent({
     "Platform Mapping Agent: inspects event samples, recommends templates, proposes mappings, and triggers preview workflow. Triggers connection backfill when schema is not ready.",
   instructions: async ({ requestContext }: { requestContext: RequestContext }) => {
     const platformType = (
-      (typeof requestContext?.get === 'function' 
-        ? requestContext.get("platformType") 
+      (typeof requestContext?.get === 'function'
+        ? requestContext.get("platformType")
         : (requestContext as any)?.platformType) || "make"
     );
+
+    // Load platform skill for deep mapping knowledge
+    const platformSkillContent = await loadSkillFromWorkspace(platformType);
 
     return {
       role: "system" as const,
@@ -68,7 +72,8 @@ export const platformMappingMaster: Agent = new Agent({
         "BEHAVIOR:",
         "- When you have enough information to proceed, proceed without asking for confirmation.",
         "- Only suspend / ask a question when a required mapping field is missing or schemaReady is false.",
-      ].join("\n"),
+        platformSkillContent ? `\n\n# PLATFORM SKILL: ${platformType.toUpperCase()}\n\n${platformSkillContent}` : "",
+      ].filter(Boolean).join("\n"),
     };
   },
   model: ({ requestContext }: { requestContext: RequestContext }) => {

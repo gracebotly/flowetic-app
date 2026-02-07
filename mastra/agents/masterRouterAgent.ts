@@ -9,6 +9,7 @@ import { getModelById } from "../lib/models/modelSelector";
 import type { RequestContext } from "@mastra/core/request-context";
 import { createFloweticMemory } from "../lib/memory";
 import { workspace } from '../workspace';  // ← ADD THIS IMPORT
+import { loadSkillFromWorkspace } from '../lib/loadSkill';
 import { platformMappingMaster } from "./platformMappingMaster";
 import { dashboardBuilderAgent } from "./dashboardBuilderAgent";
 import { designAdvisorAgent } from "./designAdvisorAgent";
@@ -100,6 +101,18 @@ export const masterRouterAgent: Agent = new Agent({
       "",
       workflowName ? `\n⚠️ CRITICAL: You are helping build a dashboard for the "${workflowName}" workflow. Always acknowledge this workflow by name when responding.\n` : "",
     ].join("\n");
+
+    // =========================================================================
+    // SKILL LOADING - Load Platform Skill + Business Outcomes Advisor
+    // =========================================================================
+    const platformSkillContent = await loadSkillFromWorkspace(safePlatformType);
+
+    // Load business outcomes advisor for recommend/align phases
+    const businessPhases = ["outcome", "story", "recommend", "align", "select_entity"];
+    const shouldLoadBusinessSkill = businessPhases.includes(phase || "select_entity");
+    const businessSkillContent = shouldLoadBusinessSkill
+      ? await loadSkillFromWorkspace("business-outcomes-advisor")
+      : "";
 
     const phaseInstructions = getPhaseInstructions(phase as FloweticPhase, {
       platformType: String(safePlatformType),
@@ -221,6 +234,11 @@ export const masterRouterAgent: Agent = new Agent({
       "- When calling TODO tools, always ensure tenantId and threadId are passed from RequestContext",
       "- These values are automatically available via context.requestContext.get('tenantId') and context.requestContext.get('threadId')",
       "- The tools will fall back to these values if not explicitly provided in the tool call",
+      // =========================================================================
+      // INJECTED SKILLS (loaded from workspace at runtime)
+      // =========================================================================
+      platformSkillContent ? `\n\n# PLATFORM SKILL: ${safePlatformType.toUpperCase()}\n\n${platformSkillContent}` : "",
+      businessSkillContent ? `\n\n# BUSINESS OUTCOMES ADVISOR\n\n${businessSkillContent}` : "",
     ].filter(Boolean).join("\n");
 
     return [
