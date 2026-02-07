@@ -83,7 +83,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const headers: Record<string, string> = {};
   if ((secret.authMode ?? "bearer") === "header") headers["X-N8N-API-KEY"] = secret.apiKey!;
   else headers["Authorization"] = `Bearer ${secret.apiKey}`;
 
@@ -125,29 +125,52 @@ export async function POST(req: Request) {
   }
 
   const now = new Date().toISOString();
-  const rows = workflows.map((w) => ({
-    tenant_id: membership.tenant_id,
-    source_id: sourceId,
-    entity_kind: "workflow",
-    external_id: String(w.id),
-    display_name: String(w.name ?? `Workflow ${w.id}`),
-    enabled_for_analytics: false,
-    enabled_for_actions: false,
-    last_seen_at: null,
-    created_at: now,
-    updated_at: now,
-  }));
 
   // Deduplicate by external_id to avoid Postgres "cannot affect row a second time" error
   const byExternalId = new Map<string, any>();
-  for (const r of rows) {
-    const k = String(r.external_id || "").trim();
+  for (const w of workflows) {
+    const k = String(w.id || "").trim();
     if (!k) continue;
-    if (!byExternalId.has(k)) byExternalId.set(k, r);
+    if (!byExternalId.has(k)) byExternalId.set(k, w);
   }
-  const dedupedRows = Array.from(byExternalId.values());
+  const dedupedWorkflows = Array.from(byExternalId.values());
+  const allExternalIds = dedupedWorkflows.map((w) => String(w.id));
 
-  const { error: upErr } = await supabase.from("source_entities").upsert(dedupedRows, {
+  // Fetch existing entities for this source to preserve their enabled_for_analytics status
+  const { data: existingEntities } = await supabase
+    .from("source_entities")
+    .select("external_id, enabled_for_analytics, enabled_for_actions")
+    .eq("source_id", sourceId)
+    .eq("tenant_id", membership.tenant_id)
+    .in("external_id", allExternalIds);
+
+  const existingMap = new Map<string, { enabled_for_analytics: boolean; enabled_for_actions: boolean }>();
+  for (const e of existingEntities ?? []) {
+    existingMap.set(String(e.external_id), {
+      enabled_for_analytics: Boolean(e.enabled_for_analytics),
+      enabled_for_actions: Boolean(e.enabled_for_actions),
+    });
+  }
+
+  const rows = dedupedWorkflows.map((w) => {
+    const exId = String(w.id);
+    const existing = existingMap.get(exId);
+    return {
+      tenant_id: membership.tenant_id,
+      source_id: sourceId,
+      entity_kind: "workflow",
+      external_id: exId,
+      display_name: String(w.name ?? `Workflow ${w.id}`),
+      // Preserve existing indexed status; default to false for new entities
+      enabled_for_analytics: existing?.enabled_for_analytics ?? false,
+      enabled_for_actions: existing?.enabled_for_actions ?? false,
+      last_seen_at: now,
+      created_at: now,
+      updated_at: now,
+    };
+  });
+
+  const { error: upErr } = await supabase.from("source_entities").upsert(rows, {
     onConflict: "source_id,external_id",
   });
 

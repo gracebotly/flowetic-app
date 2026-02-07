@@ -70,18 +70,40 @@ export async function POST(req: Request) {
     if (!byExternalId.has(externalId)) byExternalId.set(externalId, e);
   }
 
-  const rows = Array.from(byExternalId.values()).map((a: any) => ({
-    tenant_id: membership.tenant_id,
-    source_id: sourceId,
-    entity_kind: String(a.entityKind || "assistant"),
-    external_id: String(a.externalId),
-    display_name: String(a.displayName || ""),
-    enabled_for_analytics: false,
-    enabled_for_actions: false,
-    last_seen_at: null,
-    created_at: now,
-    updated_at: now,
-  }));
+  const allExternalIds = Array.from(byExternalId.keys());
+
+  // Fetch existing entities to preserve their enabled flags
+  const { data: existingEntities } = await supabase
+    .from("source_entities")
+    .select("external_id, enabled_for_analytics, enabled_for_actions")
+    .eq("source_id", sourceId)
+    .eq("tenant_id", membership.tenant_id)
+    .in("external_id", allExternalIds);
+
+  const existingMap = new Map<string, { enabled_for_analytics: boolean; enabled_for_actions: boolean }>();
+  for (const e of existingEntities ?? []) {
+    existingMap.set(String(e.external_id), {
+      enabled_for_analytics: Boolean(e.enabled_for_analytics),
+      enabled_for_actions: Boolean(e.enabled_for_actions),
+    });
+  }
+
+  const rows = Array.from(byExternalId.values()).map((a: any) => {
+    const exId = String(a.externalId);
+    const existing = existingMap.get(exId);
+    return {
+      tenant_id: membership.tenant_id,
+      source_id: sourceId,
+      entity_kind: String(a.entityKind || "assistant"),
+      external_id: exId,
+      display_name: String(a.displayName || ""),
+      enabled_for_analytics: existing?.enabled_for_analytics ?? false,
+      enabled_for_actions: existing?.enabled_for_actions ?? false,
+      last_seen_at: now,
+      created_at: now,
+      updated_at: now,
+    };
+  });
 
   const { error: upErr } = await supabase.from("source_entities").upsert(rows, {
     onConflict: "source_id,external_id",
