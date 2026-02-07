@@ -383,11 +383,31 @@ export async function POST(req: Request) {
     const testRes = await fetch(`${baseUrl}/api/v1/workflows`, { method: "GET", headers });
     if (!testRes.ok) {
       const t = await testRes.text().catch(() => "");
+
+      // Check if JWT token is expired to give a specific error message
+      let expiredHint = "";
+      if (testRes.status === 401 && secretJson.apiKey) {
+        try {
+          const parts = secretJson.apiKey.split(".");
+          if (parts.length === 3) {
+            const payload = JSON.parse(atob(parts[1]));
+            if (payload.exp && typeof payload.exp === "number") {
+              const expDate = new Date(payload.exp * 1000);
+              if (expDate.getTime() < Date.now()) {
+                expiredHint = ` Your API key expired on ${expDate.toLocaleDateString()}. Please generate a new key in n8n Settings → API.`;
+              }
+            }
+          }
+        } catch {
+          // Not a JWT or couldn't decode — ignore
+        }
+      }
+
       const msg = providerAuthMessage({
         platform: "n8n",
         status: testRes.status,
         fallback: `n8n API auth failed (${testRes.status}). ${t}`.trim(),
-      });
+      }) + expiredHint;
 
       return errorResponse(
         400,
