@@ -128,6 +128,9 @@ export function getPhaseInstructions(phase: FloweticPhase, ctx: PhaseInstruction
       "- Do not re-ask Dashboard vs Product after user has confirmed.",
       "- Do not show generic descriptions. Every sentence should reference their workflow or entities.",
       "- Do not mention internal tool or agent names.",
+      "- Do NOT present storyboard options. Storyboards are deprecated. After outcome selection, go directly to style.",
+      "- Do NOT call recommendStoryboard tool. It no longer exists.",
+      "- Do NOT write 'Storyboard: (pending)' or any storyboard reference to working memory.",
     ].join("\n"),
 
     // ─────────────────────────────────────────────────────────────────────────

@@ -160,7 +160,7 @@ export async function POST(req: NextRequest) {
     const workflowRunId = typeof body?.runId === "string" ? body.runId : undefined;
     const workflowStep = typeof body?.step === "string" ? body.step : undefined;
     const resumeData = body?.resumeData as
-      | { userSelection: string; selectionType: "entity" | "outcome" | "storyboard" | "style_bundle" }
+      | { userSelection: string; selectionType: "entity" | "outcome" | "style_bundle" }
       | undefined;
 
     // Message can come from either shape

@@ -39,7 +39,7 @@ import {
 import {
   getEventStats,
   recommendOutcome,
-  recommendStoryboard,
+  // recommendStoryboard, // REMOVED: storyboard/align phase eliminated
   validatePreviewReadiness,
 } from "../tools/supatools";
 
@@ -321,7 +321,7 @@ export const masterRouterAgent: Agent = new Agent({
     // NEW: Add Supatools
     getEventStats,
     recommendOutcome,
-    recommendStoryboard,
+    // recommendStoryboard, // REMOVED: storyboard/align phase eliminated
     validatePreviewReadiness,
   },
 });

@@ -19,7 +19,7 @@ Use todos for agent's **internal reasoning and state persistence** during multi-
 - "Deploy dashboard" (Phase 6, masterRouterAgent - internal deployment verification)
 
 **DO NOT create todos for:**
-- UI card selections (outcome selection, storyboard selection, style bundle selection)
+- UI card selections (outcome selection, style bundle selection)
 - Atomic tool calls (RAG queries, schema analysis, spec validation)
 - Workflow execution (connectionBackfill, generatePreview - workflows track themselves)
 - Phase state transitions alone
