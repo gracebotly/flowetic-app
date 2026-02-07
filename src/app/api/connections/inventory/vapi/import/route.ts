@@ -1,8 +1,9 @@
-
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { decryptSecret } from "@/lib/secrets";
 import { workspace } from '@/mastra/workspace';
 import { indexWorkflowToWorkspace, clearSourceWorkflows } from '@/mastra/lib/workflowIndexer';
+import { generateSkillMd, type WorkflowData } from '@/mastra/lib/skillMdGenerator';
 
 export const runtime = "nodejs";
 
@@ -23,56 +24,77 @@ export async function POST(req: Request) {
   const sourceId = String(body?.sourceId ?? "").trim();
   if (!sourceId) return NextResponse.json({ ok: false, code: "MISSING_SOURCE_ID" }, { status: 400 });
 
-  // Pull inventory from list endpoint (single source of truth)
-  const listRes = await fetch(
-    `${new URL(req.url).origin}/api/connections/inventory/vapi/list?sourceId=${encodeURIComponent(sourceId)}`,
-    { method: "GET", headers: { cookie: req.headers.get("cookie") ?? "" } as any },
-  );
+  // Verify source and get credentials
+  const { data: source, error: sErr } = await supabase
+    .from("sources")
+    .select("id, tenant_id, type, secret_hash")
+    .eq("id", sourceId)
+    .eq("tenant_id", membership.tenant_id)
+    .maybeSingle();
 
-  const listText = await listRes.text().catch(() => "");
-  let listJson: any = null;
-  try { listJson = listText ? JSON.parse(listText) : null; } catch { listJson = null; }
+  if (sErr || !source) return NextResponse.json({ ok: false, code: "SOURCE_NOT_FOUND" }, { status: 404 });
+  if (String(source.type) !== "vapi") return NextResponse.json({ ok: false, code: "VAPI_SOURCE_REQUIRED" }, { status: 400 });
 
-  if (!listRes.ok || !listJson?.ok) {
+  const decrypted = source.secret_hash ? decryptSecret(String(source.secret_hash)) : "";
+  let secretJson: any = null;
+  try {
+    secretJson = decrypted ? JSON.parse(decrypted) : null;
+  } catch {
+    secretJson = null;
+  }
+
+  const apiKey = String(secretJson?.apiKey || "").trim();
+  if (!apiKey) return NextResponse.json({ ok: false, code: "MISSING_API_KEY" }, { status: 400 });
+
+  const vapiHeaders = {
+    Authorization: `Bearer ${apiKey}`,
+    "Content-Type": "application/json",
+  };
+
+  // Fetch assistants list
+  const assistantsRes = await fetch("https://api.vapi.ai/assistant", {
+    method: "GET",
+    headers: vapiHeaders,
+  });
+
+  if (!assistantsRes.ok) {
+    const text = await assistantsRes.text().catch(() => "");
     return NextResponse.json(
-      {
-        ok: false,
-        code: listJson?.code || "VAPI_LIST_FAILED",
-        message: listJson?.message || "Failed to list Vapi assistants.",
-        details: { upstreamStatus: listRes.status, upstreamBodySnippet: listText.slice(0, 300) },
-      },
+      { ok: false, code: "VAPI_ASSISTANTS_FETCH_FAILED", message: `Failed to fetch Vapi assistants (${assistantsRes.status}).` },
       { status: 400 },
     );
   }
 
-  const inventory = Array.isArray(listJson?.inventoryEntities) ? listJson.inventoryEntities : [];
-  
-  // ADD: Clear existing workflows for this source
-  await clearSourceWorkflows(workspace, sourceId);
+  const assistantsRaw = await assistantsRes.json().catch(() => []);
+  const assistants = Array.isArray(assistantsRaw) ? assistantsRaw : Array.isArray(assistantsRaw?.assistants) ? assistantsRaw.assistants : [];
 
-  // ADD: Index each workflow to workspace
-  for (const wf of inventory) {
-    await indexWorkflowToWorkspace(workspace, {
-      sourceId,
-      externalId: String(wf.externalId),
-      displayName: String(wf.displayName || ""),
-      entityKind: String(wf.entityKind || "assistant"),
-      content: JSON.stringify(wf),
+  if (assistants.length === 0) {
+    return NextResponse.json({
+      ok: true,
+      importedCount: 0,
+      warning: "No Vapi assistants found.",
     });
   }
 
-  const now = new Date().toISOString();
+  // Clear existing workflows
+  try {
+    await clearSourceWorkflows(workspace, sourceId);
+  } catch (e) {
+    console.error('[vapi import] Failed to clear workspace workflows:', e);
+  }
 
+  const now = new Date().toISOString();
   const byExternalId = new Map<string, any>();
-  for (const e of inventory) {
-    const externalId = String(e?.externalId ?? "").trim();
+
+  for (const a of assistants) {
+    const externalId = String(a?.id ?? "").trim();
     if (!externalId) continue;
-    if (!byExternalId.has(externalId)) byExternalId.set(externalId, e);
+    if (!byExternalId.has(externalId)) byExternalId.set(externalId, a);
   }
 
   const allExternalIds = Array.from(byExternalId.keys());
 
-  // Fetch existing entities to preserve their enabled flags
+  // Fetch existing entities
   const { data: existingEntities } = await supabase
     .from("source_entities")
     .select("external_id, enabled_for_analytics, enabled_for_actions")
@@ -88,23 +110,120 @@ export async function POST(req: Request) {
     });
   }
 
-  const rows = Array.from(byExternalId.values()).map((a: any) => {
-    const exId = String(a.externalId);
-    const existing = existingMap.get(exId);
-    return {
+  const rows: any[] = [];
+  const eventRows: any[] = [];
+
+  for (const assistant of Array.from(byExternalId.values())) {
+    const assistantId = String(assistant.id);
+    const existing = existingMap.get(assistantId);
+
+    // Fetch call logs for this assistant
+    let callStats = { total: 0, success: 0, failed: 0, lastCall: undefined as string | undefined };
+    let recentCalls: Array<{ id: string; status: string; startedAt: string; duration?: number; error?: string }> = [];
+
+    try {
+      const callsRes = await fetch(`https://api.vapi.ai/call?assistantId=${assistantId}&limit=20`, {
+        method: "GET",
+        headers: vapiHeaders,
+      });
+      if (callsRes.ok) {
+        const callsData = await callsRes.json();
+        const calls = Array.isArray(callsData) ? callsData : Array.isArray(callsData?.calls) ? callsData.calls : [];
+
+        callStats.total = calls.length;
+        callStats.success = calls.filter((c: any) => c.status === 'completed' || c.status === 'ended').length;
+        callStats.failed = calls.filter((c: any) => c.status === 'failed' || c.status === 'error').length;
+
+        if (calls.length > 0 && calls[0].createdAt) {
+          callStats.lastCall = calls[0].createdAt;
+        }
+
+        recentCalls = calls.slice(0, 5).map((c: any) => ({
+          id: String(c.id),
+          status: c.status === 'completed' || c.status === 'ended' ? 'success' : 'error',
+          startedAt: c.createdAt || c.startedAt,
+          duration: c.endedAt && c.startedAt ? new Date(c.endedAt).getTime() - new Date(c.startedAt).getTime() : undefined,
+          error: c.error?.message,
+        }));
+
+        // Store sample events
+        for (const call of calls.slice(0, 10)) {
+          eventRows.push({
+            tenant_id: membership.tenant_id,
+            source_id: sourceId,
+            type: 'assistant_call',
+            name: `vapi:${assistant.name || assistantId}:call`,
+            value: call.status === 'completed' || call.status === 'ended' ? 1 : 0,
+            labels: {
+              assistant_id: assistantId,
+              assistant_name: assistant.name,
+              call_id: call.id,
+              status: call.status,
+            },
+            timestamp: call.createdAt || now,
+            created_at: now,
+          });
+        }
+      }
+    } catch (e) {
+      console.error(`[vapi import] Failed to fetch calls for assistant ${assistantId}:`, e);
+    }
+
+    // Generate skill_md
+    const workflowData: WorkflowData = {
+      platform: 'vapi',
+      id: assistantId,
+      name: String(assistant.name ?? `Assistant ${assistantId}`),
+      description: assistant.firstMessage,
+      triggers: assistant.model ? [{
+        type: 'voice',
+        model: assistant.model?.model || assistant.model?.provider,
+        voice: assistant.voice?.voice || assistant.voice?.provider,
+      }] : [],
+      status: assistant.serverUrl ? 'active' : 'inactive',
+      isActive: !!assistant.serverUrl,
+      createdAt: assistant.createdAt,
+      updatedAt: assistant.updatedAt,
+      executionStats: {
+        total: callStats.total,
+        success: callStats.success,
+        failed: callStats.failed,
+        lastRun: callStats.lastCall,
+      },
+      recentExecutions: recentCalls,
+    };
+
+    const skillMd = generateSkillMd(workflowData);
+
+    // Index to workspace
+    try {
+      await indexWorkflowToWorkspace(workspace, {
+        sourceId,
+        externalId: assistantId,
+        displayName: workflowData.name,
+        entityKind: 'assistant',
+        content: JSON.stringify(assistant),
+      });
+    } catch (e) {
+      console.error(`[vapi import] Failed to index assistant ${assistantId} to workspace:`, e);
+    }
+
+    rows.push({
       tenant_id: membership.tenant_id,
       source_id: sourceId,
-      entity_kind: String(a.entityKind || "assistant"),
-      external_id: exId,
-      display_name: String(a.displayName || ""),
+      entity_kind: "assistant",
+      external_id: assistantId,
+      display_name: workflowData.name,
+      skill_md: skillMd, // ✅ NOW POPULATED
       enabled_for_analytics: existing?.enabled_for_analytics ?? false,
       enabled_for_actions: existing?.enabled_for_actions ?? false,
       last_seen_at: now,
       created_at: now,
       updated_at: now,
-    };
-  });
+    });
+  }
 
+  // Upsert source_entities with skill_md
   const { error: upErr } = await supabase.from("source_entities").upsert(rows, {
     onConflict: "source_id,external_id",
   });
@@ -113,5 +232,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, code: "PERSISTENCE_FAILED", message: upErr.message }, { status: 400 });
   }
 
-  return NextResponse.json({ ok: true, importedCount: rows.length });
+  // Insert sample events
+  if (eventRows.length > 0) {
+    const { error: evErr } = await supabase.from("events").insert(eventRows);
+    if (evErr) {
+      console.error('[vapi import] Failed to insert events:', evErr);
+    }
+  }
+
+  return NextResponse.json({
+    ok: true,
+    importedCount: rows.length,
+    eventsStored: eventRows.length,
+  });
 }
