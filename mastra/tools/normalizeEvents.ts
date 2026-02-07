@@ -1,16 +1,17 @@
+// mastra/tools/normalizeEvents.ts
+import { createTool } from '@mastra/core/tools';
+import { z } from 'zod';
+import { extractTenantContext } from '../lib/tenant-verification';
+import { getNormalizer } from '../normalizers';
 
-
-import { createTool } from "@mastra/core/tools";
-import { z } from "zod";
-import { createAuthenticatedClient } from "../lib/supabase";
-import { extractTenantContext } from "../lib/tenant-verification";
-
-const PlatformType = z.enum(["vapi", "n8n", "make", "retell"]);
+const PlatformType = z.enum(['vapi', 'n8n', 'make', 'retell']);
 
 export const normalizeEvents = createTool({
-  id: "normalizeEvents",
+  id: 'normalizeEvents',
   description:
-    "Normalize raw platform events into Flowetic events rows for Supabase insertion. Adds platform_event_id for idempotency.",
+    'Normalize raw platform events into Flowetic events rows for Supabase insertion. ' +
+    'Uses platform-specific normalizers to extract structured fields into state. ' +
+    'Adds platform_event_id for idempotency.',
   inputSchema: z.object({
     rawEvents: z.array(z.record(z.any())),
     platformType: PlatformType,
@@ -21,7 +22,7 @@ export const normalizeEvents = createTool({
     count: z.number().int(),
   }),
   execute: async (inputData, context) => {
-    // Get access token and tenant context
+    // Auth
     const accessToken = context?.requestContext?.get('supabaseAccessToken') as string;
     if (!accessToken || typeof accessToken !== 'string') {
       throw new Error('[normalizeEvents]: Missing authentication');
@@ -30,48 +31,53 @@ export const normalizeEvents = createTool({
     const { tenantId } = extractTenantContext(context);
     const { rawEvents, platformType, sourceId } = inputData;
 
-    // IMPORTANT:
-    // We normalize into the existing 'events' table schema used in this repo.
-    // Keep it minimal: tenant_id, source_id, type, name, text/state/timestamp + platform_event_id.
-    // If raw events are empty, return empty.
-    const normalized = (rawEvents ?? []).map((e: any, idx: number) => {
-      const platformEventId =
-        String(e?.id ?? e?.eventId ?? e?.executionId ?? e?.callId ?? `${platformType}-${idx}`);
+    // Get platform-specific normalizer (falls back to generic)
+    const normalizer = getNormalizer(platformType);
 
-      const ts =
+    const normalized = (rawEvents ?? []).map((e: Record<string, unknown>, idx: number) => {
+      // Extract a stable platform event ID for idempotency
+      const platformEventId = String(
+        e?.id ??
+        e?.eventId ??
+        e?.executionId ??
+        e?.callId ??
+        (e?.labels && typeof e.labels === 'object'
+          ? (e.labels as Record<string, unknown>).execution_id ??
+            (e.labels as Record<string, unknown>).call_id
+          : undefined) ??
+        `${platformType}-${idx}`
+      );
+
+      // Best-effort timestamp
+      const ts = String(
         e?.timestamp ??
         e?.occurred_at ??
         e?.created_at ??
+        e?.startedAt ??
         e?.ended_at ??
-        new Date().toISOString();
+        new Date().toISOString()
+      );
+
+      // Run platform-specific normalization
+      const extracted = normalizer.normalize(e);
+
+      // Override the generic platform name with the actual platformType
+      extracted.state.platform = platformType;
+      extracted.labels.platformType = platformType;
 
       return {
         tenant_id: tenantId,
         source_id: sourceId,
         platform_event_id: platformEventId,
-
-        // Minimal classification
-        type: "state",
-        name: `${platformType}:${e.workflow_name || e.workflowId || 'workflow'}:execution`,
+        type: extracted.type,
+        name: extracted.name,
         text: null,
-        state: {
-          platformType,
-          raw: e,
-        },
-
-        // Prefer existing column name 'timestamp' if your table uses it.
+        state: extracted.state,
         timestamp: ts,
-        labels: {
-          platformType,
-          workflow_id: e.workflow_id || e.workflowId,
-          workflow_name: e.workflow_name,
-          execution_id: e.execution_id || e.id,
-          status: e.status || (e.stoppedAt ? 'error' : 'success'),
-        },
+        labels: extracted.labels,
       };
     });
 
     return { normalizedEvents: normalized, count: normalized.length };
   },
 });
-
