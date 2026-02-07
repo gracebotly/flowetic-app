@@ -662,29 +662,8 @@ export async function POST(req: Request) {
   // IMPORTANT: sources table has NO updated_at, so never set it here.
   let source: any = null;
 
-  if (platformType === "n8n") {
+  {
     const { data, error } = await supabase
-      .from("sources")
-      .upsert(
-        {
-          tenant_id: membership.tenant_id,
-          type: platformType,
-          name: ((((body as any).__computedName as string | undefined) ?? connectionName) || platformType),
-          status: "active",
-          method: method,
-          secret_hash: encryptSecret(JSON.stringify(secretJson)),
-        },
-        {
-          onConflict: "tenant_id,type,method",
-        },
-      )
-      .select()
-      .single();
-
-    if (error) return errorResponse(400, "PERSISTENCE_FAILED", error.message);
-    source = data;
-  } else {
-    const { data: source, error } = await supabase
       .from("sources")
       .upsert(
         {
@@ -700,9 +679,12 @@ export async function POST(req: Request) {
       .select()
       .single();
 
-    if (error) {
-      return errorResponse(400, "PERSISTENCE_FAILED", error.message);
-    }
+    if (error) return errorResponse(400, "PERSISTENCE_FAILED", error.message);
+    source = data;
+  }
+
+  if (!source) {
+    return errorResponse(500, "SOURCE_CREATE_FAILED", "Failed to create source record. Please try again.");
   }
 
   // If connect-time inventoryEntities were fetched, persist them into source_entities as disabled by default.
