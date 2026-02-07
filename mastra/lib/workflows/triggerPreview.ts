@@ -1,7 +1,7 @@
 // mastra/lib/workflows/triggerPreview.ts
 import { mastra } from "../../index";
 import { RequestContext } from "@mastra/core/request-context";
-import { v4 as uuidv4 } from "uuid";
+import { randomUUID } from "crypto";
 
 export async function triggerGeneratePreview(params: {
   tenantId: string;
@@ -19,7 +19,7 @@ export async function triggerGeneratePreview(params: {
 
   try {
     // FIX 3: Use unique runId to prevent snapshot collisions
-    const run = await workflow.createRun({ runId: uuidv4() });
+    const run = await workflow.createRun({ runId: randomUUID() });
 
     const result = await run.start({
       inputData: {

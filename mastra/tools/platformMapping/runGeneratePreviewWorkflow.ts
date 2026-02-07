@@ -1,7 +1,7 @@
 // mastra/tools/platformMapping/runGeneratePreviewWorkflow.ts
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
-import { v4 as uuidv4 } from "uuid";
+import { randomUUID } from "crypto";
 
 // Allowed phases for preview generation
 const PREVIEW_ALLOWED_PHASES = [
@@ -97,7 +97,7 @@ export const runGeneratePreviewWorkflow = createTool({
       }
 
       // Create a fresh run with a unique ID
-      const run = await workflow.createRun({ runId: uuidv4() });
+      const run = await workflow.createRun({ runId: randomUUID() });
 
       // Pass through RequestContext values
       const { RequestContext } = await import("@mastra/core/request-context");
