@@ -207,15 +207,34 @@ export function ChatWorkspace({
 
   // Deduplicate messages by ID (workaround for Mastra + AI SDK v5 bug #9370)
   // This filters out duplicate message IDs, keeping the latest version of each
+  // AND deduplicates identical text parts WITHIN a single message
   const dedupedMessages = useMemo(() => {
     const seen = new Map<string, (typeof uiMessages)[number]>();
     for (const msg of uiMessages) {
       seen.set(msg.id, msg);
     }
-    return Array.from(seen.values());
+    const uniqueMessages = Array.from(seen.values());
+
+    return uniqueMessages.map((msg) => {
+      if (msg.role !== 'assistant' || !msg.parts || msg.parts.length <= 1) return msg;
+      const seenTexts = new Set<string>();
+      const dedupedParts = msg.parts.filter((part) => {
+        if (part.type !== 'text') return true;
+        const text = (part as { type: 'text'; text: string }).text?.trim();
+        if (!text || seenTexts.has(text)) return false;
+        seenTexts.add(text);
+        return true;
+      });
+      if (dedupedParts.length === msg.parts.length) return msg;
+      return { ...msg, parts: dedupedParts };
+    });
   }, [uiMessages]);
 
   async function sendAi(text: string, extraData?: Record<string, any>) {
+    if (uiStatus === 'streaming') {
+      console.warn('[sendAi] Blocked: already streaming');
+      return;
+    }
     // AI SDK v5: Pass dynamic context in the second argument of sendMessage
     // Request-level options are evaluated at call time, avoiding stale closures
 

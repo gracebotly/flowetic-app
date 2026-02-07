@@ -231,6 +231,11 @@ export const masterRouterAgent: Agent = new Agent({
       "- When calling TODO tools, always ensure tenantId and threadId are passed from RequestContext",
       "- These values are automatically available via context.requestContext.get('tenantId') and context.requestContext.get('threadId')",
       "- The tools will fall back to these values if not explicitly provided in the tool call",
+      "",
+      "# MULTI-STEP EXECUTION RULES",
+      "- After calling updateWorkingMemory or any tool, do NOT repeat text you already wrote before the tool call.",
+      "- Your pre-tool text was already delivered. Continue with NEW content only.",
+      "",
       // =========================================================================
       // INJECTED SKILLS (loaded from workspace at runtime)
       // =========================================================================

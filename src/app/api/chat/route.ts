@@ -179,7 +179,7 @@ export async function POST(req: Request) {
         mastra,
         agentId: 'masterRouterAgent',
         params: enhancedParams,
-        sendStart: true,        // ← CRITICAL: Enable start events
+        sendStart: false,       // Prevents Mastra #9370 duplicate text bug with maxSteps > 1
         sendFinish: true,       // ← CRITICAL: Enable finish events
         sendReasoning: true,    // ← Enable reasoning display
         sendSources: false,     // ← Keep sources hidden
