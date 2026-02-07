@@ -8,6 +8,7 @@ import type { RequestContext } from "@mastra/core/request-context";
 import { searchDesignDatabase } from "../tools/design-system/searchDesignDatabase";
 import { generateDesignSystem } from "../tools/design-system/generateDesignSystem";
 import { createFloweticMemory } from "../lib/memory";
+import { loadSkillFromWorkspace } from '../lib/loadSkill';
 
 // NEW: Import Supatool
 import { recommendStyleKeywords } from "../tools/supatools";
@@ -23,8 +24,9 @@ export const designAdvisorAgent: Agent = new Agent({
     const mode = (requestContext.get("mode") as string | undefined) ?? "edit";
     const phase = (requestContext.get("phase") as string | undefined) ?? "editing";
     const platformType = (requestContext.get("platformType") as string | undefined) ?? "make";
-    
-    // Note: UI/UX Pro Max skill is now discovered automatically by Workspace
+
+    // Load UI/UX Pro Max skill for design expertise
+    const uiuxSkillContent = await loadSkillFromWorkspace("ui-ux-pro-max");
 
     return [
       {
@@ -46,7 +48,8 @@ export const designAdvisorAgent: Agent = new Agent({
           "When the user asks to 'make it more premium/minimal/bold', give 2-3 specific token changes (palette, radius, density) and explain the visual impact in plain language.\n" +
           "DEFAULT BEHAVIOR:\n" +
           "- If the user asks for a change (premium/minimal/bold), propose 2-3 concrete token edits and then proceed to apply them ONLY if you have an explicit tool path to apply changes in the current phase.\n" +
-          "- If you do not have the tool path in this agent to apply changes, provide the recommendations and tell the user what will change in the preview once applied.",
+          "- If you do not have the tool path in this agent to apply changes, provide the recommendations and tell the user what will change in the preview once applied." +
+          (uiuxSkillContent ? `\n\n# UI/UX PRO MAX SKILL\n\n${uiuxSkillContent}` : ""),
       },
     ];
   },

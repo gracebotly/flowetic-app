@@ -9,6 +9,7 @@ import {
   savePreviewVersion,
 } from "../tools/specEditor";
 import { createFloweticMemory } from "../lib/memory";
+import { loadSkillFromWorkspace } from '../lib/loadSkill';
 import { validateSpec } from "../tools/validateSpec";
 import { applyInteractiveEdits } from "../tools/interactiveEdit/applyInteractiveEdits";
 import { reorderComponents } from "../tools/interactiveEdit/reorderComponents";
@@ -26,6 +27,9 @@ export const dashboardBuilderAgent: Agent = new Agent({
     const mode = (requestContext.get("mode") as string | undefined) ?? "edit";
     const phase = (requestContext.get("phase") as string | undefined) ?? "editing";
     const platformType = (requestContext.get("platformType") as string | undefined) ?? "make";
+
+    // Load UI/UX Pro Max skill for design-aware editing
+    const uiuxSkillContent = await loadSkillFromWorkspace("ui-ux-pro-max");
 
     return [
       {
@@ -81,6 +85,10 @@ export const dashboardBuilderAgent: Agent = new Agent({
           REMEMBER: Todos are for YOUR internal reasoning and state persistence, not for showing progress in UI.
         `,
       },
+      ...(uiuxSkillContent ? [{
+        role: "system" as const,
+        content: `# UI/UX PRO MAX SKILL (for design-aware edits)\n\n${uiuxSkillContent}`,
+      }] : []),
     ];
   },
   model: ({ requestContext }: { requestContext: RequestContext }) => {
