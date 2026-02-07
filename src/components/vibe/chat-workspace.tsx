@@ -620,6 +620,14 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
           tenantId: authContext.tenantId,
           threadId,
           selectedModel,
+          // ✅ FIX: Pass context as FLAT top-level keys so sendAi doesn't depend on stale React state
+          platformType: enrichedCtx.platformType,
+          sourceId: enrichedCtx.sourceId,
+          entityId: enrichedCtx.entityId,
+          externalId: enrichedCtx.externalId,
+          displayName: enrichedCtx.displayName,
+          entityKind: enrichedCtx.entityKind,
+          skillMD: enrichedCtx.skillMD,
           vibeContext: enrichedCtx,
           journey: {
             mode: journeyMode,

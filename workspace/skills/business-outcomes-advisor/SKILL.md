@@ -1,4 +1,3 @@
-
 ---
 name: business-outcomes-advisor
 version: 1.0.0

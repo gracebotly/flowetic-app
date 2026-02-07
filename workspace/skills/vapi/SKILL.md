@@ -1,5 +1,5 @@
 ---
-name: vapi-skill
+name: vapi
 version: 1.0.0
 platformType: vapi
 description: Mapping guidance for Vapi voice events to dashboard templates.

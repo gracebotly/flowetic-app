@@ -1,4 +1,3 @@
-
 ---
 name: n8n
 version: 1.1.0
