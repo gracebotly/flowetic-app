@@ -1671,7 +1671,9 @@ export default function ConnectionsPage() {
                         ? "Enter your API token to import your Make scenarios."
                         : editingSourceId
                           ? null
-                          : "Enter credentials to validate and connect."
+                          : selectedPlatform === "n8n"
+                            ? "Settings → n8n API → Create an API key"
+                            : "Enter credentials to validate and connect."
                       : step === "entities"
                       ? editingSourceId
                         ? `Update which ${entityNoun(String(selectedPlatform))} GetFlowetic should index. Unselected ${entityNoun(String(selectedPlatform))} will be removed from your All tab.`
@@ -1791,14 +1793,6 @@ export default function ConnectionsPage() {
             Connect using an API key to import and index workflows.
           </div>
         </div>
-        <div className="flex gap-2">
-          <span className="shrink-0 rounded-full border-2 border-gray-200 bg-white px-2 py-1 text-xs font-bold text-gray-700">
-            Enhanced
-          </span>
-          <span className="shrink-0 rounded-full border-2 border-gray-200 bg-white px-2 py-1 text-xs font-bold text-gray-700">
-            Protected
-          </span>
-        </div>
       </div>
     </button>
 
@@ -1808,7 +1802,7 @@ export default function ConnectionsPage() {
           <div>
             <div className="text-sm font-semibold text-gray-900">MCP Instances</div>
             <div className="mt-1 text-sm text-gray-600">
-              AI tools will be able to discover and run enabled n8n workflows directly.
+              Securely search, audit, and trigger specific workflows via a centralized connection.
             </div>
           </div>
           <span className="shrink-0 rounded-full border border-indigo-200 bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-700">
@@ -2229,15 +2223,6 @@ export default function ConnectionsPage() {
     ) : null}
 
     <div className="flex justify-end gap-2 pt-2">
-      <button
-        type="button"
-        onClick={() => setStep("credentials")}
-        className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-200"
-        disabled={saving || inventoryLoading}
-      >
-        Back
-      </button>
-
       <button
         type="button"
         onClick={async () => {
