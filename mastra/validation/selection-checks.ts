@@ -5,18 +5,17 @@ export type ValidationResult = {
   duration?: number;
 };
 
-export type SelectionType = "entity" | "outcome" | "storyboard" | "style_bundle" | "deploy";
+export type SelectionType = "entity" | "outcome" | "style_bundle" | "deploy";
 
 export type DetectedSelection =
   | { type: "entity"; value: string }
   | { type: "outcome"; value: string }
-  | { type: "storyboard"; value: string }
   | { type: "style_bundle"; value: string }
   | { type: "deploy"; value: string };
 
 const ENTITY_RE = /__ACTION__:select_entity:([^\s]+)\b/;
 const OUTCOME_RE = /__ACTION__:select_outcome:([^\s]+)\b/;
-const STORYBOARD_RE = /__ACTION__:select_storyboard:([^\s]+)\b/;
+// Legacy: storyboard regex removed — storyboard phase eliminated
 const STYLE_BUNDLE_RE = /__ACTION__:select_style_bundle:([^\s]+)\b/;
 const DEPLOY_RE = /__ACTION__:(confirm_deploy|deploy):([^\s]+)\b/;
 
@@ -32,8 +31,7 @@ export function detectSelection(userMessage: string): DetectedSelection | null {
   const outcome = userMessage.match(OUTCOME_RE);
   if (outcome?.[1]) return { type: "outcome", value: outcome[1] };
 
-  const storyboard = userMessage.match(STORYBOARD_RE);
-  if (storyboard?.[1]) return { type: "storyboard", value: storyboard[1] };
+  // Legacy: storyboard tokens silently ignored (phase removed)
 
   const style = userMessage.match(STYLE_BUNDLE_RE);
   if (style?.[1]) return { type: "style_bundle", value: style[1] };
@@ -53,7 +51,8 @@ export function selectionPhaseMatch(
 
   if (phase === "select_entity") return { ok: selection.type === "entity", expected: "entity" };
   if (phase === "recommend") return { ok: selection.type === "outcome", expected: "outcome" };
-  if (phase === "align") return { ok: selection.type === "storyboard", expected: "storyboard" };
+  // Legacy: "align" phase removed — map to "style" for backward compat
+  if (phase === "align") return { ok: selection.type === "style_bundle", expected: "style_bundle" };
   if (phase === "style") return { ok: selection.type === "style_bundle", expected: "style_bundle" };
 
   if (phase === "deploy" || phase === "interactive_edit") {

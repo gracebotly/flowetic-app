@@ -128,7 +128,7 @@ export async function POST(req: Request) {
       'phase',
       'mode',
       'selectedOutcome',
-      'selectedStoryboard',
+      // 'selectedStoryboard' removed — storyboard/align phase eliminated
       'selectedStyleBundleId',
       'densityPreset',
       'paletteOverrideId',
