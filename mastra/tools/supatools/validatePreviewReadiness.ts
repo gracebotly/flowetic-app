@@ -115,7 +115,8 @@ export const validatePreviewReadiness = createSupaTool<z.infer<typeof outputSche
     // Conservative readiness: require at least a session and a selected source.
     if (requireSchemaReady) {
       if (!session) {
-        blockers.push('No journey session found. Start the journey before generating a preview.');
+        // ❌ REMOVED BLOCKER: Journey sessions are created during journey, not before
+        // blockers.push('No journey session found. Start the journey before generating a preview.');
       } else if (!session.source_id) {
         blockers.push('No source selected in the current journey session.');
       }
