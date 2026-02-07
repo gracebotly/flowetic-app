@@ -3,18 +3,11 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { randomUUID } from "crypto";
 
-// Allowed phases for preview generation
-const PREVIEW_ALLOWED_PHASES = [
-  "build_preview",
-  "interactive_edit",
-  "deploy",
-];
-
 export const runGeneratePreviewWorkflow = createTool({
   id: "runGeneratePreviewWorkflow",
   description:
     "Triggers the generate preview workflow to create a dashboard preview. " +
-    "Enforces phase gate: only allowed when phase is build_preview or later.",
+    "The agent decides when to call this based on journey context.",
   inputSchema: z.object({
     tenantId: z.string().uuid().describe("The tenant ID"),
     userId: z.string().uuid().describe("The user ID"),
@@ -34,28 +27,11 @@ export const runGeneratePreviewWorkflow = createTool({
   execute: async (inputData, context) => {
     const { tenantId, userId, interfaceId, userRole, instructions } = inputData;
 
-    // ═══════════════════════════════════════════════════════════
-    // FIX 2: PHASE GATE — Prevent preview before required phases
-    // ═══════════════════════════════════════════════════════════
-    const currentPhase = context?.requestContext?.get("phase") as string | undefined;
-
-    if (currentPhase && !PREVIEW_ALLOWED_PHASES.includes(currentPhase)) {
-      console.warn(
-        `[runGeneratePreviewWorkflow] PHASE_GATE_BLOCKED: current phase "${currentPhase}" is not in allowed phases.`
-      );
-      return {
-        success: false,
-        error: "PHASE_GATE_BLOCKED",
-        message:
-          `Cannot generate preview during "${currentPhase}" phase. ` +
-          `You need to complete outcome selection, storyboard alignment, and style selection first. ` +
-          `Guide the user through these steps before generating a preview.`,
-        currentPhase,
-      };
-    }
+    // Phase gate REMOVED — the agent enforces the journey flow via instructions.
+    // No need to block here; the agent won't call this workflow until selections are complete.
 
     // ═══════════════════════════════════════════════════════════
-    // FIX 3: SNAPSHOT COLLISION — Use unique runId + cleanup
+    // FIX: SNAPSHOT COLLISION — Use unique runId + cleanup
     // ═══════════════════════════════════════════════════════════
     try {
       const { mastra } = await import("../../index");
@@ -107,7 +83,7 @@ export const runGeneratePreviewWorkflow = createTool({
       const contextKeys = [
         "tenantId", "userId", "interfaceId", "supabaseAccessToken",
         "sourceId", "platformType", "phase", "threadId",
-        "selectedOutcome", "selectedStoryboard", "selectedStyleBundleId",
+        "selectedOutcome", "selectedStyleBundleId",
       ];
       for (const key of contextKeys) {
         const val = context?.requestContext?.get(key);

@@ -50,7 +50,6 @@ type ViewMode = "terminal" | "preview" | "publish";
 type JourneyMode =
   | "select_entity"
   | "recommend"
-  | "align"
   | "style"
   | "build_preview"
   | "interactive_edit"
@@ -121,16 +120,6 @@ type ToolUiPayload =
         swatches: Array<{ name: string; hex: string }>;
       }>;
       density: "compact" | "comfortable" | "spacious";
-    }
-  | {
-      type: "storyboard_cards";
-      title?: string;
-      options: Array<{
-        id: string;
-        title: string;
-        description: string;
-        kpis: string[];
-      }>;
     };
 
 type DesignSystem = {
@@ -251,7 +240,6 @@ export function ChatWorkspace({
       // Journey state
       phase: journeyMode,
       selectedOutcome,
-      selectedStoryboard,
       selectedStyleBundleId,
       densityPreset,
       paletteOverrideId,
@@ -341,14 +329,9 @@ export function ChatWorkspace({
         : "You selected: Workflow Product";
     }
     
+    // Legacy: storyboard action tokens handled gracefully (phase removed)
     if (action.startsWith("__ACTION__:select_storyboard:")) {
-      const id = action.replace("__ACTION__:select_storyboard:", "").trim();
-      const labels: Record<string, string> = {
-        roi_proof: "ROI Proof",
-        reliability_ops: "Reliability Ops",
-        delivery_sla: "Delivery / SLA",
-      };
-      return `You selected: ${labels[id] || id}`;
+      return "Selection received";
     }
     
     if (action.startsWith("__ACTION__:select_style_bundle:")) {
@@ -409,7 +392,6 @@ export function ChatWorkspace({
 
   const [journeyMode, setJourneyMode] = useState<JourneyMode>("select_entity");
   const [selectedOutcome, setSelectedOutcome] = useState<"dashboard" | "product" | null>(null);
-  const [selectedStoryboard, setSelectedStoryboard] = useState<string | null>(null);
   const [selectedStyleBundleId, setSelectedStyleBundleId] = useState<string | null>(null);
   const [densityPreset, setDensityPreset] = useState<"compact" | "comfortable" | "spacious">("comfortable");
   const [paletteOverrideId, setPaletteOverrideId] = useState<string | null>(null);
@@ -433,7 +415,6 @@ export function ChatWorkspace({
         mode: journeyMode,
         threadId,
         selectedOutcome,
-        selectedStoryboard,
         selectedStyleBundleId,
         densityPreset,
         paletteOverrideId,
@@ -575,9 +556,9 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
     checkBackend();
   }, [authContext.userId, authContext.tenantId]);
 
-  // Auto-expand chat for Phase 1 & 2
+  // Auto-expand chat for recommend phase
   useEffect(() => {
-    if (journeyMode === 'recommend' || journeyMode === 'align') {
+    if (journeyMode === 'recommend') {
       setIsChatExpanded(true);
     } else {
       setIsChatExpanded(false);
@@ -633,7 +614,6 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
             mode: journeyMode,
             threadId,
             selectedOutcome,
-            selectedStoryboard,
             selectedStyleBundleId,
             densityPreset,
             paletteOverrideId,
@@ -734,7 +714,6 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
         setSelectedOutcome(s.selected_outcome);
       }
     }
-    if (typeof s.selected_storyboard !== "undefined") setSelectedStoryboard(s.selected_storyboard);
     if (typeof s.selected_style_bundle_id !== "undefined") setSelectedStyleBundleId(s.selected_style_bundle_id);
     if (typeof s.density_preset !== "undefined") setDensityPreset(s.density_preset);
     if (typeof s.palette_override_id !== "undefined") setPaletteOverrideId(s.palette_override_id);
@@ -862,7 +841,6 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
           mode: journeyMode,
           threadId,
           selectedOutcome,
-          selectedStoryboard,
           selectedStyleBundleId,
           densityPreset,
           paletteOverrideId,
@@ -942,10 +920,10 @@ return (
             <PhaseIndicator currentMode={journeyMode} />
           </div>
 
-          {/* Expand button - show only in Phase 1 & 2 (separate div) */}
+          {/* Expand button - show only in recommend phase (separate div) */}
           <div className="border-b border-gray-200 px-4 py-2 flex justify-end">
-            {/* Expand button - show only in Phase 1 & 2 */}
-            {(journeyMode === "recommend" || journeyMode === "align") && (
+            {/* Expand button - show only in recommend phase */}
+            {journeyMode === "recommend" && (
               <button
                 type="button"
                 onClick={() => setIsChatExpanded(!isChatExpanded)}
@@ -1050,7 +1028,7 @@ return (
                                     const category = categoryMap[id] || (id.includes("product") ? "product" : "dashboard");
 
                                     setSelectedOutcome(category);
-                                    setJourneyMode("align");
+                                    setJourneyMode("style");
                                     await sendAi(`I selected ${id}`);  // Still send the specific ID in the message
                                   }}
                                   onHelp={
@@ -1182,33 +1160,7 @@ return (
                       />
                     )}
 
-                    {toolUi.type === "storyboard_cards" && toolUi.options && (
-                      <div className="grid gap-3">
-                        {toolUi.options.map((option: any) => (
-                          <button
-                            key={option.id}
-                            onClick={async () => {
-                              setSelectedStoryboard(option.id);
-                              setToolUi(null);
-                              await sendMessage(`__ACTION__:select_storyboard:${option.id}`);
-                            }}
-                            className="text-left rounded-lg border border-gray-200 p-4 hover:border-blue-500 hover:bg-blue-50 transition-all"
-                          >
-                            <div className="font-medium text-gray-900 mb-1">{option.title}</div>
-                            <div className="text-sm text-gray-600 mb-2">{option.description}</div>
-                            {option.kpis && option.kpis.length > 0 && (
-                              <div className="flex flex-wrap gap-1">
-                                {option.kpis.map((kpi: string, idx: number) => (
-                                  <span key={idx} className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded">
-                                    {kpi}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                          </button>
-                        ))}
-                      </div>
-                    )}
+                    {/* storyboard_cards removed — storyboard/align phase eliminated */}
 
                     {toolUi.type === "style_bundles" && toolUi.bundles && (
                       <div className="grid gap-3">

@@ -72,9 +72,9 @@ export const masterRouterAgent: Agent = new Agent({
     skillMD: z.string().optional(),
 
     // Journey state (OPTIONAL)
-    phase: z.enum(['select_entity', 'recommend', 'align', 'style', 'build_preview', 'interactive_edit', 'deploy']).optional(),
+    phase: z.enum(['select_entity', 'recommend', 'style', 'build_preview', 'interactive_edit', 'deploy']).optional(),
     selectedOutcome: z.enum(['dashboard', 'product']).optional().nullable(),
-    selectedStoryboard: z.string().optional().nullable(),
+    // selectedStoryboard removed — storyboard/align phase eliminated
     selectedStyleBundleId: z.string().optional().nullable(),
     densityPreset: z.enum(['compact', 'comfortable', 'spacious']).optional(),
     paletteOverrideId: z.string().optional().nullable(),
@@ -85,7 +85,7 @@ export const masterRouterAgent: Agent = new Agent({
   }),
   instructions: async ({ requestContext }) => {
     // Type-safe access via requestContext.all (new in Mastra 1.1.0)
-    const { tenantId, userId, platformType, phase, selectedOutcome, workflowName, selectedStoryboard, selectedStyleBundleId } = requestContext.all;
+    const { tenantId, userId, platformType, phase, selectedOutcome, workflowName, selectedStyleBundleId } = requestContext.all;
     
     
     // Fallback for values that might not be in schema
@@ -107,8 +107,8 @@ export const masterRouterAgent: Agent = new Agent({
     // =========================================================================
     const platformSkillContent = await loadSkillFromWorkspace(safePlatformType);
 
-    // Load business outcomes advisor for recommend/align phases
-    const businessPhases = ["outcome", "story", "recommend", "align", "select_entity"];
+    // Load business outcomes advisor for recommend phase
+    const businessPhases = ["outcome", "recommend", "select_entity"];
     const shouldLoadBusinessSkill = businessPhases.includes(phase || "select_entity");
     const businessSkillContent = shouldLoadBusinessSkill
       ? await loadSkillFromWorkspace("business-outcomes-advisor")
@@ -118,7 +118,6 @@ export const masterRouterAgent: Agent = new Agent({
       platformType: String(safePlatformType),
       workflowName: workflowName || undefined,
       selectedOutcome: selectedOutcome || undefined,
-      selectedStoryboard: selectedStoryboard || undefined,
       selectedStyleBundle: safeSelectedStyleBundle || undefined,
     });
 
@@ -212,13 +211,12 @@ export const masterRouterAgent: Agent = new Agent({
       "You have access to <working_memory>, which persists across the conversation thread.",
       "Treat <working_memory> as the durable source of truth for:",
       "- Current phase",
-      "- Selected outcome/storyboard/style bundle",
+      "- Selected outcome/style bundle",
       "If <working_memory> conflicts with the user's latest message, ask one clarifying question.",
       "",
       "# CURRENT CONTEXT",
       workflowName ? `User's workflow: "${workflowName}"` : "No workflow selected yet",
       selectedOutcome ? `User selected outcome: ${selectedOutcome}` : "",
-      selectedStoryboard ? `User selected storyboard: ${selectedStoryboard}` : "",
       safeSelectedStyleBundle ? `User selected style bundle: ${safeSelectedStyleBundle}` : "",
       "",
       "# CURRENT PHASE INSTRUCTIONS (Phase 2)",
