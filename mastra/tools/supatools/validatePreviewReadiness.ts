@@ -53,12 +53,20 @@ export const validatePreviewReadiness = createSupaTool<z.infer<typeof outputSche
     const blockers: string[] = [];
     const warnings: string[] = [];
 
-    const { data: sources, error: sourceError } = await supabase
+    // Build source query - if sourceId provided, look up that specific source.
+    // If not, find any active source for this tenant.
+    let sourceQuery = supabase
       .from('sources')
       .select('id, name, status')
-      .eq('tenant_id', tenantId)
-      .eq(sourceId ? 'id' : 'tenant_id', sourceId ?? tenantId)
-      .limit(1);
+      .eq('tenant_id', tenantId);
+
+    if (sourceId) {
+      sourceQuery = sourceQuery.eq('id', sourceId);
+    } else {
+      sourceQuery = sourceQuery.eq('status', 'active');
+    }
+
+    const { data: sources, error: sourceError } = await sourceQuery.limit(1);
 
     const source = !sourceError && sources && sources.length > 0 ? sources[0] : undefined;
     
