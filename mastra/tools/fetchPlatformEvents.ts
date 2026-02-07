@@ -45,7 +45,8 @@ export const fetchPlatformEvents = createTool({
     fetchedAt: z.string(),
   }),
   execute: async (inputData, context) => {
-    const { platformType, eventCount, sourceId } = inputData;
+    const { platformType, sourceId } = inputData;
+    const eventCount = inputData.eventCount ?? 100;
 
     // Get Supabase client from context to look up source credentials
     const accessToken = context?.requestContext?.get("supabaseAccessToken") as string;
