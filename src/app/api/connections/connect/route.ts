@@ -410,11 +410,12 @@ export async function POST(req: Request) {
     }
 
     const endpoints = [
+      "https://api.vapi.ai/assistant",     // current documented endpoint (singular, no prefix)
       "https://api.vapi.ai/v1/assistants",
       "https://api.vapi.ai/assistants",
       "https://api.vapi.ai/api/v1/assistants",
       "https://api.vapi.ai/api/assistants",
-      "https://api.vapi.ai/v1/assistant", // defensive (some APIs use singular list route differently)
+      "https://api.vapi.ai/v1/assistant",
     ];
 
     let lastStatus: number | null = null;

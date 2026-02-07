@@ -54,11 +54,12 @@ export async function GET(req: Request) {
   if (!apiKey) return NextResponse.json({ ok: false, code: "MISSING_API_KEY" }, { status: 400 });
 
   const endpoints = [
+    "https://api.vapi.ai/assistant",     // current documented endpoint (singular, no prefix)
     "https://api.vapi.ai/v1/assistants",
     "https://api.vapi.ai/assistants",
     "https://api.vapi.ai/api/v1/assistants",
     "https://api.vapi.ai/api/assistants",
-    "https://api.vapi.ai/v1/assistant", // defensive (some APIs use singular list route differently)
+    "https://api.vapi.ai/v1/assistant",
   ];
 
   let lastStatus: number | null = null;

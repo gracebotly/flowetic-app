@@ -604,7 +604,11 @@ export default function ConnectionsPage() {
     } catch (e: any) {
       setInventoryEntities([]);
       setSelectedExternalIds(new Set());
-      setInventoryErr(String(e?.message ?? e));
+      const errorMessage = String(e?.message ?? e);
+      setInventoryErr(errorMessage);
+      // Still open the modal so the user can SEE the error
+      setConnectOpen(true);
+      setStep("entities");
     } finally {
       setInventoryLoading(false);
     }
