@@ -453,6 +453,9 @@ export default function ConnectionsPage() {
     // Authoritative refetch (HAR shows the app already calls this; we ensure state is set from response)
     await refreshCredentials();
 
+    // Also refresh the "All" tab so deleted source's entities disappear
+    await refreshIndexedEntities();
+
     setSaving(false);
     return true;
   }
@@ -604,7 +607,11 @@ export default function ConnectionsPage() {
     } catch (e: any) {
       setInventoryEntities([]);
       setSelectedExternalIds(new Set());
-      setInventoryErr(String(e?.message ?? e));
+      const errorMessage = String(e?.message ?? e);
+      setInventoryErr(errorMessage);
+      // Still open the modal so the user can SEE the error
+      setConnectOpen(true);
+      setStep("entities");
     } finally {
       setInventoryLoading(false);
     }
@@ -754,15 +761,28 @@ export default function ConnectionsPage() {
       id: `${createdSourceId ?? "source"}:${e.externalId}`,
       externalId: e.externalId,
       name: e.displayName,
+      updatedAt: (e as any).updatedAt ?? (e as any).createdAt ?? null,
     }));
 
     const filtered = q
       ? base.filter((x) => x.name.toLowerCase().includes(q) || x.externalId.toLowerCase().includes(q))
       : base;
 
-    filtered.sort((a, b) => a.name.localeCompare(b.name));
+    // Sort: indexed (checked) items first, then newest first, then alphabetical as tiebreak
+    filtered.sort((a, b) => {
+      const aChecked = selectedExternalIds.has(a.externalId) ? 1 : 0;
+      const bChecked = selectedExternalIds.has(b.externalId) ? 1 : 0;
+      if (aChecked !== bChecked) return bChecked - aChecked; // checked first
+
+      // Newest first by updatedAt
+      const aTime = a.updatedAt ? Date.parse(a.updatedAt) : 0;
+      const bTime = b.updatedAt ? Date.parse(b.updatedAt) : 0;
+      if (aTime !== bTime) return bTime - aTime;
+
+      return a.name.localeCompare(b.name); // alphabetical tiebreak
+    });
     return filtered;
-  }, [inventoryEntities, inventorySearch, createdSourceId]);
+  }, [inventoryEntities, inventorySearch, createdSourceId, selectedExternalIds]);
 
   function resetModal() {
     setStep("platform");
@@ -869,7 +889,7 @@ export default function ConnectionsPage() {
         payload.region = selectedRegion;
       }
 
-      // n8n on your instance requires X-N8N-API-KEY header (no UI dropdown)
+      // n8n requires X-N8N-API-KEY header for all key types (including JWTs)
       if (selectedPlatform === "n8n") {
         payload.n8nAuthMode = "header";
       }
@@ -1664,7 +1684,9 @@ export default function ConnectionsPage() {
                         ? "Enter your API token to import your Make scenarios."
                         : editingSourceId
                           ? null
-                          : "Enter credentials to validate and connect."
+                          : selectedPlatform === "n8n"
+                            ? "Settings → n8n API → Create an API key"
+                            : "Enter credentials to validate and connect."
                       : step === "entities"
                       ? editingSourceId
                         ? `Update which ${entityNoun(String(selectedPlatform))} GetFlowetic should index. Unselected ${entityNoun(String(selectedPlatform))} will be removed from your All tab.`
@@ -1784,14 +1806,6 @@ export default function ConnectionsPage() {
             Connect using an API key to import and index workflows.
           </div>
         </div>
-        <div className="flex gap-2">
-          <span className="shrink-0 rounded-full border-2 border-gray-200 bg-white px-2 py-1 text-xs font-bold text-gray-700">
-            Enhanced
-          </span>
-          <span className="shrink-0 rounded-full border-2 border-gray-200 bg-white px-2 py-1 text-xs font-bold text-gray-700">
-            Protected
-          </span>
-        </div>
       </div>
     </button>
 
@@ -1801,7 +1815,7 @@ export default function ConnectionsPage() {
           <div>
             <div className="text-sm font-semibold text-gray-900">MCP Instances</div>
             <div className="mt-1 text-sm text-gray-600">
-              AI tools will be able to discover and run enabled n8n workflows directly.
+              Securely search, audit, and trigger specific workflows via a centralized connection.
             </div>
           </div>
           <span className="shrink-0 rounded-full border border-indigo-200 bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-700">
@@ -2114,6 +2128,18 @@ export default function ConnectionsPage() {
       </div>
     ) : null}
 
+    {saving ? (
+      <div className="flex items-center justify-center gap-3 rounded-lg border border-blue-100 bg-blue-50 p-4">
+        <svg className="h-5 w-5 animate-spin text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <span className="text-sm font-medium text-blue-700">
+          {editingSourceId ? "Saving changes..." : "Validating credentials and importing inventory..."}
+        </span>
+      </div>
+    ) : null}
+
     <div className="flex justify-end gap-2 pt-2">
       {!editingSourceId ? (
         <button
@@ -2222,15 +2248,6 @@ export default function ConnectionsPage() {
     ) : null}
 
     <div className="flex justify-end gap-2 pt-2">
-      <button
-        type="button"
-        onClick={() => setStep("credentials")}
-        className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-200"
-        disabled={saving || inventoryLoading}
-      >
-        Back
-      </button>
-
       <button
         type="button"
         onClick={async () => {

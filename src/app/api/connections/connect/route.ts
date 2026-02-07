@@ -383,11 +383,31 @@ export async function POST(req: Request) {
     const testRes = await fetch(`${baseUrl}/api/v1/workflows`, { method: "GET", headers });
     if (!testRes.ok) {
       const t = await testRes.text().catch(() => "");
+
+      // Check if JWT token is expired to give a specific error message
+      let expiredHint = "";
+      if (testRes.status === 401 && secretJson.apiKey) {
+        try {
+          const parts = secretJson.apiKey.split(".");
+          if (parts.length === 3) {
+            const payload = JSON.parse(atob(parts[1]));
+            if (payload.exp && typeof payload.exp === "number") {
+              const expDate = new Date(payload.exp * 1000);
+              if (expDate.getTime() < Date.now()) {
+                expiredHint = ` Your API key expired on ${expDate.toLocaleDateString()}. Please generate a new key in n8n Settings → API.`;
+              }
+            }
+          }
+        } catch {
+          // Not a JWT or couldn't decode — ignore
+        }
+      }
+
       const msg = providerAuthMessage({
         platform: "n8n",
         status: testRes.status,
         fallback: `n8n API auth failed (${testRes.status}). ${t}`.trim(),
-      });
+      }) + expiredHint;
 
       return errorResponse(
         400,
@@ -410,11 +430,12 @@ export async function POST(req: Request) {
     }
 
     const endpoints = [
+      "https://api.vapi.ai/assistant",     // current documented endpoint (singular, no prefix)
       "https://api.vapi.ai/v1/assistants",
       "https://api.vapi.ai/assistants",
       "https://api.vapi.ai/api/v1/assistants",
       "https://api.vapi.ai/api/assistants",
-      "https://api.vapi.ai/v1/assistant", // defensive (some APIs use singular list route differently)
+      "https://api.vapi.ai/v1/assistant",
     ];
 
     let lastStatus: number | null = null;
@@ -641,29 +662,8 @@ export async function POST(req: Request) {
   // IMPORTANT: sources table has NO updated_at, so never set it here.
   let source: any = null;
 
-  if (platformType === "n8n") {
+  {
     const { data, error } = await supabase
-      .from("sources")
-      .upsert(
-        {
-          tenant_id: membership.tenant_id,
-          type: platformType,
-          name: ((((body as any).__computedName as string | undefined) ?? connectionName) || platformType),
-          status: "active",
-          method: method,
-          secret_hash: encryptSecret(JSON.stringify(secretJson)),
-        },
-        {
-          onConflict: "tenant_id,type,method",
-        },
-      )
-      .select()
-      .single();
-
-    if (error) return errorResponse(400, "PERSISTENCE_FAILED", error.message);
-    source = data;
-  } else {
-    const { data: source, error } = await supabase
       .from("sources")
       .upsert(
         {
@@ -679,9 +679,12 @@ export async function POST(req: Request) {
       .select()
       .single();
 
-    if (error) {
-      return errorResponse(400, "PERSISTENCE_FAILED", error.message);
-    }
+    if (error) return errorResponse(400, "PERSISTENCE_FAILED", error.message);
+    source = data;
+  }
+
+  if (!source) {
+    return errorResponse(500, "SOURCE_CREATE_FAILED", "Failed to create source record. Please try again.");
   }
 
   // If connect-time inventoryEntities were fetched, persist them into source_entities as disabled by default.
