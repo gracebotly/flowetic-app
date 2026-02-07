@@ -7,7 +7,7 @@ import { z } from 'zod';
 
 const inputSchema = z.object({
   sourceId: z.string().uuid().optional(),
-  requireMinEvents: z.number().min(1).default(2),
+  requireMinEvents: z.number().min(1).default(10),
   requireSchemaReady: z.boolean().default(true),
 });
 
@@ -125,7 +125,10 @@ export const validatePreviewReadiness = createSupaTool<z.infer<typeof outputSche
     if (uniqueEventTypes.length === 0) {
       warnings.push('No event types detected. Dashboard may be empty.');
     } else if (uniqueEventTypes.length === 1) {
-      warnings.push(`Only "${uniqueEventTypes[0]}" event type detected. Consider waiting for more event types.`);
+      warnings.push(
+        `Limited event diversity: only "${uniqueEventTypes[0]}" events detected. ` +
+        `For richer insights, ensure workflow includes diverse actions (lead creation, metric updates, stage transitions, etc.).`
+      );
     } else if (!uniqueEventTypes.includes('metric')) {
       warnings.push('No metric events detected. Dashboard may lack quantitative data.');
     }

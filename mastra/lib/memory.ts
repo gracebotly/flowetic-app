@@ -39,8 +39,8 @@ export function createFloweticMemory(opts: CreateFloweticMemoryOpts = {}) {
 - Platform: {{platformType}}
 - Workflow Name: {{workflowName}}
 
-## Notes
-(Record user selections, progress, and decisions here as the journey proceeds)
+## Journey Progress
+(Record user selections and decisions here as they are made)
 `,
     } as const);
   
