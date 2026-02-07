@@ -4,24 +4,24 @@ import type { RequestContext } from "@mastra/core/request-context";
 import { detectSelection } from "../validation/selection-checks";
 import { getMastra } from "../index";
 
-type SelectionKind = "entity" | "outcome" | "storyboard" | "style_bundle" | "deploy";
+// "storyboard" removed — no longer a valid selection kind
+type SelectionKind = "entity" | "outcome" | "style_bundle" | "deploy";
 
 const VibeJourneySuspendSchema = z.object({
   prompt: z.string().min(1),
   options: z.array(z.string()).default([]),
-  // Optional diagnostic string for debugging
   error: z.string().optional(),
 });
 
 const VibeJourneyResumeSchema = z.object({
   userSelection: z.string().min(1),
-  selectionType: z.enum(["entity", "outcome", "storyboard", "style_bundle"]),
+  selectionType: z.enum(["entity", "outcome", "style_bundle"]),
 });
 
+// "align" removed from phase list
 const FloweticPhase = z.enum([
   "select_entity",
   "recommend",
-  "align",
   "style",
   "build_preview",
   "interactive_edit",
@@ -36,10 +36,9 @@ export const VibeJourneyInput = z.object({
 export const VibeJourneyState = z.object({
   currentPhase: FloweticPhase.default("select_entity"),
 
-  // Selections tracked across phases:
+  // Selections tracked across phases (storyboard removed):
   selectedEntity: z.string().optional(),
   selectedOutcome: z.string().optional(),
-  selectedStoryboard: z.string().optional(),
   selectedStyleBundleId: z.string().optional(),
 
   // Context:
@@ -78,10 +77,15 @@ function applyStateToRequestContext(params: {
 
   if (state.selectedEntity) safeSetRequestContext(requestContext, "selectedEntity", state.selectedEntity);
   if (state.selectedOutcome) safeSetRequestContext(requestContext, "selectedOutcome", state.selectedOutcome);
-  if (state.selectedStoryboard) safeSetRequestContext(requestContext, "selectedStoryboard", state.selectedStoryboard);
   if (state.selectedStyleBundleId) safeSetRequestContext(requestContext, "selectedStyleBundleId", state.selectedStyleBundleId);
 }
 
+/**
+ * Phase transitions (storyboard/align removed):
+ *   select_entity + entity     → recommend
+ *   recommend    + outcome     → style          (was → align)
+ *   style        + style_bundle → build_preview
+ */
 function nextPhaseForSelection(params: {
   currentPhase: FloweticPhase;
   selectionType: SelectionKind;
@@ -89,8 +93,7 @@ function nextPhaseForSelection(params: {
   const { currentPhase, selectionType } = params;
 
   if (currentPhase === "select_entity" && selectionType === "entity") return "recommend";
-  if (currentPhase === "recommend" && selectionType === "outcome") return "align";
-  if (currentPhase === "align" && selectionType === "storyboard") return "style";
+  if (currentPhase === "recommend" && selectionType === "outcome") return "style";
   if (currentPhase === "style" && selectionType === "style_bundle") return "build_preview";
 
   // Later phases:
@@ -101,23 +104,21 @@ function nextPhaseForSelection(params: {
 
 function getSelectionPrompt(phase: FloweticPhase): string {
   const prompts: Record<FloweticPhase, string> = {
-    select_entity: "Which workflow would you like to build a dashboard for?",
-    recommend: "Would you like a Dashboard or Product outcome?",
-    align: "Which storyboard template fits your needs?",
-    style: "Which style bundle matches your brand?",
-    build_preview: "Would you like to generate a preview now?",
-    interactive_edit: "What edits would you like to make before deploying?",
-    deploy: "Ready to deploy your dashboard?",
+    select_entity: "Which parts of your workflow would you like to track?",
+    recommend: "Would you like a Dashboard or Product?",
+    style: "Which style fits your brand?",
+    build_preview: "Generating your preview now.",
+    interactive_edit: "What edits would you like to make?",
+    deploy: "Ready to deploy?",
   };
   return prompts[phase] ?? "Please make a selection to continue.";
 }
 
 function getSelectionOptions(phase: FloweticPhase): string[] {
   const options: Record<FloweticPhase, string[]> = {
-    select_entity: ["workflow_v2", "make_integration", "retell_ai", "n8n_automation"],
+    select_entity: [],
     recommend: ["dashboard", "product"],
-    align: ["performance_snapshot", "impact_report", "reliability_ops", "delivery_sla"],
-    style: ["healthcare_professional", "saas_modern", "ecommerce_clean", "fintech_corporate"],
+    style: [],
     build_preview: ["generate_preview"],
     interactive_edit: ["deploy"],
     deploy: ["confirm_deploy"],
@@ -148,11 +149,10 @@ const phaseTransitionStep = createStep({
     // Always keep RequestContext consistent with current state
     applyStateToRequestContext({ requestContext, state });
 
-    // RESUME PATH: we were suspended and caller provides resumeData
+    // RESUME PATH
     if (resumeData) {
       const resume = VibeJourneyResumeSchema.parse(resumeData);
 
-      // Normalize a message into the same __ACTION__ format used by detectSelection
       const syntheticMessage = `__ACTION__:select_${resume.selectionType}:${resume.userSelection}`;
       const selection = detectSelection(syntheticMessage);
 
@@ -164,10 +164,8 @@ const phaseTransitionStep = createStep({
         });
       }
 
-      // Apply to state
       if (selection.type === "entity") state.selectedEntity = selection.value;
       if (selection.type === "outcome") state.selectedOutcome = selection.value;
-      if (selection.type === "storyboard") state.selectedStoryboard = selection.value;
       if (selection.type === "style_bundle") state.selectedStyleBundleId = selection.value;
 
       const next = nextPhaseForSelection({
@@ -181,11 +179,10 @@ const phaseTransitionStep = createStep({
       return state;
     }
 
-    // NORMAL PATH: detect selection from userMessage
+    // NORMAL PATH
     const selection = detectSelection(inputData.userMessage);
 
     if (!selection) {
-      // Phase 5 behavior: explicitly suspend instead of returning same state (prevents looping)
       return await suspend({
         prompt: getSelectionPrompt(state.currentPhase),
         options: getSelectionOptions(state.currentPhase),
@@ -193,11 +190,12 @@ const phaseTransitionStep = createStep({
       });
     }
 
-    // Apply selection fields
     if (selection.type === "entity") state.selectedEntity = selection.value;
     if (selection.type === "outcome") state.selectedOutcome = selection.value;
-    if (selection.type === "storyboard") state.selectedStoryboard = selection.value;
     if (selection.type === "style_bundle") state.selectedStyleBundleId = selection.value;
+
+    // Legacy: if someone sends a storyboard selection, just ignore it and don't block
+    // (forward-compatible with old UI versions that might still emit storyboard tokens)
 
     const next = nextPhaseForSelection({
       currentPhase: state.currentPhase,
@@ -220,7 +218,6 @@ const agentResponseStep = createStep({
     state: VibeJourneyState,
   }),
   execute: async ({ inputData, requestContext }) => {
-    // Ensure RequestContext reflects current workflow state before agent runs
     applyStateToRequestContext({ requestContext, state: inputData });
 
     const mastra = getMastra();
@@ -261,7 +258,7 @@ function inputDataToPrompt(state: VibeJourneyState, requestContext?: RequestCont
 
 export const vibeJourneyWorkflow = createWorkflow({
   id: "vibeJourney",
-  description: "Flowetic Vibe Journey orchestration workflow (Phase 4). Deterministically advances phase based on __ACTION__ selections.",
+  description: "Flowetic Vibe Journey orchestration workflow. Deterministically advances phase based on __ACTION__ selections. Flow: select_entity → recommend → style → build_preview → interactive_edit → deploy.",
   inputSchema: VibeJourneyInput,
   outputSchema: VibeJourneyOutput,
 })

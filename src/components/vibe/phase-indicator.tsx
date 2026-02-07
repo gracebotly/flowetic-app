@@ -5,7 +5,6 @@ import { motion } from "framer-motion";
 type JourneyMode =
   | "select_entity"
   | "recommend"
-  | "align"
   | "style"
   | "build_preview"
   | "interactive_edit"
@@ -18,21 +17,24 @@ interface PhaseIndicatorProps {
 const PHASES = [
   { id: "select_entity", label: "Select", step: 1 },
   { id: "recommend", label: "Outcome", step: 2 },
-  { id: "align", label: "Story", step: 3 },
-  { id: "style", label: "Style", step: 4 },
-  { id: "build_preview", label: "Preview", step: 5 },
-  { id: "interactive_edit", label: "Refine", step: 6 },
-  { id: "deploy", label: "Deploy", step: 7 },
+  { id: "style", label: "Style", step: 3 },
+  { id: "build_preview", label: "Preview", step: 4 },
+  { id: "interactive_edit", label: "Refine", step: 5 },
+  { id: "deploy", label: "Deploy", step: 6 },
 ] as const;
 
 export function PhaseIndicator({ currentMode }: PhaseIndicatorProps) {
-  const currentPhaseIndex = PHASES.findIndex((p) => p.id === currentMode);
-  const progress = ((currentPhaseIndex + 1) / PHASES.length) * 100;
+  // Handle legacy "align" phase — map it to "style" so the bar doesn't break
+  const normalizedMode = currentMode === ("align" as string) ? "style" : currentMode;
 
-  // Yellow line at Phase 3 (align) = step 3 of 7 = ~42.86%
+  const currentPhaseIndex = PHASES.findIndex((p) => p.id === normalizedMode);
+  const safeIndex = currentPhaseIndex === -1 ? 0 : currentPhaseIndex;
+  const progress = ((safeIndex + 1) / PHASES.length) * 100;
+
+  // Yellow line at Phase 3 (style) = step 3 of 6 = 50%
   const previewThreshold = (3 / PHASES.length) * 100;
 
-  const isBeforePreview = currentPhaseIndex < 2; // Before "align" phase
+  const isBeforePreview = safeIndex < 2; // Before "style" phase
 
   return (
     <div className="w-full">
@@ -59,7 +61,7 @@ export function PhaseIndicator({ currentMode }: PhaseIndicatorProps) {
       {/* Status Text */}
       <div className="mt-2 flex items-center justify-between text-xs">
         <span className="text-gray-600 dark:text-gray-400 font-medium">
-          {PHASES[currentPhaseIndex]?.label || "Processing..."}
+          {PHASES[safeIndex]?.label || "Processing..."}
         </span>
 
         {isBeforePreview && (
@@ -73,13 +75,13 @@ export function PhaseIndicator({ currentMode }: PhaseIndicatorProps) {
           </motion.span>
         )}
 
-        {!isBeforePreview && currentPhaseIndex < PHASES.length - 1 && (
+        {!isBeforePreview && safeIndex < PHASES.length - 1 && (
           <span className="text-green-600 dark:text-green-400 font-medium">
             Preview available
           </span>
         )}
 
-        {currentPhaseIndex === PHASES.length - 1 && (
+        {safeIndex === PHASES.length - 1 && (
           <span className="text-green-600 dark:text-green-400 font-semibold">
             Complete ✓
           </span>

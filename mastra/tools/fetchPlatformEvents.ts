@@ -199,6 +199,8 @@ async function fetchN8nEvents(
               platform: "n8n",
             },
             timestamp: exec.startedAt || exec.createdAt || nowIso(),
+            startedAt: exec.startedAt || null,
+            stoppedAt: exec.stoppedAt || null,
             tenant_id: tenantId,
             source_id: sourceId,
           });

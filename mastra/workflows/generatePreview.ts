@@ -64,6 +64,9 @@ const analyzeSchemaStep = createStep({
     confidence: z.number(),
   }),
   async execute({ inputData, requestContext, getStepResult, getInitData, suspend, runId }) {
+    // Phase gate REMOVED — the agent enforces the journey flow via instructions.
+    // No need to block here; the agent won't call this workflow until selections are complete.
+
     // Get sourceId from context (set when connection was established)
     const sourceId = requestContext.get('sourceId');
     
@@ -82,7 +85,6 @@ const analyzeSchemaStep = createStep({
         tenantId,
         sourceId,
         sampleSize,
-        // Include platformType as required
         platformType: requestContext.get('platformType') || 'make',
       },
       { requestContext }
@@ -184,7 +186,6 @@ const checkMappingCompletenessStep = createStep({
   }),
   async execute({ inputData, requestContext, getStepResult, getInitData, suspend, runId }) {
     const missingFields = inputData.missingFields || [];
-    // If any required fields are missing, pause for human input
     if (missingFields.length > 0) {
       await suspend({
         reason: 'Required fields missing - needs human input',
@@ -215,7 +216,6 @@ const generateUISpecStep = createStep({
   async execute({ inputData, requestContext, getStepResult, getInitData, suspend, runId }) {
     const { shouldSuspend, missingFields, message, decision } = inputData;
     
-    // If the previous step decided we should suspend, handle it
     if (shouldSuspend && missingFields && missingFields.length > 0) {
       throw new Error(`INCOMPLETE_MAPPING: ${message || 'Missing required fields'}`);
     }
