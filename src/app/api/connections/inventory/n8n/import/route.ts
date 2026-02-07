@@ -178,5 +178,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, code: "PERSISTENCE_FAILED", message: upErr.message }, { status: 400 });
   }
 
-  return NextResponse.json({ ok: true, importedCount: dedupedRows.length });
+  return NextResponse.json({ ok: true, importedCount: rows.length });
 }
