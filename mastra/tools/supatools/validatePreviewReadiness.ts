@@ -7,7 +7,7 @@ import { z } from 'zod';
 
 const inputSchema = z.object({
   sourceId: z.string().uuid().optional(),
-  requireMinEvents: z.number().min(1).default(10),
+  requireMinEvents: z.number().min(1).default(2),
   requireSchemaReady: z.boolean().default(true),
 });
 
@@ -115,7 +115,8 @@ export const validatePreviewReadiness = createSupaTool<z.infer<typeof outputSche
     // Conservative readiness: require at least a session and a selected source.
     if (requireSchemaReady) {
       if (!session) {
-        blockers.push('No journey session found. Start the journey before generating a preview.');
+        // ❌ REMOVED BLOCKER: Journey sessions are created during journey, not before
+        // blockers.push('No journey session found. Start the journey before generating a preview.');
       } else if (!session.source_id) {
         blockers.push('No source selected in the current journey session.');
       }
@@ -125,7 +126,10 @@ export const validatePreviewReadiness = createSupaTool<z.infer<typeof outputSche
     if (uniqueEventTypes.length === 0) {
       warnings.push('No event types detected. Dashboard may be empty.');
     } else if (uniqueEventTypes.length === 1) {
-      warnings.push(`Only "${uniqueEventTypes[0]}" event type detected. Consider waiting for more event types.`);
+      warnings.push(
+        `Limited event diversity: only "${uniqueEventTypes[0]}" events detected. ` +
+        `For richer insights, ensure workflow includes diverse actions (lead creation, metric updates, stage transitions, etc.).`
+      );
     } else if (!uniqueEventTypes.includes('metric')) {
       warnings.push('No metric events detected. Dashboard may lack quantitative data.');
     }

@@ -51,8 +51,8 @@ export const normalizeEvents = createTool({
         platform_event_id: platformEventId,
 
         // Minimal classification
-        type: "platform_event",
-        name: `${platformType}.event`,
+        type: "state",
+        name: `${platformType}:${e.workflow_name || e.workflowId || 'workflow'}:execution`,
         text: null,
         state: {
           platformType,
@@ -61,7 +61,13 @@ export const normalizeEvents = createTool({
 
         // Prefer existing column name 'timestamp' if your table uses it.
         timestamp: ts,
-        labels: { platformType },
+        labels: {
+          platformType,
+          workflow_id: e.workflow_id || e.workflowId,
+          workflow_name: e.workflow_name,
+          execution_id: e.execution_id || e.id,
+          status: e.status || (e.stoppedAt ? 'error' : 'success'),
+        },
       };
     });
 
