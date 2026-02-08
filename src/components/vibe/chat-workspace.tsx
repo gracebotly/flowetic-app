@@ -231,73 +231,115 @@ export function ChatWorkspace({
   }, [uiMessages]);
 
   // ━━━ Bridge: Extract previewUrl from tool results ━━━━━━━━━━━━━━━━━━━━━━━━━
-  // When savePreviewVersion or persistPreviewVersion tool results arrive in the
-  // message stream, extract previewUrl and update vibeContext so the preview
-  // panel renders the iframe.
+  // Detects preview URLs from:
+  // 1. Direct tool-invocation parts (savePreviewVersion, persistPreviewVersion)
+  // 2. Workflow wrapper tool results (runGeneratePreviewWorkflow)
+  // 3. Agent text output containing /preview/ URLs (fallback)
   useEffect(() => {
+    function trySetPreview(previewUrl: string, interfaceId: string, versionId: string) {
+      if (!previewUrl || !interfaceId || !versionId) return;
+      if (vibeContext?.previewUrl === previewUrl) return; // Already set
+
+      console.log("[Preview Bridge] Setting preview:", { previewUrl, interfaceId, versionId });
+
+      setVibeContext((prev) => prev ? {
+        ...prev,
+        previewUrl,
+        previewVersionId: versionId,
+        interfaceId,
+      } : prev);
+
+      setJourneyMode("interactive_edit");
+      setView("preview");
+    }
+
     for (const msg of dedupedMessages) {
       if (msg.role !== "assistant") continue;
 
-      // AI SDK v5: parts array contains tool results
       const parts = (msg as any).parts ?? (msg as any).content;
       if (!Array.isArray(parts)) continue;
 
       for (const part of parts) {
-        // Check for tool-result parts with savePreviewVersion or persistPreviewVersion output
+        // ── Strategy 1: Direct tool-invocation parts (AI SDK v5) ──
         if (
           part?.type === "tool-invocation" &&
           part?.state === "result" &&
           (part?.toolName === "savePreviewVersion" || part?.toolName === "persistPreviewVersion")
         ) {
           const result = part?.result;
-          if (result?.previewUrl && result?.interfaceId && result?.versionId) {
-            // Only update if we don't already have this previewUrl
-            if (vibeContext?.previewUrl !== result.previewUrl) {
-              console.log("[Preview Bridge] Detected savePreviewVersion result:", {
-                previewUrl: result.previewUrl,
-                interfaceId: result.interfaceId,
-                versionId: result.versionId,
-              });
+          if (result?.previewUrl) {
+            trySetPreview(result.previewUrl, result.interfaceId, result.versionId);
+          }
+        }
 
-              setVibeContext((prev) => prev ? {
-                ...prev,
-                previewUrl: result.previewUrl,
-                previewVersionId: result.versionId,
-                interfaceId: result.interfaceId,
-              } : prev);
+        // ── Strategy 2: Workflow wrapper tool (runGeneratePreviewWorkflow) ──
+        if (
+          part?.type === "tool-invocation" &&
+          part?.state === "result" &&
+          part?.toolName === "runGeneratePreviewWorkflow"
+        ) {
+          const result = part?.result;
+          if (result?.previewUrl) {
+            trySetPreview(result.previewUrl, result.interfaceId ?? "", result.previewVersionId ?? result.versionId ?? "");
+          }
+        }
 
-              // Also advance journey mode to interactive_edit
-              setJourneyMode("interactive_edit");
-
-              // Auto-switch to preview tab
-              setView("preview");
+        // ── Strategy 3: Workflow results streamed as tool-generatePreview ──
+        // In AI SDK v5 + Mastra, workflow tools appear as `tool-{toolId}` type parts
+        const partType = String(part?.type ?? "");
+        if (
+          (partType === "tool-generatePreview" || partType === "tool-runGeneratePreviewWorkflow") &&
+          part?.state === "output-available"
+        ) {
+          const output = part?.output;
+          if (output?.previewUrl) {
+            trySetPreview(
+              output.previewUrl,
+              output.interfaceId ?? "",
+              output.previewVersionId ?? output.versionId ?? ""
+            );
+          }
+          // Also check nested step results (workflow output contains step results)
+          const stepResults = output?.steps ?? output?.stepResults;
+          if (stepResults) {
+            const persist = stepResults.persistPreviewVersion ?? stepResults.finalize;
+            if (persist?.output?.previewUrl) {
+              trySetPreview(
+                persist.output.previewUrl,
+                persist.output.interfaceId ?? "",
+                persist.output.versionId ?? persist.output.previewVersionId ?? ""
+              );
             }
+          }
+        }
+
+        // ── Strategy 4: Parse previewUrl from agent text output (fallback) ──
+        if (part?.type === "text" && typeof part?.text === "string") {
+          const previewUrlMatch = part.text.match(/\/preview\/([a-f0-9-]+)\/([a-f0-9-]+)/);
+          if (previewUrlMatch) {
+            const [fullMatch, extractedInterfaceId, extractedVersionId] = previewUrlMatch;
+            trySetPreview(fullMatch, extractedInterfaceId, extractedVersionId);
           }
         }
       }
 
-      // Fallback: Check toolInvocations array (AI SDK v4 compat)
+      // ── Fallback: Check toolInvocations array (AI SDK v4 compat) ──
       const toolInvocations = (msg as any).toolInvocations;
       if (Array.isArray(toolInvocations)) {
         for (const invocation of toolInvocations) {
           if (
             (invocation.toolName === "savePreviewVersion" ||
-             invocation.toolName === "persistPreviewVersion") &&
+             invocation.toolName === "persistPreviewVersion" ||
+             invocation.toolName === "runGeneratePreviewWorkflow") &&
             invocation.state === "result" &&
             invocation.result?.previewUrl
           ) {
             const result = invocation.result;
-            if (vibeContext?.previewUrl !== result.previewUrl) {
-              console.log("[Preview Bridge] Detected via toolInvocations:", result);
-              setVibeContext((prev) => prev ? {
-                ...prev,
-                previewUrl: result.previewUrl,
-                previewVersionId: result.versionId,
-                interfaceId: result.interfaceId,
-              } : prev);
-              setJourneyMode("interactive_edit");
-              setView("preview");
-            }
+            trySetPreview(
+              result.previewUrl,
+              result.interfaceId ?? "",
+              result.versionId ?? result.previewVersionId ?? ""
+            );
           }
         }
       }
