@@ -47,7 +47,7 @@ export const savePreviewVersion = createTool({
       {
         interfaceId: resolvedInterfaceId,
         spec_json,
-        design_tokens,
+        design_tokens: design_tokens ?? {},
         platformType,
       },
       context
