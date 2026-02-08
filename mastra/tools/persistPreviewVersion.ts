@@ -24,12 +24,29 @@ export const persistPreviewVersion = createTool({
     }
     const { tenantId, userId } = extractTenantContext(context);
     const supabase = createAuthenticatedClient(accessToken);
-    
+
     const { interfaceId, spec_json, design_tokens, platformType } = inputData;
-    
-    // Create or get interface
-    let finalInterfaceId = interfaceId;
-    
+
+    // Resolve or create interface
+    let finalInterfaceId: string | undefined = interfaceId;
+
+    // CRITICAL: Validate that interfaceId exists in the interfaces table
+    // The agent sometimes passes a project.id which is NOT a valid interface_id
+    if (finalInterfaceId) {
+      const { data: existing, error: lookupError } = await supabase
+        .from('interfaces')
+        .select('id')
+        .eq('id', finalInterfaceId)
+        .maybeSingle();
+
+      if (lookupError || !existing) {
+        console.warn(
+          `[persistPreviewVersion] interfaceId "${finalInterfaceId}" not found in interfaces table. Creating new interface.`
+        );
+        finalInterfaceId = undefined; // Force creation of new interface
+      }
+    }
+
     if (!finalInterfaceId) {
       const { data: newInterface, error: interfaceError } = await supabase
         .from('interfaces')
@@ -41,14 +58,14 @@ export const persistPreviewVersion = createTool({
         })
         .select('id')
         .single();
-      
+
       if (interfaceError) {
         throw new Error(`Failed to create interface: ${interfaceError.message}`);
       }
-      
+
       finalInterfaceId = newInterface.id;
     }
-    
+
     // Create interface version
     const { data: version, error: versionError } = await supabase
       .from('interface_versions')
@@ -60,18 +77,17 @@ export const persistPreviewVersion = createTool({
       })
       .select('id')
       .single();
-    
+
     if (versionError) {
       throw new Error(`Failed to create version: ${versionError.message}`);
     }
-    
-    // Ensure we have a valid interfaceId (TypeScript type narrowing)
+
     if (!finalInterfaceId) {
       throw new Error('Failed to create or retrieve interface ID');
     }
-    
+
     const previewUrl = `/preview/${finalInterfaceId}/${version.id}`;
-    
+
     return {
       interfaceId: finalInterfaceId,
       versionId: version.id,
