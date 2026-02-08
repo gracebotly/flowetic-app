@@ -114,6 +114,13 @@ export const masterRouterAgent: Agent = new Agent({
       ? await loadSkillFromWorkspace("business-outcomes-advisor")
       : "";
 
+    // Load UI/UX Pro Max skill for style and build phases
+    const designPhases = ["style", "build_preview", "interactive_edit"];
+    const shouldLoadDesignSkill = designPhases.includes(phase || "");
+    const designSkillContent = shouldLoadDesignSkill
+      ? await loadSkillFromWorkspace("ui-ux-pro-max")
+      : "";
+
     const phaseInstructions = getPhaseInstructions(phase as FloweticPhase, {
       platformType: String(safePlatformType),
       workflowName: workflowName || undefined,
@@ -145,6 +152,14 @@ export const masterRouterAgent: Agent = new Agent({
       "",
       "CRITICAL: NEVER skip step 2. NEVER tell the user there's insufficient data without first attempting backfill.",
       "CRITICAL: NEVER recite a pre-written response. Describe the actual situation based on tool results.",
+      "",
+      "### DATA-DRIVEN RECOMMENDATIONS PROTOCOL:",
+      "",
+      "When presenting options to the user (entities, outcomes, layouts):",
+      "1. ALWAYS call a data tool FIRST (getEventStats, recommendOutcome) before presenting options.",
+      "2. Ground your suggestions in tool results — mention event counts, data types found, entity names from actual data.",
+      "3. If a tool returns empty/error, acknowledge it: 'I don't see stored data yet' and fall back to workflow-name-based suggestions.",
+      "4. NEVER present options purely from LLM knowledge when data tools are available.",
       "",
       "### GENERAL TOOL USAGE PRINCIPLE:",
       "",
@@ -241,6 +256,7 @@ export const masterRouterAgent: Agent = new Agent({
       // =========================================================================
       platformSkillContent ? `\n\n# PLATFORM SKILL: ${safePlatformType.toUpperCase()}\n\n${platformSkillContent}` : "",
       businessSkillContent ? `\n\n# BUSINESS OUTCOMES ADVISOR\n\n${businessSkillContent}` : "",
+      designSkillContent ? `\n\n# UI/UX DESIGN ADVISOR\n\n${designSkillContent}` : "",
     ].filter(Boolean).join("\n");
 
     return [
