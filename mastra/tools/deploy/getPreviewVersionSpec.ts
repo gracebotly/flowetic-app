@@ -28,7 +28,7 @@ export const getPreviewVersionSpec = createTool({
       .from("interface_versions")
       .select("id, interface_id, spec_json, design_tokens")
       .eq("id", inputData.previewVersionId)
-      .eq("tenant_id", tenantId) // Defense-in-depth with RLS
+      // tenant_id column does not exist on interface_versions — RLS handles tenant scoping
       .maybeSingle();
 
     if (error) throw new Error(error.message);

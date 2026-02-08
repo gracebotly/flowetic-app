@@ -3,14 +3,22 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { persistPreviewVersion } from "../persistPreviewVersion";
-import { createClient } from '@/lib/supabase/client';
-import { createAuthenticatedClient } from "../../lib/supabase";
 import { extractTenantContext } from "../../lib/tenant-verification";
 
+/**
+ * savePreviewVersion — thin delegate to persistPreviewVersion.
+ *
+ * This tool is called directly by the dashboardBuilderAgent.
+ * It delegates to persistPreviewVersion which handles:
+ * - Creating an interface if one doesn't exist
+ * - Inserting the version with correct column names
+ * - Returning interfaceId, versionId, previewUrl
+ */
 export const savePreviewVersion = createTool({
   id: "savePreviewVersion",
   description:
-    "Persist a validated spec_json + design_tokens as a new preview interface version. Reads tenantId/userId/interfaceId/platformType from runtimeContext when available.",
+    "Persist a validated spec_json + design_tokens as a new preview interface version. " +
+    "Creates the interface record automatically if interfaceId is not provided.",
   inputSchema: z.object({
     spec_json: z.record(z.any()),
     design_tokens: z.record(z.any()).default({}),
@@ -24,42 +32,36 @@ export const savePreviewVersion = createTool({
   execute: async (inputData, context) => {
     const { spec_json, design_tokens, interfaceId } = inputData;
 
-    // Get access token and tenant context
-    const accessToken = context?.requestContext?.get('supabaseAccessToken') as string;
-    if (!accessToken || typeof accessToken !== 'string') {
-      throw new Error('[savePreviewVersion]: Missing authentication token');
-    }
-    const { tenantId, userId } = extractTenantContext(context);
-    const supabase = createAuthenticatedClient(accessToken);
+    // Get platformType from context for interface naming
+    const platformType =
+      (context?.requestContext?.get("platformType") as string | undefined) ?? "make";
 
-    const platformType = (context?.requestContext?.get("platformType") as string | undefined) ?? "make";
+    // Resolve interfaceId: input > context > undefined (persistPreviewVersion will create one)
+    const resolvedInterfaceId =
+      interfaceId ??
+      (context?.requestContext?.get("interfaceId") as string | undefined) ??
+      undefined;
 
-    if (!tenantId || !userId) throw new Error("AUTH_REQUIRED");
-
-    const finalInterfaceId = interfaceId ?? (context?.requestContext?.get("interfaceId") as string | undefined) ?? undefined;
-
-    const { data: version, error: versionError } = await supabase
-      .from("interface_versions")
-      .insert({
-        interface_id: finalInterfaceId,
-        tenant_id: tenantId,
-        user_id: userId,
+    // Delegate to the canonical persistence tool
+    const result = await persistPreviewVersion.execute!(
+      {
+        interfaceId: resolvedInterfaceId,
         spec_json,
-        design_tokens: design_tokens ?? {},
-        is_preview: true,
-        created_at: new Date().toISOString(),
-      })
-      .select("id, interface_id, preview_url")
-      .single();
+        design_tokens,
+        platformType,
+      },
+      context
+    );
 
-    if (versionError) throw new Error(versionError.message);
-
-    const previewUrl = version?.preview_url ?? `https://flowetic.com/preview/${version.id}`;
+    // Handle error case
+    if (result instanceof Error) {
+      throw result;
+    }
 
     return {
-      interfaceId: finalInterfaceId ?? version.interface_id,
-      versionId: version.id,
-      previewUrl,
+      interfaceId: (result as any).interfaceId,
+      versionId: (result as any).versionId,
+      previewUrl: (result as any).previewUrl,
     };
   },
 });
