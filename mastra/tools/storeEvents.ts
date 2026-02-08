@@ -29,16 +29,45 @@ export const storeEvents = createTool({
 
     if (!rows.length) return { stored: 0, skipped: 0, errors: [] };
 
-    // Attempt upsert-like behavior by inserting and ignoring conflicts via unique index.
-    // Supabase JS upsert requires specifying conflict columns. We'll use upsert on (source_id, platform_event_id).
-    // If platform_event_id is null, it's not eligible for the unique partial index; that's acceptable.
-    const { data, error } = await supabase
-      .from("events")
-      .upsert(rows, {
-        onConflict: "source_id,platform_event_id",
-        ignoreDuplicates: true,
-      })
-      .select("id");
+    // Strip platform_event_id from rows to build clean rows for fallback
+    const cleanRows = rows.map((r: Record<string, unknown>) => {
+      const { platform_event_id, ...rest } = r;
+      return rest;
+    });
+
+    // Try upsert with platform_event_id first (preferred: dedup support)
+    const hasPlatformIds = rows.every(
+      (r: Record<string, unknown>) =>
+        r.platform_event_id != null && r.platform_event_id !== ""
+    );
+
+    let data: { id: string }[] | null = null;
+    let error: { message: string } | null = null;
+
+    if (hasPlatformIds) {
+      const result = await supabase
+        .from("events")
+        .upsert(rows, {
+          onConflict: "source_id,platform_event_id",
+          ignoreDuplicates: true,
+        })
+        .select("id");
+
+      if (result.error?.message?.includes("platform_event_id")) {
+        // Column doesn't exist yet — fall back to plain insert without that field
+        console.warn("[storeEvents] platform_event_id column missing, falling back to insert");
+        const fallback = await supabase.from("events").insert(cleanRows).select("id");
+        data = fallback.data;
+        error = fallback.error;
+      } else {
+        data = result.data;
+        error = result.error;
+      }
+    } else {
+      const result = await supabase.from("events").insert(cleanRows).select("id");
+      data = result.data;
+      error = result.error;
+    }
 
     if (error) {
       return { stored: 0, skipped: 0, errors: [error.message] };
