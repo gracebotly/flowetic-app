@@ -42,7 +42,6 @@ export const storeEvents = createTool({
     );
 
     let data: { id: string }[] | null = null;
-    let count: number | null = null;
 
     if (hasPlatformIds) {
       try {
@@ -52,11 +51,10 @@ export const storeEvents = createTool({
             onConflict: "source_id,platform_event_id",
             ignoreDuplicates: true,
           })
-          .select("id", { count: "exact" })
+          .select("id")
           .throwOnError();
 
         data = result.data;
-        count = result.count;
       } catch (err: any) {
         if (err?.message?.includes("platform_event_id")) {
           // Column doesn't exist yet — fall back to plain insert without that field
@@ -64,11 +62,10 @@ export const storeEvents = createTool({
           const fallback = await supabase
             .from("events")
             .insert(cleanRows)
-            .select("id", { count: "exact" })
+            .select("id")
             .throwOnError();
 
           data = fallback.data;
-          count = fallback.count;
         } else {
           console.error("[storeEvents] INSERT failed:", err.code, err.message);
           throw new Error(`storeEvents INSERT failed: ${err.code} — ${err.message}`);
@@ -78,14 +75,13 @@ export const storeEvents = createTool({
       const result = await supabase
         .from("events")
         .insert(cleanRows)
-        .select("id", { count: "exact" })
+        .select("id")
         .throwOnError();
 
       data = result.data;
-      count = result.count;
     }
 
-    const stored = count ?? data?.length ?? 0;
+    const stored = data?.length ?? 0;
     const skipped = Math.max(0, rows.length - stored);
 
     console.log(`[storeEvents] Stored ${stored} events, skipped ${skipped}`);
