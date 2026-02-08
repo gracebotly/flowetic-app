@@ -69,7 +69,7 @@ export const normalizeEvents = createTool({
         tenant_id: tenantId,
         source_id: sourceId,
         platform_event_id: platformEventId,
-        type: extracted.type,
+        type: extracted.type ?? e?.type ?? e?.event_type ?? e?.eventType ?? e?.category ?? 'unknown',
         name: extracted.name,
         text: null,
         state: extracted.state,
@@ -78,6 +78,25 @@ export const normalizeEvents = createTool({
       };
     });
 
-    return { normalizedEvents: normalized, count: normalized.length };
+    // Validate that all events have valid types
+    const valid = normalized.filter((e: Record<string, unknown>) =>
+      e.type && e.type !== 'unknown' && e.type !== 'undefined'
+    );
+    const invalid = normalized.filter((e: Record<string, unknown>) =>
+      !e.type || e.type === 'unknown' || e.type === 'undefined'
+    );
+
+    if (invalid.length > 0) {
+      console.warn(
+        `[normalizeEvents] ${invalid.length} events have undefined/unknown type`,
+        {
+          platformType,
+          sampleKeys: Object.keys(rawEvents[0] ?? {}).slice(0, 10),
+          sampleInvalidEvent: invalid[0]
+        }
+      );
+    }
+
+    return { normalizedEvents: valid, count: valid.length };
   },
 });

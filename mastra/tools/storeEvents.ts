@@ -42,39 +42,53 @@ export const storeEvents = createTool({
     );
 
     let data: { id: string }[] | null = null;
-    let error: { message: string } | null = null;
+    let count: number | null = null;
 
     if (hasPlatformIds) {
-      const result = await supabase
-        .from("events")
-        .upsert(rows, {
-          onConflict: "source_id,platform_event_id",
-          ignoreDuplicates: true,
-        })
-        .select("id");
+      try {
+        const result = await supabase
+          .from("events")
+          .upsert(rows, {
+            onConflict: "source_id,platform_event_id",
+            ignoreDuplicates: true,
+          })
+          .select("id", { count: "exact" })
+          .throwOnError();
 
-      if (result.error?.message?.includes("platform_event_id")) {
-        // Column doesn't exist yet — fall back to plain insert without that field
-        console.warn("[storeEvents] platform_event_id column missing, falling back to insert");
-        const fallback = await supabase.from("events").insert(cleanRows).select("id");
-        data = fallback.data;
-        error = fallback.error;
-      } else {
         data = result.data;
-        error = result.error;
+        count = result.count;
+      } catch (err: any) {
+        if (err?.message?.includes("platform_event_id")) {
+          // Column doesn't exist yet — fall back to plain insert without that field
+          console.warn("[storeEvents] platform_event_id column missing, falling back to insert");
+          const fallback = await supabase
+            .from("events")
+            .insert(cleanRows)
+            .select("id", { count: "exact" })
+            .throwOnError();
+
+          data = fallback.data;
+          count = fallback.count;
+        } else {
+          console.error("[storeEvents] INSERT failed:", err.code, err.message);
+          throw new Error(`storeEvents INSERT failed: ${err.code} — ${err.message}`);
+        }
       }
     } else {
-      const result = await supabase.from("events").insert(cleanRows).select("id");
+      const result = await supabase
+        .from("events")
+        .insert(cleanRows)
+        .select("id", { count: "exact" })
+        .throwOnError();
+
       data = result.data;
-      error = result.error;
+      count = result.count;
     }
 
-    if (error) {
-      return { stored: 0, skipped: 0, errors: [error.message] };
-    }
-
-    const stored = (data ?? []).length;
+    const stored = count ?? data?.length ?? 0;
     const skipped = Math.max(0, rows.length - stored);
+
+    console.log(`[storeEvents] Stored ${stored} events, skipped ${skipped}`);
 
     return { stored, skipped, errors: [] };
   },

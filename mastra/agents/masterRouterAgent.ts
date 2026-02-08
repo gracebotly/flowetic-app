@@ -312,13 +312,8 @@ export const masterRouterAgent: Agent = new Agent({
     dashboardBuilderAgent,
     designAdvisorAgent,
   },
-  workflows: {
-    generatePreviewWorkflow,
-    connectionBackfillWorkflow,
-    deployDashboardWorkflow,
-  },
   memory: createFloweticMemory({
-    lastMessages: 30,
+    lastMessages: 8,  // Reduced from 30 to prevent in-context format priming
   }),
   workspace,  // ← ADD THIS LINE (after existing properties, before closing brace)
   tools: {
