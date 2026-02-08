@@ -79,6 +79,7 @@ export const masterRouterAgent: Agent = new Agent({
     densityPreset: z.enum(['compact', 'comfortable', 'spacious']).optional(),
     paletteOverrideId: z.string().optional().nullable(),
     workflowName: z.string().optional(),
+    selectedEntities: z.string().optional(),
 
     // Model selection (OPTIONAL)
     selectedModel: z.string().optional(),
@@ -114,11 +115,19 @@ export const masterRouterAgent: Agent = new Agent({
       ? await loadSkillFromWorkspace("business-outcomes-advisor")
       : "";
 
+    // Load UI/UX Pro Max skill for style and build phases
+    const designPhases = ["style", "build_preview", "interactive_edit"];
+    const shouldLoadDesignSkill = designPhases.includes(phase || "");
+    const designSkillContent = shouldLoadDesignSkill
+      ? await loadSkillFromWorkspace("ui-ux-pro-max")
+      : "";
+
     const phaseInstructions = getPhaseInstructions(phase as FloweticPhase, {
       platformType: String(safePlatformType),
       workflowName: workflowName || undefined,
       selectedOutcome: selectedOutcome || undefined,
       selectedStyleBundle: safeSelectedStyleBundle || undefined,
+      selectedEntities: requestContext.all.selectedEntities || "",
     });
 
     const skillContent = [
@@ -145,6 +154,14 @@ export const masterRouterAgent: Agent = new Agent({
       "",
       "CRITICAL: NEVER skip step 2. NEVER tell the user there's insufficient data without first attempting backfill.",
       "CRITICAL: NEVER recite a pre-written response. Describe the actual situation based on tool results.",
+      "",
+      "### DATA-DRIVEN RECOMMENDATIONS PROTOCOL:",
+      "",
+      "When presenting options to the user (entities, outcomes, layouts):",
+      "1. ALWAYS call a data tool FIRST (getEventStats, recommendOutcome) before presenting options.",
+      "2. Ground your suggestions in tool results — mention event counts, data types found, entity names from actual data.",
+      "3. If a tool returns empty/error, acknowledge it: 'I don't see stored data yet' and fall back to workflow-name-based suggestions.",
+      "4. NEVER present options purely from LLM knowledge when data tools are available.",
       "",
       "### GENERAL TOOL USAGE PRINCIPLE:",
       "",
@@ -219,7 +236,7 @@ export const masterRouterAgent: Agent = new Agent({
       selectedOutcome ? `User selected outcome: ${selectedOutcome}` : "",
       safeSelectedStyleBundle ? `User selected style bundle: ${safeSelectedStyleBundle}` : "",
       "",
-      "# CURRENT PHASE INSTRUCTIONS (Phase 2)",
+      `# CURRENT PHASE INSTRUCTIONS (${phase || "recommend"})`,
       phaseInstructions,
       "",
       "# WORKSPACE SKILLS",
@@ -231,11 +248,17 @@ export const masterRouterAgent: Agent = new Agent({
       "- When calling TODO tools, always ensure tenantId and threadId are passed from RequestContext",
       "- These values are automatically available via context.requestContext.get('tenantId') and context.requestContext.get('threadId')",
       "- The tools will fall back to these values if not explicitly provided in the tool call",
+      "",
+      "# MULTI-STEP EXECUTION RULES",
+      "- After calling updateWorkingMemory or any tool, do NOT repeat text you already wrote before the tool call.",
+      "- Your pre-tool text was already delivered. Continue with NEW content only.",
+      "",
       // =========================================================================
       // INJECTED SKILLS (loaded from workspace at runtime)
       // =========================================================================
       platformSkillContent ? `\n\n# PLATFORM SKILL: ${safePlatformType.toUpperCase()}\n\n${platformSkillContent}` : "",
       businessSkillContent ? `\n\n# BUSINESS OUTCOMES ADVISOR\n\n${businessSkillContent}` : "",
+      designSkillContent ? `\n\n# UI/UX DESIGN ADVISOR\n\n${designSkillContent}` : "",
     ].filter(Boolean).join("\n");
 
     return [

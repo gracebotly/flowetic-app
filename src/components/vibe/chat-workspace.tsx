@@ -207,15 +207,108 @@ export function ChatWorkspace({
 
   // Deduplicate messages by ID (workaround for Mastra + AI SDK v5 bug #9370)
   // This filters out duplicate message IDs, keeping the latest version of each
+  // AND deduplicates identical text parts WITHIN a single message
   const dedupedMessages = useMemo(() => {
     const seen = new Map<string, (typeof uiMessages)[number]>();
     for (const msg of uiMessages) {
       seen.set(msg.id, msg);
     }
-    return Array.from(seen.values());
+    const uniqueMessages = Array.from(seen.values());
+
+    return uniqueMessages.map((msg) => {
+      if (msg.role !== 'assistant' || !msg.parts || msg.parts.length <= 1) return msg;
+      const seenTexts = new Set<string>();
+      const dedupedParts = msg.parts.filter((part) => {
+        if (part.type !== 'text') return true;
+        const text = (part as { type: 'text'; text: string }).text?.trim();
+        if (!text || seenTexts.has(text)) return false;
+        seenTexts.add(text);
+        return true;
+      });
+      if (dedupedParts.length === msg.parts.length) return msg;
+      return { ...msg, parts: dedupedParts };
+    });
   }, [uiMessages]);
 
+  // ━━━ Bridge: Extract previewUrl from tool results ━━━━━━━━━━━━━━━━━━━━━━━━━
+  // When savePreviewVersion or persistPreviewVersion tool results arrive in the
+  // message stream, extract previewUrl and update vibeContext so the preview
+  // panel renders the iframe.
+  useEffect(() => {
+    for (const msg of dedupedMessages) {
+      if (msg.role !== "assistant") continue;
+
+      // AI SDK v5: parts array contains tool results
+      const parts = (msg as any).parts ?? (msg as any).content;
+      if (!Array.isArray(parts)) continue;
+
+      for (const part of parts) {
+        // Check for tool-result parts with savePreviewVersion or persistPreviewVersion output
+        if (
+          part?.type === "tool-invocation" &&
+          part?.state === "result" &&
+          (part?.toolName === "savePreviewVersion" || part?.toolName === "persistPreviewVersion")
+        ) {
+          const result = part?.result;
+          if (result?.previewUrl && result?.interfaceId && result?.versionId) {
+            // Only update if we don't already have this previewUrl
+            if (vibeContext?.previewUrl !== result.previewUrl) {
+              console.log("[Preview Bridge] Detected savePreviewVersion result:", {
+                previewUrl: result.previewUrl,
+                interfaceId: result.interfaceId,
+                versionId: result.versionId,
+              });
+
+              setVibeContext((prev) => prev ? {
+                ...prev,
+                previewUrl: result.previewUrl,
+                previewVersionId: result.versionId,
+                interfaceId: result.interfaceId,
+              } : prev);
+
+              // Also advance journey mode to interactive_edit
+              setJourneyMode("interactive_edit");
+
+              // Auto-switch to preview tab
+              setView("preview");
+            }
+          }
+        }
+      }
+
+      // Fallback: Check toolInvocations array (AI SDK v4 compat)
+      const toolInvocations = (msg as any).toolInvocations;
+      if (Array.isArray(toolInvocations)) {
+        for (const invocation of toolInvocations) {
+          if (
+            (invocation.toolName === "savePreviewVersion" ||
+             invocation.toolName === "persistPreviewVersion") &&
+            invocation.state === "result" &&
+            invocation.result?.previewUrl
+          ) {
+            const result = invocation.result;
+            if (vibeContext?.previewUrl !== result.previewUrl) {
+              console.log("[Preview Bridge] Detected via toolInvocations:", result);
+              setVibeContext((prev) => prev ? {
+                ...prev,
+                previewUrl: result.previewUrl,
+                previewVersionId: result.versionId,
+                interfaceId: result.interfaceId,
+              } : prev);
+              setJourneyMode("interactive_edit");
+              setView("preview");
+            }
+          }
+        }
+      }
+    }
+  }, [dedupedMessages]); // eslint-disable-line react-hooks/exhaustive-deps
+
   async function sendAi(text: string, extraData?: Record<string, any>) {
+    if (uiStatus === 'streaming') {
+      console.warn('[sendAi] Blocked: already streaming');
+      return;
+    }
     // AI SDK v5: Pass dynamic context in the second argument of sendMessage
     // Request-level options are evaluated at call time, avoiding stale closures
 

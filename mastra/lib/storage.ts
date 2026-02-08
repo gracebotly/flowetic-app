@@ -10,10 +10,28 @@ export function getMastraStorage(): PostgresStore {
     throw new Error("DATABASE_URL is required (Mastra PostgresStore).");
   }
 
-  _store = new PostgresStore({
+  const baseStore = new PostgresStore({
     id: "flowetic-pg",
     connectionString: url,
   });
 
+  // Patch: swallow snapshot PK collisions from Mastra's internal agentic-loop.
+  // Chat agents don't need workflow snapshots — only suspendable workflows do.
+  const originalPersist = (baseStore as any).persistWorkflowSnapshot;
+  if (typeof originalPersist === 'function') {
+    (baseStore as any).persistWorkflowSnapshot = async function (...args: unknown[]) {
+      try {
+        return await originalPersist.apply(this, args);
+      } catch (err: any) {
+        if (err?.message?.includes('duplicate key') && err?.message?.includes('mastra_workflow_snapshot')) {
+          console.warn('[Storage] Suppressed snapshot PK collision (expected in serverless)');
+          return;
+        }
+        throw err;
+      }
+    };
+  }
+
+  _store = baseStore;
   return _store;
 }
