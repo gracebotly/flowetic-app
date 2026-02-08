@@ -309,11 +309,20 @@ const persistPreviewVersionStep = createStep({
     const userId = initData.userId;
     const interfaceId = initData.interfaceId;
     const platformType = (requestContext.get("platformType") || 'make') as SelectTemplatePlatformType;
-    
-    const result = await callTool(persistPreviewVersion, 
+
+    // Ensure requestContext has tenantId/userId for extractTenantContext()
+    // The workflow may not propagate these automatically
+    if (!requestContext.get('tenantId')) {
+      requestContext.set('tenantId', tenantId);
+    }
+    if (!requestContext.get('userId')) {
+      requestContext.set('userId', userId);
+    }
+
+    // Only pass fields matching persistPreviewVersion.inputSchema
+    // tenantId/userId are read from requestContext by extractTenantContext()
+    const result = await callTool(persistPreviewVersion,
       {
-        tenantId,
-        userId,
         interfaceId,
         spec_json,
         design_tokens,
