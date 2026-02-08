@@ -79,6 +79,7 @@ export const masterRouterAgent: Agent = new Agent({
     densityPreset: z.enum(['compact', 'comfortable', 'spacious']).optional(),
     paletteOverrideId: z.string().optional().nullable(),
     workflowName: z.string().optional(),
+    selectedEntities: z.string().optional(),
 
     // Model selection (OPTIONAL)
     selectedModel: z.string().optional(),
@@ -126,6 +127,7 @@ export const masterRouterAgent: Agent = new Agent({
       workflowName: workflowName || undefined,
       selectedOutcome: selectedOutcome || undefined,
       selectedStyleBundle: safeSelectedStyleBundle || undefined,
+      selectedEntities: requestContext.all.selectedEntities || "",
     });
 
     const skillContent = [
@@ -234,7 +236,7 @@ export const masterRouterAgent: Agent = new Agent({
       selectedOutcome ? `User selected outcome: ${selectedOutcome}` : "",
       safeSelectedStyleBundle ? `User selected style bundle: ${safeSelectedStyleBundle}` : "",
       "",
-      "# CURRENT PHASE INSTRUCTIONS (Phase 2)",
+      `# CURRENT PHASE INSTRUCTIONS (${phase || "recommend"})`,
       phaseInstructions,
       "",
       "# WORKSPACE SKILLS",
