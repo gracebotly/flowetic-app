@@ -45,7 +45,7 @@ export function createFloweticMemory(opts: CreateFloweticMemoryOpts = {}) {
     } as const);
   
   // Enable semantic recall by default for autonomous behavior
-  const semanticRecallEnabled = envFlag("MASTRA_SEMANTIC_RECALL_ENABLED", true);
+  const semanticRecallEnabled = envFlag("MASTRA_SEMANTIC_RECALL_ENABLED", false);
   
   // We require DB + pgvector. You already use PgVector elsewhere.
   const connectionString = String(process.env.DATABASE_URL || "").trim();

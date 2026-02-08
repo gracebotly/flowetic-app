@@ -186,15 +186,31 @@ const checkMappingCompletenessStep = createStep({
   }),
   async execute({ inputData, requestContext, getStepResult, getInitData, suspend, runId }) {
     const missingFields = inputData.missingFields || [];
-    if (missingFields.length > 0) {
+    const confidence = inputData.confidence || 0;
+
+    // Only suspend if ZERO fields could be mapped (total failure).
+    // Partial mappings (confidence > 0) can proceed with best-effort rendering.
+    if (confidence === 0 && missingFields.length > 0) {
       await suspend({
-        reason: 'Required fields missing - needs human input',
+        reason: 'No fields could be mapped automatically',
         missingFields,
-        message: 'Please map missing fields and resume.',
+        message: 'None of the required fields could be matched to your data. Please provide field mappings manually.',
       });
     }
+
+    // Log partial mappings but don't block
+    if (missingFields.length > 0) {
+      console.warn(
+        `[checkMappingCompleteness] Proceeding with partial mapping. Missing: ${missingFields.join(', ')}. Confidence: ${confidence}`
+      );
+    }
+
     return {
       shouldSuspend: false,
+      missingFields: missingFields.length > 0 ? missingFields : undefined,
+      message: missingFields.length > 0
+        ? `Proceeding with partial mapping (${missingFields.length} field(s) unmapped)`
+        : undefined,
       decision: 'complete',
     };
   },
