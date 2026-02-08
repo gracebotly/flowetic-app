@@ -1151,6 +1151,7 @@ return (
                                   key={idx}
                                   choices={(part as any).data?.choices || (part as any).choices || []}
                                   onSelect={async (id) => {
+                                    if (uiStatus === 'streaming') return;
                                     // Map outcome IDs to their categories for the agent schema
                                     // The agent expects 'dashboard' or 'product', not the specific outcome ID
                                     const categoryMap: Record<string, "dashboard" | "product"> = {
@@ -1187,6 +1188,7 @@ return (
                                     systems={systems as [any, any]}
                                     hasMore={(part as any).data?.hasMore || (part as any).hasMore}
                                     onSelect={async (id: string) => {
+                                      if (uiStatus === 'streaming') return;
                                       setSelectedStyleBundleId(id);
                                       await sendAi(`I selected style ${id}`);
                                     }}
@@ -1274,6 +1276,7 @@ return (
                       <InlineChoice
                         choices={toolUi.choices}
                         onSelect={async (id: string) => {
+                          if (uiStatus === 'streaming') return;
                           // Map outcome IDs to their categories for the agent schema
                           const categoryMap: Record<string, "dashboard" | "product"> = {
                             workflow_ops: "dashboard",
@@ -1302,12 +1305,18 @@ return (
                         {toolUi.bundles.map((bundle: any) => (
                           <button
                             key={bundle.id}
+                            disabled={uiStatus === 'streaming'}
                             onClick={async () => {
+                              if (uiStatus === 'streaming') return;
                               setSelectedStyleBundleId(bundle.id);
                               setToolUi(null);
                               await sendMessage(`__ACTION__:select_style_bundle:${bundle.id}`);
                             }}
-                            className="text-left rounded-lg border border-gray-200 p-4 hover:border-blue-500 hover:bg-blue-50 transition-all"
+                            className={`text-left rounded-lg border border-gray-200 p-4 transition-all ${
+                              uiStatus === 'streaming'
+                                ? 'opacity-50 cursor-not-allowed'
+                                : 'hover:border-blue-500 hover:bg-blue-50'
+                            }`}
                           >
                             <div className="font-medium text-gray-900 mb-1">{bundle.name}</div>
                             <div className="text-sm text-gray-600 mb-2">{bundle.description}</div>
