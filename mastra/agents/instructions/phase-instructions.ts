@@ -234,6 +234,9 @@ export function getPhaseInstructions(phase: FloweticPhase, ctx: PhaseInstruction
     // ─────────────────────────────────────────────────────────────────────────
     build_preview: [
       "# PHASE: BUILD PREVIEW",
+      `Workflow: "${workflowName}" | Platform: ${platformType}`,
+      selectedEntities ? `Entities: ${selectedEntities}` : "",
+      selectedOutcome ? `Outcome: ${selectedOutcome}` : "",
       "",
       "⚠️ CRITICAL: When user says 'generate', 'build', 'create dashboard', or 'preview', you MUST:",
       "",

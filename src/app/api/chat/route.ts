@@ -1,6 +1,6 @@
 
-import { handleChatStream } from '@mastra/ai-sdk';
-import { createUIMessageStreamResponse } from 'ai';
+import { createUIMessageStream, createUIMessageStreamResponse } from 'ai';
+import { toAISdkStream } from '@mastra/ai-sdk';
 import {
   RequestContext,
   MASTRA_RESOURCE_ID_KEY,
@@ -152,15 +152,6 @@ export async function POST(req: Request) {
       }
     }
     
-    // 5. CALL MASTRA WITH VALIDATED CONTEXT
-    const enhancedParams = {
-      ...params,
-      requestContext,
-      // Force non-network execution in serverless: use Agent.generate() path.
-      // If the handler ignores this, behavior remains unchanged.
-      mode: "generate",
-    };
-    
     const mastra = getMastraSingleton();
     
     if (process.env.DEBUG_CHAT_ROUTE === 'true') {
@@ -173,32 +164,118 @@ export async function POST(req: Request) {
         messagesCount: Array.isArray((params as any)?.messages) ? (params as any).messages.length : 0,
       });
     }
+
+    // =========================================================================
+    // SERVER-SIDE PHASE ADVANCEMENT
+    // Detect user selections in the latest message and advance phase
+    // before constructing requestContext for the agent.
+    // =========================================================================
+    const latestUserMessage = Array.isArray((params as any)?.messages)
+      ? [...(params as any).messages].reverse().find((m: any) => m.role === 'user')?.content ?? ''
+      : '';
+    const msgLower = typeof latestUserMessage === 'string' ? latestUserMessage.toLowerCase() : '';
     
-    const stream = await withTimeout(
-      handleChatStream({
-        mastra,
-        agentId: 'masterRouterAgent',
-        params: enhancedParams,
-        sendStart: false,       // Prevents Mastra #9370 duplicate text bug with maxSteps > 1
-        sendFinish: true,       // ← CRITICAL: Enable finish events
-        sendReasoning: true,    // ← Enable reasoning display
-        sendSources: false,     // ← Keep sources hidden
-        defaultOptions: {
-          // Hard cap concurrency to avoid Z.ai 1302 throttling
-          toolCallConcurrency: 1,
+    let currentPhase = (requestContext.get('phase') as string) || 'select_entity';
+    
+    // Phase: select_entity → recommend (user selected entities / workflow parts)
+    if (currentPhase === 'select_entity' && (
+      msgLower.includes('__action__select_entity') ||
+      msgLower.includes('track') ||
+      msgLower.includes('selected') ||
+      msgLower.includes('these') ||
+      msgLower.includes('all of them') ||
+      msgLower.includes('yes')
+    )) {
+      currentPhase = 'recommend';
+      requestContext.set('phase', 'recommend');
+      if (process.env.DEBUG_CHAT_ROUTE === 'true') {
+        console.log('[api/chat] Phase advanced: select_entity → recommend');
+      }
+    }
+    
+    // Phase: recommend → style (user selected outcome like "dashboard" or "product")
+    if (currentPhase === 'recommend' && (
+      msgLower.includes('__action__select_outcome') ||
+      msgLower.includes('dashboard') ||
+      msgLower.includes('product') ||
+      msgLower.includes('monitoring') ||
+      msgLower.includes('analytics')
+    )) {
+      currentPhase = 'style';
+      requestContext.set('phase', 'style');
+      // Also capture the outcome
+      if (msgLower.includes('dashboard') || msgLower.includes('monitoring') || msgLower.includes('analytics')) {
+        requestContext.set('selectedOutcome', 'dashboard');
+      } else if (msgLower.includes('product')) {
+        requestContext.set('selectedOutcome', 'product');
+      }
+      if (process.env.DEBUG_CHAT_ROUTE === 'true') {
+        console.log('[api/chat] Phase advanced: recommend → style');
+      }
+    }
+    
+    // Phase: style → build_preview (user selected a style bundle)
+    if (currentPhase === 'style' && (
+      msgLower.includes('__action__select_style') ||
+      msgLower.includes('minimal') ||
+      msgLower.includes('bold') ||
+      msgLower.includes('corporate') ||
+      msgLower.includes('style') ||
+      msgLower.includes('clean') ||
+      msgLower.includes('dark') ||
+      msgLower.includes('light')
+    )) {
+      currentPhase = 'build_preview';
+      requestContext.set('phase', 'build_preview');
+      if (process.env.DEBUG_CHAT_ROUTE === 'true') {
+        console.log('[api/chat] Phase advanced: style → build_preview');
+      }
+    }
 
-          // Enable autonomous multi-step execution
-          maxSteps: 10,
+    // =========================================================================
+    // AGENT NETWORK EXECUTION
+    // Use agent.network() for proper multi-agent orchestration.
+    // This handles sub-agent delegation at the framework level,
+    // eliminating maxSteps/resourceId construction errors.
+    // =========================================================================
+    const master = mastra.getAgent('masterRouterAgent');
+    if (!master) {
+      return new Response(
+        JSON.stringify({ error: 'masterRouterAgent not registered' }),
+        { status: 500, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
 
-          // Keep tool usage automatic, but now serialized
-          toolChoice: "auto",
+    const messages = (params as any)?.messages ?? [];
+
+    const networkStream = await withTimeout(
+      master.network(messages, {
+        maxSteps: 10,
+        memory: {
+          thread: mastraThreadId,
+          resource: userId,
         },
+        requestContext,
       }),
-      290000,  // 290s - leave 10s buffer for response
-      "api_chat_stream"
+      290000,
+      'api_chat_network',
     );
-    
-    return createUIMessageStreamResponse({ stream });
+
+    // Convert network stream → AI SDK UI stream
+    const uiMessageStream = createUIMessageStream({
+      originalMessages: messages,
+      execute: async ({ writer }) => {
+        for await (const part of toAISdkStream(networkStream, {
+          from: 'network',
+        })) {
+          await writer.write(part);
+        }
+      },
+    });
+
+    return createUIMessageStreamResponse({
+      stream: uiMessageStream,
+    });
     
   } catch (error: any) {
     console.error('[api/chat] Unexpected error:', error);
