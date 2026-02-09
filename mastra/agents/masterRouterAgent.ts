@@ -9,7 +9,7 @@ import { getModelById } from "../lib/models/modelSelector";
 import type { RequestContext } from "@mastra/core/request-context";
 import { createFloweticMemory } from "../lib/memory";
 import { workspace } from '../workspace';  // ← ADD THIS IMPORT
-import { loadSkillFromWorkspace } from '../lib/loadSkill';
+import { getCachedSkillAsync } from '../lib/skillCache';
 import { platformMappingMaster } from "./platformMappingMaster";
 import { dashboardBuilderAgent } from "./dashboardBuilderAgent";
 import { designAdvisorAgent } from "./designAdvisorAgent";
@@ -108,20 +108,20 @@ export const masterRouterAgent: Agent = new Agent({
     // =========================================================================
     // SKILL LOADING - Load Platform Skill + Business Outcomes Advisor
     // =========================================================================
-    const platformSkillContent = await loadSkillFromWorkspace(safePlatformType);
+    const platformSkillContent = await getCachedSkillAsync(safePlatformType);
 
     // Load business outcomes advisor for recommend phase
     const businessPhases = ["outcome", "recommend", "select_entity"];
     const shouldLoadBusinessSkill = businessPhases.includes(phase || "select_entity");
     const businessSkillContent = shouldLoadBusinessSkill
-      ? await loadSkillFromWorkspace("business-outcomes-advisor")
+      ? await getCachedSkillAsync("business-outcomes-advisor")
       : "";
 
     // Load UI/UX Pro Max skill for style and build phases
     const designPhases = ["style", "build_preview", "interactive_edit"];
     const shouldLoadDesignSkill = designPhases.includes(phase || "");
     const designSkillContent = shouldLoadDesignSkill
-      ? await loadSkillFromWorkspace("ui-ux-pro-max")
+      ? await getCachedSkillAsync("ui-ux-pro-max")
       : "";
 
     const phaseInstructions = getPhaseInstructions(phase as FloweticPhase, {

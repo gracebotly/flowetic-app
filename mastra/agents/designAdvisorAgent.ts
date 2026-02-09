@@ -8,10 +8,19 @@ import type { RequestContext } from "@mastra/core/request-context";
 import { searchDesignDatabase } from "../tools/design-system/searchDesignDatabase";
 import { generateDesignSystem } from "../tools/design-system/generateDesignSystem";
 import { createFloweticMemory } from "../lib/memory";
-import { loadSkillFromWorkspace } from '../lib/loadSkill';
+import { getCachedSkillAsync } from '../lib/skillCache';
 
 // NEW: Import Supatool
 import { recommendStyleKeywords } from "../tools/supatools";
+
+// NEW: Import UI/UX tools
+import {
+  getStyleRecommendations,
+  getChartRecommendations,
+  getTypographyRecommendations,
+  getUXGuidelines,
+  getProductRecommendations,
+} from "../tools/uiux";
 
 
 
@@ -26,7 +35,7 @@ export const designAdvisorAgent: Agent = new Agent({
     const platformType = (requestContext.get("platformType") as string | undefined) ?? "make";
 
     // Load UI/UX Pro Max skill for design expertise
-    const uiuxSkillContent = await loadSkillFromWorkspace("ui-ux-pro-max");
+    const uiuxSkillContent = await getCachedSkillAsync("ui-ux-pro-max");
 
     return [
       {
@@ -75,5 +84,11 @@ export const designAdvisorAgent: Agent = new Agent({
     generateDesignSystem,
     // NEW: Add Supatool
     recommendStyleKeywords,
+    // NEW: UI/UX tools (matches skill instructions)
+    getStyleRecommendations,
+    getChartRecommendations,
+    getTypographyRecommendations,
+    getUXGuidelines,
+    getProductRecommendations,
   },
 });

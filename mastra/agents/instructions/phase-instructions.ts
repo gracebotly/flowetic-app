@@ -181,6 +181,26 @@ export function getPhaseInstructions(phase: FloweticPhase, ctx: PhaseInstruction
     // PHASE 3: SELECT STYLE
     // ─────────────────────────────────────────────────────────────────────────
     style: [
+      "## PHASE 3: STYLE SELECTION - MANDATORY TOOL CALL",
+      "",
+      "⚠️ CRITICAL FIRST ACTION: You MUST call the `getStyleBundles` tool IMMEDIATELY.",
+      "DO NOT generate any text, wireframes, or ASCII art before calling this tool.",
+      "DO NOT describe styles in text - the tool renders visual UI cards.",
+      "DO NOT show ASCII box drawings (┌ ┐ └ ┘ │ ─) - this is FORBIDDEN in Phase 3.",
+      "",
+      "CORRECT BEHAVIOR:",
+      "1. Call getStyleBundles tool",
+      "2. Wait for tool result (UI cards will render automatically)",
+      "3. Ask user which style fits their brand",
+      "",
+      "INCORRECT BEHAVIOR (will be penalized):",
+      "- Generating ASCII wireframes",
+      "- Describing styles in paragraphs",
+      "- Showing code blocks with layout examples",
+      "- Asking user to imagine styles",
+      "",
+      "---",
+      "",
       "# PHASE: SELECT STYLE BUNDLE",
       `Workflow: "${workflowName}" | Outcome: ${selectedOutcome || "Dashboard"}`,
       selectedEntities ? `Tracking: ${selectedEntities}` : "",
@@ -206,6 +226,7 @@ export function getPhaseInstructions(phase: FloweticPhase, ctx: PhaseInstruction
       "- Do not re-list styles after the user has chosen.",
       "- Do not output raw design tokens or palettes.",
       "- Do not add unnecessary steps between style selection and preview generation.",
+      "- NEVER use ASCII box drawings (┌ ┐ └ ┘ │ ─) in Phase 3 - this is for Phase 2 layouts only.",
     ].join("\n"),
 
     // ─────────────────────────────────────────────────────────────────────────

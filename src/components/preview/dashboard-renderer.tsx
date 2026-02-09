@@ -2,6 +2,92 @@
 
 import React from "react";
 
+/**
+ * Normalize component types from various formats to canonical PascalCase.
+ * Agents may generate kebab-case, snake_case, or lowercase types.
+ */
+const TYPE_NORMALIZATION_MAP: Record<string, string> = {
+  // KPI/Metric variants
+  'kpi-card': 'MetricCard',
+  'kpi_card': 'MetricCard',
+  'kpicard': 'MetricCard',
+  'kpi': 'MetricCard',
+  'metric-card': 'MetricCard',
+  'metric_card': 'MetricCard',
+  'metriccard': 'MetricCard',
+  'MetricCard': 'MetricCard',
+
+  // Line chart variants
+  'line-chart': 'LineChart',
+  'line_chart': 'LineChart',
+  'linechart': 'LineChart',
+  'LineChart': 'LineChart',
+  'chart': 'LineChart',
+
+  // Bar chart variants
+  'bar-chart': 'BarChart',
+  'bar_chart': 'BarChart',
+  'barchart': 'BarChart',
+  'BarChart': 'BarChart',
+
+  // Pie/Donut variants
+  'pie-chart': 'PieChart',
+  'pie_chart': 'PieChart',
+  'piechart': 'PieChart',
+  'PieChart': 'PieChart',
+  'donut-chart': 'DonutChart',
+  'donut_chart': 'DonutChart',
+  'donutchart': 'DonutChart',
+  'DonutChart': 'DonutChart',
+
+  // Sankey variants
+  'sankey-chart': 'SankeyChart',
+  'sankey_chart': 'SankeyChart',
+  'sankeychart': 'SankeyChart',
+  'SankeyChart': 'SankeyChart',
+  'sankey': 'SankeyChart',
+
+  // Funnel variants
+  'funnel-chart': 'FunnelChart',
+  'funnel_chart': 'FunnelChart',
+  'funnelchart': 'FunnelChart',
+  'FunnelChart': 'FunnelChart',
+  'funnel': 'FunnelChart',
+
+  // Table variants
+  'data-table': 'DataTable',
+  'data_table': 'DataTable',
+  'datatable': 'DataTable',
+  'DataTable': 'DataTable',
+  'table': 'DataTable',
+
+  // Metric panel variants
+  'metric-panel': 'MetricPanel',
+  'metric_panel': 'MetricPanel',
+  'metricpanel': 'MetricPanel',
+  'MetricPanel': 'MetricPanel',
+  'stats-panel': 'MetricPanel',
+  'stats_panel': 'MetricPanel',
+};
+
+function normalizeComponentType(rawType: string): string {
+  // Try direct lookup first
+  if (TYPE_NORMALIZATION_MAP[rawType]) {
+    return TYPE_NORMALIZATION_MAP[rawType];
+  }
+
+  // Try lowercase lookup
+  const lower = rawType.toLowerCase().replace(/[-_\s]/g, '');
+  for (const [key, value] of Object.entries(TYPE_NORMALIZATION_MAP)) {
+    if (key.toLowerCase().replace(/[-_\s]/g, '') === lower) {
+      return value;
+    }
+  }
+
+  // Return original if no match (will show placeholder)
+  return rawType;
+}
+
 interface DashboardRendererProps {
   spec: Record<string, any>;
   designTokens: Record<string, any>;
@@ -68,7 +154,9 @@ function ComponentCard({
   component: any;
   primaryColor: string;
 }) {
-  const { type, props, id } = component;
+  const rawType = component.type;
+  const type = normalizeComponentType(rawType);
+  const { props, id } = component;
   const title = props?.title ?? id;
 
   return (
@@ -85,19 +173,23 @@ function ComponentCard({
       </div>
 
       {/* Placeholder content based on type */}
-      {type === "MetricCard" || type === "metric_card" || type === "kpi" || type === "kpi-card" ? (
+      {type === "MetricCard" ? (
         <MetricCardPreview props={props} primaryColor={primaryColor} />
-      ) : type === "LineChart" || type === "line_chart" || type === "chart" ? (
+      ) : type === "LineChart" ? (
         <ChartPreview props={props} type="line" />
-      ) : type === "BarChart" || type === "bar_chart" ? (
+      ) : type === "BarChart" ? (
         <ChartPreview props={props} type="bar" />
-      ) : type === "FunnelChart" || type === "funnel-chart" || type === "funnel" ? (
-        <FunnelPreview props={props} primaryColor={primaryColor} />
-      ) : type === "DonutChart" || type === "donut_chart" || type === "PieChart" || type === "pie_chart" ? (
+      ) : type === "PieChart" ? (
+        <ChartPreview props={props} type="pie" />
+      ) : type === "DonutChart" ? (
         <ChartPreview props={props} type="donut" />
-      ) : type === "DataTable" || type === "data_table" || type === "table" ? (
+      ) : type === "FunnelChart" ? (
+        <FunnelPreview props={props} primaryColor={primaryColor} />
+      ) : type === "SankeyChart" ? (
+        <SankeyPreview props={props} primaryColor={primaryColor} />
+      ) : type === "DataTable" ? (
         <TablePreview props={props} />
-      ) : type === "metric-panel" || type === "MetricPanel" || type === "stats-panel" ? (
+      ) : type === "MetricPanel" ? (
         <MetricPanelPreview props={props} primaryColor={primaryColor} />
       ) : (
         <div className="text-sm text-gray-500 italic">
@@ -130,7 +222,7 @@ function ChartPreview({ props, type }: { props: any; type: string }) {
   // SVG placeholder chart
   return (
     <div className="h-32 flex items-end gap-1 px-2">
-      {type === "donut" ? (
+      {type === "donut" || type === "pie" ? (
         <svg viewBox="0 0 100 100" className="w-24 h-24 mx-auto">
           <circle cx="50" cy="50" r="40" fill="none" stroke="#e5e7eb" strokeWidth="12" />
           <circle
@@ -186,29 +278,62 @@ function TablePreview({ props }: { props: any }) {
 }
 
 function FunnelPreview({ props, primaryColor }: { props: any; primaryColor: string }) {
-  const data = props?.data ?? [
-    { stage: "Stage 1", value: 100 },
-    { stage: "Stage 2", value: 75 },
-    { stage: "Stage 3", value: 50 },
-    { stage: "Stage 4", value: 25 },
+  const stages = props?.stages ?? props?.data ?? [
+    { label: "Stage 1", value: 100 },
+    { label: "Stage 2", value: 75 },
+    { label: "Stage 3", value: 45 },
+    { label: "Stage 4", value: 20 },
   ];
-  const maxValue = Math.max(...data.map((d: any) => d.value));
+  const maxVal = Math.max(...stages.map((s: any) => s.value || 100));
 
   return (
-    <div className="space-y-2">
-      {data.map((item: any, i: number) => (
-        <div key={i} className="flex items-center gap-3">
-          <div className="w-20 text-xs text-gray-600 truncate">{item.stage}</div>
+    <div className="space-y-2 p-2">
+      {stages.map((stage: any, i: number) => (
+        <div key={i} className="flex items-center gap-2">
+          <div className="w-20 text-xs text-gray-600 truncate">{stage.label || stage.stage}</div>
           <div className="flex-1 h-6 bg-gray-100 rounded overflow-hidden">
             <div
               className="h-full rounded transition-all"
               style={{
-                width: `${(item.value / maxValue) * 100}%`,
-                backgroundColor: item.color || primaryColor,
+                width: `${(stage.value / maxVal) * 100}%`,
+                backgroundColor: primaryColor,
+                opacity: 1 - (i * 0.15),
               }}
             />
           </div>
-          <div className="w-12 text-xs text-gray-700 text-right">{item.value}</div>
+          <div className="w-12 text-xs text-right font-medium">{stage.value}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SankeyPreview({ props, primaryColor }: { props: any; primaryColor: string }) {
+  const flows = props?.flows ?? props?.data ?? [
+    { from: "Source A", to: "Target 1", value: 40 },
+    { from: "Source A", to: "Target 2", value: 30 },
+    { from: "Source B", to: "Target 1", value: 25 },
+    { from: "Source B", to: "Target 3", value: 20 },
+  ];
+  const maxVal = Math.max(...flows.map((f: any) => f.value || 100));
+
+  return (
+    <div className="space-y-1 p-2">
+      {flows.map((flow: any, i: number) => (
+        <div key={i} className="flex items-center gap-2 text-xs">
+          <div className="w-16 truncate text-gray-600 text-right">{flow.from}</div>
+          <div className="flex-1 h-4 bg-gray-100 rounded overflow-hidden">
+            <div
+              className="h-full rounded transition-all"
+              style={{
+                width: `${(flow.value / maxVal) * 100}%`,
+                backgroundColor: flow.color || primaryColor,
+                opacity: 0.7 + (i * 0.05),
+              }}
+            />
+          </div>
+          <div className="w-16 truncate text-gray-600">{flow.to}</div>
+          <div className="w-8 text-right font-medium">{flow.value}</div>
         </div>
       ))}
     </div>
@@ -216,19 +341,30 @@ function FunnelPreview({ props, primaryColor }: { props: any; primaryColor: stri
 }
 
 function MetricPanelPreview({ props, primaryColor }: { props: any; primaryColor: string }) {
-  const metrics = props?.metrics ?? props?.data ?? [
-    { label: "Metric 1", value: "—" },
-    { label: "Metric 2", value: "—" },
+  const metrics = props?.metrics ?? [
+    { label: "Total", value: "1,234", trend: "+12%" },
+    { label: "Average", value: "56.7", trend: "-3%" },
+    { label: "Rate", value: "89%", trend: "+5%" },
   ];
 
   return (
-    <div className="grid grid-cols-2 gap-3">
-      {metrics.slice(0, 4).map((m: any, i: number) => (
-        <div key={i} className="text-center p-2 bg-gray-50 rounded">
-          <div className="text-lg font-semibold" style={{ color: primaryColor }}>
-            {m.value}
+    <div className="space-y-3 p-2">
+      {metrics.map((m: any, i: number) => (
+        <div key={i} className="flex items-center justify-between">
+          <span className="text-sm text-gray-600">{m.label}</span>
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-gray-900">{m.value}</span>
+            {m.trend && (
+              <span
+                className={`text-xs font-medium ${
+                  m.trend?.startsWith('+') ? 'text-green-600' :
+                  m.trend?.startsWith('-') ? 'text-red-600' : 'text-gray-500'
+                }`}
+              >
+                {m.trend}
+              </span>
+            )}
           </div>
-          <div className="text-xs text-gray-500">{m.label}</div>
         </div>
       ))}
     </div>

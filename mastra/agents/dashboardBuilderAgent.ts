@@ -9,7 +9,7 @@ import {
   savePreviewVersion,
 } from "../tools/specEditor";
 import { createFloweticMemory } from "../lib/memory";
-import { loadSkillFromWorkspace } from '../lib/loadSkill';
+import { getCachedSkillAsync } from '../lib/skillCache';
 import { validateSpec } from "../tools/validateSpec";
 import { applyInteractiveEdits } from "../tools/interactiveEdit/applyInteractiveEdits";
 import { reorderComponents } from "../tools/interactiveEdit/reorderComponents";
@@ -17,6 +17,15 @@ import { todoAdd, todoList, todoUpdate, todoComplete } from "../tools/todo";
 
 // NEW: Import Supatool
 import { getEventSamples } from "../tools/supatools";
+
+// NEW: Import UI/UX tools
+import {
+  getStyleRecommendations,
+  getChartRecommendations,
+  getTypographyRecommendations,
+  getUXGuidelines,
+  getProductRecommendations,
+} from "../tools/uiux";
 
 export const dashboardBuilderAgent: Agent = new Agent({
   id: "dashboardBuilderAgent",
@@ -29,7 +38,7 @@ export const dashboardBuilderAgent: Agent = new Agent({
     const platformType = (requestContext.get("platformType") as string | undefined) ?? "make";
 
     // Load UI/UX Pro Max skill for design-aware editing
-    const uiuxSkillContent = await loadSkillFromWorkspace("ui-ux-pro-max");
+    const uiuxSkillContent = await getCachedSkillAsync("ui-ux-pro-max");
 
     return [
       {
@@ -121,5 +130,11 @@ export const dashboardBuilderAgent: Agent = new Agent({
     todoComplete,
     // NEW: Add Supatool
     getEventSamples,
+    // NEW: UI/UX tools (matches skill instructions)
+    getStyleRecommendations,
+    getChartRecommendations,
+    getTypographyRecommendations,
+    getUXGuidelines,
+    getProductRecommendations,
   },
 });

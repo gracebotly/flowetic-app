@@ -56,6 +56,77 @@ function setByPath(obj: Record<string, any>, path: string, value: any) {
   cur[parts[parts.length - 1]!] = value;
 }
 
+/**
+ * Normalize spec to ensure all required fields exist with valid defaults.
+ * Prevents patch failures due to missing fields.
+ */
+function normalizeSpecForPatch(raw: Record<string, unknown>): Record<string, unknown> {
+  const spec = { ...raw };
+
+  // Default version
+  if (!spec.version || typeof spec.version !== "string") {
+    spec.version = "1.0";
+  }
+
+  // Default templateId
+  if (!spec.templateId || typeof spec.templateId !== "string") {
+    spec.templateId = `agent-generated-${Date.now()}`;
+  }
+
+  // Default platformType
+  if (!spec.platformType || typeof spec.platformType !== "string") {
+    spec.platformType = "n8n";
+  }
+
+  // Normalize layout
+  if (spec.layout && typeof spec.layout === "object") {
+    const layoutObj = spec.layout as Record<string, unknown>;
+    if (!layoutObj.type) layoutObj.type = "grid";
+    if (typeof layoutObj.columns !== "number") layoutObj.columns = 12;
+    if (typeof layoutObj.gap !== "number") layoutObj.gap = 16;
+  } else {
+    spec.layout = { type: "grid", columns: 12, gap: 16 };
+  }
+
+  return spec;
+}
+
+/**
+ * Validate that all component IDs in patch operations exist in the spec.
+ * Returns array of invalid IDs if any are found.
+ */
+function validateComponentIds(
+  spec: Record<string, any>,
+  operations: Array<{ op: string; componentId?: string; component?: any }>
+): string[] {
+  const existingIds = new Set<string>();
+
+  // Collect all existing component IDs
+  if (spec.components && Array.isArray(spec.components)) {
+    for (const component of spec.components) {
+      if (component.id) {
+        existingIds.add(component.id);
+      }
+    }
+  }
+
+  const invalidIds: string[] = [];
+
+  for (const op of operations) {
+    // For update/move/remove operations, component must exist
+    if (
+      (op.op === "updateComponentProps" || op.op === "moveComponent" || op.op === "removeComponent") &&
+      op.componentId
+    ) {
+      if (!existingIds.has(op.componentId)) {
+        invalidIds.push(op.componentId);
+      }
+    }
+  }
+
+  return invalidIds;
+}
+
 export const applySpecPatch = createTool({
   id: "applySpecPatch",
   description:
@@ -71,7 +142,8 @@ export const applySpecPatch = createTool({
     applied: z.array(z.string()),
   }),
   execute: async (inputData, context) => {
-    const spec = deepClone(inputData.spec_json);
+    const rawSpec = deepClone(inputData.spec_json);
+    const spec = normalizeSpecForPatch(rawSpec) as Record<string, any>;
     const tokens = deepClone(inputData.design_tokens ?? {});
     const applied: string[] = [];
 
@@ -79,6 +151,15 @@ export const applySpecPatch = createTool({
     const parsed = UISpecSchemaLoose.safeParse(spec);
     if (!parsed.success) {
       throw new Error("SPEC_VALIDATION_FAILED");
+    }
+
+    // Validate component IDs before applying patches
+    const invalidIds = validateComponentIds(spec, inputData.operations);
+    if (invalidIds.length > 0) {
+      const existingIds = spec.components?.map((c: any) => c.id) || [];
+      throw new Error(
+        `COMPONENT_NOT_FOUND: ${invalidIds.join(', ')}. Valid component IDs are: ${existingIds.join(', ')}. Call getCurrentSpec to see the current dashboard structure.`
+      );
     }
 
     const ensureComponentsArray = () => {
