@@ -9,15 +9,18 @@ function requireEnv(name: string): string {
 }
 
 export function glm47Model() {
-  const apiKey = (process.env.ZAI_API_KEY || "").trim() || requireEnv("ZAI_API_KEY");
-  const baseURL = (process.env.ZAI_BASE_URL || "").trim() || "https://api.z.ai/api/paas/v4";
+  // Route through OpenRouter for multi-provider redundancy
+  // Direct Z.ai API has known connectivity issues from Vercel serverless
+  // (UND_ERR_CONNECT_TIMEOUT due to undocumented concurrency limit + latency)
+  const apiKey = (process.env.OPENROUTER_API_KEY || "").trim() || requireEnv("OPENROUTER_API_KEY");
+  const baseURL = "https://openrouter.ai/api/v1";
 
   const provider = createOpenAICompatible({
-    name: "zai",
+    name: "openrouter",
     apiKey,
     baseURL,
   });
 
-  return provider("glm-4.7");
+  return provider("z-ai/glm-4.7");
 }
 
