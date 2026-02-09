@@ -87,18 +87,20 @@ function ComponentCard({
       {/* Placeholder content based on type */}
       {type === "MetricCard" || type === "metric_card" || type === "kpi" || type === "kpi-card" ? (
         <MetricCardPreview props={props} primaryColor={primaryColor} />
-      ) : type === "LineChart" || type === "line_chart" || type === "chart" ? (
+      ) : type === "LineChart" || type === "line_chart" || type === "line-chart" || type === "chart" ? (
         <ChartPreview props={props} type="line" />
-      ) : type === "BarChart" || type === "bar_chart" ? (
+      ) : type === "BarChart" || type === "bar_chart" || type === "bar-chart" ? (
         <ChartPreview props={props} type="bar" />
-      ) : type === "FunnelChart" || type === "funnel-chart" || type === "funnel" ? (
-        <FunnelPreview props={props} primaryColor={primaryColor} />
       ) : type === "DonutChart" || type === "donut_chart" || type === "PieChart" || type === "pie_chart" ? (
         <ChartPreview props={props} type="donut" />
+      ) : type === "FunnelChart" || type === "funnel_chart" || type === "funnel-chart" || type === "funnel" ? (
+        <FunnelPreview props={props} primaryColor={primaryColor} />
+      ) : type === "SankeyChart" || type === "sankey_chart" || type === "sankey-chart" || type === "sankey" ? (
+        <SankeyPreview props={props} primaryColor={primaryColor} />
+      ) : type === "MetricPanel" || type === "metric_panel" || type === "metric-panel" ? (
+        <MetricPanelPreview props={props} primaryColor={primaryColor} />
       ) : type === "DataTable" || type === "data_table" || type === "table" ? (
         <TablePreview props={props} />
-      ) : type === "metric-panel" || type === "MetricPanel" || type === "stats-panel" ? (
-        <MetricPanelPreview props={props} primaryColor={primaryColor} />
       ) : (
         <div className="text-sm text-gray-500 italic">
           {type} component
@@ -186,29 +188,59 @@ function TablePreview({ props }: { props: any }) {
 }
 
 function FunnelPreview({ props, primaryColor }: { props: any; primaryColor: string }) {
-  const data = props?.data ?? [
-    { stage: "Stage 1", value: 100 },
-    { stage: "Stage 2", value: 75 },
-    { stage: "Stage 3", value: 50 },
-    { stage: "Stage 4", value: 25 },
+  const stages = props?.stages ?? props?.data ?? [
+    { label: "New", value: 1247 },
+    { label: "Qualified", value: 856 },
+    { label: "Converted", value: 386 },
   ];
-  const maxValue = Math.max(...data.map((d: any) => d.value));
+  const maxVal = Math.max(...stages.map((s: any) => s.value || 100));
 
   return (
     <div className="space-y-2">
-      {data.map((item: any, i: number) => (
-        <div key={i} className="flex items-center gap-3">
-          <div className="w-20 text-xs text-gray-600 truncate">{item.stage}</div>
+      {stages.map((stage: any, i: number) => (
+        <div key={i} className="flex items-center gap-2">
+          <div className="w-20 text-xs text-gray-600 truncate">{stage.label}</div>
           <div className="flex-1 h-6 bg-gray-100 rounded overflow-hidden">
             <div
               className="h-full rounded transition-all"
               style={{
-                width: `${(item.value / maxValue) * 100}%`,
-                backgroundColor: item.color || primaryColor,
+                width: `${(stage.value / maxVal) * 100}%`,
+                backgroundColor: primaryColor,
+                opacity: 1 - (i * 0.15),
               }}
             />
           </div>
-          <div className="w-12 text-xs text-gray-700 text-right">{item.value}</div>
+          <div className="w-12 text-xs text-right text-gray-700">{stage.value}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SankeyPreview({ props, primaryColor }: { props: any; primaryColor: string }) {
+  const data = props?.data ?? [
+    { from: "New", to: "Review", value: 1247, color: "#1E3A8A" },
+    { from: "Review", to: "Qualified", value: 856, color: "#3B82F6" },
+    { from: "Qualified", to: "Converted", value: 386, color: "#10B981" },
+  ];
+  const maxVal = Math.max(...data.map((d: any) => d.value || 100));
+
+  return (
+    <div className="space-y-1">
+      {data.map((flow: any, i: number) => (
+        <div key={i} className="flex items-center gap-2 text-xs">
+          <div className="w-16 truncate text-gray-600">{flow.from}</div>
+          <div className="flex-1 h-4 bg-gray-100 rounded overflow-hidden">
+            <div
+              className="h-full rounded transition-all"
+              style={{
+                width: `${(flow.value / maxVal) * 100}%`,
+                backgroundColor: flow.color || primaryColor,
+              }}
+            />
+          </div>
+          <div className="w-16 truncate text-gray-600">{flow.to}</div>
+          <div className="w-12 text-right text-gray-700">{flow.value}</div>
         </div>
       ))}
     </div>
@@ -216,19 +248,25 @@ function FunnelPreview({ props, primaryColor }: { props: any; primaryColor: stri
 }
 
 function MetricPanelPreview({ props, primaryColor }: { props: any; primaryColor: string }) {
-  const metrics = props?.metrics ?? props?.data ?? [
-    { label: "Metric 1", value: "—" },
-    { label: "Metric 2", value: "—" },
+  const metrics = props?.metrics ?? [
+    { label: "Avg Time", value: "3.2 days", trend: "-12%" },
+    { label: "Drop-off", value: "31.3%", trend: "-8%" },
+    { label: "Top Source", value: "Referral", trend: "+15%" },
   ];
 
   return (
-    <div className="grid grid-cols-2 gap-3">
-      {metrics.slice(0, 4).map((m: any, i: number) => (
-        <div key={i} className="text-center p-2 bg-gray-50 rounded">
-          <div className="text-lg font-semibold" style={{ color: primaryColor }}>
-            {m.value}
+    <div className="space-y-3">
+      {metrics.map((m: any, i: number) => (
+        <div key={i} className="flex items-center justify-between">
+          <span className="text-sm text-gray-600">{m.label}</span>
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-gray-900">{m.value}</span>
+            {m.trend && (
+              <span className={`text-xs ${m.trend?.startsWith('-') ? 'text-green-600' : 'text-blue-600'}`}>
+                {m.trend}
+              </span>
+            )}
           </div>
-          <div className="text-xs text-gray-500">{m.label}</div>
         </div>
       ))}
     </div>

@@ -201,11 +201,15 @@ export function getPhaseInstructions(phase: FloweticPhase, ctx: PhaseInstruction
       "- If the user expresses preferences ('modern', 'dark', 'playful', 'enterprise'), acknowledge and call the tool — the scoring handles it.",
       "- When the user selects (via __ACTION__ token or natural language like 'the dark one', 'premium dark', 'option 2'), acknowledge briefly and proceed to preview generation.",
       "",
-      "## Do NOT",
+      "## Do NOT (CRITICAL)",
+      "- Do NOT use ASCII wireframes or code blocks in style selection. Styles are shown via UI cards.",
+      "- Do NOT describe styles with box drawings (┌ ┐ └ ┘ │ ─). The getStyleBundles tool renders visual previews.",
+      "- Do NOT re-show layout options. Layout was already selected in the previous phase.",
       "- Do not show more than 2 options at once.",
       "- Do not re-list styles after the user has chosen.",
       "- Do not output raw design tokens or palettes.",
       "- Do not add unnecessary steps between style selection and preview generation.",
+      "- Do not mention internal tool or agent names.",
     ].join("\n"),
 
     // ─────────────────────────────────────────────────────────────────────────

@@ -56,6 +56,44 @@ function setByPath(obj: Record<string, any>, path: string, value: any) {
   cur[parts[parts.length - 1]!] = value;
 }
 
+// ── Normalization: coerce agent-generated specs into the required shape ───────
+function normalizeSpecForPatch(raw: Record<string, unknown>): Record<string, unknown> {
+  const spec = { ...raw };
+
+  // Default version (agents often use "name" instead)
+  if (!spec.version || typeof spec.version !== "string") {
+    spec.version = "1.0";
+  }
+
+  // Default templateId
+  if (!spec.templateId || typeof spec.templateId !== "string") {
+    spec.templateId = `agent-generated-${Date.now()}`;
+  }
+
+  // Default platformType
+  if (!spec.platformType || typeof spec.platformType !== "string") {
+    spec.platformType = "n8n";
+  }
+
+  // Normalize layout
+  if (spec.layout && typeof spec.layout === "object") {
+    const layoutObj = spec.layout as Record<string, unknown>;
+    if (!layoutObj.type || typeof layoutObj.type !== "string") {
+      layoutObj.type = "grid";
+    }
+    if (typeof layoutObj.columns !== "number") {
+      layoutObj.columns = 12;
+    }
+    if (typeof layoutObj.gap !== "number") {
+      layoutObj.gap = 16;
+    }
+  } else {
+    spec.layout = { type: "grid", columns: 12, gap: 16 };
+  }
+
+  return spec;
+}
+
 export const applySpecPatch = createTool({
   id: "applySpecPatch",
   description:
@@ -71,7 +109,8 @@ export const applySpecPatch = createTool({
     applied: z.array(z.string()),
   }),
   execute: async (inputData, context) => {
-    const spec = deepClone(inputData.spec_json);
+    const rawSpec = deepClone(inputData.spec_json);
+    const spec = normalizeSpecForPatch(rawSpec) as Record<string, any>;
     const tokens = deepClone(inputData.design_tokens ?? {});
     const applied: string[] = [];
 
