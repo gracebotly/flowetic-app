@@ -9,7 +9,6 @@ export const todoList = createTool({
   id: "todo.list",
   description: "List todos for the current thread, filtered by status.",
   inputSchema: z.object({
-    tenantId: z.string().uuid(),
     threadId: z.string().min(1),
     status: z.enum(["open", "in_progress", "done"]).optional(),
   }),

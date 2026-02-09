@@ -11,7 +11,6 @@ export const todoUpdate = createTool({
   id: "todo.update",
   description: "Update a todo item (status/title/description/priority/tags).",
   inputSchema: z.object({
-    tenantId: z.string().uuid(),
     threadId: z.string().min(1),
     todoId: z.string().uuid(),
     status: z.enum(["pending", "in_progress", "completed"]).describe("New status"),

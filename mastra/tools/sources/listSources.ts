@@ -2,37 +2,24 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { createClient } from "@supabase/supabase-js";
-import { createClient as createServerClient } from "@/lib/supabase/server";
 import { SourcePublic, SourcePlatformType, SourceMethod, SourceStatus } from "./types";
-
-function createServiceRoleClient() {
-  const url =
-    process.env.SUPABASE_URL ||
-    process.env.NEXT_PUBLIC_SUPABASE_URL;
-
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!url || !serviceKey) {
-    throw new Error("SUPABASE_SERVICE_ROLE_MISSING: require SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY");
-  }
-
-  return createClient(url, serviceKey, {
-    auth: { persistSession: false },
-  });
-}
+import { createAuthenticatedClient } from "../../lib/supabase";
+import { extractTenantContext } from "../../lib/tenant-verification";
 
 export const listSources = createTool({
   id: "sources.list",
   description: "List all sources (platform connections) for the given tenant.",
-  inputSchema: z.object({
-    tenantId: z.string().uuid(),
-  }),
+  inputSchema: z.object({}),
   outputSchema: z.object({
     sources: z.array(SourcePublic),
   }),
-  execute: async (inputData) => {
-    const supabase = await createServerClient();
-    const { tenantId } = inputData;
+  execute: async (inputData, context) => {
+    const accessToken = context?.requestContext?.get('supabaseAccessToken') as string;
+    if (!accessToken || typeof accessToken !== 'string') {
+      throw new Error('[listSources]: Missing authentication token');
+    }
+    const { tenantId } = extractTenantContext(context);
+    const supabase = createAuthenticatedClient(accessToken);
 
     const { data, error } = await supabase
       .from("sources")
