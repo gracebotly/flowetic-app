@@ -8,7 +8,7 @@ import type { RequestContext } from "@mastra/core/request-context";
 import { searchDesignDatabase } from "../tools/design-system/searchDesignDatabase";
 import { generateDesignSystem } from "../tools/design-system/generateDesignSystem";
 import { createFloweticMemory } from "../lib/memory";
-import { loadSkillFromWorkspace } from '../lib/loadSkill';
+import { getCachedSkill } from '../lib/skillCache';
 
 // NEW: Import Supatool
 import { recommendStyleKeywords } from "../tools/supatools";
@@ -26,7 +26,7 @@ export const designAdvisorAgent: Agent = new Agent({
     const platformType = (requestContext.get("platformType") as string | undefined) ?? "make";
 
     // Load UI/UX Pro Max skill for design expertise
-    const uiuxSkillContent = await loadSkillFromWorkspace("ui-ux-pro-max");
+    const uiuxSkillContent = await getCachedSkill("ui-ux-pro-max");
 
     return [
       {

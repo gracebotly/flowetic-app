@@ -9,7 +9,7 @@ import {
   savePreviewVersion,
 } from "../tools/specEditor";
 import { createFloweticMemory } from "../lib/memory";
-import { loadSkillFromWorkspace } from '../lib/loadSkill';
+import { getCachedSkill } from '../lib/skillCache';
 import { validateSpec } from "../tools/validateSpec";
 import { applyInteractiveEdits } from "../tools/interactiveEdit/applyInteractiveEdits";
 import { reorderComponents } from "../tools/interactiveEdit/reorderComponents";
@@ -29,7 +29,7 @@ export const dashboardBuilderAgent: Agent = new Agent({
     const platformType = (requestContext.get("platformType") as string | undefined) ?? "make";
 
     // Load UI/UX Pro Max skill for design-aware editing
-    const uiuxSkillContent = await loadSkillFromWorkspace("ui-ux-pro-max");
+    const uiuxSkillContent = await getCachedSkill("ui-ux-pro-max");
 
     return [
       {
