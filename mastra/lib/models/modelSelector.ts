@@ -78,9 +78,9 @@ export const AVAILABLE_MODELS: ModelConfig[] = [
 ];
 
 /**
- * Default model (strong enough for complex phase instructions)
+ * Default model (cheap for testing)
  */
-export const DEFAULT_MODEL_ID: ModelId = "gemini-3-pro-preview";
+export const DEFAULT_MODEL_ID: ModelId = "glm-4.7";
 
 /**
  * Get model instance by ID (lazy instantiation)
