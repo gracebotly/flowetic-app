@@ -3,6 +3,7 @@ import { Memory } from "@mastra/memory";
 import { getModelById } from "../lib/models/modelSelector";
 import { getMastraStorage } from "../lib/storage";
 import type { RequestContext } from "@mastra/core/request-context";
+import { z } from "zod";
 import {
   getCurrentSpec,
   applySpecPatch,
@@ -108,13 +109,13 @@ export const dashboardBuilderAgent: Agent = new Agent({
     lastMessages: 30,
     workingMemory: {
       enabled: true,
-      template: `# Spec Editing Session
-- interfaceId:
-- currentGoal:
-- lastEditApplied:
-- validationStatus:
-- previewUrl:
-`,
+      schema: z.object({
+        interfaceId: z.string().optional().describe("Current interface/spec ID being edited"),
+        currentGoal: z.string().optional().describe("What the user wants to achieve"),
+        lastEditApplied: z.string().optional().describe("Description of the last edit applied"),
+        validationStatus: z.string().optional().describe("Current spec validation status"),
+        previewUrl: z.string().optional().describe("URL of the current preview"),
+      }),
     },
   }),
   tools: {

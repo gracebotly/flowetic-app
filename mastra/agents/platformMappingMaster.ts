@@ -4,6 +4,7 @@ import { Memory } from "@mastra/memory";
 import { getModelById } from "../lib/models/modelSelector";
 import { getMastraStorage } from "../lib/storage";
 import type { RequestContext } from "@mastra/core/request-context";
+import { z } from "zod";
 
 import { createFloweticMemory } from "../lib/memory";
 import { getCachedSkill } from '../lib/skillCache';
@@ -93,14 +94,14 @@ export const platformMappingMaster: Agent = new Agent({
     lastMessages: 30,
     workingMemory: {
       enabled: true,
-      template: `# Mapping Session
-- platformType:
-- schemaReady:
-- chosenTemplateId:
-- mappingConfidence:
-- missingFields:
-- lastDecision:
-`,
+      schema: z.object({
+        platformType: z.string().optional().describe("Platform type being mapped"),
+        schemaReady: z.boolean().optional().describe("Whether schema analysis is complete"),
+        chosenTemplateId: z.string().optional().describe("Selected template ID for mapping"),
+        mappingConfidence: z.string().optional().describe("Confidence level of current mapping"),
+        missingFields: z.string().optional().describe("Comma-separated list of missing required fields"),
+        lastDecision: z.string().optional().describe("Most recent mapping decision"),
+      }),
     },
   }),
   tools: {

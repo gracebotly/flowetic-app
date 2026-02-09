@@ -5,6 +5,7 @@ import { Memory } from "@mastra/memory";
 import { getModelById } from "../lib/models/modelSelector";
 import { getMastraStorage } from "../lib/storage";
 import type { RequestContext } from "@mastra/core/request-context";
+import { z } from "zod";
 import { searchDesignDatabase } from "../tools/design-system/searchDesignDatabase";
 import { generateDesignSystem } from "../tools/design-system/generateDesignSystem";
 import { createFloweticMemory } from "../lib/memory";
@@ -70,13 +71,13 @@ export const designAdvisorAgent: Agent = new Agent({
     lastMessages: 30,
     workingMemory: {
       enabled: true,
-      template: `# Design Preferences
-- styleDirection:
-- audience:
-- density:
-- palette:
-- typographyNotes:
-`,
+      schema: z.object({
+        styleDirection: z.string().optional().describe("Design style direction (e.g., premium, minimal, bold)"),
+        audience: z.string().optional().describe("Target audience for the design (e.g., law firm, healthcare, startup)"),
+        density: z.string().optional().describe("Layout density preference"),
+        palette: z.string().optional().describe("Color palette preferences"),
+        typographyNotes: z.string().optional().describe("Typography and font preferences"),
+      }),
     },
   }),
   tools: {

@@ -4,10 +4,11 @@ import { Memory } from "@mastra/memory";
 import { getMastraStorage } from "./storage";
 import { PgVector } from "@mastra/pg";
 import { openai } from "@ai-sdk/openai";
+import { z } from "zod";
 
 type CreateFloweticMemoryOpts = {
   lastMessages?: number;
-  workingMemory?: { enabled: boolean; template?: string };
+  workingMemory?: { enabled: boolean; template?: string; schema?: z.ZodObject<any> };
 };
 
 function envFlag(name: string, defaultValue: boolean) {
@@ -25,21 +26,23 @@ function envFlag(name: string, defaultValue: boolean) {
 export function createFloweticMemory(opts: CreateFloweticMemoryOpts = {}) {
   const storage = getMastraStorage();
   const lastMessages = opts.lastMessages ?? 30;
-  const workingMemory =
-    opts.workingMemory ??
-    ({
-      enabled: true,
-      template: `# Journey State
+  // Schema-based working memory: merge semantics means the agent only sends
+  // fields it wants to update, dramatically reducing malformed JSON from weak models.
+  const defaultWorkingMemorySchema = z.object({
+    phase: z.string().optional().describe("Current journey phase"),
+    platformType: z.string().optional().describe("Connected platform type (e.g. n8n, make, vapi)"),
+    workflowName: z.string().optional().describe("Name of the connected workflow"),
+    selectedEntities: z.string().optional().describe("Comma-separated entity names user selected"),
+    selectedOutcome: z.string().optional().describe("dashboard or product"),
+    selectedStyleBundleId: z.string().optional().describe("Chosen style bundle ID"),
+    lastDecision: z.string().optional().describe("Most recent user decision or action"),
+    notes: z.string().optional().describe("Any additional context the agent wants to remember"),
+  });
 
-## Context
-- Phase: {{phase}}
-- Platform: {{platformType}}
-- Workflow: {{workflowName}}
-
-## Decisions Made
-(Record user selections as they happen)
-`,
-    } as const);
+  const workingMemory = opts.workingMemory ?? {
+    enabled: true,
+    schema: defaultWorkingMemorySchema,
+  };
   
   // Enable semantic recall by default for autonomous behavior
   const semanticRecallEnabled = envFlag("MASTRA_SEMANTIC_RECALL_ENABLED", false);
@@ -54,7 +57,7 @@ export function createFloweticMemory(opts: CreateFloweticMemoryOpts = {}) {
       storage,
       options: {
         lastMessages,
-        workingMemory: workingMemory as any,
+        workingMemory,
       },
     });
   }
@@ -66,7 +69,7 @@ export function createFloweticMemory(opts: CreateFloweticMemoryOpts = {}) {
       storage,
       options: {
         lastMessages,
-        workingMemory: workingMemory as any,
+        workingMemory,
       },
     });
   }
@@ -87,7 +90,7 @@ export function createFloweticMemory(opts: CreateFloweticMemoryOpts = {}) {
     embedder: openai.embedding("text-embedding-3-small"),
     options: {
       lastMessages,
-      workingMemory: workingMemory as any,
+      workingMemory,
       semanticRecall: {
         topK: 5,
         messageRange: 3,
