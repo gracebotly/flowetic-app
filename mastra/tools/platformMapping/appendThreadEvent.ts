@@ -44,8 +44,14 @@ export const appendThreadEvent = createTool({
 
     const { threadId, interfaceId, sourceId: directSourceId, runId, type, message, metadata, actionButton } = inputData;
 
-    // Use direct sourceId parameter, fallback to metadata.sourceId
-    const sourceId = directSourceId ?? (metadata?.sourceId as string | undefined);
+    // ✅ FIX: Fall back to RequestContext sourceId if not provided (same pattern as getEventStats)
+    const sourceId = directSourceId 
+      ?? (metadata?.sourceId as string | undefined)
+      ?? (context?.requestContext?.get('sourceId') as string | undefined);
+    
+    if (!sourceId) {
+      throw new Error('[appendThreadEvent]: sourceId missing — not in args, metadata, or RequestContext');
+    }
 
     const { data, error } = await supabase
       .from("events")

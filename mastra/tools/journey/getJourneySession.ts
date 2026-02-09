@@ -27,14 +27,15 @@ export const getJourneySession = createTool({
     previewVersionId: z.string().nullable(),
   }),
   execute: async (inputData, context) => {
-    // ✅ FIX: Validate threadId and fall back to RequestContext
+    // ✅ FIX: Validate threadId is a real UUID, fall back to RequestContext
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     let threadId = inputData.threadId;
-    if (!threadId || threadId === "thread_" || threadId.length < 10) {
+    if (!threadId || !UUID_RE.test(threadId)) {
       threadId = context?.requestContext?.get('threadId') as string;
     }
     
-    if (!threadId) {
-      throw new Error('[getJourneySession]: No valid threadId provided');
+    if (!threadId || !UUID_RE.test(threadId)) {
+      throw new Error(`[getJourneySession]: No valid threadId — got "${inputData.threadId}", RequestContext had "${context?.requestContext?.get('threadId')}"`);
     }
 
     // Get access token and tenant context
