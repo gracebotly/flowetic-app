@@ -6,7 +6,7 @@ import { getMastraStorage } from "../lib/storage";
 import type { RequestContext } from "@mastra/core/request-context";
 
 import { createFloweticMemory } from "../lib/memory";
-import { loadSkillFromWorkspace } from '../lib/loadSkill';
+import { getCachedSkill } from '../lib/skillCache';
 import {
   appendThreadEvent,
   getClientContext,
@@ -42,7 +42,7 @@ export const platformMappingMaster: Agent = new Agent({
     );
 
     // Load platform skill for deep mapping knowledge
-    const platformSkillContent = await loadSkillFromWorkspace(platformType);
+    const platformSkillContent = await getCachedSkill(platformType);
 
     return {
       role: "system" as const,
