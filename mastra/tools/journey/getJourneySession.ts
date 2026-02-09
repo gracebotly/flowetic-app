@@ -27,6 +27,16 @@ export const getJourneySession = createTool({
     previewVersionId: z.string().nullable(),
   }),
   execute: async (inputData, context) => {
+    // ✅ FIX: Validate threadId and fall back to RequestContext
+    let threadId = inputData.threadId;
+    if (!threadId || threadId === "thread_" || threadId.length < 10) {
+      threadId = context?.requestContext?.get('threadId') as string;
+    }
+    
+    if (!threadId) {
+      throw new Error('[getJourneySession]: No valid threadId provided');
+    }
+
     // Get access token and tenant context
     const accessToken = context?.requestContext?.get('supabaseAccessToken') as string;
     if (!accessToken || typeof accessToken !== 'string') {
@@ -41,7 +51,7 @@ export const getJourneySession = createTool({
         "tenant_id,thread_id,platform_type,source_id,entity_id,mode,schema_ready,selected_outcome,selected_storyboard,selected_style_bundle_id,preview_interface_id,preview_version_id",
       )
       .eq("tenant_id", tenantId)
-      .eq("thread_id", inputData.threadId)
+      .eq("thread_id", threadId)
       .maybeSingle();
 
     if (error) throw new Error(error.message);

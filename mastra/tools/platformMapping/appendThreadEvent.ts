@@ -15,7 +15,7 @@ export const appendThreadEvent = createTool({
     interfaceId: z.string().uuid().optional(),
     sourceId: z.string().uuid().optional().describe("Source ID for the event (required if metadata.sourceId not provided)"),
     runId: z.string().uuid().optional(),
-    type: z.enum(["state", "tool_event", "error", "info"]),
+    type: z.enum(["state", "tool_event", "error"]),
     message: z.string().min(1),
     metadata: z.record(z.any()).optional(),
     // NEW: Support for action buttons

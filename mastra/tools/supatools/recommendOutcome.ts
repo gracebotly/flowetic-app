@@ -45,7 +45,10 @@ export const recommendOutcome = createSupaTool<z.infer<typeof outputSchema>>({
       throw new Error('recommendOutcome: tenantId missing from request context');
     }
 
-    const { sourceId, sinceDays } = input;
+    // ✅ FIX: Fall back to RequestContext sourceId if not provided
+    const sourceId = input.sourceId || (context.requestContext?.get('sourceId') as string | undefined);
+
+    const { sinceDays } = input;
 
     const supabase = createAuthenticatedClient(accessToken);
 
