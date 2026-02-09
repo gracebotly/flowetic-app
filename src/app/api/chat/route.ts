@@ -1,6 +1,6 @@
 
-import { createUIMessageStream, createUIMessageStreamResponse } from 'ai';
-import { toAISdkStream } from '@mastra/ai-sdk';
+import { handleNetworkStream } from '@mastra/ai-sdk';
+import { createUIMessageStreamResponse } from 'ai';
 import {
   RequestContext,
   MASTRA_RESOURCE_ID_KEY,
@@ -238,44 +238,31 @@ export async function POST(req: Request) {
     // This handles sub-agent delegation at the framework level,
     // eliminating maxSteps/resourceId construction errors.
     // =========================================================================
-    const master = mastra.getAgent('masterRouterAgent');
-    if (!master) {
-      return new Response(
-        JSON.stringify({ error: 'masterRouterAgent not registered' }),
-        { status: 500, headers: { 'Content-Type': 'application/json' } },
-      );
-    }
+    const enhancedParams = {
+      ...params,
+      requestContext,
+      memory: {
+        thread: mastraThreadId,
+        resource: userId,
+      },
+    };
 
-    const messages = (params as any)?.messages ?? [];
-
-    const networkStream = await withTimeout(
-      master.network(messages, {
-        maxSteps: 10,
-        memory: {
-          thread: mastraThreadId,
-          resource: userId,
+    const stream = await withTimeout(
+      handleNetworkStream({
+        mastra,
+        agentId: 'masterRouterAgent',
+        params: enhancedParams,
+        defaultOptions: {
+          toolCallConcurrency: 1,
+          maxSteps: 10,
+          toolChoice: "auto",
         },
-        requestContext,
       }),
       290000,
-      'api_chat_network',
+      "api_chat_stream"
     );
 
-    // Convert network stream → AI SDK UI stream
-    const uiMessageStream = createUIMessageStream({
-      originalMessages: messages,
-      execute: async ({ writer }) => {
-        for await (const part of toAISdkStream(networkStream, {
-          from: 'network',
-        })) {
-          await writer.write(part);
-        }
-      },
-    });
-
-    return createUIMessageStreamResponse({
-      stream: uiMessageStream,
-    });
+    return createUIMessageStreamResponse({ stream });
     
   } catch (error: any) {
     console.error('[api/chat] Unexpected error:', error);
