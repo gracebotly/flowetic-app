@@ -73,7 +73,7 @@ export const n8nNormalizer: PlatformNormalizer = {
     };
 
     return {
-      type: 'workflow_execution',
+      type: 'state',
       name: `n8n:${workflowName || workflowId || 'workflow'}:execution`,
       state,
       labels: {

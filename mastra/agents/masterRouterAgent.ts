@@ -87,8 +87,10 @@ export const masterRouterAgent: Agent = new Agent({
   instructions: async ({ requestContext }) => {
     // Type-safe access via requestContext.all (new in Mastra 1.1.0)
     const { tenantId, userId, platformType, phase, selectedOutcome, workflowName, selectedStyleBundleId } = requestContext.all;
-    
-    
+
+    // DEBUG: Log actual phase being used
+    console.log('[masterRouterAgent] Phase from RequestContext:', phase, '| Raw:', requestContext.all.phase);
+
     // Fallback for values that might not be in schema
     const safePlatformType = platformType || "make";
     const safeSelectedStyleBundle = selectedStyleBundleId || "";
@@ -236,6 +238,12 @@ export const masterRouterAgent: Agent = new Agent({
       selectedOutcome ? `User selected outcome: ${selectedOutcome}` : "",
       safeSelectedStyleBundle ? `User selected style bundle: ${safeSelectedStyleBundle}` : "",
       "",
+      "# DATA PIPELINE ERROR HANDLING",
+      "- If a backfill reports fetched > 0 but stored: 0, this is a SYSTEM ERROR, not a user error.",
+      "- NEVER tell the user to 'run their workflow' or 'trigger executions' when fetch succeeded.",
+      "- Instead say: 'I found your data but encountered a storage issue. Let me retry.' and retry the backfill.",
+      "- If retry also fails, say: 'There's a technical issue storing your data. Our team has been notified. In the meantime, I can still help you plan your dashboard based on the data I found.'",
+      "",
       `# CURRENT PHASE INSTRUCTIONS (${phase || "recommend"})`,
       phaseInstructions,
       "",
@@ -306,13 +314,8 @@ export const masterRouterAgent: Agent = new Agent({
     dashboardBuilderAgent,
     designAdvisorAgent,
   },
-  workflows: {
-    generatePreviewWorkflow,
-    connectionBackfillWorkflow,
-    deployDashboardWorkflow,
-  },
   memory: createFloweticMemory({
-    lastMessages: 30,
+    lastMessages: 8,  // Reduced from 30 to prevent in-context format priming
   }),
   workspace,  // ← ADD THIS LINE (after existing properties, before closing brace)
   tools: {

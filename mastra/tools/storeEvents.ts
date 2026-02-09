@@ -29,23 +29,62 @@ export const storeEvents = createTool({
 
     if (!rows.length) return { stored: 0, skipped: 0, errors: [] };
 
-    // Attempt upsert-like behavior by inserting and ignoring conflicts via unique index.
-    // Supabase JS upsert requires specifying conflict columns. We'll use upsert on (source_id, platform_event_id).
-    // If platform_event_id is null, it's not eligible for the unique partial index; that's acceptable.
-    const { data, error } = await supabase
-      .from("events")
-      .upsert(rows, {
-        onConflict: "source_id,platform_event_id",
-        ignoreDuplicates: true,
-      })
-      .select("id");
+    // Strip platform_event_id from rows to build clean rows for fallback
+    const cleanRows = rows.map((r: Record<string, unknown>) => {
+      const { platform_event_id, ...rest } = r;
+      return rest;
+    });
 
-    if (error) {
-      return { stored: 0, skipped: 0, errors: [error.message] };
+    // Try upsert with platform_event_id first (preferred: dedup support)
+    const hasPlatformIds = rows.every(
+      (r: Record<string, unknown>) =>
+        r.platform_event_id != null && r.platform_event_id !== ""
+    );
+
+    let data: { id: string }[] | null = null;
+
+    if (hasPlatformIds) {
+      try {
+        const result = await supabase
+          .from("events")
+          .upsert(rows, {
+            onConflict: "source_id,platform_event_id",
+            ignoreDuplicates: true,
+          })
+          .select("id")
+          .throwOnError();
+
+        data = result.data;
+      } catch (err: any) {
+        if (err?.message?.includes("platform_event_id")) {
+          // Column doesn't exist yet — fall back to plain insert without that field
+          console.warn("[storeEvents] platform_event_id column missing, falling back to insert");
+          const fallback = await supabase
+            .from("events")
+            .insert(cleanRows)
+            .select("id")
+            .throwOnError();
+
+          data = fallback.data;
+        } else {
+          console.error("[storeEvents] INSERT failed:", err.code, err.message);
+          throw new Error(`storeEvents INSERT failed: ${err.code} — ${err.message}`);
+        }
+      }
+    } else {
+      const result = await supabase
+        .from("events")
+        .insert(cleanRows)
+        .select("id")
+        .throwOnError();
+
+      data = result.data;
     }
 
-    const stored = (data ?? []).length;
+    const stored = data?.length ?? 0;
     const skipped = Math.max(0, rows.length - stored);
+
+    console.log(`[storeEvents] Stored ${stored} events, skipped ${skipped}`);
 
     return { stored, skipped, errors: [] };
   },

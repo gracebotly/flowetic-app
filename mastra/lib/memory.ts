@@ -29,23 +29,15 @@ export function createFloweticMemory(opts: CreateFloweticMemoryOpts = {}) {
     opts.workingMemory ??
     ({
       enabled: true,
-      template: `# Vibe Journey State - <working_memory>
+      template: `# Journey State
 
-## Current Phase
+## Context
 - Phase: {{phase}}
-- Last Updated: {{timestamp}}
-
-## Workflow Context
 - Platform: {{platformType}}
-- Workflow Name: {{workflowName}}
+- Workflow: {{workflowName}}
 
-## Journey Progress
-(Record user selections and decisions here as they are made)
-
-## Format Reminders
-- Layout options: ALWAYS use ASCII wireframe code blocks, NEVER text paragraphs
-- Style options: Show 2 at a time with visual previews
-- Keep all responses concise and action-oriented
+## Decisions Made
+(Record user selections as they happen)
 `,
     } as const);
   

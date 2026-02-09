@@ -246,12 +246,14 @@ const generateUISpecStep = createStep({
     const templateId = templateResult.templateId;
     const mappings = mappingResult.mappings;
     const platformType = (requestContext.get("platformType") || 'make') as SelectTemplatePlatformType;
-    
-    const result = await callTool(generateUISpec, 
+    const selectedStyleBundleId = (requestContext.get("selectedStyleBundleId") || 'professional-clean') as string;
+
+    const result = await callTool(generateUISpec,
       {
         templateId,
         mappings: mappings,
         platformType,
+        selectedStyleBundleId,
       },
       { requestContext }
     );
