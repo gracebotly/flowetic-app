@@ -8,7 +8,11 @@ import { z } from "zod";
 
 type CreateFloweticMemoryOpts = {
   lastMessages?: number;
-  workingMemory?: { enabled: boolean; template?: string; schema?: z.ZodObject<any> };
+  workingMemory?:
+    | { enabled: true; template: string; schema?: never; scope?: 'thread' | 'resource' }
+    | { enabled: true; schema: z.ZodObject<any>; template?: never; scope?: 'thread' | 'resource' }
+    | { enabled: false }
+    | { enabled: true };
 };
 
 function envFlag(name: string, defaultValue: boolean) {
