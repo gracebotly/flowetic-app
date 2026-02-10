@@ -1,7 +1,7 @@
 
 
 
-import { createTool } from "@mastra/core/tools";
+import { createTool, ValidationError } from "@mastra/core/tools";
 import { z } from "zod";
 import { createAuthenticatedClient } from "../../lib/supabase";
 import { extractTenantContext } from "../../lib/tenant-verification";
@@ -35,11 +35,10 @@ export const getJourneySession = createTool({
 
     if (!threadId || !UUID_RE.test(threadId)) {
       console.error(`[getJourneySession] Invalid or missing threadId in RequestContext: "${threadId}"`);
-      return {
-        success: false,
-        error: 'JOURNEY_SESSION_NOT_FOUND',
-        message: `threadId not found in RequestContext or invalid format. Got: "${threadId}"`,
-      };
+      return new ValidationError(
+        `threadId not found in RequestContext or invalid format. Got: "${threadId}"`,
+        { field: 'threadId', code: 'JOURNEY_SESSION_NOT_FOUND' }
+      );
     }
 
     // Get access token and tenant context
