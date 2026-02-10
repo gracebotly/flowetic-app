@@ -53,12 +53,16 @@ DO NOT try to generate previews yourself — always delegate to this specialist.
         };
       }
 
-      const prompt = [
+      // Also pass journeyThreadId if available (the client journey thread for journey_sessions lookups)
+      const journeyThreadId = context?.requestContext?.get('journeyThreadId') as string;
+      
+      const enhancedPrompt = [
         input.task,
         input.additionalContext ? `\nAdditional context: ${input.additionalContext}` : "",
+        journeyThreadId ? `\nIMPORTANT - When calling getJourneySession, use threadId: "${journeyThreadId}" (not a display name)` : "",
       ].filter(Boolean).join("\n");
 
-      const result = await platformMappingMaster.generate(prompt, {
+      const result = await platformMappingMaster.generate(enhancedPrompt, {
         maxSteps: 8,
         toolChoice: "auto",
         requestContext: context?.requestContext,

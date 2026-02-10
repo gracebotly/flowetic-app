@@ -50,15 +50,24 @@ Without calling this tool, the phase stays stuck and instructions won't update.`
     const { nextPhase, reason, selectedValue } = inputData;
     const currentPhase = (context?.requestContext?.get('phase') as string) || 'select_entity';
 
-    const allowedNextPhases = VALID_TRANSITIONS[currentPhase] || [];
-    if (!allowedNextPhases.includes(nextPhase)) {
+    // Allow multi-step jumps when intermediate phases were already completed in prior turns.
+    // The phase order is: select_entity → recommend → style → build_preview → interactive_edit → deploy
+    const PHASE_ORDER = ['select_entity', 'recommend', 'style', 'build_preview', 'interactive_edit', 'deploy'];
+    const currentIndex = PHASE_ORDER.indexOf(currentPhase);
+    const targetIndex = PHASE_ORDER.indexOf(nextPhase);
+    
+    // Only allow forward movement (target must be after current)
+    if (targetIndex <= currentIndex) {
       return {
         success: false,
         previousPhase: currentPhase,
         currentPhase: currentPhase,
-        message: `Cannot advance from "${currentPhase}" to "${nextPhase}". Valid: ${allowedNextPhases.join(', ') || 'none'}`,
+        message: `Cannot advance from "${currentPhase}" to "${nextPhase}". Must move forward. Current position: ${currentIndex}, Target: ${targetIndex}`,
       };
     }
+    
+    // Allow jumping forward (skip intermediate phases that were already decided)
+    // This prevents wasting tool calls stepping through each phase individually
 
     // Update RequestContext for this request
     context?.requestContext?.set('phase', nextPhase);

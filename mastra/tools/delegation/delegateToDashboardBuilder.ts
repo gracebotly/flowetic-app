@@ -51,9 +51,11 @@ DO NOT try to edit dashboard specs yourself — always delegate to this speciali
         };
       }
 
+      const journeyThreadId = context?.requestContext?.get('journeyThreadId') as string;
       const prompt = [
         input.task,
         input.additionalContext ? `\nAdditional context: ${input.additionalContext}` : "",
+        journeyThreadId ? `\nIMPORTANT - When calling getJourneySession, use threadId: "${journeyThreadId}" (not a display name)` : "",
       ].filter(Boolean).join("\n");
 
       const result = await dashboardBuilderAgent.generate(prompt, {

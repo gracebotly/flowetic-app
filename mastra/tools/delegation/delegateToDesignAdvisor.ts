@@ -52,9 +52,11 @@ Prefer this specialist for any design-related decisions over generic recommendat
         };
       }
 
+      const journeyThreadId = context?.requestContext?.get('journeyThreadId') as string;
       const prompt = [
         input.task,
         input.additionalContext ? `\nAdditional context: ${input.additionalContext}` : "",
+        journeyThreadId ? `\nIMPORTANT - When calling getJourneySession, use threadId: "${journeyThreadId}" (not a display name)` : "",
       ].filter(Boolean).join("\n");
 
       const result = await designAdvisorAgent.generate(prompt, {
