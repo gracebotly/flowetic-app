@@ -1,20 +1,14 @@
 
-
 import { Agent } from "@mastra/core/agent";
-import { Memory } from "@mastra/memory";
 import { getModelById } from "../lib/models/modelSelector";
-import { getMastraStorage } from "../lib/storage";
 import type { RequestContext } from "@mastra/core/request-context";
 import { z } from "zod";
-import { searchDesignDatabase } from "../tools/design-system/searchDesignDatabase";
-import { generateDesignSystem } from "../tools/design-system/generateDesignSystem";
 import { createFloweticMemory } from "../lib/memory";
-import { getCachedSkillAsync } from '../lib/skillCache';
 
-// NEW: Import Supatool
+// Supatool
 import { recommendStyleKeywords } from "../tools/supatools";
 
-// NEW: Import UI/UX tools
+// UI/UX tools (native Mastra tools with BM25 search)
 import {
   getStyleRecommendations,
   getChartRecommendations,
@@ -23,43 +17,80 @@ import {
   getProductRecommendations,
 } from "../tools/uiux";
 
-
-
 export const designAdvisorAgent: Agent = new Agent({
   id: "designAdvisorAgent",
   name: "designAdvisorAgent",
   description:
-    "Design Advisor Agent (RAG): Frontend-design powered UI/UX guidance. Generates style bundles (Phase 3), applies interactive edits (Phase 5), follows frontend-design principles for distinctive dashboards.",
+    "Design Advisor Agent: UI/UX guidance powered by BM25 search over design databases. " +
+    "Generates style recommendations, typography pairings, chart suggestions, and UX guidelines.",
   instructions: async ({ requestContext }: { requestContext: RequestContext }) => {
     const mode = (requestContext.get("mode") as string | undefined) ?? "edit";
     const phase = (requestContext.get("phase") as string | undefined) ?? "editing";
     const platformType = (requestContext.get("platformType") as string | undefined) ?? "make";
 
-    // Load UI/UX Pro Max skill for design expertise
-    const uiuxSkillContent = await getCachedSkillAsync("ui-ux-pro-max");
-
     return [
       {
         role: "system",
-        content:
-          "You are the Design Advisor Agent (RAG) for GetFlowetic.\n\n" +
-          "Goal: Make the dashboard look polished, modern, and appropriate for the user's brand (e.g., law firm, healthcare, startup) while staying consistent with the GetFlowetic component system.\n\n" +
-          "CRITICAL RULES:\n" +
-          "- Never ask the user for tenantId, sourceId, interfaceId, threadId, versionId, or any UUID. Never mention internal identifiers.\n" +
-          "Python RAG tools: Use searchDesignDatabase for domain-specific searches and generateDesignSystem for complete design systems. These execute Python scripts with BM25 search for professional design recommendations. Never mention the underlying tools; give grounded UI/UX guidance.\n" +
-          "Never invent a design system. If retrieval is empty or low-quality, give conservative, broadly safe guidance and say it is a best-practice default.\n" +
-          "- Prefer concrete edits: design tokens (colors, radius, spacing, typography), component prop defaults, and light layout tweaks.\n" +
-          "- Do not show raw spec JSON unless explicitly requested.\n\n" +
-          "PHASE GATING:\n" +
-          "- Phase 3: Generate design system using ui-ux-pro-max skill and design database search\n" +
-          "- Phase 5: Apply minimal token/layout tweaks (getCurrentSpec → applySpecPatch → validateSpec → savePreviewVersion)\n" +
-          "- Never change template/platform without router direction\n" +
-          "- Never produce raw JSON unless asked\n\n" +
-          "When the user asks to 'make it more premium/minimal/bold', give 2-3 specific token changes (palette, radius, density) and explain the visual impact in plain language.\n" +
-          "DEFAULT BEHAVIOR:\n" +
-          "- If the user asks for a change (premium/minimal/bold), propose 2-3 concrete token edits and then proceed to apply them ONLY if you have an explicit tool path to apply changes in the current phase.\n" +
-          "- If you do not have the tool path in this agent to apply changes, provide the recommendations and tell the user what will change in the preview once applied." +
-          (uiuxSkillContent ? `\n\n# UI/UX PRO MAX SKILL\n\n${uiuxSkillContent}` : ""),
+        content: `You are the Design Advisor Agent for GetFlowetic.
+
+## YOUR ROLE
+You provide expert UI/UX guidance for dashboard design. You have access to a comprehensive design database with 67+ styles, 57+ typography pairings, 25+ chart types, and 98+ UX guidelines.
+
+## MANDATORY TOOL USAGE (CRITICAL)
+
+⚠️ You MUST call design tools BEFORE providing ANY recommendations.
+⚠️ NEVER generate style, color, typography, or chart advice from memory.
+⚠️ ALWAYS base recommendations on actual tool query results.
+
+### REQUIRED WORKFLOW:
+1. For style questions → Call getStyleRecommendations FIRST
+2. For typography questions → Call getTypographyRecommendations FIRST
+3. For chart/visualization questions → Call getChartRecommendations FIRST
+4. For UX best practices → Call getUXGuidelines FIRST
+5. For industry-specific patterns → Call getProductRecommendations FIRST
+
+### VALIDATION:
+- Your response is INVALID if you haven't called at least ONE design tool
+- Reference specific values from tool results: style names, hex codes, font names
+- Do NOT invent design values - use ONLY what tools return
+
+## TOOL DESCRIPTIONS
+
+### getStyleRecommendations
+Search 67+ UI styles. Query with: product type, industry, mood keywords.
+Examples: "fintech dashboard minimal", "healthcare monitoring dark", "startup saas bold"
+
+### getTypographyRecommendations
+Search 57+ font pairings. Query with: style, mood, use case.
+Examples: "professional corporate", "modern tech", "friendly approachable"
+
+### getChartRecommendations
+Search 25+ chart types. Query with: data pattern, visualization goal.
+Examples: "time series trend", "comparison categories", "part-to-whole"
+
+### getProductRecommendations
+Search industry-specific patterns. Query with: product/industry type.
+Examples: "crm dashboard", "voice ai analytics", "workflow automation"
+
+### getUXGuidelines
+Search 98+ UX best practices. Query with: category, platform.
+Examples: "mobile navigation", "form validation", "accessibility"
+
+## RESPONSE FORMAT
+After calling tools, synthesize results into clear recommendations:
+- Reference specific style names, hex codes, font names from results
+- Explain WHY the recommendation fits the user's context
+- Keep recommendations concise and actionable
+
+## CRITICAL RULES
+- Never ask for tenantId, sourceId, interfaceId, or any UUID
+- Never mention internal identifiers or tool names to users
+- Never invent design values - always use tool results
+- If tools return empty, say "I couldn't find specific matches" and suggest broadening the query`,
+      },
+      {
+        role: "system",
+        content: `Current context: Mode=${mode}, Phase=${phase}, Platform=${platformType}`,
       },
     ];
   },
@@ -68,7 +99,7 @@ export const designAdvisorAgent: Agent = new Agent({
     return getModelById(selectedModelId);
   },
   memory: createFloweticMemory({
-    lastMessages: 30,
+    lastMessages: 20,
     workingMemory: {
       enabled: true,
       schema: z.object({
@@ -81,11 +112,9 @@ export const designAdvisorAgent: Agent = new Agent({
     },
   }),
   tools: {
-    searchDesignDatabase,
-    generateDesignSystem,
-    // NEW: Add Supatool
+    // Supatool
     recommendStyleKeywords,
-    // NEW: UI/UX tools (matches skill instructions)
+    // UI/UX tools (BM25 search over design database)
     getStyleRecommendations,
     getChartRecommendations,
     getTypographyRecommendations,

@@ -1,5 +1,4 @@
 
-
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { designAdvisorAgent } from "../../agents/designAdvisorAgent";
@@ -12,21 +11,19 @@ USE THIS TOOL WHEN:
 - User asks about design direction, colors, typography, or visual style
 - Phase is "style" and you need expert design recommendations
 - User asks for "premium", "minimal", "bold", "corporate" styling
-- You need to search the design database for specific patterns
-- You need to generate a complete design token system
+- You need data-driven style recommendations from the design database
 
-The Design Advisor has access to: searchDesignDatabase (BM25 RAG over design knowledge),
-generateDesignSystem (complete design token generation), recommendStyleKeywords,
-and the UI/UX Pro Max skill.
+The Design Advisor has access to: getStyleRecommendations, getTypographyRecommendations,
+getChartRecommendations, getProductRecommendations, getUXGuidelines, and recommendStyleKeywords.
 
-Prefer this specialist for any design-related decisions over generic recommendations.`,
+The advisor MUST call these tools before providing recommendations - never from memory.`,
 
   inputSchema: z.object({
     task: z.string().min(1).describe(
       "Design question or task. Examples: " +
       "'Recommend a premium design system for a law firm analytics dashboard', " +
-      "'Generate design tokens for a bold, modern SaaS dashboard', " +
-      "'Search for color palettes suitable for healthcare monitoring'"
+      "'What typography works for a bold, modern SaaS dashboard', " +
+      "'Suggest color palettes suitable for healthcare monitoring'"
     ),
     additionalContext: z.string().optional().describe(
       "Industry, audience, existing preferences, platform type"
@@ -72,8 +69,8 @@ Prefer this specialist for any design-related decisions over generic recommendat
       }
 
       const result = await designAdvisorAgent.generate(prompt, {
-        maxSteps: 6,
-        toolChoice: "auto",
+        maxSteps: 5,
+        toolChoice: "required",  // Force tool usage - agent MUST call tools
         requestContext: context?.requestContext,
         memory: {
           resource: userId,
@@ -95,5 +92,3 @@ Prefer this specialist for any design-related decisions over generic recommendat
     }
   },
 });
-
-
