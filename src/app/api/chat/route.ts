@@ -174,8 +174,6 @@ export async function POST(req: Request) {
       mode: "generate",
     };
 
-    const mastra = getMastraSingleton();
-
     if (process.env.DEBUG_CHAT_ROUTE === 'true') {
       console.log('[api/chat] Authorized request:', {
         tenantId, userId, userRole, mastraThreadId,
