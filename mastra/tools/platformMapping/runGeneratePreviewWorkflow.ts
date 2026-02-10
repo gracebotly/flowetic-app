@@ -2,7 +2,13 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { randomUUID } from "crypto";
+
+// STATIC IMPORTS (Fix for Issue A: #eY bundler class duplication)
+// These MUST be static top-level imports, NOT dynamic `await import()`.
+// Dynamic imports cause Vercel's bundler to place these classes in separate chunks,
+// creating duplicate class copies that fail JavaScript private field brand checks.
 import { RequestContext } from "@mastra/core/request-context";
+import { mastra } from "../../index";
 
 export const runGeneratePreviewWorkflow = createTool({
   id: "runGeneratePreviewWorkflow",
@@ -35,7 +41,6 @@ export const runGeneratePreviewWorkflow = createTool({
     // FIX: SNAPSHOT COLLISION — Use unique runId + cleanup
     // ═══════════════════════════════════════════════════════════
     try {
-      const { mastra } = await import("../../index");
       const workflow = mastra.getWorkflow("generatePreview");
 
       if (!workflow) {
