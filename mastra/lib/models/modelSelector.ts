@@ -29,9 +29,9 @@ export const AVAILABLE_MODELS: ModelConfig[] = [
   {
     id: "glm-4.7",
     displayName: "GLM 4.7",
-    provider: "openrouter",
+    provider: "zai.chat",      // ← revert from "openrouter"
     costTier: "cheap",
-    factory: () => glm47Model(), // ✅ Lazy: called per-request via OpenRouter
+    factory: () => glm47Model(),
   },
   {
     id: "gemini-3-pro-preview",

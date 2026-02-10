@@ -1,5 +1,5 @@
 
-import { handleNetworkStream } from '@mastra/ai-sdk';
+import { handleChatStream } from '@mastra/ai-sdk';
 import { createUIMessageStreamResponse } from 'ai';
 import {
   RequestContext,
@@ -165,93 +165,35 @@ export async function POST(req: Request) {
       });
     }
 
-    // =========================================================================
-    // SERVER-SIDE PHASE ADVANCEMENT
-    // Detect user selections in the latest message and advance phase
-    // before constructing requestContext for the agent.
-    // =========================================================================
-    const latestUserMessage = Array.isArray((params as any)?.messages)
-      ? [...(params as any).messages].reverse().find((m: any) => m.role === 'user')?.content ?? ''
-      : '';
-    const msgLower = typeof latestUserMessage === 'string' ? latestUserMessage.toLowerCase() : '';
-    
-    let currentPhase = (requestContext.get('phase') as string) || 'select_entity';
-    
-    // Phase: select_entity → recommend (user selected entities / workflow parts)
-    if (currentPhase === 'select_entity' && (
-      msgLower.includes('__action__select_entity') ||
-      msgLower.includes('track') ||
-      msgLower.includes('selected') ||
-      msgLower.includes('these') ||
-      msgLower.includes('all of them') ||
-      msgLower.includes('yes')
-    )) {
-      currentPhase = 'recommend';
-      requestContext.set('phase', 'recommend');
-      if (process.env.DEBUG_CHAT_ROUTE === 'true') {
-        console.log('[api/chat] Phase advanced: select_entity → recommend');
-      }
-    }
-    
-    // Phase: recommend → style (user selected outcome like "dashboard" or "product")
-    if (currentPhase === 'recommend' && (
-      msgLower.includes('__action__select_outcome') ||
-      msgLower.includes('dashboard') ||
-      msgLower.includes('product') ||
-      msgLower.includes('monitoring') ||
-      msgLower.includes('analytics')
-    )) {
-      currentPhase = 'style';
-      requestContext.set('phase', 'style');
-      // Also capture the outcome
-      if (msgLower.includes('dashboard') || msgLower.includes('monitoring') || msgLower.includes('analytics')) {
-        requestContext.set('selectedOutcome', 'dashboard');
-      } else if (msgLower.includes('product')) {
-        requestContext.set('selectedOutcome', 'product');
-      }
-      if (process.env.DEBUG_CHAT_ROUTE === 'true') {
-        console.log('[api/chat] Phase advanced: recommend → style');
-      }
-    }
-    
-    // Phase: style → build_preview (user selected a style bundle)
-    if (currentPhase === 'style' && (
-      msgLower.includes('__action__select_style') ||
-      msgLower.includes('minimal') ||
-      msgLower.includes('bold') ||
-      msgLower.includes('corporate') ||
-      msgLower.includes('style') ||
-      msgLower.includes('clean') ||
-      msgLower.includes('dark') ||
-      msgLower.includes('light')
-    )) {
-      currentPhase = 'build_preview';
-      requestContext.set('phase', 'build_preview');
-      if (process.env.DEBUG_CHAT_ROUTE === 'true') {
-        console.log('[api/chat] Phase advanced: style → build_preview');
-      }
-    }
 
-    // =========================================================================
-    // AGENT NETWORK EXECUTION
-    // Use agent.network() for proper multi-agent orchestration.
-    // This handles sub-agent delegation at the framework level,
-    // eliminating maxSteps/resourceId construction errors.
-    // =========================================================================
+
+    // 5. CALL MASTRA WITH VALIDATED CONTEXT
     const enhancedParams = {
       ...params,
       requestContext,
-      memory: {
-        thread: mastraThreadId,
-        resource: userId,
-      },
+      mode: "generate",
     };
 
+    const mastra = getMastraSingleton();
+
+    if (process.env.DEBUG_CHAT_ROUTE === 'true') {
+      console.log('[api/chat] Authorized request:', {
+        tenantId, userId, userRole, mastraThreadId,
+        clientJourneyThreadId,
+        messagesCount: Array.isArray((params as any)?.messages)
+          ? (params as any).messages.length : 0,
+      });
+    }
+
     const stream = await withTimeout(
-      handleNetworkStream({
+      handleChatStream({
         mastra,
         agentId: 'masterRouterAgent',
         params: enhancedParams,
+        sendStart: false,
+        sendFinish: true,
+        sendReasoning: false,   // ← CRITICAL: must be false to hide internal reasoning
+        sendSources: false,
         defaultOptions: {
           toolCallConcurrency: 1,
           maxSteps: 10,

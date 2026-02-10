@@ -1219,23 +1219,7 @@ return (
                                 return null;
                               }
 
-                              // ✅ SHOW: Network data (extract text from last step)
-                              if (part.type === 'data-network') {
-                                const networkData = (part as any).data;
-                                // Network streams text through the agent steps — extract text from the last step output
-                                if (networkData?.steps) {
-                                  const lastStep = networkData.steps[networkData.steps.length - 1];
-                                  if (lastStep?.output && typeof lastStep.output === 'string') {
-                                    return (
-                                      <div key={idx} className="whitespace-pre-wrap prose prose-sm max-w-none prose-gray">
-                                        {lastStep.output}
-                                      </div>
-                                    );
-                                  }
-                                }
-                                // Don't render network metadata as visible content
-                                return null;
-                              }
+
 
                               // ✅ SHOW: Text content
                               if (part.type === 'text') {

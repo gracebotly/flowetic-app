@@ -10,9 +10,12 @@ import type { RequestContext } from "@mastra/core/request-context";
 import { createFloweticMemory } from "../lib/memory";
 import { workspace } from '../workspace';  // ← ADD THIS IMPORT
 import { getCachedSkillAsync } from '../lib/skillCache';
-import { platformMappingMaster } from "./platformMappingMaster";
-import { dashboardBuilderAgent } from "./dashboardBuilderAgent";
-import { designAdvisorAgent } from "./designAdvisorAgent";
+import {
+  delegateToPlatformMapper,
+  delegateToDashboardBuilder,
+  delegateToDesignAdvisor,
+} from "../tools/delegation";
+import { advancePhase } from "../tools/journey/advancePhase";
 import { generatePreviewWorkflow } from "../workflows/generatePreview";
 import { connectionBackfillWorkflow } from "../workflows/connectionBackfill";
 import { deployDashboardWorkflow } from "../workflows/deployDashboard";
@@ -308,17 +311,17 @@ export const masterRouterAgent: Agent = new Agent({
     const { getModelById } = require("../lib/models/modelSelector");
     return getModelById(selectedModel);
   },
-  // REQUIRED: routing primitives for Agent.network()
-  agents: {
-    platformMappingMaster,
-    dashboardBuilderAgent,
-    designAdvisorAgent,
-  },
   memory: createFloweticMemory({
     lastMessages: 8,  // Reduced from 30 to prevent in-context format priming
   }),
   workspace,  // ← ADD THIS LINE (after existing properties, before closing brace)
   tools: {
+    // Phase advancement
+    advancePhase,
+    // Sub-agent delegation (replaces agents: {} config)
+    delegateToPlatformMapper,
+    delegateToDashboardBuilder,
+    delegateToDesignAdvisor,
     todoAdd,
     todoList,
     todoUpdate,
