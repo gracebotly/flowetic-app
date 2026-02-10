@@ -190,7 +190,7 @@ export async function POST(req: Request) {
         params: enhancedParams,
         sendStart: false,
         sendFinish: true,
-        sendReasoning: false,   // ← CRITICAL: must be false to hide internal reasoning
+        sendReasoning: true,    // ← Enable reasoning display in collapsible ReasoningBlock toggle
         sendSources: false,
         defaultOptions: {
           toolCallConcurrency: 1,
