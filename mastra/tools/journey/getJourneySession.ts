@@ -27,15 +27,19 @@ export const getJourneySession = createTool({
     previewVersionId: z.string().nullable(),
   }),
   execute: async (inputData, context) => {
-    // ✅ FIX: Validate threadId is a real UUID, fall back to RequestContext
+    // ALWAYS use RequestContext threadId - never trust LLM input for critical identifiers
+    // This prevents hallucinations like threadId='vibe'
+    const threadId = context?.requestContext?.get('threadId') as string;
+    
     const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    let threadId = inputData.threadId;
-    if (!threadId || !UUID_RE.test(threadId)) {
-      threadId = context?.requestContext?.get('threadId') as string;
-    }
     
     if (!threadId || !UUID_RE.test(threadId)) {
-      throw new Error(`[getJourneySession]: No valid threadId — got "${inputData.threadId}", RequestContext had "${context?.requestContext?.get('threadId')}"`);
+      console.error(`[getJourneySession] Invalid or missing threadId in RequestContext: "${threadId}"`);
+      return {
+        success: false,
+        error: 'JOURNEY_SESSION_NOT_FOUND',
+        message: `threadId not found in RequestContext or invalid format. Got: "${threadId}"`,
+      };
     }
 
     // Get access token and tenant context
