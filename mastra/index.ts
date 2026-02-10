@@ -1,6 +1,6 @@
+// mastra/index.ts
 import { Mastra } from "@mastra/core/mastra";
 import { getMastraStorage } from "./lib/storage";
-// import { ensureUIUXSearchInitialized } from './tools/uiux/initUIUXSearch';
 
 // Register real Mastra agents (NOT AG-UI AbstractAgent wrappers)
 import { masterRouterAgent } from "./agents/masterRouterAgent";
@@ -13,25 +13,29 @@ import { generatePreviewWorkflow } from "./workflows/generatePreview";
 import { connectionBackfillWorkflow } from "./workflows/connectionBackfill";
 import { deployDashboardWorkflow } from "./workflows/deployDashboard";
 import { vibeJourneyWorkflow } from "./workflows/vibeJourneyWorkflow";
-import { designSystemWorkflow } from "./workflows/designSystemWorkflow";
 
-// Initialize UI/UX search indexing (lazy initialization on first use)
-// NOTE: Disabled for serverless compatibility (requires filesystem access)
-// ensureUIUXSearchInitialized().catch(err => {
-//   console.error('Failed to initialize UI/UX search:', err);
-// });
+// =============================================================================
+// CRITICAL: globalThis singleton pattern to prevent class duplication
+//
+// Turbopack/webpack can create multiple copies of this module in different
+// chunks. Each copy would create a new Mastra instance with different class
+// brands, causing "#workflows" private field errors.
+//
+// By storing the instance on globalThis, we ensure only ONE Mastra instance
+// exists regardless of how many times this module is imported.
+// =============================================================================
 
-let _mastra: Mastra | null = null;
+declare global {
+  var __mastra: Mastra | undefined;
+}
 
-export function getMastra(): Mastra {
-  if (_mastra) return _mastra;
-
+function createMastraInstance(): Mastra {
   if (process.env.DEBUG_MASTRA_BOOT === "true") {
     console.log("[Mastra boot] building Mastra instance");
     console.log("[Mastra boot] agent ids", ["masterRouterAgent"]);
   }
 
-  _mastra = new Mastra({
+  return new Mastra({
     storage: getMastraStorage(),
     
     // Global workspace - all agents inherit this unless overridden
@@ -45,25 +49,22 @@ export function getMastra(): Mastra {
       connectionBackfillWorkflow,
       deployDashboardWorkflow,
       vibeJourneyWorkflow,
-      designSystemWorkflow,
     },
   });
-
-  return _mastra;
 }
 
+// Use existing instance or create new one (survives HMR and chunk duplication)
+globalThis.__mastra = globalThis.__mastra ?? createMastraInstance();
+
 /**
- * Backward-compatible export.
- * Many internal modules still import `{ mastra }` from "@/mastra" or "../../index".
- * This ensures no module-level DATABASE_URL capture while preserving the old import shape.
+ * The singleton Mastra instance.
+ * ALWAYS import this directly - never use dynamic import() for mastra.
  */
-export const mastra = new Proxy({} as Mastra, {
-  get(_target, prop) {
-    const instance = getMastra();
-    return (instance as any)[prop];
-  },
-  has(_target, prop) {
-    const instance = getMastra();
-    return prop in (instance as any);
-  },
-}) as unknown as Mastra;
+export const mastra = globalThis.__mastra;
+
+/**
+ * Backward-compatible getter (for code that used getMastra())
+ */
+export function getMastra(): Mastra {
+  return mastra;
+}
