@@ -9,10 +9,13 @@ import { getModelById } from "../lib/models/modelSelector";
 import type { RequestContext } from "@mastra/core/request-context";
 import { createFloweticMemory } from "../lib/memory";
 import { workspace } from '../workspace';  // ← ADD THIS IMPORT
-import { loadSkillFromWorkspace } from '../lib/loadSkill';
-import { platformMappingMaster } from "./platformMappingMaster";
-import { dashboardBuilderAgent } from "./dashboardBuilderAgent";
-import { designAdvisorAgent } from "./designAdvisorAgent";
+import { getCachedSkillAsync } from '../lib/skillCache';
+import {
+  delegateToPlatformMapper,
+  delegateToDashboardBuilder,
+  delegateToDesignAdvisor,
+} from "../tools/delegation";
+import { advancePhase } from "../tools/journey/advancePhase";
 import { generatePreviewWorkflow } from "../workflows/generatePreview";
 import { connectionBackfillWorkflow } from "../workflows/connectionBackfill";
 import { deployDashboardWorkflow } from "../workflows/deployDashboard";
@@ -108,20 +111,20 @@ export const masterRouterAgent: Agent = new Agent({
     // =========================================================================
     // SKILL LOADING - Load Platform Skill + Business Outcomes Advisor
     // =========================================================================
-    const platformSkillContent = await loadSkillFromWorkspace(safePlatformType);
+    const platformSkillContent = await getCachedSkillAsync(safePlatformType);
 
     // Load business outcomes advisor for recommend phase
     const businessPhases = ["outcome", "recommend", "select_entity"];
     const shouldLoadBusinessSkill = businessPhases.includes(phase || "select_entity");
     const businessSkillContent = shouldLoadBusinessSkill
-      ? await loadSkillFromWorkspace("business-outcomes-advisor")
+      ? await getCachedSkillAsync("business-outcomes-advisor")
       : "";
 
     // Load UI/UX Pro Max skill for style and build phases
     const designPhases = ["style", "build_preview", "interactive_edit"];
     const shouldLoadDesignSkill = designPhases.includes(phase || "");
     const designSkillContent = shouldLoadDesignSkill
-      ? await loadSkillFromWorkspace("ui-ux-pro-max")
+      ? await getCachedSkillAsync("ui-ux-pro-max")
       : "";
 
     const phaseInstructions = getPhaseInstructions(phase as FloweticPhase, {
@@ -308,17 +311,17 @@ export const masterRouterAgent: Agent = new Agent({
     const { getModelById } = require("../lib/models/modelSelector");
     return getModelById(selectedModel);
   },
-  // REQUIRED: routing primitives for Agent.network()
-  agents: {
-    platformMappingMaster,
-    dashboardBuilderAgent,
-    designAdvisorAgent,
-  },
   memory: createFloweticMemory({
     lastMessages: 8,  // Reduced from 30 to prevent in-context format priming
   }),
   workspace,  // ← ADD THIS LINE (after existing properties, before closing brace)
   tools: {
+    // Phase advancement
+    advancePhase,
+    // Sub-agent delegation (replaces agents: {} config)
+    delegateToPlatformMapper,
+    delegateToDashboardBuilder,
+    delegateToDesignAdvisor,
     todoAdd,
     todoList,
     todoUpdate,

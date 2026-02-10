@@ -3,9 +3,9 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 
 function requireEnv(name: string): string {
-  const v = process.env[name];
-  if (!v || !String(v).trim()) throw new Error(`Missing required env var: ${name}`);
-  return String(v);
+  const v = (process.env[name] || "").trim();
+  if (!v) throw new Error(`Missing env: ${name}`);
+  return v;
 }
 
 export function glm47Model() {

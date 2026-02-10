@@ -5,13 +5,23 @@ import { Memory } from "@mastra/memory";
 import { getModelById } from "../lib/models/modelSelector";
 import { getMastraStorage } from "../lib/storage";
 import type { RequestContext } from "@mastra/core/request-context";
+import { z } from "zod";
 import { searchDesignDatabase } from "../tools/design-system/searchDesignDatabase";
 import { generateDesignSystem } from "../tools/design-system/generateDesignSystem";
 import { createFloweticMemory } from "../lib/memory";
-import { loadSkillFromWorkspace } from '../lib/loadSkill';
+import { getCachedSkillAsync } from '../lib/skillCache';
 
 // NEW: Import Supatool
 import { recommendStyleKeywords } from "../tools/supatools";
+
+// NEW: Import UI/UX tools
+import {
+  getStyleRecommendations,
+  getChartRecommendations,
+  getTypographyRecommendations,
+  getUXGuidelines,
+  getProductRecommendations,
+} from "../tools/uiux";
 
 
 
@@ -26,7 +36,7 @@ export const designAdvisorAgent: Agent = new Agent({
     const platformType = (requestContext.get("platformType") as string | undefined) ?? "make";
 
     // Load UI/UX Pro Max skill for design expertise
-    const uiuxSkillContent = await loadSkillFromWorkspace("ui-ux-pro-max");
+    const uiuxSkillContent = await getCachedSkillAsync("ui-ux-pro-max");
 
     return [
       {
@@ -61,13 +71,13 @@ export const designAdvisorAgent: Agent = new Agent({
     lastMessages: 30,
     workingMemory: {
       enabled: true,
-      template: `# Design Preferences
-- styleDirection:
-- audience:
-- density:
-- palette:
-- typographyNotes:
-`,
+      schema: z.object({
+        styleDirection: z.string().optional().describe("Design style direction (e.g., premium, minimal, bold)"),
+        audience: z.string().optional().describe("Target audience for the design (e.g., law firm, healthcare, startup)"),
+        density: z.string().optional().describe("Layout density preference"),
+        palette: z.string().optional().describe("Color palette preferences"),
+        typographyNotes: z.string().optional().describe("Typography and font preferences"),
+      }),
     },
   }),
   tools: {
@@ -75,5 +85,11 @@ export const designAdvisorAgent: Agent = new Agent({
     generateDesignSystem,
     // NEW: Add Supatool
     recommendStyleKeywords,
+    // NEW: UI/UX tools (matches skill instructions)
+    getStyleRecommendations,
+    getChartRecommendations,
+    getTypographyRecommendations,
+    getUXGuidelines,
+    getProductRecommendations,
   },
 });

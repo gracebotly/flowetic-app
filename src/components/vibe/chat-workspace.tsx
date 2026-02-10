@@ -1219,6 +1219,8 @@ return (
                                 return null;
                               }
 
+
+
                               // ✅ SHOW: Text content
                               if (part.type === 'text') {
                                 return (

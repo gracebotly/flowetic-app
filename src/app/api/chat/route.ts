@@ -152,15 +152,6 @@ export async function POST(req: Request) {
       }
     }
     
-    // 5. CALL MASTRA WITH VALIDATED CONTEXT
-    const enhancedParams = {
-      ...params,
-      requestContext,
-      // Force non-network execution in serverless: use Agent.generate() path.
-      // If the handler ignores this, behavior remains unchanged.
-      mode: "generate",
-    };
-    
     const mastra = getMastraSingleton();
     
     if (process.env.DEBUG_CHAT_ROUTE === 'true') {
@@ -173,31 +164,44 @@ export async function POST(req: Request) {
         messagesCount: Array.isArray((params as any)?.messages) ? (params as any).messages.length : 0,
       });
     }
-    
+
+
+
+    // 5. CALL MASTRA WITH VALIDATED CONTEXT
+    const enhancedParams = {
+      ...params,
+      requestContext,
+      mode: "generate",
+    };
+
+    if (process.env.DEBUG_CHAT_ROUTE === 'true') {
+      console.log('[api/chat] Authorized request:', {
+        tenantId, userId, userRole, mastraThreadId,
+        clientJourneyThreadId,
+        messagesCount: Array.isArray((params as any)?.messages)
+          ? (params as any).messages.length : 0,
+      });
+    }
+
     const stream = await withTimeout(
       handleChatStream({
         mastra,
         agentId: 'masterRouterAgent',
         params: enhancedParams,
-        sendStart: false,       // Prevents Mastra #9370 duplicate text bug with maxSteps > 1
-        sendFinish: true,       // ← CRITICAL: Enable finish events
-        sendReasoning: true,    // ← Enable reasoning display
-        sendSources: false,     // ← Keep sources hidden
+        sendStart: false,
+        sendFinish: true,
+        sendReasoning: true,    // ← Enable reasoning display in collapsible ReasoningBlock toggle
+        sendSources: false,
         defaultOptions: {
-          // Hard cap concurrency to avoid Z.ai 1302 throttling
           toolCallConcurrency: 1,
-
-          // Enable autonomous multi-step execution
           maxSteps: 10,
-
-          // Keep tool usage automatic, but now serialized
           toolChoice: "auto",
         },
       }),
-      290000,  // 290s - leave 10s buffer for response
+      290000,
       "api_chat_stream"
     );
-    
+
     return createUIMessageStreamResponse({ stream });
     
   } catch (error: any) {

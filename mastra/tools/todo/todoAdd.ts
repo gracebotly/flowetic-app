@@ -10,7 +10,6 @@ export const todoAdd = createTool({
   id: "todo.add",
   description: "Create a new todo item for the current thread. Use for planning and progress tracking.",
   inputSchema: z.object({
-    tenantId: z.string().uuid(),
     threadId: z.string().min(1),
     title: z.string().min(1).max(160),
     description: z.string().max(2000).optional(),

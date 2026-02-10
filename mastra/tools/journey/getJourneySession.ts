@@ -27,6 +27,17 @@ export const getJourneySession = createTool({
     previewVersionId: z.string().nullable(),
   }),
   execute: async (inputData, context) => {
+    // ✅ FIX: Validate threadId is a real UUID, fall back to RequestContext
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    let threadId = inputData.threadId;
+    if (!threadId || !UUID_RE.test(threadId)) {
+      threadId = context?.requestContext?.get('threadId') as string;
+    }
+    
+    if (!threadId || !UUID_RE.test(threadId)) {
+      throw new Error(`[getJourneySession]: No valid threadId — got "${inputData.threadId}", RequestContext had "${context?.requestContext?.get('threadId')}"`);
+    }
+
     // Get access token and tenant context
     const accessToken = context?.requestContext?.get('supabaseAccessToken') as string;
     if (!accessToken || typeof accessToken !== 'string') {
@@ -41,7 +52,7 @@ export const getJourneySession = createTool({
         "tenant_id,thread_id,platform_type,source_id,entity_id,mode,schema_ready,selected_outcome,selected_storyboard,selected_style_bundle_id,preview_interface_id,preview_version_id",
       )
       .eq("tenant_id", tenantId)
-      .eq("thread_id", inputData.threadId)
+      .eq("thread_id", threadId)
       .maybeSingle();
 
     if (error) throw new Error(error.message);

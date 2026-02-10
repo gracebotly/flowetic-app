@@ -53,7 +53,12 @@ export const getEventStats = createSupaTool<z.infer<typeof outputSchema>>({
       throw new Error('getEventStats: tenantId missing from request context');
     }
 
-    const { sourceId, type, sinceDays } = input;
+    
+// ✅ FIX: Fall back to RequestContext sourceId if not provided
+    const sourceId = input.sourceId || (context.requestContext?.get('sourceId') as string | undefined);
+
+    const { type, sinceDays } = input;
+
 
     const supabase = createAuthenticatedClient(accessToken);
 
