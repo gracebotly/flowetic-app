@@ -59,6 +59,18 @@ Prefer this specialist for any design-related decisions over generic recommendat
         journeyThreadId ? `\nIMPORTANT - When calling getJourneySession, use threadId: "${journeyThreadId}" (not a display name)` : "",
       ].filter(Boolean).join("\n");
 
+      // Debug logging for context propagation
+      if (process.env.DEBUG_CONTEXT === 'true') {
+        const contextKeys = ['tenantId', 'userId', 'threadId', 'sourceId',
+          'interfaceId', 'supabaseAccessToken', 'platformType', 'phase'];
+        const contextSnapshot: Record<string, string> = {};
+        for (const key of contextKeys) {
+          const val = context?.requestContext?.get(key);
+          contextSnapshot[key] = val ? `${String(val).substring(0, 8)}...` : 'MISSING';
+        }
+        console.log('[delegateToDesignAdvisor] Context propagation:', contextSnapshot);
+      }
+
       const result = await designAdvisorAgent.generate(prompt, {
         maxSteps: 6,
         toolChoice: "auto",

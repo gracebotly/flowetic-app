@@ -62,6 +62,18 @@ DO NOT try to generate previews yourself — always delegate to this specialist.
         journeyThreadId ? `\nIMPORTANT - When calling getJourneySession, use threadId: "${journeyThreadId}" (not a display name)` : "",
       ].filter(Boolean).join("\n");
 
+      // Debug logging for context propagation
+      if (process.env.DEBUG_CONTEXT === 'true') {
+        const contextKeys = ['tenantId', 'userId', 'threadId', 'sourceId',
+          'interfaceId', 'supabaseAccessToken', 'platformType', 'phase'];
+        const contextSnapshot: Record<string, string> = {};
+        for (const key of contextKeys) {
+          const val = context?.requestContext?.get(key);
+          contextSnapshot[key] = val ? `${String(val).substring(0, 8)}...` : 'MISSING';
+        }
+        console.log('[delegateToPlatformMapper] Context propagation:', contextSnapshot);
+      }
+
       const result = await platformMappingMaster.generate(enhancedPrompt, {
         maxSteps: 8,
         toolChoice: "auto",

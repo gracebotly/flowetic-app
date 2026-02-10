@@ -2,6 +2,7 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { randomUUID } from "crypto";
+import { RequestContext } from "@mastra/core/request-context";
 
 export const runGeneratePreviewWorkflow = createTool({
   id: "runGeneratePreviewWorkflow",
@@ -75,26 +76,38 @@ export const runGeneratePreviewWorkflow = createTool({
       // Create a fresh run with a unique ID
       const run = await workflow.createRun({ runId: randomUUID() });
 
-      // Pass through RequestContext values
-      const { RequestContext } = await import("@mastra/core/request-context");
-      const requestContext = new RequestContext();
+      // PREFER forwarding the parent's requestContext (context propagation)
+      // Only create new RequestContext as fallback
+      let requestContext: InstanceType<typeof RequestContext>;
 
-      // Copy all relevant context from the agent's requestContext
-      const contextKeys = [
-        "tenantId", "userId", "interfaceId", "supabaseAccessToken",
-        "sourceId", "platformType", "phase", "threadId",
-        "selectedOutcome", "selectedStyleBundleId",
-      ];
-      for (const key of contextKeys) {
-        const val = context?.requestContext?.get(key);
-        if (val !== undefined && val !== null) {
-          requestContext.set(key, val);
+      if (context?.requestContext) {
+        // Forward parent context — this is the correct v1 pattern
+        requestContext = context.requestContext;
+
+        // Override with input values (they take precedence for this workflow)
+        requestContext.set("tenantId", tenantId);
+        requestContext.set("userId", userId);
+        requestContext.set("interfaceId", interfaceId);
+      } else {
+        // Fallback: construct new context (should rarely happen)
+        console.warn("[runGeneratePreviewWorkflow] No parent requestContext — constructing new one");
+        requestContext = new RequestContext();
+
+        const contextKeys = [
+          "tenantId", "userId", "interfaceId", "supabaseAccessToken",
+          "sourceId", "platformType", "phase", "threadId",
+          "selectedOutcome", "selectedStyleBundleId",
+        ];
+        for (const key of contextKeys) {
+          const val = context?.requestContext?.get(key);
+          if (val !== undefined && val !== null) {
+            requestContext.set(key, val);
+          }
         }
+        requestContext.set("tenantId", tenantId);
+        requestContext.set("userId", userId);
+        requestContext.set("interfaceId", interfaceId);
       }
-      // Override with input values (they take precedence)
-      requestContext.set("tenantId", tenantId);
-      requestContext.set("userId", userId);
-      requestContext.set("interfaceId", interfaceId);
 
       const result = await run.start({
         inputData: {
