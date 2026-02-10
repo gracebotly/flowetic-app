@@ -13,6 +13,7 @@ import { generatePreviewWorkflow } from "./workflows/generatePreview";
 import { connectionBackfillWorkflow } from "./workflows/connectionBackfill";
 import { deployDashboardWorkflow } from "./workflows/deployDashboard";
 import { vibeJourneyWorkflow } from "./workflows/vibeJourneyWorkflow";
+import { designSystemWorkflow } from "./workflows/designSystemWorkflow";
 
 // Initialize UI/UX search indexing (lazy initialization on first use)
 // NOTE: Disabled for serverless compatibility (requires filesystem access)
@@ -44,6 +45,7 @@ export function getMastra(): Mastra {
       connectionBackfillWorkflow,
       deployDashboardWorkflow,
       vibeJourneyWorkflow,
+      designSystemWorkflow,
     },
   });
 

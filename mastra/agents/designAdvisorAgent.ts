@@ -51,7 +51,7 @@ export const designAdvisorAgent: Agent = new Agent({
           "- Prefer concrete edits: design tokens (colors, radius, spacing, typography), component prop defaults, and light layout tweaks.\n" +
           "- Do not show raw spec JSON unless explicitly requested.\n\n" +
           "PHASE GATING:\n" +
-          "- Phase 3: Generate 4 style bundles using getStyleBundles tool\n" +
+          "- Phase 3: Generate design system using ui-ux-pro-max skill and design database search\n" +
           "- Phase 5: Apply minimal token/layout tweaks (getCurrentSpec → applySpecPatch → validateSpec → savePreviewVersion)\n" +
           "- Never change template/platform without router direction\n" +
           "- Never produce raw JSON unless asked\n\n" +
