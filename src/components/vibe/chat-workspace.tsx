@@ -480,6 +480,36 @@ export function ChatWorkspace({
     return "Action received";
   }
 
+  /**
+   * Handle suggested action button clicks from suggestAction tool
+   */
+  async function handleSuggestedAction(actionId: string, payload?: Record<string, any>) {
+    if (uiStatus === 'streaming') return;
+    
+    console.log('[handleSuggestedAction]', actionId, payload);
+    
+    // Map actionId to appropriate action
+    switch (actionId) {
+      case 'generate-preview':
+      case 'generate-dashboard-preview':
+        await sendAi('Generate Dashboard Preview');
+        break;
+      case 'select-style':
+        await sendAi('Show different styles');
+        break;
+      case 'confirm-selection':
+        await sendAi('Confirm my selection');
+        break;
+      case 'show-alternatives':
+        await sendAi('Show me alternatives');
+        break;
+      default:
+        // For backwards compatibility with text-based action labels
+        await sendAi(actionId.replace(/-/g, ' '));
+        break;
+    }
+  }
+
   // Conversation session state
   const [sessionsOpen, setSessionsOpen] = useState(false);
   const [sessions, setSessions] = useState<any[]>([]);
@@ -1221,11 +1251,88 @@ return (
 
 
 
-                              // ✅ SHOW: Text content
-                              if (part.type === 'text') {
+                              // ✅ RENDER: suggestAction tool as clickable button
+                              if (part.type === 'tool-suggestAction' && (part as any).state === 'input-available') {
+                                const input = (part as any).input as { label: string; actionId: string; payload?: Record<string, any> };
                                 return (
-                                  <div key={idx} className="whitespace-pre-wrap prose prose-sm max-w-none prose-gray">
-                                    {(part as any).text}
+                                  <button
+                                    key={(part as any).toolCallId || idx}
+                                    onClick={() => handleSuggestedAction(input.actionId, input.payload)}
+                                    disabled={uiStatus === 'streaming'}
+                                    className={cn(
+                                      "mt-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all",
+                                      "bg-indigo-600 text-white hover:bg-indigo-700",
+                                      "disabled:opacity-50 disabled:cursor-not-allowed",
+                                      "flex items-center gap-2"
+                                    )}
+                                  >
+                                    <span>▶</span>
+                                    <span>{input.label}</span>
+                                  </button>
+                                );
+                              }
+
+                              // ✅ SHOW: Text content (with fallback __ACTION__ parser for backwards compatibility)
+                              if (part.type === 'text') {
+                                const text = (part as any).text || '';
+                                
+                                // Parse __ACTION__ tokens for backwards compatibility with existing agent responses
+                                const actionPattern = /__ACTION__\n([\s\S]*?)\n__ACTION__/g;
+                                const segments: Array<{ type: 'text' | 'action'; content: string }> = [];
+                                let lastIndex = 0;
+                                let match: RegExpExecArray | null;
+                                
+                                while ((match = actionPattern.exec(text)) !== null) {
+                                  if (match.index > lastIndex) {
+                                    segments.push({ type: 'text', content: text.slice(lastIndex, match.index) });
+                                  }
+                                  segments.push({ type: 'action', content: match[1].trim() });
+                                  lastIndex = match.index + match[0].length;
+                                }
+                                
+                                const remaining = text.slice(lastIndex);
+                                if (remaining) {
+                                  segments.push({ type: 'text', content: remaining });
+                                }
+                                
+                                // If no action tokens found, render as plain text
+                                if (segments.length === 0 || (segments.length === 1 && segments[0].type === 'text')) {
+                                  return (
+                                    <div key={idx} className="whitespace-pre-wrap prose prose-sm max-w-none prose-gray">
+                                      {text}
+                                    </div>
+                                  );
+                                }
+                                
+                                // Render mixed content with action buttons
+                                return (
+                                  <div key={idx} className="space-y-2">
+                                    {segments.map((seg, segIdx) => {
+                                      if (seg.type === 'text') {
+                                        return (
+                                          <div key={segIdx} className="whitespace-pre-wrap prose prose-sm max-w-none prose-gray">
+                                            {seg.content}
+                                          </div>
+                                        );
+                                      }
+                                      // Render action as button
+                                      return (
+                                        <button
+                                          key={segIdx}
+                                          onClick={() => handleSuggestedAction(seg.content.toLowerCase().replace(/\s+/g, '-'), {})}
+                                          disabled={uiStatus === 'streaming'}
+                                          className={cn(
+                                            "px-4 py-2.5 rounded-lg font-medium text-sm transition-all",
+                                            "bg-indigo-600 text-white hover:bg-indigo-700",
+                                            "disabled:opacity-50 disabled:cursor-not-allowed",
+                                            "flex items-center gap-2"
+                                          )}
+                                        >
+                                          <span>▶</span>
+                                          <span>{seg.content}</span>
+                                        </button>
+                                      );
+                                    })}
                                   </div>
                                 );
                               }

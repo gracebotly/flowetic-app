@@ -15,13 +15,10 @@ export const runGeneratePreviewWorkflow = createTool({
   id: "runGeneratePreviewWorkflow",
   description:
     "Triggers the generate preview workflow to create a dashboard preview. " +
-    "The agent decides when to call this based on journey context.",
+    "All identity fields (tenantId, userId, interfaceId) are read from server context automatically. " +
+    "Do NOT pass any IDs — only pass optional instructions if needed.",
   inputSchema: z.object({
-    tenantId: z.string().uuid().describe("The tenant ID"),
-    userId: z.string().uuid().describe("The user ID"),
-    interfaceId: z.string().uuid().describe("The interface ID"),
-    userRole: z.enum(["admin", "client", "viewer"]).describe("The user role"),
-    instructions: z.string().optional().describe("Optional instructions"),
+    instructions: z.string().optional().describe("Optional extra instructions for preview generation"),
   }),
   outputSchema: z.object({
     success: z.boolean(),
@@ -33,7 +30,33 @@ export const runGeneratePreviewWorkflow = createTool({
     currentPhase: z.string().optional(),
   }),
   execute: async (inputData, context) => {
-    const { tenantId, userId, interfaceId, userRole, instructions } = inputData;
+    // Read ALL identity fields from RequestContext — NEVER from LLM input
+    // The LLM hallucinates UUIDs (e.g. passes tenantId as userId, sourceId as interfaceId)
+    const tenantId = context?.requestContext?.get('tenantId') as string;
+    const userId = context?.requestContext?.get('userId') as string;
+    const sourceId = context?.requestContext?.get('sourceId') as string;
+    const userRole = (context?.requestContext?.get('userRole') as string) || 'client';
+    const instructions = inputData.instructions || '';
+
+    // interfaceId: prefer from RequestContext, fall back to sourceId
+    // (the LLM was passing sourceId as interfaceId anyway — sourceId is correct for new dashboards)
+    const interfaceId = (context?.requestContext?.get('interfaceId') as string) || sourceId;
+
+    if (!tenantId || !userId) {
+      return {
+        success: false,
+        error: "MISSING_CONTEXT",
+        message: "tenantId or userId missing from RequestContext",
+      };
+    }
+
+    if (!interfaceId) {
+      return {
+        success: false,
+        error: "MISSING_INTERFACE_ID",
+        message: "No interfaceId or sourceId found in RequestContext",
+      };
+    }
 
     try {
       // Use the statically imported singleton - NEVER dynamic import

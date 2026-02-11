@@ -60,3 +60,6 @@ export * from "./uiux";
 
 // NEW: Supatools exports
 export * from "./supatools";
+
+// Action suggestion tool
+export { suggestAction } from "./suggestAction";

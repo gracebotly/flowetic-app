@@ -14,6 +14,8 @@ const FILE_MAP: Record<string, string> = {
   typography: 'typography.csv',
   icons: 'icons.csv',
   'web-interface': 'web-interface.csv',
+  'react-performance': 'react-performance.csv',
+  'ui-reasoning': 'ui-reasoning.csv',
 };
 
 const cache = new Map<string, UIUXCSVRow[]>();

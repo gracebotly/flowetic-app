@@ -1,6 +1,5 @@
 
 
-
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { createAuthenticatedClient } from "../../lib/supabase";
@@ -8,10 +7,8 @@ import { extractTenantContext } from "../../lib/tenant-verification";
 
 export const getJourneySession = createTool({
   id: "journey.getSession",
-  description: "Fetch journey session state for tenant/thread (source of truth for schemaReady).",
-  inputSchema: z.object({
-    threadId: z.string().min(1),
-  }),
+  description: "Get the current journey session. threadId is automatically provided via server context - do NOT pass it as input.",
+  inputSchema: z.object({}),
   outputSchema: z.object({
     tenantId: z.string(),
     threadId: z.string(),
@@ -26,16 +23,23 @@ export const getJourneySession = createTool({
     previewInterfaceId: z.string().nullable(),
     previewVersionId: z.string().nullable(),
   }),
-  execute: async (inputData, context) => {
-    // ALWAYS use RequestContext threadId - never trust LLM input for critical identifiers
-    // This prevents hallucinations like threadId='vibe' (see Mastra docs: server/request-context)
-    const threadId = context?.requestContext?.get('threadId') as string;
+  execute: async (_inputData, context) => {
+    // Use journeyThreadId (the client-side UUID stored in journey_sessions.thread_id)
+    // NOT threadId (which is the Mastra internal thread UUID from ensureMastraThreadId)
+    // The route.ts sets both:
+    //   requestContext.set('threadId', mastraThreadId)        ← Mastra internal, NOT in journey_sessions
+    //   requestContext.set('journeyThreadId', clientJourneyThreadId)  ← matches journey_sessions.thread_id
+    const threadId = (context?.requestContext?.get('journeyThreadId') ?? context?.requestContext?.get('threadId')) as string;
+
+    if (!threadId) {
+      throw new Error('getJourneySession: threadId missing from RequestContext. This tool does not accept threadId as input - it must be provided via server context.');
+    }
 
     const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-    if (!threadId || !UUID_RE.test(threadId)) {
-      console.error(`[getJourneySession] Invalid or missing threadId in RequestContext: "${threadId}"`);
-      throw new Error(`[getJourneySession] threadId not found in RequestContext or invalid format. Got: "${threadId}"`);
+    if (!UUID_RE.test(threadId)) {
+      console.error(`[getJourneySession] Invalid threadId in RequestContext: "${threadId}"`);
+      throw new Error(`[getJourneySession] threadId invalid format in RequestContext. Got: "${threadId}"`);
     }
 
     // Get access token and tenant context

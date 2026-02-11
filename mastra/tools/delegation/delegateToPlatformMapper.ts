@@ -38,6 +38,9 @@ DO NOT try to generate previews yourself — always delegate to this specialist.
     success: z.boolean(),
     response: z.string(),
     error: z.string().optional(),
+    previewUrl: z.string().optional(),
+    previewVersionId: z.string().optional(),
+    interfaceId: z.string().optional(),
   }),
 
   execute: async (input, context) => {
@@ -84,9 +87,48 @@ DO NOT try to generate previews yourself — always delegate to this specialist.
         },
       });
 
+      // Extract structured workflow results from sub-agent tool calls
+      // The sub-agent calls runGeneratePreviewWorkflow which returns previewUrl/previewVersionId
+      // but result.text only contains prose — we need the actual tool output
+      let previewUrl: string | undefined;
+      let previewVersionId: string | undefined;
+      let interfaceId: string | undefined;
+
+      if (result.toolResults && Array.isArray(result.toolResults)) {
+        for (const tr of result.toolResults) {
+          const toolResult = tr as any;
+          if (toolResult.toolName === 'runGeneratePreviewWorkflow' && toolResult.result?.success) {
+            previewUrl = toolResult.result.previewUrl;
+            previewVersionId = toolResult.result.previewVersionId;
+            interfaceId = toolResult.result.interfaceId;
+          }
+        }
+      }
+
+      // Also check steps array (Mastra v1 may use this structure)
+      if (!previewUrl && result.steps && Array.isArray(result.steps)) {
+        for (const step of result.steps) {
+          const stepData = step as any;
+          const toolResults = stepData.toolResults;
+          if (Array.isArray(toolResults)) {
+            for (const tr of toolResults) {
+              const toolResult = tr as any;
+              if (toolResult.toolName === 'runGeneratePreviewWorkflow' && toolResult.result?.success) {
+                previewUrl = toolResult.result.previewUrl;
+                previewVersionId = toolResult.result.previewVersionId;
+                interfaceId = toolResult.result.interfaceId;
+              }
+            }
+          }
+        }
+      }
+
       return {
         success: true,
         response: result.text || "Platform mapping completed.",
+        previewUrl,
+        previewVersionId,
+        interfaceId,
       };
     } catch (error: any) {
       console.error("[delegateToPlatformMapper] Error:", error.message);
