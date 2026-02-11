@@ -29,7 +29,7 @@ export const todoComplete = createTool({
     try {
       const { data, error } = await supabase
         .from("todos")
-        .update({ status: "done", updated_at: new Date().toISOString() })
+        .update({ status: "completed", updated_at: new Date().toISOString() })
         .eq("tenant_id", tenantId)
         .eq("thread_id", threadId)
         .eq("id", todoId)
