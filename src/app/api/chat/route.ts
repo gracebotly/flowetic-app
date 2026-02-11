@@ -74,7 +74,15 @@ export async function POST(req: Request) {
     const userRole = membership.role;
     
     // 3. GET/CREATE STABLE MASTRA THREAD
-    const clientJourneyThreadId = (params as any)?.journeyThreadId || 'default-thread';
+    // Validate journeyThreadId is a UUID. Reject route slugs like "vibe" or other garbage.
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const rawJourneyThreadId = (params as any)?.journeyThreadId;
+    const clientJourneyThreadId = (typeof rawJourneyThreadId === 'string' && UUID_RE.test(rawJourneyThreadId))
+      ? rawJourneyThreadId
+      : 'default-thread';
+    if (rawJourneyThreadId && rawJourneyThreadId !== clientJourneyThreadId) {
+      console.warn(`[api/chat] Rejected invalid journeyThreadId: "${rawJourneyThreadId}", using default-thread`);
+    }
     
     let mastraThreadId: string;
     try {

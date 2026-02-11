@@ -204,9 +204,24 @@ export function ChatWorkspace({
       api: '/api/chat',
     }),
     onFinish: (message) => {
-      // Check if any tool results contain advancePhase success
-      if (message.toolInvocations) {
-        for (const invocation of message.toolInvocations) {
+      // Update journeyMode when advancePhase tool succeeds.
+      // AI SDK v5 streams tool results as parts, not a separate toolInvocations array.
+      if (message.parts) {
+        for (const part of message.parts) {
+          if (
+            part?.type === 'tool-invocation' &&
+            part?.toolName === 'advancePhase' &&
+            part?.state === 'result' &&
+            part?.result?.success &&
+            part?.result?.currentPhase
+          ) {
+            setJourneyMode(part.result.currentPhase);
+          }
+        }
+      }
+      // Fallback: AI SDK v4 compatibility (if toolInvocations array exists)
+      if ((message as any).toolInvocations) {
+        for (const invocation of (message as any).toolInvocations) {
           if (
             invocation.toolName === 'advancePhase' &&
             invocation.state === 'result' &&
@@ -529,7 +544,11 @@ export function ChatWorkspace({
   const [sessionsOpen, setSessionsOpen] = useState(false);
   const [sessions, setSessions] = useState<any[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
-  const [threadId, setThreadId] = useState<string>("vibe");
+  // FIXED: Default to a proper UUID instead of the URL slug "vibe".
+  // The old default caused getJourneySession to receive "vibe" as journeyThreadId,
+  // which failed UUID validation. A real session threadId is set by switchToSession()
+  // or createNewSession(), but the initial value must also be a valid UUID.
+  const [threadId, setThreadId] = useState<string>(() => crypto.randomUUID());
   const [newConvOpen, setNewConvOpen] = useState(false);
   const [newPlatformType, setNewPlatformType] = useState<"retell"|"make"|"n8n"|"vapi"|"activepieces"|"other">("retell");
   const [newSourceId, setNewSourceId] = useState<string>("");
