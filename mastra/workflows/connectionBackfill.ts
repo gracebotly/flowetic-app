@@ -171,23 +171,60 @@ export const connectionBackfillWorkflow = createWorkflow({
       }),
       execute: async ({ inputData, requestContext }) => {
         if (!storeEvents.execute) {
-          throw new Error("storeEvents.execute is not available");
+          // Return graceful failure - don't throw
+          console.error("[storeEventsStep] storeEvents.execute is not available");
+          return {
+            stored: 0,
+            skipped: inputData.normalizedEvents?.length || 0,
+            errors: ["storeEvents tool not available"],
+            tenantId: inputData.tenantId,
+            threadId: inputData.threadId,
+            sourceId: inputData.sourceId,
+          };
         }
         
-        const result = await storeEvents.execute(
-          {
+        try {
+          const result = await storeEvents.execute(
+            {
+              sourceId: inputData.sourceId,
+              events: inputData.normalizedEvents
+            },
+            { requestContext }
+          );
+          
+          // Handle ValidationError
+          if (result && typeof result === 'object' && 'message' in result) {
+            console.warn("[storeEventsStep] Tool returned validation error:", (result as any).message);
+            return {
+              stored: 0,
+              skipped: inputData.normalizedEvents?.length || 0,
+              errors: [(result as any).message],
+              tenantId: inputData.tenantId,
+              threadId: inputData.threadId,
+              sourceId: inputData.sourceId,
+            };
+          }
+          
+          const unwrapped = result as { stored: number; skipped: number; errors: string[] };
+          return {
+            ...unwrapped,
+            tenantId: inputData.tenantId,
+            threadId: inputData.threadId,
             sourceId: inputData.sourceId,
-            events: inputData.normalizedEvents
-          },
-          { requestContext }
-        );
-        const unwrapped = unwrapToolResult(result);
-        return {
-          ...unwrapped,
-          tenantId: inputData.tenantId,
-          threadId: inputData.threadId,
-          sourceId: inputData.sourceId,
-        };
+          };
+        } catch (err: unknown) {
+          // NEVER throw from workflow step - return graceful failure
+          const errorMessage = err instanceof Error ? err.message : String(err);
+          console.error("[storeEventsStep] Caught error:", errorMessage);
+          return {
+            stored: 0,
+            skipped: inputData.normalizedEvents?.length || 0,
+            errors: [errorMessage],
+            tenantId: inputData.tenantId,
+            threadId: inputData.threadId,
+            sourceId: inputData.sourceId,
+          };
+        }
       },
     }),
   )
