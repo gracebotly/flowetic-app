@@ -45,6 +45,9 @@ import {
   validatePreviewReadiness,
 } from "../tools/supatools";
 
+// NEW: Import suggestAction tool
+import { suggestAction } from "../tools/suggestAction";
+
 export const masterRouterAgent: Agent = new Agent({
   id: "masterRouterAgent",
   name: "masterRouterAgent",
@@ -195,6 +198,7 @@ export const masterRouterAgent: Agent = new Agent({
       "- generatePreviewWorkflow: Create dashboard preview (only if validation passes)",
       "",
       "Remember: You're a consultant, not a form-filler. Complete tasks autonomously and explain your reasoning.",
+"IMPORTANT: Never output raw __ACTION__ tokens in text. Instead, use the suggestAction tool to present clickable buttons to users. Example: suggestAction({ label: 'Generate Dashboard Preview', actionId: 'generate-preview' })",
       "",
       "# WHO YOU ARE",
       "You are a business consultant helping agencies turn AI workflows into client dashboards.",
@@ -347,5 +351,7 @@ export const masterRouterAgent: Agent = new Agent({
     recommendOutcome,
     // recommendStoryboard, // REMOVED: storyboard/align phase eliminated
     validatePreviewReadiness,
+    // Action suggestion
+    suggestAction,
   },
 });
