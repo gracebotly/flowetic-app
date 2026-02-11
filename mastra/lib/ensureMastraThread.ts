@@ -8,12 +8,17 @@ export async function ensureMastraThreadId(params: {
   journeyThreadId: string;
   resourceId: string;
   title?: string;
+  // NEW: Optional context for auto-creating session
+  platformType?: string;
+  sourceId?: string;
+  entityId?: string;
 }): Promise<string> {
   const supabase = await createClient();
 
+  // 1. Try to find existing session
   const { data: session, error: sessionErr } = await supabase
     .from("journey_sessions")
-    .select("mastra_thread_id")
+    .select("id, mastra_thread_id")
     .eq("tenant_id", params.tenantId)
     .eq("thread_id", params.journeyThreadId)
     .maybeSingle();
@@ -22,10 +27,12 @@ export async function ensureMastraThreadId(params: {
     throw new Error("ensureMastraThreadId: failed reading journey_sessions: " + String(sessionErr.message || sessionErr));
   }
 
+  // 2. If session exists and has mastra_thread_id, return it
   if (session?.mastra_thread_id) {
     return session.mastra_thread_id;
   }
 
+  // 3. Create Mastra thread
   const storage = getMastraStorage();
 
   const memory = new Memory({
@@ -43,14 +50,73 @@ export async function ensureMastraThreadId(params: {
     throw new Error("ensureMastraThreadId: Memory.createThread returned no id");
   }
 
-  const { error: updErr } = await supabase
-    .from("journey_sessions")
-    .update({ mastra_thread_id: mastraThreadId })
-    .eq("tenant_id", params.tenantId)
-    .eq("thread_id", params.journeyThreadId);
+  // 4. UPSERT: Create session if it doesn't exist, or update if it does
+  if (!session) {
+    // Session doesn't exist - CREATE it
+    console.log('[ensureMastraThreadId] Creating new journey_sessions row:', {
+      tenantId: params.tenantId,
+      journeyThreadId: params.journeyThreadId,
+      mastraThreadId,
+    });
 
-  if (updErr) {
-    throw new Error("ensureMastraThreadId: failed updating journey_sessions: " + String(updErr.message || updErr));
+    const now = new Date().toISOString();
+    const { error: insertErr } = await supabase
+      .from("journey_sessions")
+      .insert({
+        tenant_id: params.tenantId,
+        thread_id: params.journeyThreadId,
+        mastra_thread_id: mastraThreadId,
+        platform_type: params.platformType || "other",
+        source_id: params.sourceId || null,
+        entity_id: params.entityId || null,
+        mode: "select_entity",
+        density_preset: "comfortable",
+        created_at: now,
+        updated_at: now,
+      });
+
+    if (insertErr) {
+      // Handle race condition: another request may have created it
+      if (insertErr.code === '23505') { // unique_violation
+        console.log('[ensureMastraThreadId] Race condition: session already exists, updating instead');
+        const { error: raceUpdateErr } = await supabase
+          .from("journey_sessions")
+          .update({ mastra_thread_id: mastraThreadId, updated_at: now })
+          .eq("tenant_id", params.tenantId)
+          .eq("thread_id", params.journeyThreadId);
+
+        if (raceUpdateErr) {
+          console.error('[ensureMastraThreadId] Failed to update after race:', raceUpdateErr);
+        }
+      } else {
+        throw new Error("ensureMastraThreadId: failed inserting journey_sessions: " + String(insertErr.message || insertErr));
+      }
+    }
+  } else {
+    // Session exists but no mastra_thread_id - UPDATE it
+    console.log('[ensureMastraThreadId] Updating existing journey_sessions row:', {
+      sessionId: session.id,
+      mastraThreadId,
+    });
+
+    const { data: updateResult, error: updErr } = await supabase
+      .from("journey_sessions")
+      .update({
+        mastra_thread_id: mastraThreadId,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("tenant_id", params.tenantId)
+      .eq("thread_id", params.journeyThreadId)
+      .select("id")
+      .maybeSingle();
+
+    if (updErr) {
+      throw new Error("ensureMastraThreadId: failed updating journey_sessions: " + String(updErr.message || updErr));
+    }
+
+    if (!updateResult) {
+      console.error('[ensureMastraThreadId] Update matched 0 rows - this should not happen');
+    }
   }
 
   return mastraThreadId;

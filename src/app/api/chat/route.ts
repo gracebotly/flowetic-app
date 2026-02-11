@@ -86,11 +86,26 @@ export async function POST(req: Request) {
     
     let mastraThreadId: string;
     try {
+      // Extract platform context from request for auto-session creation
+      const platformType = (params as any)?.platformType ||
+                           (params as any)?.vibeContext?.platformType ||
+                           'other';
+      const sourceId = (params as any)?.sourceId ||
+                       (params as any)?.vibeContext?.sourceId ||
+                       null;
+      const entityId = (params as any)?.entityId ||
+                       (params as any)?.vibeContext?.entityId ||
+                       null;
+
       mastraThreadId = await ensureMastraThreadId({
         tenantId,
         journeyThreadId: clientJourneyThreadId,
         resourceId: userId,
         title: (params as any)?.displayName || 'Dashboard Journey',
+        // NEW: Pass platform context for auto-session creation
+        platformType,
+        sourceId,
+        entityId,
       });
     } catch (threadError: any) {
       console.error('[api/chat] Failed to ensure Mastra thread:', threadError);

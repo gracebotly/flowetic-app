@@ -81,9 +81,10 @@ export const getJourneySession = createTool({
         queryValue,
         tenantId,
         journeyThreadId,
-        mastraThreadId
+        mastraThreadId,
+        hint: 'This usually means ensureMastraThreadId failed to create the session row. Check if journey_sessions INSERT is working.',
       });
-      throw new Error("JOURNEY_SESSION_NOT_FOUND");
+      throw new Error(`JOURNEY_SESSION_NOT_FOUND: No session with ${queryColumn}=${queryValue} for tenant ${tenantId}`);
     }
 
     return {
