@@ -203,9 +203,9 @@ export function ChatWorkspace({
     transport: new DefaultChatTransport({
       api: '/api/chat',
     }),
-    onFinish: (message) => {
+    onFinish: ({ message }) => {
       // Update journeyMode when advancePhase tool succeeds.
-      // AI SDK v5 streams tool results as parts, not a separate toolInvocations array.
+      // AI SDK v5 onFinish receives { message, messages, isAbort, ... } — destructure message.
       if (message.parts) {
         for (const part of message.parts) {
           if (
