@@ -67,7 +67,13 @@ export const persistPreviewVersion = createTool({
     }
 
     // Create interface version
-    const { data: version, error: versionError } = await supabase
+    // NOTE: created_by may fail FK if user not in public.users table
+    // First try with userId, if FK fails, retry without created_by
+    let version: { id: string } | null = null;
+    let versionError: any = null;
+
+    // Attempt 1: With created_by
+    const { data: v1, error: e1 } = await supabase
       .from('interface_versions')
       .insert({
         interface_id: finalInterfaceId,
@@ -78,8 +84,41 @@ export const persistPreviewVersion = createTool({
       .select('id')
       .single();
 
+    if (e1) {
+      // Check if it's a FK constraint error on created_by
+      const isFkError = e1.message?.includes('created_by_fkey') ||
+                        e1.message?.includes('foreign key constraint');
+
+      if (isFkError) {
+        console.warn(`[persistPreviewVersion] FK error on created_by, retrying without it. userId: ${userId}`);
+
+        // Attempt 2: Without created_by (let it be NULL)
+        const { data: v2, error: e2 } = await supabase
+          .from('interface_versions')
+          .insert({
+            interface_id: finalInterfaceId,
+            spec_json,
+            design_tokens,
+            // created_by omitted - will be NULL
+          })
+          .select('id')
+          .single();
+
+        version = v2;
+        versionError = e2;
+      } else {
+        versionError = e1;
+      }
+    } else {
+      version = v1;
+    }
+
     if (versionError) {
       throw new Error(`Failed to create version: ${versionError.message}`);
+    }
+
+    if (!version) {
+      throw new Error('Failed to create interface version: version data is null');
     }
 
     if (!finalInterfaceId) {

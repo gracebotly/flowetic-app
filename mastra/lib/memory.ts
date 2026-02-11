@@ -98,7 +98,7 @@ export function createFloweticMemory(opts: CreateFloweticMemoryOpts = {}) {
       semanticRecall: {
         topK: 5,
         messageRange: 3,
-        scope: "resource",
+        scope: "thread",
         indexName,
       } as any,
     },
@@ -111,7 +111,7 @@ export function createFloweticMemory(opts: CreateFloweticMemoryOpts = {}) {
       workingMemoryEnabled: workingMemory.enabled,
       topK: 5,
       messageRange: 3,
-      scope: 'resource',
+      scope: 'thread',
       indexName,
       connectionString: connectionString.replace(/:[^:]+@/, ':****@'), // Hide password in logs
     });
