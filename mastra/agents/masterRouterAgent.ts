@@ -31,7 +31,6 @@ import {
   getProductRecommendations,
 } from "../tools/uiux";
 import { getOutcomes } from "../tools/outcomes";
-import { getStyleBundles } from "../tools/design";
 import {
   getPhaseFromRequestContext,
   getPhaseInstructions,
@@ -120,12 +119,9 @@ export const masterRouterAgent: Agent = new Agent({
       ? await getCachedSkillAsync("business-outcomes-advisor")
       : "";
 
-    // Load UI/UX Pro Max skill for style and build phases
-    const designPhases = ["style", "build_preview", "interactive_edit"];
-    const shouldLoadDesignSkill = designPhases.includes(phase || "");
-    const designSkillContent = shouldLoadDesignSkill
-      ? await getCachedSkillAsync("ui-ux-pro-max")
-      : "";
+    // UI/UX skill loading REMOVED - tools enforce design database usage directly
+    // Design phases now rely on delegateToDesignAdvisor which uses toolChoice: "required"
+    const designSkillContent = "";  // No longer injecting 800-line skill
 
     const phaseInstructions = getPhaseInstructions(phase as FloweticPhase, {
       platformType: String(safePlatformType),
@@ -269,7 +265,7 @@ export const masterRouterAgent: Agent = new Agent({
       // =========================================================================
       platformSkillContent ? `\n\n# PLATFORM SKILL: ${safePlatformType.toUpperCase()}\n\n${platformSkillContent}` : "",
       businessSkillContent ? `\n\n# BUSINESS OUTCOMES ADVISOR\n\n${businessSkillContent}` : "",
-      designSkillContent ? `\n\n# UI/UX DESIGN ADVISOR\n\n${designSkillContent}` : "",
+      // designSkillContent removed - tool enforcement handles this
     ].filter(Boolean).join("\n");
 
     return [
@@ -346,7 +342,6 @@ export const masterRouterAgent: Agent = new Agent({
     getProductRecommendations,
     // Outcome & Style Tools
     getOutcomes,
-    getStyleBundles,
     // NEW: Add Supatools
     getEventStats,
     recommendOutcome,

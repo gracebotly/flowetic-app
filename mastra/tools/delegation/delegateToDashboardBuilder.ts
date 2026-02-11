@@ -58,6 +58,18 @@ DO NOT try to edit dashboard specs yourself — always delegate to this speciali
         journeyThreadId ? `\nIMPORTANT - When calling getJourneySession, use threadId: "${journeyThreadId}" (not a display name)` : "",
       ].filter(Boolean).join("\n");
 
+      // Debug logging for context propagation
+      if (process.env.DEBUG_CONTEXT === 'true') {
+        const contextKeys = ['tenantId', 'userId', 'threadId', 'sourceId',
+          'interfaceId', 'supabaseAccessToken', 'platformType', 'phase'];
+        const contextSnapshot: Record<string, string> = {};
+        for (const key of contextKeys) {
+          const val = context?.requestContext?.get(key);
+          contextSnapshot[key] = val ? `${String(val).substring(0, 8)}...` : 'MISSING';
+        }
+        console.log('[delegateToDashboardBuilder] Context propagation:', contextSnapshot);
+      }
+
       const result = await dashboardBuilderAgent.generate(prompt, {
         maxSteps: 8,
         toolChoice: "auto",

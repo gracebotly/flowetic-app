@@ -12,14 +12,6 @@ const FloweticPhase = z.enum([
   "deploy",
 ]);
 
-const VALID_TRANSITIONS: Record<string, string[]> = {
-  select_entity: ["recommend"],
-  recommend: ["style"],
-  style: ["build_preview"],
-  build_preview: ["interactive_edit"],
-  interactive_edit: ["deploy"],
-  deploy: [],
-};
 
 export const advancePhase = createTool({
   id: "advancePhase",
@@ -50,24 +42,27 @@ Without calling this tool, the phase stays stuck and instructions won't update.`
     const { nextPhase, reason, selectedValue } = inputData;
     const currentPhase = (context?.requestContext?.get('phase') as string) || 'select_entity';
 
-    // Allow multi-step jumps when intermediate phases were already completed in prior turns.
-    // The phase order is: select_entity → recommend → style → build_preview → interactive_edit → deploy
-    const PHASE_ORDER = ['select_entity', 'recommend', 'style', 'build_preview', 'interactive_edit', 'deploy'];
-    const currentIndex = PHASE_ORDER.indexOf(currentPhase);
-    const targetIndex = PHASE_ORDER.indexOf(nextPhase);
-    
-    // Only allow forward movement (target must be after current)
-    if (targetIndex <= currentIndex) {
+    // Define valid sequential transitions - no skipping allowed
+    // Matches vibeJourneyWorkflow.ts nextPhaseForSelection() logic
+    const VALID_TRANSITIONS: Record<string, string[]> = {
+      select_entity: ['recommend'],
+      recommend: ['style'],
+      style: ['build_preview'],
+      build_preview: ['interactive_edit'],
+      interactive_edit: ['deploy'],
+      deploy: [],
+    };
+
+    // Validate transition is allowed
+    if (!VALID_TRANSITIONS[currentPhase]?.includes(nextPhase)) {
+      const allowedPhases = VALID_TRANSITIONS[currentPhase] || [];
       return {
         success: false,
         previousPhase: currentPhase,
         currentPhase: currentPhase,
-        message: `Cannot advance from "${currentPhase}" to "${nextPhase}". Must move forward. Current position: ${currentIndex}, Target: ${targetIndex}`,
+        message: `Invalid transition: "${currentPhase}" can only advance to ${allowedPhases.length > 0 ? allowedPhases.join(', ') : 'none (terminal phase)'}. Cannot jump to "${nextPhase}".`,
       };
     }
-    
-    // Allow jumping forward (skip intermediate phases that were already decided)
-    // This prevents wasting tool calls stepping through each phase individually
 
     // Update RequestContext for this request
     context?.requestContext?.set('phase', nextPhase);

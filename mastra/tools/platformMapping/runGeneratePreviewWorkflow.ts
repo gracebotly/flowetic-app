@@ -1,7 +1,15 @@
 // mastra/tools/platformMapping/runGeneratePreviewWorkflow.ts
+// 
+// CRITICAL FIX: Static imports + RequestContext forwarding
+// - NO dynamic imports (prevents class duplication)
+// - Forward parent requestContext instead of creating new one
+//
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { randomUUID } from "crypto";
+import { RequestContext } from "@mastra/core/request-context";
+import { mastra } from "../../index";
+import { createAuthenticatedClient } from "../../lib/supabase";
 
 export const runGeneratePreviewWorkflow = createTool({
   id: "runGeneratePreviewWorkflow",
@@ -27,17 +35,13 @@ export const runGeneratePreviewWorkflow = createTool({
   execute: async (inputData, context) => {
     const { tenantId, userId, interfaceId, userRole, instructions } = inputData;
 
-    // Phase gate REMOVED — the agent enforces the journey flow via instructions.
-    // No need to block here; the agent won't call this workflow until selections are complete.
-
-    // ═══════════════════════════════════════════════════════════
-    // FIX: SNAPSHOT COLLISION — Use unique runId + cleanup
-    // ═══════════════════════════════════════════════════════════
     try {
-      const { mastra } = await import("../../index");
-      const workflow = mastra.getWorkflow("generatePreview");
+      // Use the statically imported singleton - NEVER dynamic import
+      const workflow = mastra.getWorkflow("generatePreviewWorkflow");
 
       if (!workflow) {
+        console.error("[runGeneratePreviewWorkflow] Workflow not found. Available workflows:", 
+          Object.keys((mastra as any).workflows || {}));
         return {
           success: false,
           error: "WORKFLOW_NOT_FOUND",
@@ -45,12 +49,10 @@ export const runGeneratePreviewWorkflow = createTool({
         };
       }
 
-      // Clean up stale snapshots before creating a new run.
-      // This prevents "duplicate key" errors from previous suspended/failed runs.
+      // Clean up stale snapshots before creating a new run
       try {
         const accessToken = context?.requestContext?.get("supabaseAccessToken") as string;
         if (accessToken) {
-          const { createAuthenticatedClient } = await import("../../lib/supabase");
           const supabase = createAuthenticatedClient(accessToken);
 
           // Delete snapshots older than 1 hour for this workflow
@@ -58,12 +60,11 @@ export const runGeneratePreviewWorkflow = createTool({
           const { error: cleanupErr } = await supabase
             .from("mastra_workflow_snapshot")
             .delete()
-            .eq("workflow_name", "generatePreview")
+            .eq("workflow_name", "generatePreviewWorkflow")
             .lt("created_at", oneHourAgo);
 
           if (cleanupErr) {
             console.warn("[runGeneratePreviewWorkflow] Snapshot cleanup warning:", cleanupErr.message);
-            // Non-fatal — continue anyway
           } else {
             console.log("[runGeneratePreviewWorkflow] Cleaned up stale workflow snapshots.");
           }
@@ -75,26 +76,55 @@ export const runGeneratePreviewWorkflow = createTool({
       // Create a fresh run with a unique ID
       const run = await workflow.createRun({ runId: randomUUID() });
 
-      // Pass through RequestContext values
-      const { RequestContext } = await import("@mastra/core/request-context");
-      const requestContext = new RequestContext();
+      // ═══════════════════════════════════════════════════════════════════════
+      // FIX: Forward parent RequestContext instead of creating a new one
+      // 
+      // Creating a new RequestContext breaks the class brand chain because
+      // the RequestContext class may have been instantiated from a different
+      // chunk. By forwarding the parent context, we maintain consistent brands.
+      // ═══════════════════════════════════════════════════════════════════════
+      let requestContext: RequestContext;
 
-      // Copy all relevant context from the agent's requestContext
-      const contextKeys = [
-        "tenantId", "userId", "interfaceId", "supabaseAccessToken",
-        "sourceId", "platformType", "phase", "threadId",
-        "selectedOutcome", "selectedStyleBundleId",
-      ];
-      for (const key of contextKeys) {
-        const val = context?.requestContext?.get(key);
-        if (val !== undefined && val !== null) {
-          requestContext.set(key, val);
+      if (context?.requestContext) {
+        // PREFERRED: Forward the parent's requestContext (correct Mastra v1 pattern)
+        requestContext = context.requestContext as RequestContext;
+        
+        // Override with input values (they take precedence for this workflow)
+        requestContext.set("tenantId", tenantId);
+        requestContext.set("userId", userId);
+        requestContext.set("interfaceId", interfaceId);
+        
+        console.log("[runGeneratePreviewWorkflow] Forwarding parent RequestContext");
+      } else {
+        // FALLBACK: Construct new context (should rarely happen)
+        console.warn("[runGeneratePreviewWorkflow] No parent requestContext — constructing new one");
+        requestContext = new RequestContext();
+
+        // Copy relevant context values
+        const contextKeys = [
+          "tenantId", "userId", "interfaceId", "supabaseAccessToken",
+          "sourceId", "platformType", "phase", "threadId",
+          "selectedOutcome", "selectedStyleBundleId",
+        ];
+        for (const key of contextKeys) {
+          const val = context?.requestContext?.get(key);
+          if (val !== undefined && val !== null) {
+            requestContext.set(key, val);
+          }
         }
+        
+        // Override with input values
+        requestContext.set("tenantId", tenantId);
+        requestContext.set("userId", userId);
+        requestContext.set("interfaceId", interfaceId);
       }
-      // Override with input values (they take precedence)
-      requestContext.set("tenantId", tenantId);
-      requestContext.set("userId", userId);
-      requestContext.set("interfaceId", interfaceId);
+
+      console.log("[runGeneratePreviewWorkflow] Starting workflow with:", {
+        tenantId,
+        userId,
+        interfaceId,
+        userRole,
+      });
 
       const result = await run.start({
         inputData: {
@@ -108,6 +138,7 @@ export const runGeneratePreviewWorkflow = createTool({
       });
 
       if (result.status === "failed") {
+        console.error("[runGeneratePreviewWorkflow] Workflow failed:", result.error);
         return {
           success: false,
           error: "WORKFLOW_FAILED",
@@ -116,7 +147,6 @@ export const runGeneratePreviewWorkflow = createTool({
       }
 
       if (result.status === "suspended") {
-        // Extract suspension details for the agent to handle
         const suspendPayload = (result as Record<string, unknown>).suspendedSteps ??
           (result as Record<string, unknown>).suspendPayload ?? {};
         return {
@@ -129,6 +159,7 @@ export const runGeneratePreviewWorkflow = createTool({
       }
 
       if (result.status === "success" && result.result) {
+        console.log("[runGeneratePreviewWorkflow] Workflow succeeded:", result.result);
         return {
           success: true,
           runId: result.result.runId,
@@ -145,22 +176,10 @@ export const runGeneratePreviewWorkflow = createTool({
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       console.error("[runGeneratePreviewWorkflow] Error:", message);
-
-      // If it's a snapshot collision that wasn't cleaned, provide a clear message
-      if (message.includes("duplicate key") && message.includes("mastra_workflow_snapshot")) {
-        return {
-          success: false,
-          error: "SNAPSHOT_COLLISION",
-          message:
-            "A previous preview generation left stale data. Please try again — " +
-            "the system has been cleaned up.",
-        };
-      }
-
       return {
         success: false,
-        error: "EXECUTION_ERROR",
-        message: `Preview generation encountered an error: ${message}`,
+        error: "WORKFLOW_EXECUTION_ERROR",
+        message,
       };
     }
   },

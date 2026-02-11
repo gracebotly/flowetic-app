@@ -2,8 +2,9 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 // ============================================================================
-// Style bundle catalog (mirrors getStyleBundles.ts STYLE_CATALOG)
+// Style bundle catalog
 // Used to resolve selectedStyleBundleId → design tokens
+// Design selection now handled by designSystemWorkflow + ui-ux-pro-max skill
 // ============================================================================
 const STYLE_BUNDLE_TOKENS: Record<string, {
   colors: { primary: string; secondary: string; success: string; warning: string; error: string; background: string; text: string };

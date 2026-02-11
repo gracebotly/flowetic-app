@@ -10,15 +10,20 @@ export async function triggerGeneratePreview(params: {
   selectedStoryboardKey: string;
   selectedStyleBundleId: string;
 }) {
-  const workflow = mastra.getWorkflow("generatePreview");
-  if (!workflow) throw new Error("WORKFLOW_NOT_FOUND");
+  // Use the singleton - NEVER dynamic import
+  const workflow = mastra.getWorkflow("generatePreviewWorkflow");
+  if (!workflow) {
+    console.error("[triggerGeneratePreview] Available workflows:", 
+      Object.keys((mastra as any).workflows || {}));
+    throw new Error("WORKFLOW_NOT_FOUND: generatePreviewWorkflow not registered");
+  }
 
   const requestContext = new RequestContext();
   requestContext.set("tenantId", params.tenantId);
   requestContext.set("threadId", params.threadId);
 
   try {
-    // FIX 3: Use unique runId to prevent snapshot collisions
+    // Use unique runId to prevent snapshot collisions
     const run = await workflow.createRun({ runId: randomUUID() });
 
     const result = await run.start({
@@ -52,6 +57,7 @@ export async function triggerGeneratePreview(params: {
       previewUrl: output.previewUrl || '',
     };
   } catch (error) {
+    console.error("[triggerGeneratePreview] Error:", error);
     throw new Error(`WORKFLOW_FAILED: ${error}`);
   }
 }

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --turbo=false",
     "dev:mastra": "mastra dev --dir ./mastra",
     "mastra:dev": "mastra dev --dir ./mastra",
     "mastra:dev:nocache": "MASTRA_DEV_NO_CACHE=1 mastra dev --dir ./mastra",

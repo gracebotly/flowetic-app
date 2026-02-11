@@ -1,7 +1,27 @@
 import type { NextConfig } from "next";
- 
+
 const nextConfig: NextConfig = {
-  /* config options here */
+  // =========================================================================
+  // CRITICAL: Prevent bundler from duplicating @mastra/* classes
+  //
+  // Without this, Next.js's bundler creates multiple copies of Mastra classes
+  // in different chunks. JavaScript private field brand checks then fail with
+  // "#workflows" errors because instances from one chunk don't match the class
+  // definition in another chunk.
+  //
+  // This config tells Next.js to load @mastra/* packages directly from
+  // node_modules at runtime instead of bundling them.
+  // =========================================================================
+  serverExternalPackages: [
+    "@mastra/core",
+    "@mastra/memory",
+    "@mastra/ai-sdk",
+    "@mastra/libsql",
+    "@mastra/pg",
+    "@mastra/rag",
+    "@mastra/mcp",
+  ],
+
   async redirects() {
     return [
       // Legacy app routes → new Control Panel shell
@@ -28,5 +48,5 @@ const nextConfig: NextConfig = {
     ];
   },
 };
- 
+
 export default nextConfig;
