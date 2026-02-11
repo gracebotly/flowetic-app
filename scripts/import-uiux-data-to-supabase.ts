@@ -24,6 +24,13 @@ const FILE_MAP: Record<string, string> = {
   typography: 'typography.csv',
   icons: 'icons.csv',
   'web-interface': 'web-interface.csv',
+  'react-performance': 'react-performance.csv',
+  'ui-reasoning': 'ui-reasoning.csv',
+  // Stack-specific CSVs (namespaced domains)
+  'stack:react': 'stacks/react.csv',
+  'stack:nextjs': 'stacks/nextjs.csv',
+  'stack:html-tailwind': 'stacks/html-tailwind.csv',
+  'stack:shadcn': 'stacks/shadcn.csv',
 };
 
 // Get Supabase client
@@ -52,6 +59,8 @@ async function importDomain(domain: string): Promise<number> {
       columns: true,
       skip_empty_lines: true,
       trim: true,
+      relax_quotes: true,        // Allow unescaped quotes in fields
+      relax_column_count: true,  // Allow inconsistent column counts
     });
 
     if (records.length === 0) {

@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 
 export type UIUXCSVRow = Record<string, string>;
 
+// Update to include stack domains
 const FILE_MAP: Record<string, string> = {
   style: 'styles.csv',
   color: 'colors.csv',
@@ -16,6 +17,11 @@ const FILE_MAP: Record<string, string> = {
   'web-interface': 'web-interface.csv',
   'react-performance': 'react-performance.csv',
   'ui-reasoning': 'ui-reasoning.csv',
+  // Stack domains (these query Supabase, not filesystem)
+  'stack:react': 'stacks/react.csv',
+  'stack:nextjs': 'stacks/nextjs.csv',
+  'stack:html-tailwind': 'stacks/html-tailwind.csv',
+  'stack:shadcn': 'stacks/shadcn.csv',
 };
 
 const cache = new Map<string, UIUXCSVRow[]>();
