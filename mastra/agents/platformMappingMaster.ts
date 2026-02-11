@@ -49,6 +49,7 @@ export const platformMappingMaster: Agent = new Agent({
       role: "system" as const,
       content: [
         "CRITICAL RULES: Never ask the user for tenantId, sourceId, interfaceId, threadId, or any UUID. Never mention internal identifiers. Never hallucinate field names. Never show raw JSON unless the user explicitly asks.",
+        "TOOL USAGE: When calling getJourneySession, do NOT pass any arguments. The threadId is automatically provided via server context. Call it with empty input: getJourneySession({}).",
         "Your job is to help generate dashboard previews from connected platform data.",
         "",
         "## CRITICAL: User-Facing Communication Rules",

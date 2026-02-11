@@ -61,7 +61,10 @@ export function createFloweticMemory(opts: CreateFloweticMemoryOpts = {}) {
       storage,
       options: {
         lastMessages,
-        workingMemory,
+        workingMemory: workingMemory ? {
+          ...workingMemory,
+          scope: "thread",
+        } : undefined,
       },
     });
   }
@@ -73,7 +76,10 @@ export function createFloweticMemory(opts: CreateFloweticMemoryOpts = {}) {
       storage,
       options: {
         lastMessages,
-        workingMemory,
+        workingMemory: workingMemory ? {
+          ...workingMemory,
+          scope: "thread",
+        } : undefined,
       },
     });
   }
@@ -94,10 +100,13 @@ export function createFloweticMemory(opts: CreateFloweticMemoryOpts = {}) {
     embedder: openai.embedding("text-embedding-3-small"),
     options: {
       lastMessages,
-      workingMemory,
+      workingMemory: workingMemory ? {
+        ...workingMemory,
+        scope: "thread",
+      } : undefined,
       semanticRecall: {
-        topK: 5,
-        messageRange: 3,
+        topK: 3,
+        messageRange: { before: 2, after: 1 },
         scope: "thread",
         indexName,
       } as any,
