@@ -1,6 +1,5 @@
 
 
-
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { createAuthenticatedClient } from "../../lib/supabase";
@@ -25,10 +24,13 @@ export const getJourneySession = createTool({
     previewVersionId: z.string().nullable(),
   }),
   execute: async (_inputData, context) => {
-    // ALWAYS use RequestContext threadId - never trust LLM input for critical identifiers
-    // This prevents hallucinations like threadId='vibe' (see Mastra docs: server/request-context)
-    const threadId = context?.requestContext?.get('threadId') as string;
-    
+    // Use journeyThreadId (the client-side UUID stored in journey_sessions.thread_id)
+    // NOT threadId (which is the Mastra internal thread UUID from ensureMastraThreadId)
+    // The route.ts sets both:
+    //   requestContext.set('threadId', mastraThreadId)        ← Mastra internal, NOT in journey_sessions
+    //   requestContext.set('journeyThreadId', clientJourneyThreadId)  ← matches journey_sessions.thread_id
+    const threadId = (context?.requestContext?.get('journeyThreadId') ?? context?.requestContext?.get('threadId')) as string;
+
     if (!threadId) {
       throw new Error('getJourneySession: threadId missing from RequestContext. This tool does not accept threadId as input - it must be provided via server context.');
     }
