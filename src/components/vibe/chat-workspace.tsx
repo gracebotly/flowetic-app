@@ -207,7 +207,7 @@ export function ChatWorkspace({
       // Update journeyMode when advancePhase tool succeeds.
       // AI SDK v5 onFinish receives { message, messages, isAbort, ... } — destructure message.
       if (message.parts) {
-        for (const part of message.parts) {
+        for (const part of message.parts as any[]) {
           if (
             part?.type === 'tool-invocation' &&
             part?.toolName === 'advancePhase' &&
