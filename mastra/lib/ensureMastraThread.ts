@@ -3,6 +3,31 @@ import { Memory } from "@mastra/memory";
 import { createClient } from "@/lib/supabase/server";
 import { getMastraStorage } from "./storage";
 
+// UUID validation regex
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Safely extract UUID from a potentially corrupted value
+ * Handles cases like "uuid:extradata" by extracting just the UUID part
+ */
+function safeUuid(value: string | null | undefined): string | null {
+  if (!value) return null;
+
+  // If it's already a valid UUID, return it
+  if (UUID_RE.test(value)) return value;
+
+  // Try to extract UUID from start of string (handles "uuid:extra" format)
+  const uuidMatch = value.match(/^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
+  if (uuidMatch) {
+    console.warn(`[ensureMastraThreadId] Extracted UUID from corrupted value: "${value}" -> "${uuidMatch[1]}"`);
+    return uuidMatch[1];
+  }
+
+  // Not a valid UUID at all
+  console.warn(`[ensureMastraThreadId] Invalid UUID value ignored: "${value}"`);
+  return null;
+}
+
 export async function ensureMastraThreadId(params: {
   tenantId: string;
   journeyThreadId: string;
@@ -53,10 +78,16 @@ export async function ensureMastraThreadId(params: {
   // 4. UPSERT: Create session if it doesn't exist, or update if it does
   if (!session) {
     // Session doesn't exist - CREATE it
+    // IMPORTANT: Validate UUIDs before inserting to prevent Postgres errors
+    const safeSourceId = safeUuid(params.sourceId);
+    const safeEntityId = safeUuid(params.entityId);
+
     console.log('[ensureMastraThreadId] Creating new journey_sessions row:', {
       tenantId: params.tenantId,
       journeyThreadId: params.journeyThreadId,
       mastraThreadId,
+      sourceId: safeSourceId,
+      entityId: safeEntityId,
     });
 
     const now = new Date().toISOString();
@@ -67,8 +98,8 @@ export async function ensureMastraThreadId(params: {
         thread_id: params.journeyThreadId,
         mastra_thread_id: mastraThreadId,
         platform_type: params.platformType || "other",
-        source_id: params.sourceId || null,
-        entity_id: params.entityId || null,
+        source_id: safeSourceId,  // Use validated UUID or null
+        entity_id: safeEntityId,  // Use validated UUID or null
         mode: "select_entity",
         density_preset: "comfortable",
         created_at: now,
