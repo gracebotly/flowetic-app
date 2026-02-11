@@ -13,6 +13,7 @@ import { generatePreviewWorkflow } from "./workflows/generatePreview";
 import { connectionBackfillWorkflow } from "./workflows/connectionBackfill";
 import { deployDashboardWorkflow } from "./workflows/deployDashboard";
 import { vibeJourneyWorkflow } from "./workflows/vibeJourneyWorkflow";
+import { designSystemWorkflow } from "./workflows/designSystemWorkflow";
 
 // =============================================================================
 // CRITICAL: globalThis singleton pattern to prevent class duplication
@@ -49,6 +50,7 @@ function createMastraInstance(): Mastra {
       connectionBackfillWorkflow,
       deployDashboardWorkflow,
       vibeJourneyWorkflow,
+      designSystemWorkflow,
     },
   });
 }

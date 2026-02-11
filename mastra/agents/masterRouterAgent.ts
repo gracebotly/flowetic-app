@@ -48,6 +48,9 @@ import {
 // NEW: Import suggestAction tool
 import { suggestAction } from "../tools/suggestAction";
 
+// Design system workflow
+import { runDesignSystemWorkflow } from "../tools/design";
+
 export const masterRouterAgent: Agent = new Agent({
   id: "masterRouterAgent",
   name: "masterRouterAgent",
@@ -353,5 +356,7 @@ export const masterRouterAgent: Agent = new Agent({
     validatePreviewReadiness,
     // Action suggestion
     suggestAction,
+    // Design system workflow
+    runDesignSystemWorkflow,
   },
 });
