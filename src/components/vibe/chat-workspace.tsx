@@ -203,6 +203,21 @@ export function ChatWorkspace({
     transport: new DefaultChatTransport({
       api: '/api/chat',
     }),
+    onFinish: (message) => {
+      // Check if any tool results contain advancePhase success
+      if (message.toolInvocations) {
+        for (const invocation of message.toolInvocations) {
+          if (
+            invocation.toolName === 'advancePhase' &&
+            invocation.state === 'result' &&
+            invocation.result?.success &&
+            invocation.result?.currentPhase
+          ) {
+            setJourneyMode(invocation.result.currentPhase);
+          }
+        }
+      }
+    },
   });
 
   // Deduplicate messages by ID (workaround for Mastra + AI SDK v5 bug #9370)

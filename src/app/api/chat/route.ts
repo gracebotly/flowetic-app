@@ -151,7 +151,35 @@ export async function POST(req: Request) {
         requestContext.set(key, clientData[key]);
       }
     }
-    
+
+    // FIX: Override client-provided phase with authoritative DB value.
+    // Client React state can become stale if advancePhase streams back
+    // but the client doesn't update journeyMode before the next request.
+    if (clientJourneyThreadId && clientJourneyThreadId !== 'default-thread') {
+      try {
+        const { data: sessionRow } = await supabase
+          .from('journey_sessions')
+          .select('mode')
+          .eq('thread_id', clientJourneyThreadId)
+          .eq('tenant_id', tenantId)
+          .maybeSingle();
+
+        if (sessionRow?.mode) {
+          requestContext.set('phase', sessionRow.mode);
+          if (process.env.DEBUG_CHAT_ROUTE === 'true') {
+            console.log('[api/chat] Phase override from DB:', {
+              clientPhase: clientData.phase,
+              dbPhase: sessionRow.mode,
+              overridden: clientData.phase !== sessionRow.mode,
+            });
+          }
+        }
+      } catch (phaseErr) {
+        // Non-fatal: if DB read fails, client-provided phase is used as fallback
+        console.warn('[api/chat] Failed to read phase from DB, using client value:', phaseErr);
+      }
+    }
+
     const mastra = getMastraSingleton();
     
     if (process.env.DEBUG_CHAT_ROUTE === 'true') {

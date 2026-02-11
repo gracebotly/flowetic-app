@@ -29,17 +29,32 @@ export const getJourneySession = createTool({
     // The route.ts sets both:
     //   requestContext.set('threadId', mastraThreadId)        ← Mastra internal, NOT in journey_sessions
     //   requestContext.set('journeyThreadId', clientJourneyThreadId)  ← matches journey_sessions.thread_id
-    const threadId = (context?.requestContext?.get('journeyThreadId') ?? context?.requestContext?.get('threadId')) as string;
-
-    if (!threadId) {
-      throw new Error('getJourneySession: threadId missing from RequestContext. This tool does not accept threadId as input - it must be provided via server context.');
-    }
-
+    // Try journeyThreadId first (the client UUID matching journey_sessions.thread_id)
+    // Fall back to threadId (Mastra internal thread) only if journeyThreadId is missing/invalid
     const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-    if (!UUID_RE.test(threadId)) {
-      console.error(`[getJourneySession] Invalid threadId in RequestContext: "${threadId}"`);
-      throw new Error(`[getJourneySession] threadId invalid format in RequestContext. Got: "${threadId}"`);
+    let threadId = context?.requestContext?.get('journeyThreadId') as string;
+
+    if (!threadId || !UUID_RE.test(threadId)) {
+      // journeyThreadId missing or invalid (e.g. "vibe" from URL path corruption)
+      // Try threadId as fallback
+      const fallback = context?.requestContext?.get('threadId') as string;
+      if (fallback && UUID_RE.test(fallback)) {
+        console.warn(`[getJourneySession] journeyThreadId invalid ("${threadId}"), using threadId fallback: "${fallback?.substring(0, 8)}..."`);
+        threadId = fallback;
+      }
+    }
+
+    if (!threadId || !UUID_RE.test(threadId)) {
+      // Log all available RequestContext keys for debugging
+      const availableKeys: string[] = [];
+      const keysToCheck = ['journeyThreadId', 'threadId', 'tenantId', 'userId', 'phase', 'sourceId'];
+      for (const k of keysToCheck) {
+        const v = context?.requestContext?.get(k);
+        if (v) availableKeys.push(`${k}=${String(v).substring(0, 12)}`);
+      }
+      console.error(`[getJourneySession] No valid UUID threadId found. journeyThreadId="${threadId}", available: [${availableKeys.join(', ')}]`);
+      throw new Error(`[getJourneySession] No valid threadId. Got: "${threadId}". This may indicate RequestContext corruption during sub-agent delegation.`);
     }
 
     // Get access token and tenant context
