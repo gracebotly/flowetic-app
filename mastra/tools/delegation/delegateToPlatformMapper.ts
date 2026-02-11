@@ -87,8 +87,13 @@ DO NOT try to generate previews yourself — always delegate to this specialist.
         },
         onStepFinish: ({ toolCalls, finishReason }) => {
           // Log each step for debugging without blocking autonomous flow
+          // Use safe property access to handle different ToolCall shapes across SDK versions
+          const toolNames = (toolCalls ?? []).map((tc: Record<string, unknown>) => {
+            // AI SDK v5 uses 'toolName', some versions may use 'name'
+            return (tc.toolName ?? tc.name ?? 'unknown') as string;
+          });
           console.log('[delegateToPlatformMapper] Step completed:', {
-            tools: toolCalls?.map(tc => tc.toolName) || [],
+            tools: toolNames,
             reason: finishReason,
           });
         },
