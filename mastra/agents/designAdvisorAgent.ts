@@ -15,6 +15,12 @@ import {
   getTypographyRecommendations,
   getUXGuidelines,
   getProductRecommendations,
+  getColorRecommendations,
+  getIconRecommendations,
+  getLandingPagePatterns,
+  getWebInterfaceGuidelines,
+  getReactPerformanceGuidelines,
+  getUIReasoningPatterns,
 } from "../tools/uiux";
 
 export const designAdvisorAgent: Agent = new Agent({
@@ -120,5 +126,11 @@ After calling tools, synthesize results into clear recommendations:
     getTypographyRecommendations,
     getUXGuidelines,
     getProductRecommendations,
+    getColorRecommendations,
+    getIconRecommendations,
+    getLandingPagePatterns,
+    getWebInterfaceGuidelines,
+    getReactPerformanceGuidelines,
+    getUIReasoningPatterns,
   },
 });
