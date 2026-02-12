@@ -119,28 +119,42 @@ Without calling this tool, the phase stays stuck and instructions won't update.`
             };
           }
 
+          // BUG FIX: Use OR query to match EITHER thread_id OR mastra_thread_id
+          // This ensures we update regardless of which ID was used to create the session
           const { data: updateResult, error: updateError } = await supabase
             .from('journey_sessions')
             .update(updateData)
             .eq('tenant_id', tenantId)
-            .eq(queryColumn, queryValue)
-            .select('id')
+            .or(`thread_id.eq.${queryValue},mastra_thread_id.eq.${queryValue}`)
+            .select('id, mode')
             .maybeSingle();
 
-          // Warn if no rows updated (helps debug)
+          // CRITICAL: Verify the update actually persisted the correct phase
           if (updateError) {
-            console.warn('[advancePhase] DB update error:', updateError.message);
+            console.error('[advancePhase] DB update error:', updateError.message);
+            // Don't silently fail - this is why phase keeps resetting
+            throw new Error(`[advancePhase] Failed to persist phase: ${updateError.message}`);
           } else if (!updateResult) {
-            console.warn('[advancePhase] DB update matched 0 rows:', {
+            console.error('[advancePhase] DB update matched 0 rows:', {
               queryColumn,
               queryValue,
               tenantId,
               nextPhase,
+              hint: 'Session may not exist or tenant mismatch',
             });
+            throw new Error(`[advancePhase] No session found to update for ${queryColumn}=${queryValue}`);
+          } else if (updateResult.mode !== nextPhase) {
+            console.error('[advancePhase] Phase mismatch after update:', {
+              expected: nextPhase,
+              actual: updateResult.mode,
+              sessionId: updateResult.id,
+            });
+            throw new Error(`[advancePhase] Phase not persisted: expected ${nextPhase}, got ${updateResult.mode}`);
           } else {
-            console.log('[advancePhase] DB update succeeded:', {
+            console.log('[advancePhase] DB update verified:', {
               sessionId: updateResult.id,
               newPhase: nextPhase,
+              verified: true,
             });
           }
         }

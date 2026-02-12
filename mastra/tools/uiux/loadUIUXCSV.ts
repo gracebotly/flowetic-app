@@ -71,7 +71,36 @@ export async function loadUIUXCSV(domain: string): Promise<UIUXCSVRow[]> {
       return [];
     }
 
-    const rows = (data ?? []).map((r: any) => (r?.row_data ?? {}) as UIUXCSVRow);
+    // BUG FIX: Handle potential double-stringify of JSONB data
+    // Supabase may return row_data as string if it was inserted incorrectly
+    const rows = (data ?? []).map((r: any) => {
+      let rowData = r?.row_data;
+
+      // If row_data is a string, try to parse it (handles double-stringify)
+      if (typeof rowData === 'string') {
+        try {
+          rowData = JSON.parse(rowData);
+          // Check for double-stringify (string inside string)
+          if (typeof rowData === 'string') {
+            rowData = JSON.parse(rowData);
+          }
+        } catch {
+          console.warn('[loadUIUXCSV] Failed to parse row_data string:', rowData?.substring?.(0, 100));
+          rowData = {};
+        }
+      }
+
+      return (rowData ?? {}) as UIUXCSVRow;
+    });
+
+    if (process.env.DEBUG_UIUX === 'true' && rows.length > 0) {
+      const sampleRow = rows[0];
+      console.log('[loadUIUXCSV] Sample row keys:', Object.keys(sampleRow));
+      console.log('[loadUIUXCSV] Sample row values:', {
+        'Style Category': sampleRow['Style Category'],
+        'Keywords': sampleRow['Keywords']?.substring?.(0, 50),
+      });
+    }
 
     cache.set(domain, rows);
     return rows;

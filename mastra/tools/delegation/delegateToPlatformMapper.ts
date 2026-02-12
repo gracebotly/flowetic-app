@@ -1,6 +1,8 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { platformMappingMaster } from "../../agents/platformMappingMaster";
+import { advancePhase } from "../journey/advancePhase";
+import { todoComplete } from "../todo";
 
 export const delegateToPlatformMapper = createTool({
   id: "delegateToPlatformMapper",
@@ -81,15 +83,36 @@ DO NOT try to generate previews yourself — always delegate to this specialist.
         maxSteps: 8, // Keep at 8 for autonomous execution (per agent_research.md)
         toolChoice: "auto",
         requestContext: context?.requestContext,
+        // Pass parent tools that sub-agent needs but doesn't have in its config
+        toolsets: {
+          parentTools: {
+            advancePhase,
+            todoComplete,
+          },
+        },
         memory: {
           resource: userId,
           thread: threadId,
         },
         onStepFinish: ({ toolCalls, finishReason }) => {
           // Log each step for debugging without blocking autonomous flow
+          // AI SDK v5 / Mastra structure varies - check multiple property paths
           const toolNames = (toolCalls ?? []).map((tc) => {
-            // Access toolName safely - cast to any to bypass strict typing
-            return String((tc as any).toolName ?? (tc as any).name ?? 'unknown');
+            const call = tc as any;
+            // Debug: Log actual structure on first unknown to diagnose
+            if (!call.toolName && !call.name && process.env.DEBUG_TOOL_CALLS === 'true') {
+              console.log('[delegateToPlatformMapper] Unknown tool call structure:', JSON.stringify(call, null, 2));
+            }
+            // Try multiple property paths for tool name extraction
+            const name =
+              call.toolName ??              // Mastra standard
+              call.name ??                  // Alternative
+              call.tool?.name ??            // Nested tool object
+              call.function?.name ??        // OpenAI-style function calling
+              call.toolCall?.toolName ??    // Wrapped structure
+              (typeof call === 'string' ? call : null) ??  // String tool name
+              'unknown';
+            return String(name);
           });
           console.log('[delegateToPlatformMapper] Step completed:', {
             tools: toolNames,
