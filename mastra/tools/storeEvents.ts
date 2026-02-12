@@ -46,8 +46,9 @@ export const storeEvents = createTool({
 
     try {
       // Use RPC for proper upsert with partial unique index support
+      // Pass as JSONB directly - don't stringify, Supabase client handles conversion
       const { data, error } = await supabase.rpc('upsert_events', {
-        p_events: JSON.stringify(enrichedRows),
+        p_events: enrichedRows,
       });
 
       if (error) {
