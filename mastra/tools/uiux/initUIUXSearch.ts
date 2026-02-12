@@ -58,43 +58,19 @@ export async function initUIUXSearch(): Promise<void> {
 }
 
 /**
- * Load CSV rows (internal helper)
+ * Load UI/UX rows from Supabase instead of parsing CSV files.
+ * This avoids CSV parsing issues with malformed icons.csv and web-interface.csv
+ * (unescaped quotes, inconsistent column counts).
+ *
+ * The data was imported to Supabase with relaxed CSV options, so it's already clean.
  */
 async function loadCSV(domain: string): Promise<Record<string, string>[]> {
-  const FILE_MAP: Record<string, string> = {
-    style: 'styles.csv',
-    color: 'colors.csv',
-    chart: 'charts.csv',
-    landing: 'landing.csv',
-    product: 'products.csv',
-    ux: 'ux-guidelines.csv',
-    typography: 'typography.csv',
-    icons: 'icons.csv',
-    'web-interface': 'web-interface.csv',
-  };
-
-  const filename = FILE_MAP[domain];
-  if (!filename) return [];
-
-  const filePath = `/skills/ui-ux-pro-max/data/${filename}`;
-  try {
-    if (!workspace.filesystem) {
-      console.error(`[uiux] Workspace filesystem is not configured`);
-      return [];
-    }
-    
-    const { parse } = await import('csv-parse/sync');
-    const content = await workspace.filesystem.readFile(filePath, { encoding: 'utf-8' }) as string;
-    const rows = parse(content, {
-      columns: true,
-      skip_empty_lines: true,
-      trim: true,
-    });
-    return rows as Record<string, string>[];
-  } catch (err) {
-    console.error(`[uiux] Failed to read CSV: ${filePath}`, err);
-    return [];
-  }
+  // Delegate to the canonical Supabase loader which handles:
+  // - uiux_data table queries
+  // - In-memory caching
+  // - Error handling
+  const { loadUIUXCSV } = await import('./loadUIUXCSV');
+  return loadUIUXCSV(domain);
 }
 
 /**

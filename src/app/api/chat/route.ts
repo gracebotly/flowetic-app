@@ -178,15 +178,32 @@ export async function POST(req: Request) {
     // FIX: Override client-provided phase with authoritative DB value.
     // Client React state can become stale if advancePhase streams back
     // but the client doesn't update journeyMode before the next request.
+    // BUG FIX: Query BOTH thread_id AND mastra_thread_id columns since advancePhase
+    // may write to either depending on which ID was available.
     if (clientJourneyThreadId && clientJourneyThreadId !== 'default-thread') {
       try {
-        const { data: sessionRow } = await supabase
+        // Query by thread_id first (primary), then fallback to mastra_thread_id
+        let sessionRow = null;
+
+        const { data: byThreadId } = await supabase
           .from('journey_sessions')
-          .select('mode')
+          .select('id, mode, preview_interface_id')
           .eq('thread_id', clientJourneyThreadId)
           .eq('tenant_id', tenantId)
           .maybeSingle();
 
+        if (byThreadId) {
+          sessionRow = byThreadId;
+        } else {
+          // Fallback: query by mastra_thread_id (in case thread was created that way)
+          const { data: byMastraId } = await supabase
+            .from('journey_sessions')
+            .select('id, mode, preview_interface_id')
+            .eq('mastra_thread_id', mastraThreadId)
+            .eq('tenant_id', tenantId)
+            .maybeSingle();
+          sessionRow = byMastraId;
+        }
         if (sessionRow?.mode) {
           requestContext.set('phase', sessionRow.mode);
           if (process.env.DEBUG_CHAT_ROUTE === 'true') {
@@ -194,8 +211,39 @@ export async function POST(req: Request) {
               clientPhase: clientData.phase,
               dbPhase: sessionRow.mode,
               overridden: clientData.phase !== sessionRow.mode,
+              sessionId: sessionRow.id,
             });
           }
+        }
+        // BUG FIX: Ensure interface exists for this journey session
+        // This prevents "MISSING" interfaceId in downstream tools
+        if (sessionRow && !sessionRow.preview_interface_id) {
+          const { data: newInterface, error: ifaceErr } = await supabase
+            .from('interfaces')
+            .insert({
+              tenant_id: tenantId,
+              name: clientData.displayName || 'Untitled Dashboard',
+              status: 'draft',
+              component_pack: 'default',
+            })
+            .select('id')
+            .single();
+          if (!ifaceErr && newInterface?.id) {
+            await supabase
+              .from('journey_sessions')
+              .update({
+                preview_interface_id: newInterface.id,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', sessionRow.id);
+            requestContext.set('interfaceId', newInterface.id);
+            console.log('[api/chat] Created interface for session:', {
+              sessionId: sessionRow.id,
+              interfaceId: newInterface.id,
+            });
+          }
+        } else if (sessionRow?.preview_interface_id) {
+          requestContext.set('interfaceId', sessionRow.preview_interface_id);
         }
       } catch (phaseErr) {
         // Non-fatal: if DB read fails, client-provided phase is used as fallback

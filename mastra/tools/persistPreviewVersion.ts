@@ -33,18 +33,47 @@ export const persistPreviewVersion = createTool({
     // CRITICAL: Validate that interfaceId exists in the interfaces table
     // The agent sometimes passes a project.id which is NOT a valid interface_id
     if (finalInterfaceId) {
-      const { data: existing, error: lookupError } = await supabase
-        .from('interfaces')
-        .select('id')
-        .eq('id', finalInterfaceId)
-        .maybeSingle();
+      // Check for obvious invalid/placeholder values first
+      const isPlaceholder =
+        finalInterfaceId === 'MISSING' ||
+        finalInterfaceId === '00000000-0000-0000-0000-000000000000' ||
+        finalInterfaceId === 'undefined' ||
+        finalInterfaceId === 'null';
 
-      if (lookupError || !existing) {
+      if (isPlaceholder) {
         console.warn(
-          `[persistPreviewVersion] interfaceId "${finalInterfaceId}" not found in interfaces table. Creating new interface.`
+          `[persistPreviewVersion] interfaceId is placeholder value "${finalInterfaceId}". Will create new interface.`
         );
-        finalInterfaceId = undefined; // Force creation of new interface
+        finalInterfaceId = undefined;
+      } else {
+        // Validate against interfaces table
+        const { data: existing, error: lookupError } = await supabase
+          .from('interfaces')
+          .select('id, tenant_id')
+          .eq('id', finalInterfaceId)
+          .maybeSingle();
+
+        if (lookupError) {
+          console.error(`[persistPreviewVersion] Error looking up interface: ${lookupError.message}`);
+          finalInterfaceId = undefined;
+        } else if (!existing) {
+          console.warn(
+            `[persistPreviewVersion] interfaceId "${finalInterfaceId}" not found in interfaces table ` +
+            `(may be project.id instead of interface.id). Creating new interface.`
+          );
+          finalInterfaceId = undefined;
+        } else if (existing.tenant_id !== tenantId) {
+          console.error(
+            `[persistPreviewVersion] interfaceId "${finalInterfaceId}" belongs to different tenant. ` +
+            `Expected: ${tenantId}, Got: ${existing.tenant_id}. Creating new interface.`
+          );
+          finalInterfaceId = undefined;
+        } else {
+          console.log(`[persistPreviewVersion] Using existing interface: ${finalInterfaceId}`);
+        }
       }
+    } else {
+      console.log(`[persistPreviewVersion] No interfaceId provided, will create new interface.`);
     }
 
     if (!finalInterfaceId) {
