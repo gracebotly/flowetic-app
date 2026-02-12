@@ -52,7 +52,7 @@ const generateDesignSystemStep = createStep({
   description: "Activates ui-ux-pro-max skill via Design Advisor and generates complete design system",
   inputSchema: designSystemInputSchema,
   outputSchema: designSystemOutputSchema,
-  execute: async ({ inputData, mastra }) => {
+  execute: async ({ inputData, mastra, requestContext }) => {
     const agent = mastra.getAgent("designAdvisorAgent");
 
     if (!agent) {
@@ -91,6 +91,7 @@ const generateDesignSystemStep = createStep({
     const result = await agent.generate(prompt, {
       maxSteps: 10,
       toolChoice: "auto",
+      requestContext,
     });
 
     // Parse the agent's response

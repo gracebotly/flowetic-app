@@ -4,6 +4,9 @@ import { getMastraStorage } from "./lib/storage";
 
 // Register real Mastra agents (NOT AG-UI AbstractAgent wrappers)
 import { masterRouterAgent } from "./agents/masterRouterAgent";
+import { designAdvisorAgent } from "./agents/designAdvisorAgent";
+import { platformMappingMaster } from "./agents/platformMappingMaster";
+import { dashboardBuilderAgent } from "./agents/dashboardBuilderAgent";
 
 // Workspace instance for skill discovery and file management
 import { workspace } from "./workspace";
@@ -33,7 +36,7 @@ declare global {
 function createMastraInstance(): Mastra {
   if (process.env.DEBUG_MASTRA_BOOT === "true") {
     console.log("[Mastra boot] building Mastra instance");
-    console.log("[Mastra boot] agent ids", ["masterRouterAgent"]);
+    console.log("[Mastra boot] agent ids", ["masterRouterAgent", "designAdvisorAgent", "platformMappingMaster", "dashboardBuilderAgent"]);
   }
 
   return new Mastra({
@@ -44,6 +47,9 @@ function createMastraInstance(): Mastra {
     
     agents: {
       masterRouterAgent,
+      designAdvisorAgent,
+      platformMappingMaster,
+      dashboardBuilderAgent,
     },
     workflows: {
       generatePreviewWorkflow,

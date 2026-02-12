@@ -24,22 +24,34 @@ export const getJourneySession = createTool({
     previewVersionId: z.string().nullable(),
   }),
   execute: async (_inputData, context) => {
-    // Use journeyThreadId (the client-side UUID stored in journey_sessions.thread_id)
-    // NOT threadId (which is the Mastra internal thread UUID from ensureMastraThreadId)
     // The route.ts sets both:
-    //   requestContext.set('threadId', mastraThreadId)        ← Mastra internal, NOT in journey_sessions
-    //   requestContext.set('journeyThreadId', clientJourneyThreadId)  ← matches journey_sessions.thread_id
-    const threadId = (context?.requestContext?.get('journeyThreadId') ?? context?.requestContext?.get('threadId')) as string;
-
-    if (!threadId) {
-      throw new Error('getJourneySession: threadId missing from RequestContext. This tool does not accept threadId as input - it must be provided via server context.');
-    }
-
+    //   requestContext.set('threadId', mastraThreadId)              ← Mastra internal UUID
+    //   requestContext.set('journeyThreadId', clientJourneyThreadId) ← Client journey UUID
+    //
+    // CRITICAL: These map to DIFFERENT columns in journey_sessions:
+    //   - journeyThreadId → journey_sessions.thread_id
+    //   - threadId (Mastra) → journey_sessions.mastra_thread_id
+    const journeyThreadId = context?.requestContext?.get('journeyThreadId') as string | undefined;
+    const mastraThreadId = context?.requestContext?.get('threadId') as string | undefined;
     const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-    if (!UUID_RE.test(threadId)) {
-      console.error(`[getJourneySession] Invalid threadId in RequestContext: "${threadId}"`);
-      throw new Error(`[getJourneySession] threadId invalid format in RequestContext. Got: "${threadId}"`);
+    // Determine which ID and column to use
+    let queryColumn: 'thread_id' | 'mastra_thread_id';
+    let queryValue: string;
+
+    if (journeyThreadId && UUID_RE.test(journeyThreadId)) {
+      // Primary path: use client journey UUID → thread_id column
+      queryColumn = 'thread_id';
+      queryValue = journeyThreadId;
+    } else if (mastraThreadId && UUID_RE.test(mastraThreadId)) {
+      // Fallback path: use Mastra UUID → mastra_thread_id column
+      queryColumn = 'mastra_thread_id';
+      queryValue = mastraThreadId;
+    } else {
+      // No valid ID available
+      const debugInfo = `journeyThreadId="${journeyThreadId}", threadId="${mastraThreadId}"`;
+      console.error(`[getJourneySession] No valid UUID in RequestContext: ${debugInfo}`);
+      throw new Error(`getJourneySession: No valid threadId in RequestContext. ${debugInfo}`);
     }
 
     // Get access token and tenant context
@@ -56,11 +68,24 @@ export const getJourneySession = createTool({
         "tenant_id,thread_id,platform_type,source_id,entity_id,mode,schema_ready,selected_outcome,selected_storyboard,selected_style_bundle_id,preview_interface_id,preview_version_id",
       )
       .eq("tenant_id", tenantId)
-      .eq("thread_id", threadId)
+      .eq(queryColumn, queryValue)  // ✅ Query the CORRECT column
       .maybeSingle();
 
-    if (error) throw new Error(error.message);
-    if (!data) throw new Error("JOURNEY_SESSION_NOT_FOUND");
+    if (error) {
+      console.error('[getJourneySession] DB error:', error.message);
+      throw new Error(error.message);
+    }
+    if (!data) {
+      console.error('[getJourneySession] Session not found:', {
+        queryColumn,
+        queryValue,
+        tenantId,
+        journeyThreadId,
+        mastraThreadId,
+        hint: 'This usually means ensureMastraThreadId failed to create the session row. Check if journey_sessions INSERT is working.',
+      });
+      throw new Error(`JOURNEY_SESSION_NOT_FOUND: No session with ${queryColumn}=${queryValue} for tenant ${tenantId}`);
+    }
 
     return {
       tenantId: data.tenant_id,

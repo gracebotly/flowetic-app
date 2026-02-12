@@ -75,23 +75,74 @@ Without calling this tool, the phase stays stuck and instructions won't update.`
     // Persist to journey_sessions in Supabase (non-blocking)
     const accessToken = context?.requestContext?.get('supabaseAccessToken') as string;
     const tenantId = context?.requestContext?.get('tenantId') as string;
-    const threadId = context?.requestContext?.get('threadId') as string;
+    // Get both thread IDs - they map to different columns
+    const journeyThreadId = context?.requestContext?.get('journeyThreadId') as string | undefined;
+    const mastraThreadId = context?.requestContext?.get('threadId') as string | undefined;
 
-    if (accessToken && tenantId && threadId) {
+    if (accessToken && tenantId && (journeyThreadId || mastraThreadId)) {
       try {
         const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
         const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
         if (url && serviceKey) {
           const supabase = createClient(url, serviceKey, { auth: { persistSession: false } });
-          const updateData: Record<string, string> = { current_phase: nextPhase };
-          if (selectedValue && nextPhase === 'style') updateData.selected_outcome = selectedValue;
-          if (selectedValue && nextPhase === 'build_preview') updateData.selected_style_bundle_id = selectedValue;
 
-          await supabase
+          // Note: column is 'mode' not 'current_phase' based on schema
+          const updateData: Record<string, string> = {
+            mode: nextPhase,
+            updated_at: new Date().toISOString(),
+          };
+          if (selectedValue && nextPhase === 'style') {
+            updateData.selected_outcome = selectedValue;
+          }
+          if (selectedValue && nextPhase === 'build_preview') {
+            updateData.selected_style_bundle_id = selectedValue;
+          }
+
+          // Determine correct column based on available ID
+          const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+          let queryColumn: 'thread_id' | 'mastra_thread_id';
+          let queryValue: string;
+
+          if (journeyThreadId && UUID_RE.test(journeyThreadId)) {
+            queryColumn = 'thread_id';
+            queryValue = journeyThreadId;
+          } else if (mastraThreadId && UUID_RE.test(mastraThreadId)) {
+            queryColumn = 'mastra_thread_id';
+            queryValue = mastraThreadId;
+          } else {
+            console.warn('[advancePhase] No valid thread ID for DB update');
+            return {
+              success: true,  // Still succeed in-memory, just warn about persistence
+              previousPhase: currentPhase,
+              currentPhase: nextPhase,
+              message: `Phase advanced (not persisted): ${currentPhase} → ${nextPhase}`,
+            };
+          }
+
+          const { data: updateResult, error: updateError } = await supabase
             .from('journey_sessions')
             .update(updateData)
             .eq('tenant_id', tenantId)
-            .eq('thread_id', threadId);
+            .eq(queryColumn, queryValue)
+            .select('id')
+            .maybeSingle();
+
+          // Warn if no rows updated (helps debug)
+          if (updateError) {
+            console.warn('[advancePhase] DB update error:', updateError.message);
+          } else if (!updateResult) {
+            console.warn('[advancePhase] DB update matched 0 rows:', {
+              queryColumn,
+              queryValue,
+              tenantId,
+              nextPhase,
+            });
+          } else {
+            console.log('[advancePhase] DB update succeeded:', {
+              sessionId: updateResult.id,
+              newPhase: nextPhase,
+            });
+          }
         }
       } catch (err) {
         console.warn('[advancePhase] Persistence failed (non-blocking):', err);

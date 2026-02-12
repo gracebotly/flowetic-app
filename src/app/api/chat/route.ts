@@ -74,15 +74,38 @@ export async function POST(req: Request) {
     const userRole = membership.role;
     
     // 3. GET/CREATE STABLE MASTRA THREAD
-    const clientJourneyThreadId = (params as any)?.journeyThreadId || 'default-thread';
+    // Validate journeyThreadId is a UUID. Reject route slugs like "vibe" or other garbage.
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const rawJourneyThreadId = (params as any)?.journeyThreadId;
+    const clientJourneyThreadId = (typeof rawJourneyThreadId === 'string' && UUID_RE.test(rawJourneyThreadId))
+      ? rawJourneyThreadId
+      : 'default-thread';
+    if (rawJourneyThreadId && rawJourneyThreadId !== clientJourneyThreadId) {
+      console.warn(`[api/chat] Rejected invalid journeyThreadId: "${rawJourneyThreadId}", using default-thread`);
+    }
     
     let mastraThreadId: string;
     try {
+      // Extract platform context from request for auto-session creation
+      const platformType = (params as any)?.platformType ||
+                           (params as any)?.vibeContext?.platformType ||
+                           'other';
+      const sourceId = (params as any)?.sourceId ||
+                       (params as any)?.vibeContext?.sourceId ||
+                       null;
+      const entityId = (params as any)?.entityId ||
+                       (params as any)?.vibeContext?.entityId ||
+                       null;
+
       mastraThreadId = await ensureMastraThreadId({
         tenantId,
         journeyThreadId: clientJourneyThreadId,
         resourceId: userId,
         title: (params as any)?.displayName || 'Dashboard Journey',
+        // NEW: Pass platform context for auto-session creation
+        platformType,
+        sourceId,
+        entityId,
       });
     } catch (threadError: any) {
       console.error('[api/chat] Failed to ensure Mastra thread:', threadError);
@@ -151,7 +174,35 @@ export async function POST(req: Request) {
         requestContext.set(key, clientData[key]);
       }
     }
-    
+
+    // FIX: Override client-provided phase with authoritative DB value.
+    // Client React state can become stale if advancePhase streams back
+    // but the client doesn't update journeyMode before the next request.
+    if (clientJourneyThreadId && clientJourneyThreadId !== 'default-thread') {
+      try {
+        const { data: sessionRow } = await supabase
+          .from('journey_sessions')
+          .select('mode')
+          .eq('thread_id', clientJourneyThreadId)
+          .eq('tenant_id', tenantId)
+          .maybeSingle();
+
+        if (sessionRow?.mode) {
+          requestContext.set('phase', sessionRow.mode);
+          if (process.env.DEBUG_CHAT_ROUTE === 'true') {
+            console.log('[api/chat] Phase override from DB:', {
+              clientPhase: clientData.phase,
+              dbPhase: sessionRow.mode,
+              overridden: clientData.phase !== sessionRow.mode,
+            });
+          }
+        }
+      } catch (phaseErr) {
+        // Non-fatal: if DB read fails, client-provided phase is used as fallback
+        console.warn('[api/chat] Failed to read phase from DB, using client value:', phaseErr);
+      }
+    }
+
     const mastra = getMastraSingleton();
     
     if (process.env.DEBUG_CHAT_ROUTE === 'true') {

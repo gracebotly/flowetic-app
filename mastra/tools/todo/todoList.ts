@@ -10,7 +10,7 @@ export const todoList = createTool({
   description: "List todos for the current thread, filtered by status.",
   inputSchema: z.object({
     threadId: z.string().min(1),
-    status: z.enum(["open", "in_progress", "done"]).optional(),
+    status: z.enum(["pending", "in_progress", "completed"]).optional(),
   }),
   outputSchema: z.object({
     todos: z.array(z.any()),
@@ -48,7 +48,7 @@ export const todoList = createTool({
       }
 
       const total = data.length;
-      const completed = data.filter((t: any) => String(t?.status) === "done").length;
+      const completed = data.filter((t: any) => String(t?.status) === "completed").length;
 
       return { todos: data, total, completed };
     } catch (err) {

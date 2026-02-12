@@ -1,5 +1,3 @@
-
-
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { createAuthenticatedClient } from "../lib/supabase";
@@ -8,7 +6,7 @@ import { extractTenantContext } from "../lib/tenant-verification";
 export const storeEvents = createTool({
   id: "storeEvents",
   description:
-    "Bulk insert normalized events into Supabase events table. Skips duplicates via (source_id, platform_event_id) unique index.",
+    "Bulk insert normalized events into Supabase events table. Uses RPC for proper deduplication with partial unique index.",
   inputSchema: z.object({
     events: z.array(z.record(z.any())),
     sourceId: z.string().min(1),
@@ -17,76 +15,129 @@ export const storeEvents = createTool({
     stored: z.number().int(),
     skipped: z.number().int(),
     errors: z.array(z.string()),
+    status: z.enum(["success", "partial", "failed"]).optional(),
   }),
   execute: async (inputData, context) => {
     const accessToken = context?.requestContext?.get('supabaseAccessToken') as string;
     if (!accessToken || typeof accessToken !== 'string') {
-      throw new Error('[storeEvents]: Missing authentication');
+      // Return graceful failure instead of throwing
+      console.error('[storeEvents]: Missing authentication');
+      return { 
+        stored: 0, 
+        skipped: inputData.events?.length || 0, 
+        errors: ['Missing authentication'],
+        status: 'failed' as const,
+      };
     }
+    
     const { tenantId } = extractTenantContext(context);
     const supabase = createAuthenticatedClient(accessToken);
     const rows = inputData.events ?? [];
 
-    if (!rows.length) return { stored: 0, skipped: 0, errors: [] };
+    if (!rows.length) {
+      return { stored: 0, skipped: 0, errors: [], status: 'success' as const };
+    }
 
-    // Strip platform_event_id from rows to build clean rows for fallback
-    const cleanRows = rows.map((r: Record<string, unknown>) => {
+    // Ensure all rows have tenant_id set
+    const enrichedRows = rows.map((r: Record<string, unknown>) => ({
+      ...r,
+      tenant_id: r.tenant_id || tenantId,
+    }));
+
+    try {
+      // Use RPC for proper upsert with partial unique index support
+      const { data, error } = await supabase.rpc('upsert_events', {
+        p_events: JSON.stringify(enrichedRows),
+      });
+
+      if (error) {
+        // Check if RPC doesn't exist yet (migration not applied)
+        if (error.message?.includes('function') && error.message?.includes('does not exist')) {
+          console.warn('[storeEvents] upsert_events RPC not found, falling back to plain insert');
+          return await fallbackInsert(supabase, enrichedRows);
+        }
+        
+        console.error('[storeEvents] RPC error:', error.code, error.message);
+        // Return graceful failure with data preserved
+        return {
+          stored: 0,
+          skipped: rows.length,
+          errors: [error.message],
+          status: 'failed' as const,
+        };
+      }
+
+      const results = data as Array<{ id: string; is_new: boolean }> | null;
+      const stored = results?.filter(r => r.is_new).length ?? 0;
+      const updated = results?.filter(r => !r.is_new).length ?? 0;
+      const skipped = rows.length - (stored + updated);
+
+      console.log(`[storeEvents] Stored ${stored} new, updated ${updated}, skipped ${skipped}`);
+
+      return { 
+        stored: stored + updated, 
+        skipped, 
+        errors: [],
+        status: 'success' as const,
+      };
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      console.error('[storeEvents] Unexpected error:', errorMessage);
+      
+      // NEVER throw - return graceful failure so workflow can continue
+      return {
+        stored: 0,
+        skipped: rows.length,
+        errors: [errorMessage],
+        status: 'failed' as const,
+      };
+    }
+  },
+});
+
+// Fallback for when RPC doesn't exist yet
+async function fallbackInsert(
+  supabase: ReturnType<typeof createAuthenticatedClient>,
+  rows: Record<string, unknown>[]
+): Promise<{ stored: number; skipped: number; errors: string[]; status: 'success' | 'partial' | 'failed' }> {
+  try {
+    // Strip platform_event_id to avoid constraint issues
+    const cleanRows = rows.map((r) => {
       const { platform_event_id, ...rest } = r;
       return rest;
     });
 
-    // Try upsert with platform_event_id first (preferred: dedup support)
-    const hasPlatformIds = rows.every(
-      (r: Record<string, unknown>) =>
-        r.platform_event_id != null && r.platform_event_id !== ""
-    );
+    const { data, error } = await supabase
+      .from("events")
+      .insert(cleanRows)
+      .select("id");
 
-    let data: { id: string }[] | null = null;
-
-    if (hasPlatformIds) {
-      try {
-        const result = await supabase
-          .from("events")
-          .upsert(rows, {
-            onConflict: "source_id,platform_event_id",
-            ignoreDuplicates: true,
-          })
-          .select("id")
-          .throwOnError();
-
-        data = result.data;
-      } catch (err: any) {
-        if (err?.message?.includes("platform_event_id")) {
-          // Column doesn't exist yet — fall back to plain insert without that field
-          console.warn("[storeEvents] platform_event_id column missing, falling back to insert");
-          const fallback = await supabase
-            .from("events")
-            .insert(cleanRows)
-            .select("id")
-            .throwOnError();
-
-          data = fallback.data;
-        } else {
-          console.error("[storeEvents] INSERT failed:", err.code, err.message);
-          throw new Error(`storeEvents INSERT failed: ${err.code} — ${err.message}`);
-        }
-      }
-    } else {
-      const result = await supabase
-        .from("events")
-        .insert(cleanRows)
-        .select("id")
-        .throwOnError();
-
-      data = result.data;
+    if (error) {
+      console.error('[storeEvents:fallback] Insert error:', error.message);
+      return {
+        stored: 0,
+        skipped: rows.length,
+        errors: [error.message],
+        status: 'failed' as const,
+      };
     }
 
     const stored = data?.length ?? 0;
-    const skipped = Math.max(0, rows.length - stored);
-
-    console.log(`[storeEvents] Stored ${stored} events, skipped ${skipped}`);
-
-    return { stored, skipped, errors: [] };
-  },
-});
-
+    console.log(`[storeEvents:fallback] Inserted ${stored} events`);
+    
+    return {
+      stored,
+      skipped: rows.length - stored,
+      errors: [],
+      status: 'success' as const,
+    };
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    return {
+      stored: 0,
+      skipped: rows.length,
+      errors: [errorMessage],
+      status: 'failed' as const,
+    };
+  }
+}

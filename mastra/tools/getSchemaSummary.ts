@@ -8,19 +8,28 @@ export const getSchemaSummary = createTool({
   inputSchema: z.object({
     samples: z.array(
       z.object({
-        id: z.string(),
-        type: z.string(),
-        name: z.string().nullable(),
-        value: z.number().nullable(),
-        unit: z.string().nullable(),
-        text: z.string().nullable(),
-        state: z.any().nullable(),
-        labels: z.any().nullable(),
-        timestamp: z.string(),
-        sourceId: z.string().optional(),
+        // All fields optional with safe defaults to handle LLM inconsistency
+        id: z.string().optional().default(''),
+        type: z.string().optional().default('unknown'),
+        name: z.string().optional().nullable().default(null),
+        value: z.union([z.number(), z.string(), z.null()])
+          .optional()
+          .default(null)
+          .transform(v => {
+            if (v === null || v === undefined) return null;
+            if (typeof v === 'number') return v;
+            const parsed = parseFloat(String(v));
+            return isNaN(parsed) ? null : parsed;
+          }),
+        unit: z.string().optional().nullable().default(null),
+        text: z.string().optional().nullable().default(null),
+        state: z.any().optional().nullable().default(null),
+        labels: z.any().optional().nullable().default({}),
+        timestamp: z.string().optional().default(() => new Date().toISOString()),
+        sourceId: z.string().optional().nullable().default(null),
       })
-    ).describe('Event samples to analyze'),
-    includeStatistics: z.boolean().default(true).describe('Include field statistics'),
+    ).describe('Event samples to analyze. All fields are optional with safe defaults.'),
+    includeStatistics: z.boolean().optional().default(true).describe('Include field statistics'),
   }),
   outputSchema: z.object({
     fields: z.array(z.object({

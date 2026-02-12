@@ -38,7 +38,7 @@ export const todoAdd = createTool({
           thread_id: threadId,
           title,
           description: description ?? null,
-          status: "open",
+          status: "pending",
           priority: priority ?? "medium",
           tags: tags ?? [],
           parent_id: parentId ?? null,

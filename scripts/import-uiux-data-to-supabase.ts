@@ -15,6 +15,7 @@ import { createClient } from '@supabase/supabase-js';
 const DATA_DIR = path.join(process.cwd(), 'workspace', 'skills', 'ui-ux-pro-max', 'data');
 
 const FILE_MAP: Record<string, string> = {
+  // Core design data (11 domains)
   style: 'styles.csv',
   color: 'colors.csv',
   chart: 'charts.csv',
@@ -24,6 +25,14 @@ const FILE_MAP: Record<string, string> = {
   typography: 'typography.csv',
   icons: 'icons.csv',
   'web-interface': 'web-interface.csv',
+  'react-performance': 'react-performance.csv',
+  'ui-reasoning': 'ui-reasoning.csv',
+  
+  // Stack-specific CSVs (4 domains - namespaced for clean filtering)
+  'stack:react': 'stacks/react.csv',
+  'stack:nextjs': 'stacks/nextjs.csv',
+  'stack:html-tailwind': 'stacks/html-tailwind.csv',
+  'stack:shadcn': 'stacks/shadcn.csv',
 };
 
 // Get Supabase client
@@ -52,6 +61,8 @@ async function importDomain(domain: string): Promise<number> {
       columns: true,
       skip_empty_lines: true,
       trim: true,
+      relax_quotes: true,        // Fix icons.csv parsing - allows unescaped quotes in fields
+      relax_column_count: true,  // Fix web-interface.csv parsing - allows inconsistent column counts
     });
 
     if (records.length === 0) {

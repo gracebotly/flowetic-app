@@ -78,12 +78,23 @@ DO NOT try to generate previews yourself — always delegate to this specialist.
       }
 
       const result = await platformMappingMaster.generate(enhancedPrompt, {
-        maxSteps: 8,
+        maxSteps: 8, // Keep at 8 for autonomous execution (per agent_research.md)
         toolChoice: "auto",
         requestContext: context?.requestContext,
         memory: {
           resource: userId,
           thread: threadId,
+        },
+        onStepFinish: ({ toolCalls, finishReason }) => {
+          // Log each step for debugging without blocking autonomous flow
+          const toolNames = (toolCalls ?? []).map((tc) => {
+            // Access toolName safely - cast to any to bypass strict typing
+            return String((tc as any).toolName ?? (tc as any).name ?? 'unknown');
+          });
+          console.log('[delegateToPlatformMapper] Step completed:', {
+            tools: toolNames,
+            reason: finishReason,
+          });
         },
       });
 
