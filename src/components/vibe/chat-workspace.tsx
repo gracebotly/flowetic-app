@@ -44,6 +44,16 @@ import { ReasoningBlock } from "@/components/vibe/ReasoningBlock";
 import { ErrorDisplay } from "@/components/vibe/ErrorDisplay";
 import { ModelSelector, type ModelId } from "./model-selector";
 import { exportAsMarkdown, exportAsJSON } from "@/lib/export-chat";
+import {
+  InteractiveEditPanel,
+  DevicePreviewToolbar,
+  type DeviceMode,
+  type WidgetConfig,
+  type Palette,
+  type Density,
+} from "@/components/vibe/editor";
+import { ResponsiveDashboardRenderer } from "@/components/preview/ResponsiveDashboardRenderer";
+import { useEditActions } from "@/hooks/useEditActions";
 
 type ViewMode = "terminal" | "preview" | "publish";
 
@@ -373,6 +383,22 @@ export function ChatWorkspace({
             }
           }
         }
+
+        // ── Strategy 6: Handle interactive_edit_panel tool results ──
+        if (
+          part?.type === "tool-invocation" &&
+          part?.state === "result" &&
+          part?.toolName === "showInteractiveEditPanel"
+        ) {
+          const result = part?.result;
+          if (result?.widgets) {
+            setEditWidgets(result.widgets);
+            setEditPalettes(result.palettes || []);
+            setEditDensity(result.density || "comfortable");
+            setSelectedPaletteId(result.selectedPaletteId || null);
+            setEditPanelOpen(true);
+          }
+        }
       }
 
       // ── Fallback: Check toolInvocations array (AI SDK v4 compat) ──
@@ -617,8 +643,39 @@ export function ChatWorkspace({
   const [densityPreset, setDensityPreset] = useState<"compact" | "comfortable" | "spacious">("comfortable");
   const [paletteOverrideId, setPaletteOverrideId] = useState<string | null>(null);
 
+  // Interactive editor state
+  const [editPanelOpen, setEditPanelOpen] = useState(false);
+  const [deviceMode, setDeviceMode] = useState<DeviceMode>("desktop");
+  const [isMobile, setIsMobile] = useState(false);
 
+  // Edit panel data (populated from interactive_edit_panel tool result)
+  const [editWidgets, setEditWidgets] = useState<WidgetConfig[]>([]);
+  const [editPalettes, setEditPalettes] = useState<Palette[]>([]);
+  const [editDensity, setEditDensity] = useState<Density>("comfortable");
+  const [selectedPaletteId, setSelectedPaletteId] = useState<string | null>(null);
 
+  // Initialize edit actions hook
+  const editActions = useEditActions({
+    tenantId: authContext.tenantId ?? "default",
+    userId: authContext.userId ?? "default",
+    interfaceId: vibeContext?.interfaceId ?? "",
+    platformType: vibeContext?.platformType ?? "vapi",
+    onSuccess: (result) => {
+      // Update preview URL when edits are applied
+      if (result.previewUrl) {
+        setVibeContext((prev) => prev ? { ...prev, previewUrl: result.previewUrl } : prev);
+      }
+    },
+    onError: (error) => {
+      console.error("[ChatWorkspace] Edit action error:", error);
+    },
+  });
+
+  // Widget reorder handler
+  const handleReorderWidgets = (widgets: WidgetConfig[]) => {
+    setEditWidgets(widgets);
+    editActions.reorderWidgets(widgets.map((w) => w.id));
+  };
 
   function buildCopilotEnvelope(userText: string) {
     const safeVibeContext = {
@@ -783,6 +840,21 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
       setIsChatExpanded(true);
     } else {
       setIsChatExpanded(false);
+    }
+  }, [journeyMode]);
+
+  // Mobile detection
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
+
+  // Auto-open edit panel when in interactive_edit mode
+  useEffect(() => {
+    if (journeyMode === "interactive_edit") {
+      setEditPanelOpen(true);
     }
   }, [journeyMode]);
 
@@ -1610,29 +1682,106 @@ return (
           ) : null}
 
           {/* Right Panel - Preview Area */}
-          <div className="flex-1 bg-gray-50 relative">
-            {vibeContext?.previewUrl ? (
-              <div className="h-full">
-                <iframe
-                  src={vibeContext.previewUrl}
-                  className="w-full h-full border-0"
-                  title="Dashboard Preview"
-                  sandbox="allow-scripts allow-same-origin"
+          <div className="flex-1 overflow-hidden flex flex-col">
+            {/* Device preview toolbar - only show in edit mode */}
+            {journeyMode === "interactive_edit" && (
+              <div className="p-2 border-b border-gray-200 bg-gray-50 flex justify-center">
+                <DevicePreviewToolbar
+                  value={deviceMode}
+                  onChange={setDeviceMode}
                 />
               </div>
-            ) : journeyMode === "build_preview" ? (
-              <div className="flex items-center justify-center h-full">
-                <div className="text-center">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                  <p className="text-gray-600">Generating your preview...</p>
-                </div>
-              </div>
-            ) : (
-              <div className="flex items-center justify-center h-full text-gray-400">
-                <p>Preview will appear here once your dashboard is generated</p>
-              </div>
             )}
+            {/* Preview content */}
+            <div className="flex-1 overflow-auto bg-gray-100 p-4">
+              {vibeContext?.previewUrl && journeyMode !== "interactive_edit" ? (
+                <div className="h-full bg-white rounded-lg shadow-sm overflow-hidden">
+                  <iframe
+                    src={vibeContext.previewUrl}
+                    className="w-full h-full border-0"
+                    title="Dashboard Preview"
+                    sandbox="allow-scripts allow-same-origin"
+                  />
+                </div>
+              ) : journeyMode === "interactive_edit" && vibeContext?.previewUrl ? (
+                <div className="h-full flex items-start justify-center py-4">
+                  <ResponsiveDashboardRenderer
+                    spec={{
+                      title: "Dashboard Preview",
+                      components: editWidgets.map((w) => ({
+                        id: w.id,
+                        type: w.kind === "chart" ? "LineChart" : w.kind === "metric" ? "MetricCard" : w.kind === "table" ? "DataTable" : "MetricCard",
+                        props: { title: w.title, hidden: !w.enabled },
+                        layout: { col: 0, row: 0, w: 4, h: 2 },
+                      })),
+                      layout: { columns: 12, gap: 16 },
+                    }}
+                    designTokens={{
+                      colors: { primary: "#3b82f6" },
+                      borderRadius: 8,
+                    }}
+                    deviceMode={deviceMode}
+                    isEditing={true}
+                    onWidgetClick={(widgetId) => {
+                      // Could highlight widget in edit panel
+                      console.log("Widget clicked:", widgetId);
+                    }}
+                  />
+                </div>
+              ) : journeyMode === "build_preview" ? (
+                <div className="flex items-center justify-center h-full">
+                  <div className="text-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                    <p className="text-gray-600">Generating your preview...</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-center h-full text-gray-400">
+                  <p>Preview will appear here once your dashboard is generated</p>
+                </div>
+              )}
+            </div>
           </div>
+
+          {/* Interactive Edit Panel */}
+          <InteractiveEditPanel
+            interfaceId={vibeContext?.interfaceId ?? ""}
+            widgets={editWidgets}
+            palettes={editPalettes}
+            selectedPaletteId={selectedPaletteId}
+            density={editDensity}
+            isOpen={editPanelOpen}
+            isMobile={isMobile}
+            isLoading={editActions.isLoading}
+            onClose={() => setEditPanelOpen(false)}
+            onToggleWidget={(widgetId) => {
+              setEditWidgets((prev) =>
+                prev.map((w) => (w.id === widgetId ? { ...w, enabled: !w.enabled } : w))
+              );
+              editActions.toggleWidget(widgetId);
+            }}
+            onRenameWidget={(widgetId, title) => {
+              setEditWidgets((prev) =>
+                prev.map((w) => (w.id === widgetId ? { ...w, title } : w))
+              );
+              editActions.renameWidget(widgetId, title);
+            }}
+            onChartTypeChange={(widgetId, chartType) => {
+              setEditWidgets((prev) =>
+                prev.map((w) => (w.id === widgetId ? { ...w, chartType } : w))
+              );
+              editActions.changeChartType(widgetId, chartType);
+            }}
+            onReorderWidgets={handleReorderWidgets}
+            onDensityChange={(density) => {
+              setEditDensity(density);
+              editActions.setDensity(density);
+            }}
+            onPaletteChange={(paletteId) => {
+              setSelectedPaletteId(paletteId);
+              editActions.setPalette(paletteId);
+            }}
+          />
 
           {view === "publish" && (
             <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-indigo-50 to-purple-50">
