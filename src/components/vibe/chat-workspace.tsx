@@ -351,6 +351,28 @@ export function ChatWorkspace({
             trySetPreview(fullMatch, extractedInterfaceId, extractedVersionId);
           }
         }
+
+        // ── Strategy 5: delegateToPlatformMapper wrapper tool ──
+        // When masterRouterAgent delegates to platformMappingMaster, the previewUrl
+        // is returned in the wrapper tool's output as tool-{toolId} type
+        if (
+          partType === "tool-delegateToPlatformMapper" &&
+          part?.state === "output-available"
+        ) {
+          const output = part?.output;
+          if (output?.previewUrl && output?.success) {
+            // Extract interfaceId and versionId from the URL if not provided directly
+            const urlMatch = String(output.previewUrl).match(/\/preview\/([a-f0-9-]+)\/([a-f0-9-]+)/);
+            if (urlMatch) {
+              const [, extractedInterfaceId, extractedVersionId] = urlMatch;
+              trySetPreview(
+                output.previewUrl,
+                output.interfaceId ?? extractedInterfaceId,
+                output.previewVersionId ?? extractedVersionId
+              );
+            }
+          }
+        }
       }
 
       // ── Fallback: Check toolInvocations array (AI SDK v4 compat) ──
