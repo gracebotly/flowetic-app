@@ -1,6 +1,8 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { platformMappingMaster } from "../../agents/platformMappingMaster";
+import { advancePhase } from "../journey/advancePhase";
+import { todoComplete } from "../todo";
 
 export const delegateToPlatformMapper = createTool({
   id: "delegateToPlatformMapper",
@@ -81,6 +83,13 @@ DO NOT try to generate previews yourself — always delegate to this specialist.
         maxSteps: 8, // Keep at 8 for autonomous execution (per agent_research.md)
         toolChoice: "auto",
         requestContext: context?.requestContext,
+        // Pass parent tools that sub-agent needs but doesn't have in its config
+        toolsets: {
+          parentTools: {
+            advancePhase,
+            todoComplete,
+          },
+        },
         memory: {
           resource: userId,
           thread: threadId,

@@ -59,16 +59,13 @@ export async function initUIUXSearch(): Promise<void> {
 
 /**
  * Load UI/UX rows from Supabase instead of parsing CSV files.
- * This avoids CSV parsing issues with malformed icons.csv and web-interface.csv
- * (unescaped quotes, inconsistent column counts).
- *
- * The data was imported to Supabase with relaxed CSV options, so it's already clean.
+ * Delegates to the canonical loadUIUXCSV which handles:
+ * - uiux_data table queries
+ * - In-memory caching
+ * - Double-stringify JSONB handling
+ * - Error handling
  */
 async function loadCSV(domain: string): Promise<Record<string, string>[]> {
-  // Delegate to the canonical Supabase loader which handles:
-  // - uiux_data table queries
-  // - In-memory caching
-  // - Error handling
   const { loadUIUXCSV } = await import('./loadUIUXCSV');
   return loadUIUXCSV(domain);
 }
