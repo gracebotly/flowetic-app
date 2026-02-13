@@ -67,6 +67,15 @@ Without calling this tool, the phase stays stuck and instructions won't update.`
     // Update RequestContext for this request
     context?.requestContext?.set('phase', nextPhase);
 
+    // Verify the update took effect
+    const verifyPhase = context?.requestContext?.get('phase');
+    console.log('[advancePhase] RequestContext updated:', {
+      previousPhase: currentPhase,
+      targetPhase: nextPhase,
+      verifyRead: verifyPhase,
+      match: verifyPhase === nextPhase,
+    });
+
     if (selectedValue) {
       if (nextPhase === 'style') context?.requestContext?.set('selectedOutcome', selectedValue);
       if (nextPhase === 'build_preview') context?.requestContext?.set('selectedStyleBundleId', selectedValue);
@@ -132,31 +141,21 @@ Without calling this tool, the phase stays stuck and instructions won't update.`
           // CRITICAL: Verify the update actually persisted the correct phase
           if (updateError) {
             console.error('[advancePhase] DB update error:', updateError.message);
-            // Don't silently fail - this is why phase keeps resetting
-            throw new Error(`[advancePhase] Failed to persist phase: ${updateError.message}`);
-          } else if (!updateResult) {
-            console.error('[advancePhase] DB update matched 0 rows:', {
-              queryColumn,
-              queryValue,
-              tenantId,
-              nextPhase,
-              hint: 'Session may not exist or tenant mismatch',
-            });
-            throw new Error(`[advancePhase] No session found to update for ${queryColumn}=${queryValue}`);
-          } else if (updateResult.mode !== nextPhase) {
-            console.error('[advancePhase] Phase mismatch after update:', {
-              expected: nextPhase,
-              actual: updateResult.mode,
-              sessionId: updateResult.id,
-            });
-            throw new Error(`[advancePhase] Phase not persisted: expected ${nextPhase}, got ${updateResult.mode}`);
-          } else {
-            console.log('[advancePhase] DB update verified:', {
-              sessionId: updateResult.id,
-              newPhase: nextPhase,
-              verified: true,
-            });
+            // Don't silently fail - return error so agent knows phase didn't change
+            return {
+              success: false,
+              previousPhase: currentPhase,
+              currentPhase: currentPhase,
+              message: `Phase update failed: ${updateError.message}`,
+            };
           }
+
+          // Log successful DB update
+          console.log('[advancePhase] DB update successful:', {
+            rowId: updateResult?.id,
+            newMode: updateResult?.mode,
+            expected: nextPhase,
+          });
         }
       } catch (err) {
         console.warn('[advancePhase] Persistence failed (non-blocking):', err);

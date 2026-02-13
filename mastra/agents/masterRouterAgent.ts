@@ -51,6 +51,9 @@ import { suggestAction } from "../tools/suggestAction";
 // Design system workflow
 import { runDesignSystemWorkflow } from "../tools/design";
 
+// Interactive edit panel
+import { showInteractiveEditPanel } from "../tools/editor";
+
 export const masterRouterAgent: Agent = new Agent({
   id: "masterRouterAgent",
   name: "masterRouterAgent",
@@ -361,5 +364,7 @@ export const masterRouterAgent: Agent = new Agent({
     suggestAction,
     // Design system workflow
     runDesignSystemWorkflow,
+    // Interactive edit panel
+    showInteractiveEditPanel,
   },
 });

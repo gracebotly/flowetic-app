@@ -99,10 +99,12 @@ DO NOT try to generate previews yourself — always delegate to this specialist.
           // AI SDK v5 / Mastra structure varies - check multiple property paths
           const toolNames = (toolCalls ?? []).map((tc) => {
             const call = tc as any;
-            // Debug: Log actual structure on first unknown to diagnose
-            if (!call.toolName && !call.name && process.env.DEBUG_TOOL_CALLS === 'true') {
-              console.log('[delegateToPlatformMapper] Unknown tool call structure:', JSON.stringify(call, null, 2));
+
+            // AI SDK v5: Tool calls may have `type: 'tool-{toolName}'` format
+            if (call.type && typeof call.type === 'string' && call.type.startsWith('tool-')) {
+              return call.type.replace('tool-', '');
             }
+
             // Try multiple property paths for tool name extraction
             const name =
               call.toolName ??              // Mastra standard
@@ -110,8 +112,15 @@ DO NOT try to generate previews yourself — always delegate to this specialist.
               call.tool?.name ??            // Nested tool object
               call.function?.name ??        // OpenAI-style function calling
               call.toolCall?.toolName ??    // Wrapped structure
+              call.id?.replace?.('call_', '') ?? // Extract from call ID if available
               (typeof call === 'string' ? call : null) ??  // String tool name
               'unknown';
+
+            // Debug: Log actual structure if still unknown
+            if (name === 'unknown' && process.env.DEBUG_TOOL_CALLS === 'true') {
+              console.log('[delegateToPlatformMapper] Unknown tool call structure:', JSON.stringify(call, null, 2));
+            }
+
             return String(name);
           });
           console.log('[delegateToPlatformMapper] Step completed:', {
@@ -157,6 +166,14 @@ DO NOT try to generate previews yourself — always delegate to this specialist.
         }
       }
 
+      // Log successful extraction for debugging
+      console.log('[delegateToPlatformMapper] Returning result:', {
+        success: true,
+        hasPreviewUrl: !!previewUrl,
+        previewUrl: previewUrl ? `${previewUrl.substring(0, 50)}...` : undefined,
+        interfaceId,
+        previewVersionId,
+      });
       return {
         success: true,
         response: result.text || "Platform mapping completed.",

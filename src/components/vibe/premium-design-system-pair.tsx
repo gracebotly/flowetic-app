@@ -2,13 +2,40 @@
 
 import { motion } from "framer-motion";
 import { Card } from "@tremor/react";
-import { Palette, ChevronDown, ChevronUp, MoreHorizontal } from "lucide-react";
+import {
+  Palette,
+  ChevronDown,
+  ChevronUp,
+  MoreHorizontal,
+  Sparkles,
+  Gem,
+  Layers,
+  Zap,
+  Crown,
+  Star,
+  Heart,
+  type LucideIcon,
+} from "lucide-react";
+
+// Icon mapping for design system styles
+const STYLE_ICONS: Record<string, LucideIcon> = {
+  Palette,
+  Sparkles,
+  Gem,
+  Layers,
+  Zap,
+  Crown,
+  Star,
+  Heart,
+};
+
+const DEFAULT_ICON = Palette;
 import { useState } from "react";
 
 interface DesignSystem {
   id: string;
   name: string;
-  emoji: string;
+  icon: string; // Lucide icon name
   colors: string;
   style: string;
   typography: string;
@@ -60,13 +87,16 @@ export function PremiumDesignSystemPair({
               >
                 <div className="flex items-start gap-3">
                   <motion.div
-                    className="text-3xl"
+                    className="w-12 h-12 rounded-xl bg-gradient-to-br from-violet-100 to-purple-100 flex items-center justify-center"
                     animate={
-                      hoveredId === system.id ? { rotate: [0, 10, -10, 0] } : {}
+                      hoveredId === system.id ? { scale: [1, 1.1, 1] } : {}
                     }
-                    transition={{ duration: 0.5 }}
+                    transition={{ duration: 0.3 }}
                   >
-                    {system.emoji}
+                    {(() => {
+                      const IconComponent = STYLE_ICONS[system.icon] || DEFAULT_ICON;
+                      return <IconComponent className="w-6 h-6 text-violet-600" />;
+                    })()}
                   </motion.div>
                   <div>
                     <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
