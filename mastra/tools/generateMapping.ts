@@ -41,8 +41,8 @@ export const generateMapping = createTool({
       // workflow-dashboard fields
       'workflow_id': ['threadid', 'thread_id', 'runid', 'run_id', 'executionid', 'execution_id', 'id', 'sourceid', 'source_id'],
       'status': ['kind', 'state', 'status', 'result', 'outcome', 'execution_status'],
-      'started_at': ['createdat', 'created_at', 'timestamp', 'start_time', 'started_at', 'begin', 'time'],
-      'ended_at': ['updatedat', 'updated_at', 'completed_at', 'end_time', 'ended_at', 'finish'],
+      'started_at': ['started_at', 'startedAt', 'start_time', 'startTime', 'created_at', 'createdAt', 'timestamp', 'start'],
+      'ended_at': ['ended_at', 'endedAt', 'end_time', 'endTime', 'finished_at', 'finishedAt', 'completed_at', 'completedAt', 'stoppedAt', 'stopped_at', 'end'],
       // voice-agent-dashboard fields
       'call_id': ['threadid', 'thread_id', 'callid', 'call_id', 'id', 'sessionid', 'session_id'],
       'duration': ['duration', 'call_duration', 'length', 'elapsed', 'duration_seconds', 'call_duration_seconds', 'call_length'],

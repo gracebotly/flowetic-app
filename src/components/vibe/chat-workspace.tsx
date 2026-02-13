@@ -392,6 +392,40 @@ export function ChatWorkspace({
     }
   }, [dedupedMessages]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Fetch dashboard spec when interfaceId/versionId are set ──
+  useEffect(() => {
+    const fetchDashboardSpec = async () => {
+      if (!vibeContext?.interfaceId || !vibeContext?.previewVersionId) {
+        return;
+      }
+
+      try {
+        const res = await fetch(
+          `/api/interfaces/${vibeContext.interfaceId}/versions/${vibeContext.previewVersionId}`
+        );
+
+        if (!res.ok) {
+          console.error('[fetchDashboardSpec] Failed to fetch spec:', res.status);
+          return;
+        }
+
+        const data = await res.json();
+        console.log('[fetchDashboardSpec] Loaded spec:', {
+          interfaceId: vibeContext.interfaceId,
+          versionId: vibeContext.previewVersionId,
+          componentCount: data.spec_json?.components?.length ?? 0,
+        });
+
+        setLoadedSpec(data.spec_json);
+        setLoadedDesignTokens(data.design_tokens);
+      } catch (error) {
+        console.error('[fetchDashboardSpec] Error:', error);
+      }
+    };
+
+    fetchDashboardSpec();
+  }, [vibeContext?.interfaceId, vibeContext?.previewVersionId]);
+
   async function sendAi(text: string, extraData?: Record<string, any>) {
     if (uiStatus === 'streaming') {
       console.warn('[sendAi] Blocked: already streaming');
@@ -641,6 +675,8 @@ export function ChatWorkspace({
 
   // Edit panel data (populated from interactive_edit_panel tool result)
   const [editWidgets, setEditWidgets] = useState<WidgetConfig[]>([]);
+  const [loadedSpec, setLoadedSpec] = useState<any>(null);
+  const [loadedDesignTokens, setLoadedDesignTokens] = useState<any>(null);
   const [editPalettes, setEditPalettes] = useState<Palette[]>([]);
   const [editDensity, setEditDensity] = useState<Density>("comfortable");
   const [selectedPaletteId, setSelectedPaletteId] = useState<string | null>(null);
@@ -1747,7 +1783,7 @@ return (
               ) : journeyMode === "interactive_edit" && vibeContext?.previewUrl ? (
                 <div className="h-full flex items-start justify-center py-4">
                   <ResponsiveDashboardRenderer
-                    spec={{
+                    spec={loadedSpec ?? {
                       title: "Dashboard Preview",
                       components: editWidgets.map((w) => ({
                         id: w.id,
@@ -1757,7 +1793,7 @@ return (
                       })),
                       layout: { columns: 12, gap: 16 },
                     }}
-                    designTokens={{
+                    designTokens={loadedDesignTokens ?? {
                       colors: { primary: "#3b82f6" },
                       borderRadius: 8,
                     }}
