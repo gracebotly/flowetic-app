@@ -1,13 +1,42 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Check, RefreshCw, ChevronDown, ChevronUp } from "lucide-react";
+import {
+  Check,
+  RefreshCw,
+  ChevronDown,
+  ChevronUp,
+  Palette,
+  Sparkles,
+  Gem,
+  Layers,
+  Zap,
+  Crown,
+  Star,
+  Heart,
+  type LucideIcon,
+} from "lucide-react";
+
+// Icon mapping for design system styles
+const STYLE_ICONS: Record<string, LucideIcon> = {
+  Palette,
+  Sparkles,
+  Gem,
+  Layers,
+  Zap,
+  Crown,
+  Star,
+  Heart,
+};
+
+// Default icon if name not found
+const DEFAULT_ICON = Palette;
 import { useState } from "react";
 
 interface DesignSystem {
   id: string;
   name: string;
-  emoji: string;
+  icon: string; // Lucide icon name (e.g., "Palette", "Sparkles", "Gem")
   colors: string;
   style: string;
   typography: string;
@@ -42,7 +71,14 @@ export function DesignSystemPair({ systems, onSelect, onShowMore, hasMore = true
             {/* Header */}
             <div className="flex items-start justify-between mb-3">
               <div className="flex items-center gap-2">
-                <span className="text-2xl">{system.emoji}</span>
+                {(() => {
+                  const IconComponent = STYLE_ICONS[system.icon] || DEFAULT_ICON;
+                  return (
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center">
+                      <IconComponent className="w-5 h-5 text-blue-400" />
+                    </div>
+                  );
+                })()}
                 <div>
                   <h4 className="text-sm font-semibold text-white">
                     OPTION {index + 1}: {system.name}
@@ -149,3 +185,5 @@ export function DesignSystemPair({ systems, onSelect, onShowMore, hasMore = true
     </div>
   );
 }
+
+export type { DesignSystem };

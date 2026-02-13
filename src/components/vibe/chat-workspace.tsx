@@ -135,7 +135,7 @@ type ToolUiPayload =
 type DesignSystem = {
   id: string;
   name: string;
-  emoji: string;
+  icon: string; // Lucide icon name (e.g., "Palette", "Sparkles")
   colors: string;
   style: string;
   typography: string;
