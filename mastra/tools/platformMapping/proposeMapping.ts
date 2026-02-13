@@ -44,13 +44,17 @@ export const proposeMapping = createTool({
 
     const mappings: Record<string, string> = {};
 
-    const timestamp = findFirst(["timestamp", "created_at", "createdat", "time", "event_time"]);
-    const duration = findFirst(["call_duration", "duration", "call_length", "duration_seconds", "call_duration_seconds"]);
+    const timestamp = findFirst(["timestamp", "created_at", "createdat", "time", "event_time", "started_at", "startedat", "ended_at", "executed_at", "finished_at"]);
+    const duration = findFirst(["call_duration", "duration", "call_length", "duration_seconds", "call_duration_seconds", "duration_ms"]);
     const status = findFirst(["status", "call_status", "outcome", "execution_status"]);
+    const startedAt = findFirst(["started_at", "startedat", "start_time", "starttime"]);
+    const endedAt = findFirst(["ended_at", "endedat", "end_time", "endtime", "stopped_at", "stoppedAt", "finished_at"]);
 
     if (timestamp) mappings.timestamp = timestamp;
     if (duration) mappings.duration = duration;
     if (status) mappings.status = status;
+    if (startedAt) mappings.started_at = startedAt;
+    if (endedAt) mappings.ended_at = endedAt;
 
     const missingFields = required.filter((r) => !mappings[r]);
 

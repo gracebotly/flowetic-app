@@ -99,28 +99,27 @@ DO NOT try to generate previews yourself — always delegate to this specialist.
           // AI SDK v5 / Mastra structure varies - check multiple property paths
           const toolNames = (toolCalls ?? []).map((tc) => {
             const call = tc as any;
-
-            // AI SDK v5: Tool calls may have `type: 'tool-{toolName}'` format
-            if (call.type && typeof call.type === 'string' && call.type.startsWith('tool-')) {
+            // CRITICAL: Check toolName FIRST - call.type is 'tool-call' (generic literal) in AI SDK v5
+            // The actual tool name is in call.toolName, NOT encoded in call.type
+            if (call.toolName) {
+              return String(call.toolName);
+            }
+            // Fallback: Check if type encodes the tool name (some providers use 'tool-{name}')
+            // But guard against 'tool-call' which is the generic type discriminator
+            if (call.type && typeof call.type === 'string' && call.type.startsWith('tool-') && call.type !== 'tool-call') {
               return call.type.replace('tool-', '');
             }
-
-            // Try multiple property paths for tool name extraction
+            // Try remaining property paths
             const name =
-              call.toolName ??              // Mastra standard
-              call.name ??                  // Alternative
+              call.name ??                  // Alternative property
               call.tool?.name ??            // Nested tool object
               call.function?.name ??        // OpenAI-style function calling
               call.toolCall?.toolName ??    // Wrapped structure
-              call.id?.replace?.('call_', '') ?? // Extract from call ID if available
-              (typeof call === 'string' ? call : null) ??  // String tool name
+              (typeof call === 'string' ? call : null) ??
               'unknown';
-
-            // Debug: Log actual structure if still unknown
             if (name === 'unknown' && process.env.DEBUG_TOOL_CALLS === 'true') {
               console.log('[delegateToPlatformMapper] Unknown tool call structure:', JSON.stringify(call, null, 2));
             }
-
             return String(name);
           });
           console.log('[delegateToPlatformMapper] Step completed:', {
@@ -140,10 +139,12 @@ DO NOT try to generate previews yourself — always delegate to this specialist.
       if (result.toolResults && Array.isArray(result.toolResults)) {
         for (const tr of result.toolResults) {
           const toolResult = tr as any;
-          if (toolResult.toolName === 'runGeneratePreviewWorkflow' && toolResult.result?.success) {
-            previewUrl = toolResult.result.previewUrl;
-            previewVersionId = toolResult.result.previewVersionId;
-            interfaceId = toolResult.result.interfaceId;
+          // AI SDK v5: tool results use .output (not .result)
+          const output = toolResult.output;
+          if (toolResult.toolName === 'runGeneratePreviewWorkflow' && output?.success) {
+            previewUrl = output.previewUrl;
+            previewVersionId = output.previewVersionId;
+            interfaceId = output.interfaceId;
           }
         }
       }
@@ -156,10 +157,12 @@ DO NOT try to generate previews yourself — always delegate to this specialist.
           if (Array.isArray(toolResults)) {
             for (const tr of toolResults) {
               const toolResult = tr as any;
-              if (toolResult.toolName === 'runGeneratePreviewWorkflow' && toolResult.result?.success) {
-                previewUrl = toolResult.result.previewUrl;
-                previewVersionId = toolResult.result.previewVersionId;
-                interfaceId = toolResult.result.interfaceId;
+              // AI SDK v5: tool results use .output (not .result)
+              const output = toolResult.output;
+              if (toolResult.toolName === 'runGeneratePreviewWorkflow' && output?.success) {
+                previewUrl = output.previewUrl;
+                previewVersionId = output.previewVersionId;
+                interfaceId = output.interfaceId;
               }
             }
           }

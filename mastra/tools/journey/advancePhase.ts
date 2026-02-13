@@ -85,8 +85,13 @@ Without calling this tool, the phase stays stuck and instructions won't update.`
     const accessToken = context?.requestContext?.get('supabaseAccessToken') as string;
     const tenantId = context?.requestContext?.get('tenantId') as string;
     // Get both thread IDs - they map to different columns
-    const journeyThreadId = context?.requestContext?.get('journeyThreadId') as string | undefined;
-    const mastraThreadId = context?.requestContext?.get('threadId') as string | undefined;
+    const rawJourneyThreadId = context?.requestContext?.get('journeyThreadId') as string | undefined;
+    const rawMastraThreadId = context?.requestContext?.get('threadId') as string | undefined;
+    // Extract clean UUID from potentially corrupted compound IDs (e.g., "uuid:nanoid")
+    // Mastra Memory.createThread() can return compound format that fails strict UUID_RE
+    const UUID_EXTRACT_RE = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
+    const journeyThreadId = rawJourneyThreadId?.match(UUID_EXTRACT_RE)?.[1] ?? rawJourneyThreadId;
+    const mastraThreadId = rawMastraThreadId?.match(UUID_EXTRACT_RE)?.[1] ?? rawMastraThreadId;
 
     if (accessToken && tenantId && (journeyThreadId || mastraThreadId)) {
       try {
@@ -130,18 +135,20 @@ Without calling this tool, the phase stays stuck and instructions won't update.`
 
           // BUG FIX: Use OR query to match EITHER thread_id OR mastra_thread_id
           // This ensures we update regardless of which ID was used to create the session
+          // ATOMIC CONDITIONAL UPDATE (CAS pattern)
+          // .eq('mode', currentPhase) acts as a guard — only updates if phase hasn't been
+          // changed by a concurrent request. If no rows match, data is null (not an error).
           const { data: updateResult, error: updateError } = await supabase
             .from('journey_sessions')
             .update(updateData)
             .eq('tenant_id', tenantId)
+            .eq('mode', currentPhase)  // CAS GUARD: prevents race conditions
             .or(`thread_id.eq.${queryValue},mastra_thread_id.eq.${queryValue}`)
             .select('id, mode')
             .maybeSingle();
 
-          // CRITICAL: Verify the update actually persisted the correct phase
           if (updateError) {
             console.error('[advancePhase] DB update error:', updateError.message);
-            // Don't silently fail - return error so agent knows phase didn't change
             return {
               success: false,
               previousPhase: currentPhase,
@@ -150,12 +157,53 @@ Without calling this tool, the phase stays stuck and instructions won't update.`
             };
           }
 
-          // Log successful DB update
-          console.log('[advancePhase] DB update successful:', {
-            rowId: updateResult?.id,
-            newMode: updateResult?.mode,
-            expected: nextPhase,
-          });
+          // CAS conflict: no rows matched means phase was already changed by another request
+          if (!updateResult) {
+            const { data: freshState } = await supabase
+              .from('journey_sessions')
+              .select('id, mode')
+              .eq('tenant_id', tenantId)
+              .or(`thread_id.eq.${queryValue},mastra_thread_id.eq.${queryValue}`)
+              .maybeSingle();
+
+            if (freshState?.mode === nextPhase) {
+              // Another request already advanced to the same target — treat as success
+              console.log('[advancePhase] Phase already at target (concurrent advance):', {
+                currentPhase: freshState.mode,
+                targetPhase: nextPhase,
+              });
+            } else {
+              console.warn('[advancePhase] Race condition detected:', {
+                expectedPhase: currentPhase,
+                actualPhase: freshState?.mode,
+                attemptedPhase: nextPhase,
+              });
+              return {
+                success: false,
+                previousPhase: currentPhase,
+                currentPhase: freshState?.mode || currentPhase,
+                message: `Phase conflict: expected '${currentPhase}' but DB has '${freshState?.mode}'. Another request already changed the phase.`,
+              };
+            }
+          } else if (updateResult.mode !== nextPhase) {
+            console.error('[advancePhase] Phase mismatch after update:', {
+              expected: nextPhase,
+              actual: updateResult.mode,
+              sessionId: updateResult.id,
+            });
+            return {
+              success: false,
+              previousPhase: currentPhase,
+              currentPhase: updateResult.mode,
+              message: `Phase verification failed: expected '${nextPhase}' but got '${updateResult.mode}'`,
+            };
+          } else {
+            console.log('[advancePhase] DB update verified:', {
+              sessionId: updateResult.id,
+              newPhase: nextPhase,
+              verified: true,
+            });
+          }
         }
       } catch (err) {
         console.warn('[advancePhase] Persistence failed (non-blocking):', err);
