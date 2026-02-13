@@ -99,28 +99,19 @@ DO NOT try to generate previews yourself — always delegate to this specialist.
           // AI SDK v5 / Mastra structure varies - check multiple property paths
           const toolNames = (toolCalls ?? []).map((tc) => {
             const call = tc as any;
-
-            // AI SDK v5: Tool calls may have `type: 'tool-{toolName}'` format
-            if (call.type && typeof call.type === 'string' && call.type.startsWith('tool-')) {
-              return call.type.replace('tool-', '');
-            }
-
-            // Try multiple property paths for tool name extraction
+            // AI SDK v5: call.toolName is the canonical property
+            if (call.toolName) return String(call.toolName);
+            // Fallback paths
             const name =
-              call.toolName ??              // Mastra standard
-              call.name ??                  // Alternative
-              call.tool?.name ??            // Nested tool object
-              call.function?.name ??        // OpenAI-style function calling
-              call.toolCall?.toolName ??    // Wrapped structure
-              call.id?.replace?.('call_', '') ?? // Extract from call ID if available
-              (typeof call === 'string' ? call : null) ??  // String tool name
+              call.name ??
+              call.tool?.name ??
+              call.function?.name ??
+              call.toolCall?.toolName ??
+              (typeof call === 'string' ? call : null) ??
               'unknown';
-
-            // Debug: Log actual structure if still unknown
-            if (name === 'unknown' && process.env.DEBUG_TOOL_CALLS === 'true') {
+            if (name === 'unknown') {
               console.log('[delegateToPlatformMapper] Unknown tool call structure:', JSON.stringify(call, null, 2));
             }
-
             return String(name);
           });
           console.log('[delegateToPlatformMapper] Step completed:', {
@@ -130,25 +121,44 @@ DO NOT try to generate previews yourself — always delegate to this specialist.
         },
       });
 
-      // Extract structured workflow results from sub-agent tool calls
-      // The sub-agent calls runGeneratePreviewWorkflow which returns previewUrl/previewVersionId
-      // but result.text only contains prose — we need the actual tool output
+      // === EXTRACTION: Try multiple paths to find previewUrl from sub-agent results ===
+
+      // DEBUG: Log available result keys so we can see what the sub-agent actually returns
+      console.log('[delegateToPlatformMapper] Result keys:', Object.keys(result));
+      console.log('[delegateToPlatformMapper] toolResults type:', typeof result.toolResults, Array.isArray(result.toolResults) ? `(${result.toolResults.length} items)` : '');
+      console.log('[delegateToPlatformMapper] steps type:', typeof result.steps, Array.isArray(result.steps) ? `(${result.steps.length} items)` : '');
+
       let previewUrl: string | undefined;
       let previewVersionId: string | undefined;
       let interfaceId: string | undefined;
 
+      // Path 1: result.toolResults (top-level tool results)
       if (result.toolResults && Array.isArray(result.toolResults)) {
         for (const tr of result.toolResults) {
           const toolResult = tr as any;
-          if (toolResult.toolName === 'runGeneratePreviewWorkflow' && toolResult.result?.success) {
-            previewUrl = toolResult.result.previewUrl;
-            previewVersionId = toolResult.result.previewVersionId;
-            interfaceId = toolResult.result.interfaceId;
+          console.log('[delegateToPlatformMapper] toolResult:', {
+            toolName: toolResult.toolName,
+            hasOutput: !!toolResult.output,
+            hasResult: !!toolResult.result,
+            keys: Object.keys(toolResult),
+          });
+          // Try .output first (AI SDK v5), then .result (AI SDK v4 / Mastra)
+          const payload = toolResult.output ?? toolResult.result;
+          if (toolResult.toolName === 'runGeneratePreviewWorkflow' && payload?.success) {
+            previewUrl = payload.previewUrl;
+            previewVersionId = payload.previewVersionId;
+            interfaceId = payload.interfaceId;
+          }
+          // Also check persistPreviewVersion which is the inner tool that actually has the URL
+          if (toolResult.toolName === 'persistPreviewVersion' && (payload?.previewUrl || payload?.interfaceId)) {
+            previewUrl = previewUrl || payload.previewUrl;
+            previewVersionId = previewVersionId || payload.previewVersionId || payload.versionId;
+            interfaceId = interfaceId || payload.interfaceId;
           }
         }
       }
 
-      // Also check steps array (Mastra v1 may use this structure)
+      // Path 2: result.steps[].toolResults (step-level tool results)
       if (!previewUrl && result.steps && Array.isArray(result.steps)) {
         for (const step of result.steps) {
           const stepData = step as any;
@@ -156,13 +166,30 @@ DO NOT try to generate previews yourself — always delegate to this specialist.
           if (Array.isArray(toolResults)) {
             for (const tr of toolResults) {
               const toolResult = tr as any;
-              if (toolResult.toolName === 'runGeneratePreviewWorkflow' && toolResult.result?.success) {
-                previewUrl = toolResult.result.previewUrl;
-                previewVersionId = toolResult.result.previewVersionId;
-                interfaceId = toolResult.result.interfaceId;
+              const payload = toolResult.output ?? toolResult.result;
+              if (toolResult.toolName === 'runGeneratePreviewWorkflow' && payload?.success) {
+                previewUrl = payload.previewUrl;
+                previewVersionId = payload.previewVersionId;
+                interfaceId = payload.interfaceId;
+              }
+              if (toolResult.toolName === 'persistPreviewVersion' && (payload?.previewUrl || payload?.interfaceId)) {
+                previewUrl = previewUrl || payload.previewUrl;
+                previewVersionId = previewVersionId || payload.previewVersionId || payload.versionId;
+                interfaceId = interfaceId || payload.interfaceId;
               }
             }
           }
+        }
+      }
+
+      // Path 3: Parse previewUrl from result.text as last resort
+      if (!previewUrl && result.text) {
+        const urlMatch = result.text.match(/\/preview\/([a-f0-9-]+)\/([a-f0-9-]+)/);
+        if (urlMatch) {
+          previewUrl = urlMatch[0];
+          interfaceId = urlMatch[1];
+          previewVersionId = urlMatch[2];
+          console.log('[delegateToPlatformMapper] Extracted previewUrl from text:', previewUrl);
         }
       }
 

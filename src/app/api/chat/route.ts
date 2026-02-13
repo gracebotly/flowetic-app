@@ -180,7 +180,12 @@ export async function POST(req: Request) {
     // but the client doesn't update journeyMode before the next request.
     // BUG FIX: Query BOTH thread_id AND mastra_thread_id columns since advancePhase
     // may write to either depending on which ID was available.
-    if (clientJourneyThreadId && clientJourneyThreadId !== 'default-thread') {
+    // Extract clean UUIDs from potentially corrupted compound IDs (e.g., "uuid:nanoid")
+    // Mastra Memory.createThread() can return compound format
+    const UUID_EXTRACT_RE = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
+    const cleanJourneyThreadId = clientJourneyThreadId?.match(UUID_EXTRACT_RE)?.[1] ?? clientJourneyThreadId;
+    const cleanMastraThreadId = mastraThreadId?.match(UUID_EXTRACT_RE)?.[1] ?? mastraThreadId;
+    if (cleanJourneyThreadId && cleanJourneyThreadId !== 'default-thread') {
       try {
         // Query by thread_id first (primary), then fallback to mastra_thread_id
         let sessionRow = null;
@@ -188,7 +193,7 @@ export async function POST(req: Request) {
         const { data: byThreadId } = await supabase
           .from('journey_sessions')
           .select('id, mode, preview_interface_id')
-          .eq('thread_id', clientJourneyThreadId)
+          .eq('thread_id', cleanJourneyThreadId)
           .eq('tenant_id', tenantId)
           .maybeSingle();
 
@@ -199,7 +204,7 @@ export async function POST(req: Request) {
           const { data: byMastraId } = await supabase
             .from('journey_sessions')
             .select('id, mode, preview_interface_id')
-            .eq('mastra_thread_id', mastraThreadId)
+            .eq('mastra_thread_id', cleanMastraThreadId)
             .eq('tenant_id', tenantId)
             .maybeSingle();
           sessionRow = byMastraId;

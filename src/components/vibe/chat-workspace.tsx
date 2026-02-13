@@ -53,6 +53,7 @@ import {
   type Density,
 } from "@/components/vibe/editor";
 import { ResponsiveDashboardRenderer } from "@/components/preview/ResponsiveDashboardRenderer";
+import { EmptyPreviewState } from './EmptyPreviewState';
 import { useEditActions } from "@/hooks/useEditActions";
 
 type ViewMode = "terminal" | "preview" | "publish";
@@ -227,31 +228,6 @@ export function ChatWorkspace({
             console.log('[onFinish] Phase update detected (v5):', part.output.currentPhase);
             setJourneyMode(part.output.currentPhase);
           }
-          // ✅ Legacy AI SDK v4 format (fallback)
-          if (
-            part?.type === 'tool-invocation' &&
-            part?.toolName === 'advancePhase' &&
-            part?.state === 'result' &&
-            part?.result?.success &&
-            part?.result?.currentPhase
-          ) {
-            console.log('[onFinish] Phase update detected (v4):', part.result.currentPhase);
-            setJourneyMode(part.result.currentPhase);
-          }
-        }
-      }
-      // Fallback: AI SDK v4 compatibility (if toolInvocations array exists)
-      if ((message as any).toolInvocations) {
-        for (const invocation of (message as any).toolInvocations) {
-          if (
-            invocation.toolName === 'advancePhase' &&
-            invocation.state === 'result' &&
-            invocation.result?.success &&
-            invocation.result?.currentPhase
-          ) {
-            console.log('[onFinish] Phase update detected (toolInvocations):', invocation.result.currentPhase);
-            setJourneyMode(invocation.result.currentPhase);
-          }
         }
       }
     },
@@ -312,33 +288,35 @@ export function ChatWorkspace({
       if (!Array.isArray(parts)) continue;
 
       for (const part of parts) {
-        // ── Strategy 1: Direct tool-invocation parts (AI SDK v5) ──
+        // Guard: skip undefined/null parts to prevent TypeError on .state access
+        if (!part || typeof part !== 'object') continue;
+
+        const partType = String(part?.type ?? "");
+
+        // ── Strategy 1: Direct tool parts — savePreviewVersion / persistPreviewVersion (v5) ──
         if (
-          part?.type === "tool-invocation" &&
-          part?.state === "result" &&
-          (part?.toolName === "savePreviewVersion" || part?.toolName === "persistPreviewVersion")
+          (partType === "tool-savePreviewVersion" || partType === "tool-persistPreviewVersion") &&
+          part?.state === "output-available"
         ) {
-          const result = part?.result;
-          if (result?.previewUrl) {
-            trySetPreview(result.previewUrl, result.interfaceId, result.versionId);
+          const output = part?.output;
+          if (output?.previewUrl) {
+            trySetPreview(output.previewUrl, output.interfaceId ?? "", output.versionId ?? "");
           }
         }
 
-        // ── Strategy 2: Workflow wrapper tool (runGeneratePreviewWorkflow) ──
+        // ── Strategy 2: Workflow wrapper tool — runGeneratePreviewWorkflow (v5) ──
         if (
-          part?.type === "tool-invocation" &&
-          part?.state === "result" &&
-          part?.toolName === "runGeneratePreviewWorkflow"
+          partType === "tool-runGeneratePreviewWorkflow" &&
+          part?.state === "output-available"
         ) {
-          const result = part?.result;
-          if (result?.previewUrl) {
-            trySetPreview(result.previewUrl, result.interfaceId ?? "", result.previewVersionId ?? result.versionId ?? "");
+          const output = part?.output;
+          if (output?.previewUrl) {
+            trySetPreview(output.previewUrl, output.interfaceId ?? "", output.previewVersionId ?? output.versionId ?? "");
           }
         }
 
         // ── Strategy 3: Workflow results streamed as tool-generatePreview ──
         // In AI SDK v5 + Mastra, workflow tools appear as `tool-{toolId}` type parts
-        const partType = String(part?.type ?? "");
         if (
           (partType === "tool-generatePreview" || partType === "tool-runGeneratePreviewWorkflow") &&
           part?.state === "output-available"
@@ -410,43 +388,8 @@ export function ChatWorkspace({
             setEditPanelOpen(true);
           }
         }
-        // Legacy v4 fallback
-        if (
-          part?.type === "tool-invocation" &&
-          part?.state === "result" &&
-          part?.toolName === "showInteractiveEditPanel"
-        ) {
-          const result = part?.result;
-          if (result?.widgets) {
-            setEditWidgets(result.widgets);
-            setEditPalettes(result.palettes || []);
-            setEditDensity(result.density || "comfortable");
-            setSelectedPaletteId(result.selectedPaletteId || null);
-            setEditPanelOpen(true);
-          }
-        }
       }
 
-      // ── Fallback: Check toolInvocations array (AI SDK v4 compat) ──
-      const toolInvocations = (msg as any).toolInvocations;
-      if (Array.isArray(toolInvocations)) {
-        for (const invocation of toolInvocations) {
-          if (
-            (invocation.toolName === "savePreviewVersion" ||
-             invocation.toolName === "persistPreviewVersion" ||
-             invocation.toolName === "runGeneratePreviewWorkflow") &&
-            invocation.state === "result" &&
-            invocation.result?.previewUrl
-          ) {
-            const result = invocation.result;
-            trySetPreview(
-              result.previewUrl,
-              result.interfaceId ?? "",
-              result.versionId ?? result.previewVersionId ?? ""
-            );
-          }
-        }
-      }
     }
   }, [dedupedMessages]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -607,6 +550,29 @@ export function ChatWorkspace({
       case 'show-alternatives':
         await sendAi('Show me alternatives');
         break;
+      case 'view-preview':
+        // Handle preview navigation from suggestAction tool
+        if (payload?.url) {
+          const url = String(payload.url);
+          const urlMatch = url.match(/\/preview\/([a-f0-9-]+)\/([a-f0-9-]+)/);
+          if (urlMatch) {
+            const [fullUrl, extractedInterfaceId, extractedVersionId] = urlMatch;
+            console.log('[handleSuggestedAction] Setting preview from action:', {
+              url: fullUrl,
+              interfaceId: extractedInterfaceId,
+              versionId: extractedVersionId,
+            });
+            setVibeContext((prev) => prev ? {
+              ...prev,
+              previewUrl: fullUrl,
+              interfaceId: extractedInterfaceId,
+              previewVersionId: extractedVersionId,
+            } : prev);
+            setJourneyMode("interactive_edit");
+            setView("preview");
+          }
+        }
+        break;
       default:
         // For backwards compatibility with text-based action labels
         await sendAi(actionId.replace(/-/g, ' '));
@@ -676,6 +642,8 @@ export function ChatWorkspace({
 
   // Edit panel data (populated from interactive_edit_panel tool result)
   const [editWidgets, setEditWidgets] = useState<WidgetConfig[]>([]);
+  const [loadedSpec, setLoadedSpec] = useState<any>(null);
+  const [loadedDesignTokens, setLoadedDesignTokens] = useState<any>(null);
   const [editPalettes, setEditPalettes] = useState<Palette[]>([]);
   const [editDensity, setEditDensity] = useState<Density>("comfortable");
   const [selectedPaletteId, setSelectedPaletteId] = useState<string | null>(null);
@@ -883,6 +851,40 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
       setEditPanelOpen(true);
     }
   }, [journeyMode]);
+
+  // ── Fetch dashboard spec when interfaceId/versionId are set ──
+  useEffect(() => {
+    const fetchDashboardSpec = async () => {
+      if (!vibeContext?.interfaceId || !vibeContext?.previewVersionId) {
+        return;
+      }
+
+      try {
+        const res = await fetch(
+          `/api/interfaces/${vibeContext.interfaceId}/versions/${vibeContext.previewVersionId}`
+        );
+
+        if (!res.ok) {
+          console.error('[fetchDashboardSpec] Failed to fetch spec:', res.status);
+          return;
+        }
+
+        const data = await res.json();
+        console.log('[fetchDashboardSpec] Loaded spec:', {
+          interfaceId: vibeContext.interfaceId,
+          versionId: vibeContext.previewVersionId,
+          componentCount: data.spec_json?.components?.length ?? 0,
+        });
+
+        setLoadedSpec(data.spec_json);
+        setLoadedDesignTokens(data.design_tokens);
+      } catch (error) {
+        console.error('[fetchDashboardSpec] Error:', error);
+      }
+    };
+
+    fetchDashboardSpec();
+  }, [vibeContext?.interfaceId, vibeContext?.previewVersionId]);
 
   useEffect(() => {
     async function initFromSession() {
@@ -1425,24 +1427,8 @@ return (
                               }
                             }
 
-                            // ✅ HIDE: All tool parts
-                            if (part.type?.startsWith('tool-') || part.type === 'tool-call' || part.type === 'tool-result') {
-                              return null;
-                            }
-
-                              // ✅ HIDE: Step-start
-                              if (part.type === 'step-start') {
-                                return null;
-                              }
-
-                              // ✅ HIDE: Reasoning (already rendered above)
-                              if (part.type === 'reasoning') {
-                                return null;
-                              }
-
-
-
                               // ✅ RENDER: suggestAction tool as clickable button
+                              // MUST be before the tool-* catch-all or it's unreachable
                               if (part.type === 'tool-suggestAction' && (part as any).state === 'input-available') {
                                 const input = (part as any).input as { label: string; actionId: string; payload?: Record<string, any> };
                                 return (
@@ -1462,11 +1448,40 @@ return (
                                   </button>
                                 );
                               }
+                            // ✅ HIDE: All tool parts (catch-all — must be AFTER specific tool handlers)
+                            if (part.type?.startsWith('tool-') || part.type === 'tool-call' || part.type === 'tool-result') {
+                              return null;
+                            }
+
+                              // ✅ HIDE: Step-start
+                              if (part.type === 'step-start') {
+                                return null;
+                              }
+
+                              // ✅ HIDE: Reasoning (already rendered above)
+                              if (part.type === 'reasoning') {
+                                return null;
+                              }
 
                               // ✅ SHOW: Text content (with fallback __ACTION__ parser for backwards compatibility)
                               if (part.type === 'text') {
                                 const text = (part as any).text || '';
-                                
+                                // Suppress markdown text that duplicates design system tool output
+                                // already rendered as DesignSystemPair cards above
+                                const hasDesignSystemToolInMessage = m.parts?.some(
+                                  (p) => p.type === 'tool-runDesignSystemWorkflow' &&
+                                         (p as any).state === 'output-available' &&
+                                         (p as any).output?.success &&
+                                         (p as any).output?.designSystem
+                                );
+                                if (hasDesignSystemToolInMessage && (
+                                  text.includes('Style Option') ||
+                                  text.includes('Design Philosophy') ||
+                                  text.includes('design system') ||
+                                  text.includes('Color Palette')
+                                )) {
+                                  return null;
+                                }
                                 // Parse __ACTION__ tokens for backwards compatibility with existing agent responses
                                 const actionPattern = /__ACTION__\n([\s\S]*?)\n__ACTION__/g;
                                 const segments: Array<{ type: 'text' | 'action'; content: string }> = [];
@@ -1734,14 +1749,10 @@ return (
         </div>
 
           {view === "terminal" ? (
-            <div className="flex flex-1 items-center justify-center bg-gray-50">
-              <div className="text-center">
-                <TerminalIcon className="w-12 h-12 mx-auto mb-3 text-gray-400" />
-                <p className="text-sm text-gray-500">
-                  Terminal view removed - all interactions now in chat sidebar
-                </p>
-              </div>
-            </div>
+            <EmptyPreviewState
+              journeyMode={journeyMode}
+              entityName={vibeContext?.displayName}
+            />
           ) : null}
 
           {/* Right Panel - Preview Area */}
@@ -1769,7 +1780,7 @@ return (
               ) : journeyMode === "interactive_edit" && vibeContext?.previewUrl ? (
                 <div className="h-full flex items-start justify-center py-4">
                   <ResponsiveDashboardRenderer
-                    spec={{
+                    spec={loadedSpec ?? {
                       title: "Dashboard Preview",
                       components: editWidgets.map((w) => ({
                         id: w.id,
@@ -1779,7 +1790,7 @@ return (
                       })),
                       layout: { columns: 12, gap: 16 },
                     }}
-                    designTokens={{
+                    designTokens={loadedDesignTokens ?? {
                       colors: { primary: "#3b82f6" },
                       borderRadius: 8,
                     }}
@@ -1799,9 +1810,10 @@ return (
                   </div>
                 </div>
               ) : (
-                <div className="flex items-center justify-center h-full text-gray-400">
-                  <p>Preview will appear here once your dashboard is generated</p>
-                </div>
+                <EmptyPreviewState
+                  journeyMode={journeyMode}
+                  entityName={vibeContext?.displayName}
+                />
               )}
             </div>
           </div>

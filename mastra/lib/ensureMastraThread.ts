@@ -70,9 +70,11 @@ export async function ensureMastraThreadId(params: {
     metadata: { journeyThreadId: params.journeyThreadId },
   });
 
-  const mastraThreadId = thread?.id;
+  const rawMastraThreadId = thread?.id;
+  // CRITICAL: Sanitize the thread ID - Mastra may return 'uuid:nanoid' format
+  const mastraThreadId = safeUuid(rawMastraThreadId);
   if (!mastraThreadId) {
-    throw new Error("ensureMastraThreadId: Memory.createThread returned no id");
+    throw new Error("ensureMastraThreadId: Memory.createThread returned invalid thread id: " + String(rawMastraThreadId));
   }
 
   // 4. UPSERT: Create session if it doesn't exist, or update if it does

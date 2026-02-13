@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo } from "react";
+import { Card, Metric, Text, AreaChart, BarChart, DonutChart } from '@tremor/react';
 import type { DeviceMode } from "@/components/vibe/editor";
 
 interface ComponentSpec {
@@ -188,59 +189,80 @@ function ComponentCard({
         </span>
       </div>
 
-      {/* Placeholder content based on type */}
-      <div className="h-24 bg-gray-50 rounded flex items-center justify-center">
+      {/* Premium content based on type */}
+      <div className="flex-1 min-h-0">
         {type === "MetricCard" ? (
-          <div className="text-center">
-            <div className="text-2xl font-bold text-gray-900">
-              {props?.value ?? "1,234"}
-            </div>
-            <div className="text-xs text-gray-500">
-              {props?.subtitle ?? "Total"}
-            </div>
+          <div className="text-center py-4">
+            <Metric className="text-gray-900">
+              {props?.value ?? "—"}
+            </Metric>
+            <Text className="text-gray-500">
+              {props?.subtitle ?? props?.label ?? "Metric"}
+            </Text>
           </div>
-        ) : type === "LineChart" || type === "BarChart" ? (
-          <svg className="w-full h-full" viewBox="0 0 100 50" preserveAspectRatio="none">
-            {type === "LineChart" ? (
-              <polyline
-                points="0,40 20,30 40,35 60,20 80,25 100,15"
-                fill="none"
-                stroke={primaryColor}
-                strokeWidth="2"
-              />
-            ) : (
-              <>
-                <rect x="10" y="25" width="15" height="25" fill={primaryColor} opacity="0.3" />
-                <rect x="30" y="15" width="15" height="35" fill={primaryColor} opacity="0.5" />
-                <rect x="50" y="20" width="15" height="30" fill={primaryColor} opacity="0.7" />
-                <rect x="70" y="10" width="15" height="40" fill={primaryColor} />
-              </>
-            )}
-          </svg>
+        ) : type === "LineChart" || type === "TimeseriesChart" ? (
+          <AreaChart
+            className="h-full"
+            data={props?.data ?? [
+              { date: "Jan", value: 100 },
+              { date: "Feb", value: 150 },
+              { date: "Mar", value: 120 },
+              { date: "Apr", value: 180 },
+            ]}
+            index="date"
+            categories={["value"]}
+            colors={[primaryColor.replace("#", "")]}
+            showLegend={false}
+            showGridLines={false}
+            showYAxis={false}
+          />
+        ) : type === "BarChart" ? (
+          <BarChart
+            className="h-full"
+            data={props?.data ?? [
+              { name: "A", value: 40 },
+              { name: "B", value: 65 },
+              { name: "C", value: 50 },
+              { name: "D", value: 80 },
+            ]}
+            index="name"
+            categories={["value"]}
+            colors={[primaryColor.replace("#", "")]}
+            showLegend={false}
+            showGridLines={false}
+          />
         ) : type === "PieChart" || type === "DonutChart" ? (
-          <svg className="w-16 h-16" viewBox="0 0 32 32">
-            <circle cx="16" cy="16" r="12" fill="none" stroke="#e5e7eb" strokeWidth="4" />
-            <circle
-              cx="16"
-              cy="16"
-              r="12"
-              fill="none"
-              stroke={primaryColor}
-              strokeWidth="4"
-              strokeDasharray="50 75"
-              transform="rotate(-90 16 16)"
-            />
-            {type === "DonutChart" && <circle cx="16" cy="16" r="8" fill="white" />}
-          </svg>
+          <DonutChart
+            className="h-full"
+            data={props?.data ?? [
+              { name: "Success", value: 75 },
+              { name: "Failed", value: 15 },
+              { name: "Pending", value: 10 },
+            ]}
+            category="value"
+            index="name"
+            colors={["emerald", "rose", "amber"]}
+            showLabel={true}
+          />
         ) : type === "DataTable" ? (
-          <div className="w-full px-2">
-            <div className="h-2 bg-gray-200 rounded mb-2" />
-            <div className="h-2 bg-gray-100 rounded mb-1.5" />
-            <div className="h-2 bg-gray-100 rounded mb-1.5" />
-            <div className="h-2 bg-gray-100 rounded" />
+          <div className="text-xs text-gray-500">
+            <div className="grid grid-cols-4 gap-2 font-medium border-b pb-2 mb-2">
+              {(props?.columns ?? ["ID", "Name", "Status", "Date"]).slice(0, 4).map((col: string, i: number) => (
+                <div key={i} className="truncate">{col}</div>
+              ))}
+            </div>
+            {[1, 2, 3].map((row) => (
+              <div key={row} className="grid grid-cols-4 gap-2 py-1 border-b border-gray-100">
+                {[1, 2, 3, 4].map((cell) => (
+                  <div key={cell} className="h-3 bg-gray-100 rounded animate-pulse" />
+                ))}
+              </div>
+            ))}
           </div>
         ) : (
-          <span className="text-xs text-gray-400">{type}</span>
+          <div className="flex items-center justify-center h-full text-gray-400 text-sm">
+            {type} component
+          </div>
         )}
       </div>
     </div>
