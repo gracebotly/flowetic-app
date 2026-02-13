@@ -392,40 +392,6 @@ export function ChatWorkspace({
     }
   }, [dedupedMessages]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Fetch dashboard spec when interfaceId/versionId are set ──
-  useEffect(() => {
-    const fetchDashboardSpec = async () => {
-      if (!vibeContext?.interfaceId || !vibeContext?.previewVersionId) {
-        return;
-      }
-
-      try {
-        const res = await fetch(
-          `/api/interfaces/${vibeContext.interfaceId}/versions/${vibeContext.previewVersionId}`
-        );
-
-        if (!res.ok) {
-          console.error('[fetchDashboardSpec] Failed to fetch spec:', res.status);
-          return;
-        }
-
-        const data = await res.json();
-        console.log('[fetchDashboardSpec] Loaded spec:', {
-          interfaceId: vibeContext.interfaceId,
-          versionId: vibeContext.previewVersionId,
-          componentCount: data.spec_json?.components?.length ?? 0,
-        });
-
-        setLoadedSpec(data.spec_json);
-        setLoadedDesignTokens(data.design_tokens);
-      } catch (error) {
-        console.error('[fetchDashboardSpec] Error:', error);
-      }
-    };
-
-    fetchDashboardSpec();
-  }, [vibeContext?.interfaceId, vibeContext?.previewVersionId]);
-
   async function sendAi(text: string, extraData?: Record<string, any>) {
     if (uiStatus === 'streaming') {
       console.warn('[sendAi] Blocked: already streaming');
@@ -884,6 +850,40 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
       setEditPanelOpen(true);
     }
   }, [journeyMode]);
+
+  // ── Fetch dashboard spec when interfaceId/versionId are set ──
+  useEffect(() => {
+    const fetchDashboardSpec = async () => {
+      if (!vibeContext?.interfaceId || !vibeContext?.previewVersionId) {
+        return;
+      }
+
+      try {
+        const res = await fetch(
+          `/api/interfaces/${vibeContext.interfaceId}/versions/${vibeContext.previewVersionId}`
+        );
+
+        if (!res.ok) {
+          console.error('[fetchDashboardSpec] Failed to fetch spec:', res.status);
+          return;
+        }
+
+        const data = await res.json();
+        console.log('[fetchDashboardSpec] Loaded spec:', {
+          interfaceId: vibeContext.interfaceId,
+          versionId: vibeContext.previewVersionId,
+          componentCount: data.spec_json?.components?.length ?? 0,
+        });
+
+        setLoadedSpec(data.spec_json);
+        setLoadedDesignTokens(data.design_tokens);
+      } catch (error) {
+        console.error('[fetchDashboardSpec] Error:', error);
+      }
+    };
+
+    fetchDashboardSpec();
+  }, [vibeContext?.interfaceId, vibeContext?.previewVersionId]);
 
   useEffect(() => {
     async function initFromSession() {
