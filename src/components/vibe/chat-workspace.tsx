@@ -53,6 +53,7 @@ import {
   type Density,
 } from "@/components/vibe/editor";
 import { ResponsiveDashboardRenderer } from "@/components/preview/ResponsiveDashboardRenderer";
+import { EmptyPreviewState } from './EmptyPreviewState';
 import { useEditActions } from "@/hooks/useEditActions";
 
 type ViewMode = "terminal" | "preview" | "publish";
@@ -1748,14 +1749,10 @@ return (
         </div>
 
           {view === "terminal" ? (
-            <div className="flex flex-1 items-center justify-center bg-gray-50">
-              <div className="text-center">
-                <TerminalIcon className="w-12 h-12 mx-auto mb-3 text-gray-400" />
-                <p className="text-sm text-gray-500">
-                  Terminal view removed - all interactions now in chat sidebar
-                </p>
-              </div>
-            </div>
+            <EmptyPreviewState
+              journeyMode={journeyMode}
+              entityName={vibeContext?.displayName}
+            />
           ) : null}
 
           {/* Right Panel - Preview Area */}
@@ -1813,9 +1810,10 @@ return (
                   </div>
                 </div>
               ) : (
-                <div className="flex items-center justify-center h-full text-gray-400">
-                  <p>Preview will appear here once your dashboard is generated</p>
-                </div>
+                <EmptyPreviewState
+                  journeyMode={journeyMode}
+                  entityName={vibeContext?.displayName}
+                />
               )}
             </div>
           </div>

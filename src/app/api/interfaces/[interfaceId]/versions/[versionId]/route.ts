@@ -26,14 +26,15 @@ export async function GET(
       .select('id, interface_id, spec_json, design_tokens, created_at')
       .eq('id', versionId)
       .eq('interface_id', interfaceId)
-      .single();
+      .maybeSingle();
 
     if (error) {
       console.error('[GET /versions] Supabase error:', error);
-      return NextResponse.json({ error: error.message }, { status: 404 });
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
     if (!data) {
+      console.warn('[GET /versions] No version found:', { interfaceId, versionId });
       return NextResponse.json({ error: 'Version not found' }, { status: 404 });
     }
 
