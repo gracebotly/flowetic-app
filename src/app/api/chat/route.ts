@@ -206,14 +206,21 @@ export async function POST(req: Request) {
         }
         if (sessionRow?.mode) {
           requestContext.set('phase', sessionRow.mode);
-          if (process.env.DEBUG_CHAT_ROUTE === 'true') {
-            console.log('[api/chat] Phase override from DB:', {
-              clientPhase: clientData.phase,
-              dbPhase: sessionRow.mode,
-              overridden: clientData.phase !== sessionRow.mode,
-              sessionId: sessionRow.id,
-            });
-          }
+          // ALWAYS log phase override - critical for debugging phase desync
+          console.log('[api/chat] Phase from DB:', {
+            clientPhase: clientData.phase,
+            dbPhase: sessionRow.mode,
+            overridden: clientData.phase !== sessionRow.mode,
+            sessionId: sessionRow.id,
+            threadId: clientJourneyThreadId,
+          });
+        } else {
+          // Log when no session found - helps debug why phase might be wrong
+          console.log('[api/chat] No session found for phase lookup:', {
+            clientPhase: clientData.phase,
+            threadId: clientJourneyThreadId,
+            mastraThreadId,
+          });
         }
         // BUG FIX: Ensure interface exists for this journey session
         // This prevents "MISSING" interfaceId in downstream tools
@@ -252,7 +259,7 @@ export async function POST(req: Request) {
     }
 
     const mastra = getMastraSingleton();
-    
+
     if (process.env.DEBUG_CHAT_ROUTE === 'true') {
       console.log('[api/chat] Authorized request:', {
         tenantId,
@@ -264,7 +271,13 @@ export async function POST(req: Request) {
       });
     }
 
-
+    // PHASE VERIFICATION: Log final phase value before agent execution
+    const finalPhase = requestContext.get('phase') as string;
+    console.log('[api/chat] Final RequestContext phase before agent:', {
+      phase: finalPhase,
+      tenantId: tenantId.substring(0, 8) + '...',
+      threadId: mastraThreadId.substring(0, 8) + '...',
+    });
 
     // 5. CALL MASTRA WITH VALIDATED CONTEXT
     const enhancedParams = {

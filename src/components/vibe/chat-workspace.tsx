@@ -214,10 +214,20 @@ export function ChatWorkspace({
       api: '/api/chat',
     }),
     onFinish: ({ message }) => {
-      // Update journeyMode when advancePhase tool succeeds.
       // AI SDK v5 onFinish receives { message, messages, isAbort, ... } — destructure message.
       if (message.parts) {
         for (const part of message.parts as any[]) {
+          // ✅ AI SDK v5 format: tool-advancePhase with output property
+          if (
+            part?.type === 'tool-advancePhase' &&
+            part?.state === 'output-available' &&
+            part?.output?.success &&
+            part?.output?.currentPhase
+          ) {
+            console.log('[onFinish] Phase update detected (v5):', part.output.currentPhase);
+            setJourneyMode(part.output.currentPhase);
+          }
+          // ✅ Legacy AI SDK v4 format (fallback)
           if (
             part?.type === 'tool-invocation' &&
             part?.toolName === 'advancePhase' &&
@@ -225,6 +235,7 @@ export function ChatWorkspace({
             part?.result?.success &&
             part?.result?.currentPhase
           ) {
+            console.log('[onFinish] Phase update detected (v4):', part.result.currentPhase);
             setJourneyMode(part.result.currentPhase);
           }
         }
@@ -238,6 +249,7 @@ export function ChatWorkspace({
             invocation.result?.success &&
             invocation.result?.currentPhase
           ) {
+            console.log('[onFinish] Phase update detected (toolInvocations):', invocation.result.currentPhase);
             setJourneyMode(invocation.result.currentPhase);
           }
         }
@@ -384,7 +396,21 @@ export function ChatWorkspace({
           }
         }
 
-        // ── Strategy 6: Handle interactive_edit_panel tool results ──
+        // ── Strategy 6: Handle interactive_edit_panel tool results (AI SDK v5) ──
+        if (
+          partType === "tool-showInteractiveEditPanel" &&
+          part?.state === "output-available"
+        ) {
+          const output = part?.output;
+          if (output?.success && output?.widgets) {
+            setEditWidgets(output.widgets);
+            setEditPalettes(output.palettes || []);
+            setEditDensity(output.density || "comfortable");
+            setSelectedPaletteId(output.selectedPaletteId || null);
+            setEditPanelOpen(true);
+          }
+        }
+        // Legacy v4 fallback
         if (
           part?.type === "tool-invocation" &&
           part?.state === "result" &&
@@ -1357,6 +1383,43 @@ return (
                                           }
                                         : undefined
                                     }
+                                  />
+                                );
+                              }
+                            }
+
+                            // ✅ RENDER: runDesignSystemWorkflow → DesignSystemPair (AI SDK v5)
+                            if (part.type === 'tool-runDesignSystemWorkflow' && (part as any).state === 'output-available') {
+                              const output = (part as any).output;
+                              if (output?.success && output?.designSystem) {
+                                const ds = output.designSystem;
+                                // Transform workflow output to DesignSystemPair format
+                                // NOTE: Using Lucide icon name instead of emoji
+                                const system1 = {
+                                  id: 'style-workflow-1',
+                                  name: ds.style?.name || 'Recommended Style',
+                                  icon: 'Palette', // Lucide icon name, NOT emoji
+                                  colors: [
+                                    ds.colors?.primary,
+                                    ds.colors?.secondary,
+                                    ds.colors?.accent
+                                  ].filter(Boolean).join(' / '),
+                                  style: ds.style?.keywords || ds.style?.type || 'Professional',
+                                  typography: `${ds.typography?.headingFont || 'Inter'} + ${ds.typography?.bodyFont || 'Inter'}`,
+                                  bestFor: output.reasoning || 'Your workflow',
+                                };
+                                return (
+                                  <DesignSystemPair
+                                    key={idx}
+                                    systems={[system1, system1] as [typeof system1, typeof system1]}
+                                    onSelect={(id) => {
+                                      setSelectedStyleBundleId(id);
+                                      void sendAi(`__ACTION__:select_style_bundle:${id}`);
+                                    }}
+                                    onShowMore={() => {
+                                      void sendAi("Show different styles");
+                                    }}
+                                    hasMore={true}
                                   />
                                 );
                               }
