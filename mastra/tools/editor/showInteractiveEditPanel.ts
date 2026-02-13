@@ -69,7 +69,7 @@ that the frontend renders as an interactive edit panel with Tremor components.`,
         palettes: [],
         density: "comfortable" as const,
         selectedPaletteId: null,
-        editMode: input.editMode,
+        editMode: input.editMode || "full",
         error: "Missing tenantId in RequestContext",
       };
     }
@@ -81,7 +81,7 @@ that the frontend renders as an interactive edit panel with Tremor components.`,
         palettes: [],
         density: "comfortable" as const,
         selectedPaletteId: null,
-        editMode: input.editMode,
+        editMode: input.editMode || "full",
         error: "No interfaceId available. Generate a preview first.",
       };
     }
@@ -169,7 +169,7 @@ that the frontend renders as an interactive edit panel with Tremor components.`,
         palettes,
         density: "comfortable" as const,
         selectedPaletteId: 'current',
-        editMode: input.editMode,
+        editMode: input.editMode || "full",
       };
     } catch (error: any) {
       console.error('[showInteractiveEditPanel] Error:', error.message);
@@ -179,7 +179,7 @@ that the frontend renders as an interactive edit panel with Tremor components.`,
         palettes: [],
         density: "comfortable" as const,
         selectedPaletteId: null,
-        editMode: input.editMode,
+        editMode: input.editMode || "full",
         error: error.message,
       };
     }
