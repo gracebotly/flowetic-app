@@ -1,7 +1,15 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
+import { createHash } from 'crypto';
 import { createAuthenticatedClient } from '../lib/supabase';
 import { extractTenantContext } from '../lib/tenant-verification';
+
+/**
+ * Compute MD5 hash to match Postgres md5() function for deduplication
+ */
+async function computeMd5Hash(content: string): Promise<string> {
+  return createHash('md5').update(content).digest('hex');
+}
 
 export const persistPreviewVersion = createTool({
   id: 'persist-preview-version',
@@ -95,7 +103,29 @@ export const persistPreviewVersion = createTool({
       finalInterfaceId = newInterface.id;
     }
 
-    // Create interface version
+    // Create interface version with deduplication
+    // Check if identical spec already exists for this interface (using spec_hash column)
+    const specHash = undefined; // spec_hash is auto-generated, we query by computing it
+
+    // Query for existing version with same spec_json content
+    const { data: existingVersion } = await supabase
+      .from('interface_versions')
+      .select('id')
+      .eq('interface_id', finalInterfaceId)
+      .eq('spec_hash', await computeMd5Hash(JSON.stringify(spec_json)))
+      .maybeSingle();
+
+    if (existingVersion) {
+      console.log(`[persistPreviewVersion] Identical spec exists, returning existing version: ${existingVersion.id}`);
+      const previewUrl = `/preview/${finalInterfaceId}/${existingVersion.id}`;
+      return {
+        interfaceId: finalInterfaceId,
+        versionId: existingVersion.id,
+        previewUrl,
+      };
+    }
+
+    // No duplicate found, create new version
     // NOTE: created_by may fail FK if user not in public.users table
     // First try with userId, if FK fails, retry without created_by
     let version: { id: string } | null = null;

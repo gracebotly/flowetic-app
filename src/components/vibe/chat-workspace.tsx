@@ -215,20 +215,21 @@ export function ChatWorkspace({
       api: '/api/chat',
     }),
     onFinish: ({ message }) => {
-      // AI SDK v5 onFinish receives { message, messages, isAbort, ... } — destructure message.
-      if (message.parts) {
-        for (const part of message.parts as any[]) {
-          // ✅ AI SDK v5 format: tool-advancePhase with output property
-          if (
-            part?.type === 'tool-advancePhase' &&
-            part?.state === 'output-available' &&
-            part?.output?.success &&
-            part?.output?.currentPhase
-          ) {
-            console.log('[onFinish] Phase update detected (v5):', part.output.currentPhase);
-            setJourneyMode(part.output.currentPhase);
-          }
-        }
+      // AI SDK v5: Find the LAST advancePhase tool part (most recent phase wins)
+      if (!message.parts) return;
+
+      const lastPhaseUpdate = [...(message.parts as any[])]
+        .reverse()
+        .find((part) =>
+          part?.type === 'tool-advancePhase' &&
+          part?.state === 'output-available' &&
+          part?.output?.success &&
+          !!part?.output?.currentPhase
+        );
+
+      if (lastPhaseUpdate) {
+        console.log('[onFinish] Phase update (v5):', lastPhaseUpdate.output.currentPhase);
+        setJourneyMode(lastPhaseUpdate.output.currentPhase);
       }
     },
   });
@@ -1450,7 +1451,8 @@ return (
                                 );
                               }
                             // ✅ HIDE: All tool parts (catch-all — must be AFTER specific tool handlers)
-                            if (part.type?.startsWith('tool-') || part.type === 'tool-call' || part.type === 'tool-result') {
+                            // AI SDK v5: tool parts are typed as tool-{toolName}, no generic tool-call/tool-result
+                            if (part.type?.startsWith('tool-')) {
                               return null;
                             }
 

@@ -36,7 +36,7 @@ export function useEditActions({
           body: JSON.stringify({
             toolCall: {
               toolName: "applyInteractiveEdits",
-              args: {
+              input: {
                 tenantId,
                 userId,
                 interfaceId,

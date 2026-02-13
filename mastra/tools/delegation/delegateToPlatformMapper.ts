@@ -96,19 +96,10 @@ DO NOT try to generate previews yourself — always delegate to this specialist.
         },
         onStepFinish: ({ toolCalls, finishReason }) => {
           // Log each step for debugging without blocking autonomous flow
-          // AI SDK v5 / Mastra structure varies - check multiple property paths
           const toolNames = (toolCalls ?? []).map((tc) => {
             const call = tc as any;
             // AI SDK v5: call.toolName is the canonical property
-            if (call.toolName) return String(call.toolName);
-            // Fallback paths
-            const name =
-              call.name ??
-              call.tool?.name ??
-              call.function?.name ??
-              call.toolCall?.toolName ??
-              (typeof call === 'string' ? call : null) ??
-              'unknown';
+            const name = call.toolName ?? 'unknown';
             if (name === 'unknown') {
               console.log('[delegateToPlatformMapper] Unknown tool call structure:', JSON.stringify(call, null, 2));
             }
@@ -142,8 +133,8 @@ DO NOT try to generate previews yourself — always delegate to this specialist.
             hasResult: !!toolResult.result,
             keys: Object.keys(toolResult),
           });
-          // Try .output first (AI SDK v5), then .result (AI SDK v4 / Mastra)
-          const payload = toolResult.output ?? toolResult.result;
+          // AI SDK v5: use .output only
+          const payload = toolResult.output;
           if (toolResult.toolName === 'runGeneratePreviewWorkflow' && payload?.success) {
             previewUrl = payload.previewUrl;
             previewVersionId = payload.previewVersionId;
@@ -166,7 +157,7 @@ DO NOT try to generate previews yourself — always delegate to this specialist.
           if (Array.isArray(toolResults)) {
             for (const tr of toolResults) {
               const toolResult = tr as any;
-              const payload = toolResult.output ?? toolResult.result;
+              const payload = toolResult.output;
               if (toolResult.toolName === 'runGeneratePreviewWorkflow' && payload?.success) {
                 previewUrl = payload.previewUrl;
                 previewVersionId = payload.previewVersionId;

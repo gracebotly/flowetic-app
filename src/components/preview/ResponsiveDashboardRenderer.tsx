@@ -247,8 +247,10 @@ function ComponentCard({
         ) : type === "DataTable" ? (
           <div className="text-xs text-gray-500">
             <div className="grid grid-cols-4 gap-2 font-medium border-b pb-2 mb-2">
-              {(props?.columns ?? ["ID", "Name", "Status", "Date"]).slice(0, 4).map((col: string, i: number) => (
-                <div key={i} className="truncate">{col}</div>
+              {(props?.columns ?? ["ID", "Name", "Status", "Date"]).slice(0, 4).map((col: string | { key: string; label: string }, i: number) => (
+                <div key={i} className="truncate">
+                  {typeof col === 'string' ? col : col.label}
+                </div>
               ))}
             </div>
             {[1, 2, 3].map((row) => (
