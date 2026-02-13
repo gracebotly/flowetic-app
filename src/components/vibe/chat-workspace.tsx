@@ -549,6 +549,29 @@ export function ChatWorkspace({
       case 'show-alternatives':
         await sendAi('Show me alternatives');
         break;
+      case 'view-preview':
+        // Handle preview navigation from suggestAction tool
+        if (payload?.url) {
+          const url = String(payload.url);
+          const urlMatch = url.match(/\/preview\/([a-f0-9-]+)\/([a-f0-9-]+)/);
+          if (urlMatch) {
+            const [fullUrl, extractedInterfaceId, extractedVersionId] = urlMatch;
+            console.log('[handleSuggestedAction] Setting preview from action:', {
+              url: fullUrl,
+              interfaceId: extractedInterfaceId,
+              versionId: extractedVersionId,
+            });
+            setVibeContext((prev) => prev ? {
+              ...prev,
+              previewUrl: fullUrl,
+              interfaceId: extractedInterfaceId,
+              previewVersionId: extractedVersionId,
+            } : prev);
+            setJourneyMode("interactive_edit");
+            setView("preview");
+          }
+        }
+        break;
       default:
         // For backwards compatibility with text-based action labels
         await sendAi(actionId.replace(/-/g, ' '));
