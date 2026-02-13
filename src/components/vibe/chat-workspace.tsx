@@ -861,7 +861,8 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
 
       try {
         const res = await fetch(
-          `/api/interfaces/${vibeContext.interfaceId}/versions/${vibeContext.previewVersionId}`
+          `/api/interfaces/${vibeContext.interfaceId}/versions/${vibeContext.previewVersionId}`,
+          { credentials: 'include' }  // CRITICAL: Include cookies for auth
         );
 
         if (!res.ok) {
