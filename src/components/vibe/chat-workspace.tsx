@@ -289,6 +289,9 @@ export function ChatWorkspace({
       for (const part of parts) {
         // Guard: skip undefined/null parts to prevent TypeError on .state access
         if (!part || typeof part !== 'object') continue;
+
+        const partType = String(part?.type ?? "");
+
         // ── Strategy 1: Direct tool parts — savePreviewVersion / persistPreviewVersion (v5) ──
         if (
           (partType === "tool-savePreviewVersion" || partType === "tool-persistPreviewVersion") &&
@@ -313,7 +316,6 @@ export function ChatWorkspace({
 
         // ── Strategy 3: Workflow results streamed as tool-generatePreview ──
         // In AI SDK v5 + Mastra, workflow tools appear as `tool-{toolId}` type parts
-        const partType = String(part?.type ?? "");
         if (
           (partType === "tool-generatePreview" || partType === "tool-runGeneratePreviewWorkflow") &&
           part?.state === "output-available"
