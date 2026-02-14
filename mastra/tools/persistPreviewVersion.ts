@@ -103,7 +103,7 @@ export const persistPreviewVersion = createTool({
         p_design_tokens: design_tokens,
         p_created_by: userId,
       })
-      .single();
+      .single<{ version_id: string; was_inserted: boolean }>();
 
     if (rpcError) {
       console.warn('[persistPreviewVersion] RPC failed:', rpcError.message);
