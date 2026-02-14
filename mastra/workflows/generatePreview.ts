@@ -24,6 +24,7 @@ export const GeneratePreviewOutput = z.object({
   runId: z.string().uuid(),
   previewVersionId: z.string().uuid(),
   previewUrl: z.string(),
+  interfaceId: z.string().uuid(),
 });
 
 export type GeneratePreviewInput = {
@@ -38,6 +39,7 @@ export type GeneratePreviewOutput = {
   runId: string;
   previewVersionId: string;
   previewUrl: string;
+  interfaceId: string;
 };
 
 // ============================================================================
@@ -351,6 +353,7 @@ const finalizeStep = createStep({
       runId,
       previewVersionId: persistResult.versionId,
       previewUrl: persistResult.previewUrl,
+      interfaceId: persistResult.interfaceId,
     };
   },
 });
