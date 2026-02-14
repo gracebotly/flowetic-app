@@ -95,7 +95,29 @@ export const persistPreviewVersion = createTool({
       finalInterfaceId = newInterface.id;
     }
 
-    // Create interface version
+    // Use RPC for deduplication - hash computed server-side to match generated column
+    const { data: rpcResult, error: rpcError } = await supabase
+      .rpc('upsert_interface_version', {
+        p_interface_id: finalInterfaceId,
+        p_spec_json: spec_json,
+        p_design_tokens: design_tokens,
+        p_created_by: userId,
+      })
+      .single<{ version_id: string; was_inserted: boolean }>();
+
+    if (rpcError) {
+      console.warn('[persistPreviewVersion] RPC failed:', rpcError.message);
+    } else if (rpcResult) {
+      const previewUrl = `/preview/${finalInterfaceId}/${rpcResult.version_id}`;
+      console.log(`[persistPreviewVersion] ${rpcResult.was_inserted ? 'Created' : 'Found'} version: ${rpcResult.version_id}`);
+      return {
+        interfaceId: finalInterfaceId,
+        versionId: rpcResult.version_id,
+        previewUrl,
+      };
+    }
+
+    // Fallback if RPC unavailable
     // NOTE: created_by may fail FK if user not in public.users table
     // First try with userId, if FK fails, retry without created_by
     let version: { id: string } | null = null;
