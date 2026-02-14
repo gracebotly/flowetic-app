@@ -94,20 +94,37 @@ const generateDesignSystemStep = createStep({
       requestContext,
     });
 
+    console.log(`[designSystemWorkflow] Agent response length: ${result.text?.length ?? 0}`);
+    console.log(`[designSystemWorkflow] Agent response preview: ${result.text?.substring(0, 200)}`);
+
     // Parse the agent's response
     try {
-      // Try to extract JSON from the response
-      const jsonMatch = result.text.match(/\{[\s\S]*\}/);
+      // Try to extract JSON from the response - use non-greedy match for the outermost object
+      const text = result.text || "";
+
+      // Strategy 1: Look for a JSON code block
+      const codeBlockMatch = text.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+      // Strategy 2: Find the largest valid JSON object
+      const jsonMatch = codeBlockMatch?.[1] || text.match(/\{[\s\S]*\}/)?.[0];
+
       if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        return {
-          designSystem: parsed.designSystem || parsed,
-          reasoning: parsed.reasoning || "Design system generated based on workflow context.",
-          skillActivated: true,
-        };
+        const parsed = JSON.parse(jsonMatch);
+        const ds = parsed.designSystem || parsed;
+
+        // Validate we got real data, not just empty strings
+        if (ds?.colors?.primary && ds?.style?.name) {
+          console.log(`[designSystemWorkflow] Parsed design system: ${ds.style.name}, primary: ${ds.colors.primary}`);
+          return {
+            designSystem: ds,
+            reasoning: parsed.reasoning || "Design system generated from tool results.",
+            skillActivated: true,
+          };
+        }
+        console.warn("[designSystemWorkflow] Parsed JSON but missing required fields (colors.primary or style.name)");
       }
     } catch (e) {
-      console.warn("[designSystemWorkflow] Failed to parse JSON response, using fallback");
+      console.warn("[designSystemWorkflow] Failed to parse JSON response:", (e as Error).message);
+      console.warn("[designSystemWorkflow] Raw response:", result.text?.substring(0, 500));
     }
 
     // Fallback with sensible defaults

@@ -176,13 +176,13 @@ function ComponentCard({
       {type === "MetricCard" ? (
         <MetricCardPreview props={props} primaryColor={primaryColor} />
       ) : type === "LineChart" ? (
-        <ChartPreview props={props} type="line" />
+        <ChartPreview props={props} type="line" primaryColor={primaryColor} />
       ) : type === "BarChart" ? (
-        <ChartPreview props={props} type="bar" />
+        <ChartPreview props={props} type="bar" primaryColor={primaryColor} />
       ) : type === "PieChart" ? (
-        <ChartPreview props={props} type="pie" />
+        <ChartPreview props={props} type="pie" primaryColor={primaryColor} />
       ) : type === "DonutChart" ? (
-        <ChartPreview props={props} type="donut" />
+        <ChartPreview props={props} type="donut" primaryColor={primaryColor} />
       ) : type === "FunnelChart" ? (
         <FunnelPreview props={props} primaryColor={primaryColor} />
       ) : type === "SankeyChart" ? (
@@ -200,25 +200,66 @@ function ComponentCard({
   );
 }
 
+/** Generate realistic placeholder values based on aggregation type */
+function getSmartPlaceholder(aggregation?: string): string {
+  if (!aggregation) return "—";
+  const agg = aggregation.toLowerCase();
+  if (agg === "count") return "1,247";
+  if (agg === "sum") return "84,392";
+  if (agg === "avg" || agg === "average") return "42.8";
+  if (agg === "rate" || agg === "ratio") return "94.2%";
+  if (agg === "min") return "0.3s";
+  if (agg === "max") return "12.7s";
+  if (agg === "p95") return "2.4s";
+  if (agg === "p99") return "8.1s";
+  if (agg === "median") return "1.2s";
+  return "—";
+}
+
+/** Convert raw aggregation formulas to human-readable labels */
+function formatAggregationLabel(aggregation: string, valueField?: string): string {
+  const field = valueField ?? "value";
+  // Clean the field name: snake_case/camelCase → Title Case
+  const friendlyField = field
+    .replace(/_/g, " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+  const aggMap: Record<string, string> = {
+    count: `Total ${friendlyField}s`,
+    sum: `Total ${friendlyField}`,
+    avg: `Average ${friendlyField}`,
+    average: `Average ${friendlyField}`,
+    min: `Minimum ${friendlyField}`,
+    max: `Maximum ${friendlyField}`,
+    median: `Median ${friendlyField}`,
+    p95: `95th Percentile ${friendlyField}`,
+    p99: `99th Percentile ${friendlyField}`,
+    rate: `${friendlyField} Rate`,
+    ratio: `${friendlyField} Ratio`,
+  };
+  const aggLower = aggregation.toLowerCase();
+  return aggMap[aggLower] ?? `${aggregation} of ${friendlyField}`;
+}
+
 function MetricCardPreview({ props, primaryColor }: { props: any; primaryColor: string }) {
   return (
     <div>
       <div className="text-3xl font-bold" style={{ color: primaryColor }}>
-        {props?.defaultValue ?? "—"}
+        {props?.defaultValue ?? getSmartPlaceholder(props?.aggregation)}
       </div>
       {props?.subtitle && (
         <div className="text-xs text-gray-500 mt-1">{props.subtitle}</div>
       )}
       {props?.aggregation && (
         <div className="text-xs text-gray-400 mt-1">
-          {props.aggregation}({props.valueField ?? "value"})
+          {formatAggregationLabel(props.aggregation, props.valueField)}
         </div>
       )}
     </div>
   );
 }
 
-function ChartPreview({ props, type }: { props: any; type: string }) {
+function ChartPreview({ props, type, primaryColor = "#3b82f6" }: { props: any; type: string; primaryColor?: string }) {
   // SVG placeholder chart
   return (
     <div className="h-32 flex items-end gap-1 px-2">
@@ -226,7 +267,7 @@ function ChartPreview({ props, type }: { props: any; type: string }) {
         <svg viewBox="0 0 100 100" className="w-24 h-24 mx-auto">
           <circle cx="50" cy="50" r="40" fill="none" stroke="#e5e7eb" strokeWidth="12" />
           <circle
-            cx="50" cy="50" r="40" fill="none" stroke="#3b82f6" strokeWidth="12"
+            cx="50" cy="50" r="40" fill="none" stroke={primaryColor} strokeWidth="12"
             strokeDasharray="188 252" strokeDashoffset="0"
             transform="rotate(-90 50 50)"
           />
@@ -239,7 +280,7 @@ function ChartPreview({ props, type }: { props: any; type: string }) {
             className="flex-1 rounded-t"
             style={{
               height: `${30 + Math.random() * 70}%`,
-              backgroundColor: i === 4 ? "#3b82f6" : "#e5e7eb",
+              backgroundColor: i === 4 ? primaryColor : "#e5e7eb",
             }}
           />
         ))
