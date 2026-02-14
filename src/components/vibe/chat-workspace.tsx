@@ -265,8 +265,24 @@ export function ChatWorkspace({
   // 2. Workflow wrapper tool results (runGeneratePreviewWorkflow)
   // 3. Agent text output containing /preview/ URLs (fallback)
   useEffect(() => {
+    // Strict UUID regex - requires exactly 36 characters in 8-4-4-4-12 format
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const UUID_PATTERN = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+
     function trySetPreview(previewUrl: string, interfaceId: string, versionId: string) {
       if (!previewUrl || !interfaceId || !versionId) return;
+
+      // CRITICAL: Validate UUIDs are exactly 36 characters - prevents truncated IDs
+      if (!UUID_REGEX.test(interfaceId) || !UUID_REGEX.test(versionId)) {
+        console.error('[Preview Bridge] Invalid UUID format - skipping:', {
+          interfaceId: interfaceId?.length,
+          versionId: versionId?.length,
+          interfaceIdValue: interfaceId,
+          versionIdValue: versionId,
+        });
+        return;
+      }
+
       if (vibeContext?.previewUrl === previewUrl) return; // Already set
 
       console.log("[Preview Bridge] Setting preview:", { previewUrl, interfaceId, versionId });
@@ -346,7 +362,8 @@ export function ChatWorkspace({
 
         // ── Strategy 4: Parse previewUrl from agent text output (fallback) ──
         if (part?.type === "text" && typeof part?.text === "string") {
-          const previewUrlMatch = part.text.match(/\/preview\/([a-f0-9-]+)\/([a-f0-9-]+)/);
+          // Use strict UUID pattern to prevent truncated matches
+          const previewUrlMatch = part.text.match(new RegExp(`/preview/(${UUID_PATTERN})/(${UUID_PATTERN})`, 'i'));
           if (previewUrlMatch) {
             const [fullMatch, extractedInterfaceId, extractedVersionId] = previewUrlMatch;
             trySetPreview(fullMatch, extractedInterfaceId, extractedVersionId);
@@ -363,7 +380,8 @@ export function ChatWorkspace({
           const output = part?.output;
           if (output?.previewUrl && output?.success) {
             // Extract interfaceId and versionId from the URL if not provided directly
-            const urlMatch = String(output.previewUrl).match(/\/preview\/([a-f0-9-]+)\/([a-f0-9-]+)/);
+            // Use strict UUID pattern to prevent truncated matches
+            const urlMatch = String(output.previewUrl).match(new RegExp(`/preview/(${UUID_PATTERN})/(${UUID_PATTERN})`, 'i'));
             if (urlMatch) {
               const [, extractedInterfaceId, extractedVersionId] = urlMatch;
               trySetPreview(
@@ -555,7 +573,9 @@ export function ChatWorkspace({
         // Handle preview navigation from suggestAction tool
         if (payload?.url) {
           const url = String(payload.url);
-          const urlMatch = url.match(/\/preview\/([a-f0-9-]+)\/([a-f0-9-]+)/);
+          // Use strict UUID pattern to prevent truncated matches
+          const UUID_PATTERN_LOCAL = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+          const urlMatch = url.match(new RegExp(`/preview/(${UUID_PATTERN_LOCAL})/(${UUID_PATTERN_LOCAL})`, 'i'));
           if (urlMatch) {
             const [fullUrl, extractedInterfaceId, extractedVersionId] = urlMatch;
             console.log('[handleSuggestedAction] Setting preview from action:', {
