@@ -90,9 +90,10 @@ export async function POST(req: Request) {
       const platformType = (params as any)?.platformType ||
                            (params as any)?.vibeContext?.platformType ||
                            'other';
-      const sourceId = (params as any)?.sourceId ||
-                       (params as any)?.vibeContext?.sourceId ||
-                       null;
+      const rawSourceId = (params as any)?.sourceId ||
+                          (params as any)?.vibeContext?.sourceId ||
+                          null;
+      const sourceId = rawSourceId?.match?.(/^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i)?.[1] ?? rawSourceId;
       const entityId = (params as any)?.entityId ||
                        (params as any)?.vibeContext?.entityId ||
                        null;
