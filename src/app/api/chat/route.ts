@@ -210,16 +210,27 @@ export async function POST(req: Request) {
             .maybeSingle();
           sessionRow = byMastraId;
         }
+        const VALID_PHASES = ['select_entity', 'recommend', 'style', 'build_preview', 'interactive_edit', 'deploy'] as const;
+
         if (sessionRow?.mode) {
-          requestContext.set('phase', sessionRow.mode);
-          // ALWAYS log phase override - critical for debugging phase desync
-          console.log('[api/chat] Phase from DB:', {
-            clientPhase: clientData.phase,
-            dbPhase: sessionRow.mode,
-            overridden: clientData.phase !== sessionRow.mode,
-            sessionId: sessionRow.id,
-            threadId: clientJourneyThreadId,
-          });
+          if (VALID_PHASES.includes(sessionRow.mode as any)) {
+            requestContext.set('phase', sessionRow.mode);
+            console.log('[api/chat] Phase from DB:', {
+              clientPhase: clientData.phase,
+              dbPhase: sessionRow.mode,
+              overridden: clientData.phase !== sessionRow.mode,
+              sessionId: sessionRow.id,
+              threadId: clientJourneyThreadId,
+            });
+          } else {
+            // Bad data in DB — don't let it crash the agent
+            console.warn('[api/chat] Invalid phase in DB, falling back to select_entity:', {
+              invalidPhase: sessionRow.mode,
+              sessionId: sessionRow.id,
+              threadId: clientJourneyThreadId,
+            });
+            requestContext.set('phase', 'select_entity');
+          }
         } else {
           // Log when no session found - helps debug why phase might be wrong
           console.log('[api/chat] No session found for phase lookup:', {
