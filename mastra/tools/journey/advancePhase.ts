@@ -133,19 +133,40 @@ Without calling this tool, the phase stays stuck and instructions won't update.`
             };
           }
 
-          // BUG FIX: Use OR query to match EITHER thread_id OR mastra_thread_id
-          // This ensures we update regardless of which ID was used to create the session
-          // ATOMIC CONDITIONAL UPDATE (CAS pattern)
-          // .eq('mode', currentPhase) acts as a guard — only updates if phase hasn't been
-          // changed by a concurrent request. If no rows match, data is null (not an error).
-          const { data: updateResult, error: updateError } = await supabase
+          // Use separate queries to avoid PostgREST .or() filter issues
+          // that cause misleading "column does not exist" errors
+          let updateResult: { id: string; mode: string } | null = null;
+          let updateError: { message: string } | null = null;
+
+          // First try: match by thread_id
+          const result1 = await supabase
             .from('journey_sessions')
             .update(updateData)
             .eq('tenant_id', tenantId)
-            .eq('mode', currentPhase)  // CAS GUARD: prevents race conditions
-            .or(`thread_id.eq.${queryValue},mastra_thread_id.eq.${queryValue}`)
+            .eq('mode', currentPhase)
+            .eq('thread_id', queryValue)
             .select('id, mode')
             .maybeSingle();
+
+          if (result1.data) {
+            updateResult = result1.data;
+            updateError = result1.error;
+          } else if (!result1.error || result1.error.message?.includes('0 rows')) {
+            // Fallback: match by mastra_thread_id
+            const result2 = await supabase
+              .from('journey_sessions')
+              .update(updateData)
+              .eq('tenant_id', tenantId)
+              .eq('mode', currentPhase)
+              .eq('mastra_thread_id', queryValue)
+              .select('id, mode')
+              .maybeSingle();
+
+            updateResult = result2.data;
+            updateError = result2.error;
+          } else {
+            updateError = result1.error;
+          }
 
           if (updateError) {
             console.error('[advancePhase] DB update error:', updateError.message);
@@ -159,12 +180,27 @@ Without calling this tool, the phase stays stuck and instructions won't update.`
 
           // CAS conflict: no rows matched means phase was already changed by another request
           if (!updateResult) {
-            const { data: freshState } = await supabase
+            // Use separate queries to avoid PostgREST .or() filter issues
+            let freshState: { id: string; mode: string } | null = null;
+
+            const fresh1 = await supabase
               .from('journey_sessions')
               .select('id, mode')
               .eq('tenant_id', tenantId)
-              .or(`thread_id.eq.${queryValue},mastra_thread_id.eq.${queryValue}`)
+              .eq('thread_id', queryValue)
               .maybeSingle();
+
+            if (fresh1.data) {
+              freshState = fresh1.data;
+            } else {
+              const fresh2 = await supabase
+                .from('journey_sessions')
+                .select('id, mode')
+                .eq('tenant_id', tenantId)
+                .eq('mastra_thread_id', queryValue)
+                .maybeSingle();
+              freshState = fresh2.data;
+            }
 
             if (freshState?.mode === nextPhase) {
               // Another request already advanced to the same target — treat as success
