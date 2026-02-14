@@ -161,15 +161,9 @@ function ComponentCard({
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm h-full">
-      {/* Component type badge */}
-      <div className="flex items-center justify-between mb-3">
+      {/* Header */}
+      <div className="mb-3">
         <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
-        <span
-          className="text-xs px-2 py-0.5 rounded-full text-white"
-          style={{ backgroundColor: primaryColor }}
-        >
-          {type}
-        </span>
       </div>
 
       {/* Placeholder content based on type */}

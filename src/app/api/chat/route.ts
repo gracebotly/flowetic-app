@@ -193,7 +193,7 @@ export async function POST(req: Request) {
 
         const { data: byThreadId } = await supabase
           .from('journey_sessions')
-          .select('id, mode, preview_interface_id')
+          .select('id, mode, preview_interface_id, selected_style_bundle_id')
           .eq('thread_id', cleanJourneyThreadId)
           .eq('tenant_id', tenantId)
           .maybeSingle();
@@ -204,22 +204,33 @@ export async function POST(req: Request) {
           // Fallback: query by mastra_thread_id (in case thread was created that way)
           const { data: byMastraId } = await supabase
             .from('journey_sessions')
-            .select('id, mode, preview_interface_id')
+            .select('id, mode, preview_interface_id, selected_style_bundle_id')
             .eq('mastra_thread_id', cleanMastraThreadId)
             .eq('tenant_id', tenantId)
             .maybeSingle();
           sessionRow = byMastraId;
         }
+        const VALID_PHASES = ['select_entity', 'recommend', 'style', 'build_preview', 'interactive_edit', 'deploy'] as const;
+
         if (sessionRow?.mode) {
-          requestContext.set('phase', sessionRow.mode);
-          // ALWAYS log phase override - critical for debugging phase desync
-          console.log('[api/chat] Phase from DB:', {
-            clientPhase: clientData.phase,
-            dbPhase: sessionRow.mode,
-            overridden: clientData.phase !== sessionRow.mode,
-            sessionId: sessionRow.id,
-            threadId: clientJourneyThreadId,
-          });
+          if (VALID_PHASES.includes(sessionRow.mode as any)) {
+            requestContext.set('phase', sessionRow.mode);
+            console.log('[api/chat] Phase from DB:', {
+              clientPhase: clientData.phase,
+              dbPhase: sessionRow.mode,
+              overridden: clientData.phase !== sessionRow.mode,
+              sessionId: sessionRow.id,
+              threadId: clientJourneyThreadId,
+            });
+          } else {
+            // Bad data in DB — don't let it crash the agent
+            console.warn('[api/chat] Invalid phase in DB, falling back to select_entity:', {
+              invalidPhase: sessionRow.mode,
+              sessionId: sessionRow.id,
+              threadId: clientJourneyThreadId,
+            });
+            requestContext.set('phase', 'select_entity');
+          }
         } else {
           // Log when no session found - helps debug why phase might be wrong
           console.log('[api/chat] No session found for phase lookup:', {
@@ -228,6 +239,22 @@ export async function POST(req: Request) {
             mastraThreadId,
           });
         }
+
+        // BUG FIX: Override client-provided selectedStyleBundleId with DB value.
+        // Client React state can become stale due to batched setState + closure capture.
+        // The DB value (written by advancePhase tool) is authoritative.
+        if (sessionRow?.selected_style_bundle_id) {
+          const clientStyle = requestContext.get('selectedStyleBundleId') as string | undefined;
+          requestContext.set('selectedStyleBundleId', sessionRow.selected_style_bundle_id);
+          if (clientStyle !== sessionRow.selected_style_bundle_id) {
+            console.log('[api/chat] Style override from DB:', {
+              clientStyle,
+              dbStyle: sessionRow.selected_style_bundle_id,
+              sessionId: sessionRow.id,
+            });
+          }
+        }
+
         // BUG FIX: Ensure interface exists for this journey session
         // This prevents "MISSING" interfaceId in downstream tools
         if (sessionRow && !sessionRow.preview_interface_id) {

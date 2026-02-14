@@ -179,14 +179,8 @@ function ComponentCard({
       aria-label={isEditing ? `Edit ${title}` : undefined}
     >
       {/* Header */}
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-gray-900 truncate">{title}</h3>
-        <span
-          className="text-xs px-2 py-0.5 rounded-full text-white flex-shrink-0"
-          style={{ backgroundColor: primaryColor }}
-        >
-          {type}
-        </span>
+      <div className="mb-3">
+        <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
       </div>
 
       {/* Premium content based on type */}
