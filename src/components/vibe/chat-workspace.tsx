@@ -1398,7 +1398,13 @@ return (
                                     onSelect={async (id: string) => {
                                       if (uiStatus === 'streaming') return;
                                       setSelectedStyleBundleId(id);
-                                      await sendAi(`I selected style ${id}`);
+                                      // FIX: Pass id explicitly to avoid React stale closure.
+                                      // setState is batched — selectedStyleBundleId is still
+                                      // the OLD value when sendAi reads it from closure.
+                                      // See: https://ai-sdk.dev/docs/troubleshooting/use-chat-stale-body-data
+                                      await sendAi(`I selected style ${id}`, {
+                                        selectedStyleBundleId: id,
+                                      });
                                     }}
                                     onShowMore={
                                       (part as any).data?.hasMore || (part as any).hasMore
@@ -1438,7 +1444,10 @@ return (
                                     systems={[system1, system1] as [typeof system1, typeof system1]}
                                     onSelect={(id) => {
                                       setSelectedStyleBundleId(id);
-                                      void sendAi(`__ACTION__:select_style_bundle:${id}`);
+                                      // FIX: Explicit extraData override for stale closure
+                                      void sendAi(`__ACTION__:select_style_bundle:${id}`, {
+                                        selectedStyleBundleId: id,
+                                      });
                                     }}
                                     onShowMore={() => {
                                       void sendAi("Show different styles");
@@ -1648,7 +1657,10 @@ return (
                               if (uiStatus === 'streaming') return;
                               setSelectedStyleBundleId(bundle.id);
                               setToolUi(null);
-                              await sendMessage(`__ACTION__:select_style_bundle:${bundle.id}`);
+                              // FIX: Pass explicit override for stale closure
+                              await sendAi(`__ACTION__:select_style_bundle:${bundle.id}`, {
+                                selectedStyleBundleId: bundle.id,
+                              });
                             }}
                             className={`text-left rounded-lg border border-gray-200 p-4 transition-all ${
                               uiStatus === 'streaming'
