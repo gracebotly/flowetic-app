@@ -39,6 +39,7 @@ Returns: reasoning pattern, decision criteria, psychological basis, application 
       rows,
       query: inputData.query,
       limit: inputData.limit ?? 3,
+      domain: 'ui-reasoning',
     });
 
     return {

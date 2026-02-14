@@ -41,6 +41,7 @@ Returns: palette name, primary/secondary/accent colors (hex), mood, use cases.`,
       rows,
       query: inputData.query,
       limit: inputData.limit ?? 3,
+      domain: 'color',
     });
 
     return {

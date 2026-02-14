@@ -40,7 +40,7 @@ export const getStyleRecommendations = createTool({
       .filter(Boolean)
       .join(" ");
 
-    const ranked = await rankRowsByQuery({ rows, query, limit: inputData.limit ?? 3 });
+    const ranked = await rankRowsByQuery({ rows, query, limit: inputData.limit ?? 3, domain: 'style' });
 
     const recommendations = ranked.map((row) => ({
       styleCategory: row["Style Category"] || "",

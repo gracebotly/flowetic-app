@@ -39,6 +39,7 @@ Returns: optimization technique, implementation, impact level, code examples.`,
       rows,
       query: inputData.query,
       limit: inputData.limit ?? 3,
+      domain: 'react-performance',
     });
 
     return {
