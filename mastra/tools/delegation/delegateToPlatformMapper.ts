@@ -124,27 +124,40 @@ DO NOT try to generate previews yourself — always delegate to this specialist.
       let interfaceId: string | undefined;
 
       // Path 1: result.toolResults (top-level tool results)
+      // Handle BOTH standard AI SDK v5 format AND Mastra agent network format
       if (result.toolResults && Array.isArray(result.toolResults)) {
         for (const tr of result.toolResults) {
           const toolResult = tr as any;
+
+          // Mastra agent network format: { type: 'tool-result', from: 'AGENT', payload: { toolName, result } }
+          // Standard AI SDK v5 format: { toolName, output }
+          const isMastraNetworkFormat = toolResult.type === 'tool-result' && toolResult.payload;
+
+          const toolName = isMastraNetworkFormat
+            ? toolResult.payload?.toolName
+            : toolResult.toolName;
+          const toolOutput = isMastraNetworkFormat
+            ? (toolResult.payload?.result ?? toolResult.payload?.output)
+            : toolResult.output;
+
           console.log('[delegateToPlatformMapper] toolResult:', {
-            toolName: toolResult.toolName,
-            hasOutput: !!toolResult.output,
-            hasResult: !!toolResult.result,
+            format: isMastraNetworkFormat ? 'mastra-network' : 'ai-sdk-v5',
+            toolName,
+            hasOutput: !!toolOutput,
             keys: Object.keys(toolResult),
           });
-          // AI SDK v5: use .output only
-          const payload = toolResult.output;
-          if (toolResult.toolName === 'runGeneratePreviewWorkflow' && payload?.success) {
-            previewUrl = payload.previewUrl;
-            previewVersionId = payload.previewVersionId;
-            interfaceId = payload.interfaceId;
+
+          if (toolName === 'runGeneratePreviewWorkflow' && toolOutput?.success) {
+            previewUrl = toolOutput.previewUrl;
+            previewVersionId = toolOutput.previewVersionId;
+            interfaceId = toolOutput.interfaceId;
+            console.log('[delegateToPlatformMapper] Found preview URL:', previewUrl);
           }
           // Also check persistPreviewVersion which is the inner tool that actually has the URL
-          if (toolResult.toolName === 'persistPreviewVersion' && (payload?.previewUrl || payload?.interfaceId)) {
-            previewUrl = previewUrl || payload.previewUrl;
-            previewVersionId = previewVersionId || payload.previewVersionId || payload.versionId;
-            interfaceId = interfaceId || payload.interfaceId;
+          if (toolName === 'persistPreviewVersion' && (toolOutput?.previewUrl || toolOutput?.interfaceId)) {
+            previewUrl = previewUrl || toolOutput.previewUrl;
+            previewVersionId = previewVersionId || toolOutput.previewVersionId || toolOutput.versionId;
+            interfaceId = interfaceId || toolOutput.interfaceId;
           }
         }
       }
@@ -157,16 +170,25 @@ DO NOT try to generate previews yourself — always delegate to this specialist.
           if (Array.isArray(toolResults)) {
             for (const tr of toolResults) {
               const toolResult = tr as any;
-              const payload = toolResult.output;
-              if (toolResult.toolName === 'runGeneratePreviewWorkflow' && payload?.success) {
-                previewUrl = payload.previewUrl;
-                previewVersionId = payload.previewVersionId;
-                interfaceId = payload.interfaceId;
+
+              // Handle both Mastra network format and AI SDK v5 format
+              const isMastraNetworkFormat = toolResult.type === 'tool-result' && toolResult.payload;
+              const toolName = isMastraNetworkFormat
+                ? toolResult.payload?.toolName
+                : toolResult.toolName;
+              const toolOutput = isMastraNetworkFormat
+                ? (toolResult.payload?.result ?? toolResult.payload?.output)
+                : toolResult.output;
+
+              if (toolName === 'runGeneratePreviewWorkflow' && toolOutput?.success) {
+                previewUrl = toolOutput.previewUrl;
+                previewVersionId = toolOutput.previewVersionId;
+                interfaceId = toolOutput.interfaceId;
               }
-              if (toolResult.toolName === 'persistPreviewVersion' && (payload?.previewUrl || payload?.interfaceId)) {
-                previewUrl = previewUrl || payload.previewUrl;
-                previewVersionId = previewVersionId || payload.previewVersionId || payload.versionId;
-                interfaceId = interfaceId || payload.interfaceId;
+              if (toolName === 'persistPreviewVersion' && (toolOutput?.previewUrl || toolOutput?.interfaceId)) {
+                previewUrl = previewUrl || toolOutput.previewUrl;
+                previewVersionId = previewVersionId || toolOutput.previewVersionId || toolOutput.versionId;
+                interfaceId = interfaceId || toolOutput.interfaceId;
               }
             }
           }
@@ -175,7 +197,8 @@ DO NOT try to generate previews yourself — always delegate to this specialist.
 
       // Path 3: Parse previewUrl from result.text as last resort
       if (!previewUrl && result.text) {
-        const urlMatch = result.text.match(/\/preview\/([a-f0-9-]+)\/([a-f0-9-]+)/);
+        const UUID_PATTERN = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+        const urlMatch = result.text.match(new RegExp(`/preview/(${UUID_PATTERN})/(${UUID_PATTERN})`, 'i'));
         if (urlMatch) {
           previewUrl = urlMatch[0];
           interfaceId = urlMatch[1];
