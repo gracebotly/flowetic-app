@@ -22,10 +22,13 @@ export const generateMapping = createTool({
 
     // Template requirements (simplified for MVP)
     const templateRequirements: Record<string, string[]> = {
+      'workflow-dashboard': ['workflow_id', 'status', 'started_at', 'ended_at', 'duration_ms'],
+      'workflow-monitor': ['workflow_id', 'status', 'started_at', 'ended_at', 'duration_ms'],  // alias for same thing
       'voice-agent-dashboard': ['call_id', 'duration', 'status', 'transcript', 'cost'],
-      'workflow-dashboard': ['workflow_id', 'status', 'started_at', 'ended_at'],
+      'voice-analytics': ['call_id', 'duration', 'status'],  // alias
       'chat-dashboard': ['message_id', 'role', 'text', 'timestamp'],
       'multi-agent-dashboard': ['agent_id', 'task', 'status', 'output'],
+      'general-analytics': ['timestamp', 'status'],
       'default': ['id', 'timestamp', 'type'],
     };
 
@@ -43,6 +46,7 @@ export const generateMapping = createTool({
       'status': ['kind', 'state', 'status', 'result', 'outcome', 'execution_status'],
       'started_at': ['started_at', 'startedAt', 'start_time', 'startTime', 'created_at', 'createdAt', 'timestamp', 'start'],
       'ended_at': ['ended_at', 'endedAt', 'end_time', 'endTime', 'finished_at', 'finishedAt', 'completed_at', 'completedAt', 'stoppedAt', 'stopped_at', 'end'],
+      'duration_ms': ['duration_ms', 'durationms', 'duration', 'elapsed', 'elapsed_ms', 'runtime', 'runtime_ms', 'execution_time'],
       // voice-agent-dashboard fields
       'call_id': ['threadid', 'thread_id', 'callid', 'call_id', 'id', 'sessionid', 'session_id'],
       'duration': ['duration', 'call_duration', 'length', 'elapsed', 'duration_seconds', 'call_duration_seconds', 'call_length'],

@@ -98,10 +98,11 @@ DO NOT try to generate previews yourself — always delegate to this specialist.
           // Log each step for debugging without blocking autonomous flow
           const toolNames = (toolCalls ?? []).map((tc) => {
             const call = tc as any;
-            // AI SDK v5: call.toolName is the canonical property
-            const name = call.toolName ?? 'unknown';
+            // AI SDK v5: call.toolName is canonical
+            // Mastra Agent Network format: { type: "tool-call", payload: { toolName: "..." } }
+            const name = call.toolName ?? call.payload?.toolName ?? 'unknown';
             if (name === 'unknown') {
-              console.log('[delegateToPlatformMapper] Unknown tool call structure:', JSON.stringify(call, null, 2));
+              console.log('[delegateToPlatformMapper] Unknown tool call structure:', JSON.stringify(call, null, 2).substring(0, 500));
             }
             return String(name);
           });
@@ -204,6 +205,17 @@ DO NOT try to generate previews yourself — always delegate to this specialist.
           interfaceId = urlMatch[1];
           previewVersionId = urlMatch[2];
           console.log('[delegateToPlatformMapper] Extracted previewUrl from text:', previewUrl);
+        }
+      }
+
+      // Path 4 (safety net): Extract interfaceId from previewUrl if we have URL but missing interfaceId
+      if (previewUrl && !interfaceId) {
+        const UUID_PATTERN = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+        const urlParts = previewUrl.match(new RegExp(`/preview/(${UUID_PATTERN})/(${UUID_PATTERN})`, 'i'));
+        if (urlParts) {
+          interfaceId = urlParts[1];
+          previewVersionId = previewVersionId || urlParts[2];
+          console.log('[delegateToPlatformMapper] Extracted interfaceId from previewUrl:', interfaceId);
         }
       }
 

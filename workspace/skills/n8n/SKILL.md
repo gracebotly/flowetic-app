@@ -51,6 +51,36 @@ If the user asks for ROI: still start with Workflow Activity Dashboard, then add
 
 ---
 
+## Tool Call Sequence (Agent MUST Follow This Order)
+
+### Required Tools for Dashboard Generation
+
+| Step | Tool | Purpose | Required |
+|------|------|---------|----------|
+| 1 | `analyzeSchema` | Detect fields from events (inspects `state` + `labels` JSONB) | YES |
+| 2 | `generateMapping` | Map detected fields → template requirements using semantic aliases | YES |
+| 3 | `checkMappingCompleteness` | Validate confidence ≥ 0.75, list missing fields | YES |
+| 4 | `validatePreviewReadiness` | Confirm all prerequisites before preview generation | YES |
+| 5 | `runGeneratePreviewWorkflow` | Generate the actual preview | YES |
+
+### Usage Rules
+
+1. **ALWAYS** call `analyzeSchema` before any mapping tool
+2. **ALWAYS** use `generateMapping` (id: `generate-mapping`) — NOT `proposeMapping`
+3. **NEVER** assume field names — use only what `analyzeSchema` returns
+4. **NEVER** proceed to preview if confidence < 0.75 — ask user to confirm missing fields first
+5. If `analyzeSchema` returns fields from `state` JSONB (e.g., `started_at`, `status`, `duration_ms`), these are the normalized fields — prefer them over raw `labels` fields
+
+### Template ID Mapping
+
+| User Says | Template ID | Required Fields |
+|-----------|-------------|-----------------|
+| "workflow dashboard", "activity dashboard", "ops dashboard" | `workflow-dashboard` | `workflow_id`, `status`, `started_at`, `ended_at` |
+| "workflow monitor" | `workflow-dashboard` | (same — `workflow-monitor` is a deprecated alias) |
+| Default for n8n | `workflow-dashboard` | (always use this for n8n) |
+
+---
+
 ## Step 3 — Auto-Mapping (what fields to look for)
 ### Vocabulary
 - workflow = automation definition
@@ -108,6 +138,24 @@ If node-level data is available, offer optional drill-down: "slow node", "failed
 
 Ask in a UI-friendly way:
 - "I can't find duration. I found: execution_time, runtime_ms, stopped_at-started_at. Which should we use?"
+
+---
+
+## Pre-Preview Checklist (Validate Before Generating)
+
+Before calling `runGeneratePreviewWorkflow`, verify:
+
+- [ ] `analyzeSchema` returned fields from `state` JSONB (not just top-level columns)
+- [ ] `status` field is mapped and has non-empty values
+- [ ] `started_at` field is mapped (source: normalizer's `state.started_at`)
+- [ ] `ended_at` field is mapped (source: normalizer's `state.ended_at`)
+- [ ] `duration_ms` is available (computed by normalizer from timestamps)
+- [ ] `workflow_id` is mapped for grouping
+- [ ] Overall mapping confidence ≥ 0.75
+- [ ] If confidence < 0.75: asked user about missing fields with 2-3 suggestions
+
+If `started_at` or `ended_at` are missing but `timestamp` exists:
+→ Offer: "I found timestamps but not execution start/end times. This means duration-based widgets will be empty. Continue anyway?"
 
 ---
 

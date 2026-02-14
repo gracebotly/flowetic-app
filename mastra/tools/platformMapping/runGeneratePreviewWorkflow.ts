@@ -25,6 +25,7 @@ export const runGeneratePreviewWorkflow = createTool({
     runId: z.string().optional(),
     previewVersionId: z.string().optional(),
     previewUrl: z.string().optional(),
+    interfaceId: z.string().optional(),
     error: z.string().optional(),
     message: z.string().optional(),
     currentPhase: z.string().optional(),
@@ -188,6 +189,7 @@ export const runGeneratePreviewWorkflow = createTool({
           runId: result.result.runId,
           previewVersionId: result.result.previewVersionId,
           previewUrl: result.result.previewUrl,
+          interfaceId: (result.result as any).interfaceId,
         };
       }
 

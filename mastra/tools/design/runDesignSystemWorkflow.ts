@@ -75,9 +75,39 @@ Present the results as 2 style options for the user to choose from.`,
       if (!workflow) {
         console.error("[runDesignSystemWorkflow] Workflow not found. Available workflows:",
           Object.keys((mastra as any).workflows || {}));
+
+        // Fallback: Call designAdvisorAgent directly
+        console.log("[runDesignSystemWorkflow] Falling back to direct designAdvisorAgent call");
+        try {
+          const agent = mastra.getAgent("designAdvisorAgent");
+          if (agent) {
+            const prompt = `Generate a design system for a ${inputData.platformType} dashboard called "${inputData.workflowName}".
+Call getStyleRecommendations, getTypographyRecommendations, getChartRecommendations, and getProductRecommendations.
+Return JSON with: designSystem { style, colors, typography, charts, uxGuidelines }, reasoning.`;
+
+            const result = await agent.generate(prompt, {
+              maxSteps: 10,
+              toolChoice: "auto",
+              requestContext: context?.requestContext,
+            });
+
+            // Try to parse result
+            const jsonMatch = result.text?.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+              const parsed = JSON.parse(jsonMatch[0]);
+              return {
+                success: true,
+                designSystem: parsed.designSystem || parsed,
+                reasoning: parsed.reasoning || "Generated via direct agent fallback",
+              };
+            }
+          }
+        } catch (fallbackErr) {
+          console.error("[runDesignSystemWorkflow] Agent fallback also failed:", fallbackErr);
+        }
         return {
           success: false,
-          error: "designSystemWorkflow not registered. Falling back to delegateToDesignAdvisor.",
+          error: "designSystemWorkflow not registered and agent fallback failed.",
         };
       }
 
