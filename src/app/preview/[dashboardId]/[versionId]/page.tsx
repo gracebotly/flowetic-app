@@ -145,16 +145,43 @@ export default async function PreviewPage({ params }: PreviewPageProps) {
     notFound();
   }
 
-  // 2. NEW: Fetch real event data for this interface
-  const { data: events } = await supabase
-    .from("events")
-    .select("id, type, name, value, unit, text, state, timestamp, created_at")
+  // 2. Fetch real event data via flattened view (Bug 6 fix)
+  // events_flat extracts state JSONB fields as top-level columns
+  // View uses security_invoker=true so RLS on events table still applies
+  let resolvedEvents: any[] = [];
+  const { data: events, error: eventsError } = await supabase
+    .from("events_flat")
+    .select("id, type, name, value, unit, text, state, timestamp, created_at, workflow_id, status, duration_ms, mode, workflow_name, execution_id, error_message")
     .eq("interface_id", dashboardId)
     .order("timestamp", { ascending: false })
     .limit(200);
 
+  if (eventsError?.message?.includes('events_flat')) {
+    // Fallback: if migration not yet applied, query events directly and flatten in JS
+    const { data: fallbackEvents } = await supabase
+      .from("events")
+      .select("id, type, name, value, unit, text, state, timestamp, created_at")
+      .eq("interface_id", dashboardId)
+      .order("timestamp", { ascending: false })
+      .limit(200);
+    resolvedEvents = (fallbackEvents || []).map((evt: any) => ({
+      ...evt,
+      workflow_id: evt.state?.workflow_id ?? null,
+      status: evt.state?.status ?? null,
+      duration_ms: evt.state?.duration_ms != null ? Number(evt.state.duration_ms) : null,
+      workflow_name: evt.state?.workflow_name ?? null,
+      execution_id: evt.state?.execution_id ?? null,
+      error_message: evt.state?.error_message ?? null,
+    }));
+  } else {
+    // Coerce numeric types (Supabase ->> returns text, ::numeric casts in view but JS may still get string)
+    resolvedEvents = (events || []).map((evt: any) => ({
+      ...evt,
+      duration_ms: evt.duration_ms != null ? Number(evt.duration_ms) : null,
+    }));
+  }
+
   // 3. If no events found via interface_id, try via journey_sessions → source_id
-  let resolvedEvents = events || [];
   if (resolvedEvents.length === 0) {
     const { data: session } = await supabase
       .from("journey_sessions")
@@ -163,13 +190,35 @@ export default async function PreviewPage({ params }: PreviewPageProps) {
       .maybeSingle();
 
     if (session?.source_id) {
-      const { data: sourceEvents } = await supabase
-        .from("events")
-        .select("id, type, name, value, unit, text, state, timestamp, created_at")
+      const { data: sourceEvents, error: sourceEventsError } = await supabase
+        .from("events_flat")
+        .select("id, type, name, value, unit, text, state, timestamp, created_at, workflow_id, status, duration_ms, mode, workflow_name, execution_id, error_message")
         .eq("source_id", session.source_id)
         .order("timestamp", { ascending: false })
         .limit(200);
-      resolvedEvents = sourceEvents || [];
+
+      if (sourceEventsError?.message?.includes('events_flat')) {
+        const { data: fallbackSourceEvents } = await supabase
+          .from("events")
+          .select("id, type, name, value, unit, text, state, timestamp, created_at")
+          .eq("source_id", session.source_id)
+          .order("timestamp", { ascending: false })
+          .limit(200);
+        resolvedEvents = (fallbackSourceEvents || []).map((evt: any) => ({
+          ...evt,
+          workflow_id: evt.state?.workflow_id ?? null,
+          status: evt.state?.status ?? null,
+          duration_ms: evt.state?.duration_ms != null ? Number(evt.state.duration_ms) : null,
+          workflow_name: evt.state?.workflow_name ?? null,
+          execution_id: evt.state?.execution_id ?? null,
+          error_message: evt.state?.error_message ?? null,
+        }));
+      } else {
+        resolvedEvents = (sourceEvents || []).map((evt: any) => ({
+          ...evt,
+          duration_ms: evt.duration_ms != null ? Number(evt.duration_ms) : null,
+        }));
+      }
     }
   }
 
