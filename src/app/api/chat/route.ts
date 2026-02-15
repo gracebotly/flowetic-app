@@ -46,6 +46,13 @@ export async function POST(req: Request) {
       null;
 
     if (!clientProvidedTenantId || typeof clientProvidedTenantId !== 'string') {
+      // AI SDK v5 transport can send auto-resubmission requests without custom body.
+      // Log for visibility but keep the 400 so the frontend knows to stop retrying.
+      console.warn('[api/chat] Missing tenantId — likely a transport resubmission without body context', {
+        hasMessages: Array.isArray(clientData?.messages) && clientData.messages.length > 0,
+        trigger: clientData?.trigger,
+        keys: Object.keys(clientData || {}),
+      });
       return new Response(
         JSON.stringify({ error: 'Missing tenantId in request' }),
         { status: 400, headers: { 'Content-Type': 'application/json' } }

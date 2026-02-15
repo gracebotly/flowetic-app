@@ -204,9 +204,22 @@ export function ChatWorkspace({
   // Guard against concurrent init + user sends
   const initSendInFlight = useRef(false);
 
+  // Use ref to provide current auth context to transport-level body.
+  // This ensures auto-resubmissions (onFinish/shouldContinue) include tenantId.
+  // See: https://ai-sdk.dev/docs/troubleshooting/use-chat-stale-body-data
+  const authContextRef = useRef(authContext);
+  useEffect(() => { authContextRef.current = authContext; }, [authContext]);
+  const threadIdRef = useRef(threadId);
+  useEffect(() => { threadIdRef.current = threadId; }, [threadId]);
+
   const { messages: uiMessages, sendMessage: sendUiMessage, status: uiStatus, error: uiError } = useChat({
     transport: new DefaultChatTransport({
       api: '/api/chat',
+      body: () => ({
+        tenantId: authContextRef.current?.tenantId,
+        userId: authContextRef.current?.userId,
+        journeyThreadId: threadIdRef.current,
+      }),
     }),
     onFinish: ({ message }) => {
       // AI SDK v5: Find the LAST advancePhase tool part (most recent phase wins)

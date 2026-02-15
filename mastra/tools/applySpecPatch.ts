@@ -56,13 +56,42 @@ function setByPath(obj: Record<string, any>, path: string, value: any) {
   cur[parts[parts.length - 1]!] = value;
 }
 
+/**
+ * Deep-merge source into target. Source values win on conflict.
+ * Only merges plain objects recursively; arrays and primitives are replaced.
+ */
+function deepMerge(target: Record<string, any>, source: Record<string, any>): Record<string, any> {
+  const result = { ...target };
+  for (const key of Object.keys(source)) {
+    if (
+      source[key] !== null &&
+      typeof source[key] === "object" &&
+      !Array.isArray(source[key]) &&
+      target[key] !== null &&
+      typeof target[key] === "object" &&
+      !Array.isArray(target[key])
+    ) {
+      result[key] = deepMerge(target[key], source[key]);
+    } else {
+      result[key] = source[key];
+    }
+  }
+  return result;
+}
+
 export const applySpecPatch = createTool({
   id: "applySpecPatch",
   description:
-    "Apply a small, deterministic patch to a dashboard UI spec and/or design tokens. Returns updated spec_json + design_tokens.",
+    "Apply a small, deterministic patch to a dashboard UI spec and/or design tokens. " +
+    "IMPORTANT: Always pass existing_design_tokens (the full tokens from getCurrentSpec) " +
+    "to prevent token loss when using setDesignToken operations. " +
+    "Returns updated spec_json + design_tokens.",
   inputSchema: z.object({
     spec_json: z.record(z.any()),
     design_tokens: z.record(z.any()).default({}),
+    existing_design_tokens: z.record(z.any()).optional().describe(
+      "Full design tokens from getCurrentSpec. When provided, design_tokens is deep-merged onto this base to prevent token loss."
+    ),
     operations: z.array(PatchOpSchema).min(1).max(20),
   }),
   outputSchema: z.object({
@@ -72,7 +101,16 @@ export const applySpecPatch = createTool({
   }),
   execute: async (inputData, context) => {
     const spec = deepClone(inputData.spec_json);
-    const tokens = deepClone(inputData.design_tokens ?? {});
+    // Deep-merge: if existing_design_tokens is provided, use it as the base
+    // and merge inputData.design_tokens on top. This prevents the LLM from
+    // accidentally dropping tokens by passing a sparse design_tokens object.
+    const baseTokens = inputData.existing_design_tokens
+      ? deepClone(inputData.existing_design_tokens)
+      : {};
+    const incomingTokens = deepClone(inputData.design_tokens ?? {});
+    const tokens = Object.keys(baseTokens).length > 0
+      ? deepMerge(baseTokens, incomingTokens)
+      : incomingTokens;
     const applied: string[] = [];
 
     // Basic shape guard to keep edits sane

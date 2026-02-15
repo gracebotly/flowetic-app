@@ -53,7 +53,9 @@ You own the dashboard spec language and all incremental 'vibe coding' edits. You
 
 ## DETERMINISTIC EDITING WORKFLOW
 1. Call getCurrentSpec to load the latest spec/version
-2. Call applySpecPatch with a minimal patch (operations array)
+2. Call applySpecPatch with a minimal patch (operations array).
+   CRITICAL: Always pass the FULL design_tokens from getCurrentSpec as existing_design_tokens.
+   Only put the tokens you want to CHANGE in design_tokens. This prevents token loss.
 3. Call validateSpec with spec_json from applySpecPatch
 4. If valid and score >= 0.8, call savePreviewVersion to persist and return previewUrl
 
