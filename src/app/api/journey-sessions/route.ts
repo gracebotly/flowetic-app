@@ -58,6 +58,7 @@ export async function POST(req: NextRequest) {
     platform_type: platformType,
     source_id: sourceId,
     entity_id: entityId,
+    title,
     mode: "select_entity",
     density_preset: "comfortable",
     created_at: now,
@@ -72,18 +73,6 @@ export async function POST(req: NextRequest) {
 
   if (error) {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
-  }
-
-  // store title as first system message for now (no title column in schema)
-  const { error: msgErr } = await supabase.from("journey_messages").insert({
-    tenant_id: tenantId,
-    thread_id: threadId,
-    role: "system",
-    content: `Conversation: ${title}`,
-  });
-
-  if (msgErr) {
-    // non-fatal
   }
 
   return NextResponse.json({ ok: true, session: data });

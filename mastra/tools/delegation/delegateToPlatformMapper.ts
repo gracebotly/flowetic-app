@@ -60,11 +60,42 @@ DO NOT try to generate previews yourself — always delegate to this specialist.
 
       // Also pass journeyThreadId if available (the client journey thread for journey_sessions lookups)
       const journeyThreadId = context?.requestContext?.get('journeyThreadId') as string;
-      
+
+      // Extract phase context from RequestContext so sub-agent knows which phase it's in
+      const currentPhase = context?.requestContext?.get('phase') as string || '';
+      const platformType = context?.requestContext?.get('platformType') as string || '';
+      const workflowName = context?.requestContext?.get('workflowName') as string || '';
+      const sourceId = context?.requestContext?.get('sourceId') as string || '';
+      // Build phase-specific instructions for the sub-agent
+      let phaseDirective = '';
+      if (currentPhase === 'select_entity') {
+        phaseDirective = [
+          '\n## PHASE CONTEXT: select_entity',
+          `You are in the SELECT ENTITY phase for a ${platformType} workflow${workflowName ? `: "${workflowName}"` : ''}.`,
+          '',
+          'YOUR FIRST PRIORITY in this phase:',
+          '1. Call getEventStats WITHOUT any type filter (omit the "type" parameter) to see ALL events across all types.',
+          '2. If totalEvents > 0, also call getEventSamples to see actual event structure and field names.',
+          '3. Use the returned stats to identify which entities have REAL events stored.',
+          '4. Include event counts in your suggestions (e.g., "Leads — 847 events tracked").',
+          '5. Only suggest entities that have actual data. Do NOT hallucinate entities based on the workflow name alone.',
+          '6. Event types include: workflow_execution (n8n/Make runs), message, metric, state, tool_event, error.',
+          '',
+          'If getEventStats returns no data or errors, THEN fall back to suggesting entities based on the workflow name and platform type — but explicitly tell the user: "I don\'t see stored events yet, so here are likely entities based on your workflow type."',
+          '',
+          'Present 3-5 entities specific to this workflow. Each should have a 1-sentence description.',
+          'After the user picks entities, call advancePhase with nextPhase="recommend".',
+        ].join('\n');
+      } else if (currentPhase === 'recommend') {
+        phaseDirective = `\n## PHASE CONTEXT: recommend\nYou are in the RECOMMEND phase. Help the user choose between Dashboard and Product outcomes based on their selected entities and workflow data.`;
+      } else if (currentPhase === 'build_preview') {
+        phaseDirective = `\n## PHASE CONTEXT: build_preview\nYou are in the BUILD PREVIEW phase. Check schema readiness, run data analysis, and generate the dashboard preview.`;
+      }
       const enhancedPrompt = [
         input.task,
         input.additionalContext ? `\nAdditional context: ${input.additionalContext}` : "",
         journeyThreadId ? `\nIMPORTANT - When calling getJourneySession, use threadId: "${journeyThreadId}" (not a display name)` : "",
+        phaseDirective,
       ].filter(Boolean).join("\n");
 
       // Debug logging for context propagation

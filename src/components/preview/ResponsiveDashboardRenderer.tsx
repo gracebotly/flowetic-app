@@ -29,6 +29,8 @@ interface DashboardSpec {
 interface DesignTokens {
   colors?: {
     primary?: string;
+    secondary?: string;
+    accent?: string;
     background?: string;
     text?: string;
   };
@@ -145,6 +147,8 @@ function getDeviceContainerStyle(deviceMode: DeviceMode): React.CSSProperties {
 function ComponentCard({
   component,
   primaryColor,
+  secondaryColor,
+  accentColor,
   borderRadius,
   shadow,
   isEditing,
@@ -152,6 +156,8 @@ function ComponentCard({
 }: {
   component: ComponentSpec;
   primaryColor: string;
+  secondaryColor: string;
+  accentColor: string;
   borderRadius: number;
   shadow: string;
   isEditing: boolean;
@@ -205,7 +211,7 @@ function ComponentCard({
             ]}
             index="date"
             categories={["value"]}
-            colors={[primaryColor.replace("#", "")]}
+            colors={[primaryColor]}
             showLegend={false}
             showGridLines={false}
             showYAxis={false}
@@ -221,7 +227,7 @@ function ComponentCard({
             ]}
             index="name"
             categories={["value"]}
-            colors={[primaryColor.replace("#", "")]}
+            colors={[primaryColor, secondaryColor]}
             showLegend={false}
             showGridLines={false}
           />
@@ -235,7 +241,7 @@ function ComponentCard({
             ]}
             category="value"
             index="name"
-            colors={["emerald", "rose", "amber"]}
+            colors={[primaryColor, secondaryColor, accentColor]}
             showLabel={true}
           />
         ) : type === "DataTable" ? (
@@ -286,6 +292,9 @@ export function ResponsiveDashboardRenderer({
   // Design tokens
   const colors = designTokens?.colors ?? {};
   const primaryColor = colors?.primary ?? "#3b82f6";
+  const secondaryColor = colors?.secondary ?? "#64748B";
+  const accentColor = colors?.accent ?? "#14B8A6";
+  const backgroundColor = colors?.background ?? "#ffffff";
   const borderRadius = designTokens?.borderRadius ?? 8;
   const shadow = designTokens?.shadow ?? "0 2px 4px rgba(0,0,0,0.05)";
 
@@ -323,6 +332,8 @@ export function ResponsiveDashboardRenderer({
                 key={comp.id}
                 component={comp}
                 primaryColor={primaryColor}
+                secondaryColor={secondaryColor}
+                accentColor={accentColor}
                 borderRadius={borderRadius}
                 shadow={shadow}
                 isEditing={isEditing}
@@ -360,6 +371,8 @@ export function ResponsiveDashboardRenderer({
               <ComponentCard
                 component={comp}
                 primaryColor={primaryColor}
+                secondaryColor={secondaryColor}
+                accentColor={accentColor}
                 borderRadius={borderRadius}
                 shadow={shadow}
                 isEditing={isEditing}

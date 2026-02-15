@@ -12,8 +12,8 @@ interface ModelOption {
 }
 
 const MODELS: ModelOption[] = [
-  { id: "glm-4.7", name: "GLM 4.7" },
   { id: "gemini-3-pro-preview", name: "Gemini 3 Pro" },
+  { id: "glm-4.7", name: "GLM 4.7" },
   { id: "claude-sonnet-4-5", name: "Claude Sonnet 4.5" },
   { id: "gpt-5.2", name: "GPT 5.2" },
 ];

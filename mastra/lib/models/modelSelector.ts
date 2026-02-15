@@ -27,13 +27,6 @@ export interface ModelConfig {
  */
 export const AVAILABLE_MODELS: ModelConfig[] = [
   {
-    id: "glm-4.7",
-    displayName: "GLM 4.7",
-    provider: "zai.chat",      // ← revert from "openrouter"
-    costTier: "cheap",
-    factory: () => glm47Model(),
-  },
-  {
     id: "gemini-3-pro-preview",
     displayName: "Gemini 3 Pro",
     provider: "google",
@@ -46,6 +39,13 @@ export const AVAILABLE_MODELS: ModelConfig[] = [
       const google = createGoogleGenerativeAI({ apiKey });
       return google("gemini-3-pro-preview");
     },
+  },
+  {
+    id: "glm-4.7",
+    displayName: "GLM 4.7",
+    provider: "zai.chat",      // ← revert from "openrouter"
+    costTier: "cheap",
+    factory: () => glm47Model(),
   },
   {
     id: "claude-sonnet-4-5",
@@ -78,9 +78,9 @@ export const AVAILABLE_MODELS: ModelConfig[] = [
 ];
 
 /**
- * Default model (cheap for testing)
+ * Default model
  */
-export const DEFAULT_MODEL_ID: ModelId = "glm-4.7";
+export const DEFAULT_MODEL_ID: ModelId = "gemini-3-pro-preview";
 
 /**
  * Get model instance by ID (lazy instantiation)
@@ -95,7 +95,7 @@ export function getModelById(modelId: ModelId | string | undefined): any {
 
   if (!config) {
     console.warn(`[ModelSelector] Unknown model ID "${normalized}", falling back to default`);
-    const defaultConfig = AVAILABLE_MODELS[0]; // GLM 4.7
+    const defaultConfig = AVAILABLE_MODELS[0]; // Gemini 3 Pro
     return defaultConfig.factory(); // ✅ Call factory
   }
 
@@ -114,5 +114,5 @@ export function getModelDisplayName(modelId: ModelId | string | undefined): stri
 
   const config = AVAILABLE_MODELS.find(m => m.id === normalized);
 
-  return config?.displayName || "GLM 4.7";
+  return config?.displayName || "Gemini 3 Pro";
 }
