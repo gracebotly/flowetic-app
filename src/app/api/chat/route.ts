@@ -318,6 +318,50 @@ export async function POST(req: Request) {
       threadId: mastraThreadId.substring(0, 8) + '...',
     });
 
+    // Auto-advance phase based on user selections
+    const currentPhase = requestContext.get('currentPhase') as string | undefined;
+    const messages = (params as any)?.messages || [];
+    const userMessage = messages[messages.length - 1]?.content;
+
+    if (currentPhase && typeof userMessage === 'string') {
+      let nextPhase: string | null = null;
+
+      // Phase transition rules (event-driven)
+      if (currentPhase === 'select_entity' && userMessage.match(/selected|choose|pick|entity/i)) {
+        nextPhase = 'recommend';
+      } else if (currentPhase === 'recommend' && userMessage.match(/dashboard|product/i)) {
+        nextPhase = 'build_preview';
+      } else if (currentPhase === 'build_preview' && userMessage.match(/approve|looks good|deploy/i)) {
+        nextPhase = 'deploy';
+      }
+
+      if (nextPhase) {
+        // Update phase in journey_sessions
+        const journeyThreadId = requestContext.get('journeyThreadId') as string | undefined;
+        if (journeyThreadId) {
+          const { getJourneySession } = await import('@/mastra/tools/journey/getJourneySession');
+          const session = await getJourneySession.execute(
+            { threadId: journeyThreadId },
+            { requestContext }
+          );
+
+          if (session) {
+            const { updateJourneyPhase } = await import('@/mastra/tools/journey/updateJourneyPhase');
+            await updateJourneyPhase.execute(
+              {
+                threadId: journeyThreadId,
+                phase: nextPhase,
+              },
+              { requestContext }
+            );
+
+            // Update context for this request
+            requestContext.set('currentPhase', nextPhase);
+          }
+        }
+      }
+    }
+
     // 5. CALL MASTRA WITH VALIDATED CONTEXT
     const enhancedParams = {
       ...params,

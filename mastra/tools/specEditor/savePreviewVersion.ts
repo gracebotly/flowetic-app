@@ -34,6 +34,12 @@ export const savePreviewVersion = createTool({
     const { spec_json, interfaceId } = inputData;
     let { design_tokens } = inputData;
 
+    // ── Inject default styleBundleId if missing ──────────────────────
+    if (!spec_json.styleBundleId) {
+      console.warn('[savePreviewVersion] spec_json missing styleBundleId, injecting default');
+      spec_json.styleBundleId = 'professional-clean';
+    }
+
     // ── Token-locking guard ──────────────────────────────────────────
     // If spec_json contains a styleBundleId, re-resolve design tokens
     // from the canonical STYLE_BUNDLE_TOKENS map instead of trusting
@@ -41,6 +47,15 @@ export const savePreviewVersion = createTool({
     const rawBundleId = spec_json?.styleBundleId;
     if (rawBundleId && typeof rawBundleId === "string") {
       const resolvedId = resolveStyleBundleId(rawBundleId);
+
+      // Re-resolve tokens to catch LLM hallucinations
+      if (resolvedId !== rawBundleId) {
+        console.warn(
+          `[savePreviewVersion] LLM used invalid bundle '${rawBundleId}', corrected to '${resolvedId}'`
+        );
+        spec_json.styleBundleId = resolvedId;
+      }
+
       const canonicalTokens = STYLE_BUNDLE_TOKENS[resolvedId];
       if (canonicalTokens) {
         console.log(

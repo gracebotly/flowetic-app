@@ -41,6 +41,11 @@ Without calling this tool, the phase stays stuck and instructions won't update.`
   }),
 
   execute: async (inputData, context) => {
+    // Warning: Manual phase transition triggered
+    console.warn(
+      '[advancePhase] Manual phase transition triggered. This should be rare - most transitions are auto-driven by user selections.'
+    );
+
     const { nextPhase, reason, selectedValue } = inputData;
     const currentPhase = (context?.requestContext?.get('phase') as string) || 'select_entity';
 
