@@ -69,6 +69,13 @@ export const STYLE_BUNDLE_TOKENS: Record<string, {
     radius: 8,
     shadow: 'warm',
   },
+  'modern-saas': {
+    colors: { primary: '#7C3AED', secondary: '#14B8A6', success: '#10B981', warning: '#F59E0B', error: '#EF4444', background: '#FFFFFF', text: '#111827' },
+    fonts: { heading: 'Inter, sans-serif', body: 'Inter, sans-serif' },
+    spacing: { unit: 8 },
+    radius: 10,
+    shadow: 'soft',
+  },
 };
 
 // ============================================================================
@@ -382,38 +389,74 @@ function getTemplateBlueprints(templateId: string, mappings: Record<string, stri
 }
 
 // ============================================================================
-// Style bundle ID resolver — handles LLM-generated display names
-// that don't match the hardcoded STYLE_BUNDLE_TOKENS keys.
-// Uses keyword matching to find the closest bundle.
+// Style bundle ID resolver — layered: exact key → display name → slug → fuzzy
+// Replaces broken single-keyword BM25 that matched "Modern SaaS" → "neon-cyber"
 // ============================================================================
+const STYLE_DISPLAY_NAMES: Record<string, string> = {
+  'professional-clean': 'Professional Clean',
+  'premium-dark': 'Premium Dark',
+  'glass-premium': 'Glass Premium',
+  'bold-startup': 'Bold Startup',
+  'corporate-trust': 'Corporate Trust',
+  'neon-cyber': 'Neon Cyber',
+  'pastel-soft': 'Pastel Soft',
+  'warm-earth': 'Warm Earth',
+  'modern-saas': 'Modern SaaS',
+};
+
 export function resolveStyleBundleId(input: string): string {
-  // Direct match — fast path
-  if (STYLE_BUNDLE_TOKENS[input]) return input;
+  const trimmed = input.trim();
+  const lower = trimmed.toLowerCase();
+  const validKeys = Object.keys(STYLE_BUNDLE_TOKENS);
 
-  const KEYWORD_MAP: Record<string, string[]> = {
-    'professional-clean': ['professional', 'clean', 'minimal', 'simple', 'executive', 'business'],
-    'premium-dark': ['premium', 'dark', 'elegant', 'luxury', 'sophisticated', 'night', 'sleek'],
-    'glass-premium': ['glass', 'glassmorphism', 'frosted', 'translucent', 'blur', 'transparent', 'aurora'],
-    'bold-startup': ['bold', 'startup', 'energetic', 'vibrant', 'playful', 'bright', 'fun'],
-    'corporate-trust': ['corporate', 'trust', 'formal', 'authority', 'banking', 'finance', 'enterprise'],
-    'neon-cyber': ['neon', 'cyber', 'monitoring', 'modern', 'electric', 'real-time', 'tech', 'hud', 'dashboard', 'analytics', 'terminal', 'matrix'],
-    'pastel-soft': ['pastel', 'soft', 'gentle', 'calming', 'wellness', 'health', 'light', 'friendly'],
-    'warm-earth': ['warm', 'earth', 'organic', 'natural', 'rustic', 'cozy', 'brown', 'sustainable'],
-  };
+  // Layer 1: Exact key match (e.g., "neon-cyber")
+  if (STYLE_BUNDLE_TOKENS[trimmed]) return trimmed;
+  if (STYLE_BUNDLE_TOKENS[lower]) return lower;
 
-  const inputLower = input.toLowerCase().replace(/[-_]/g, ' ');
-  let bestMatch = 'professional-clean';
-  let bestScore = 0;
-
-  for (const [bundleId, keywords] of Object.entries(KEYWORD_MAP)) {
-    const score = keywords.filter(kw => inputLower.includes(kw)).length;
-    if (score > bestScore) {
-      bestScore = score;
-      bestMatch = bundleId;
+  // Layer 2: Exact display name match (case-insensitive)
+  for (const [key, displayName] of Object.entries(STYLE_DISPLAY_NAMES)) {
+    if (displayName.toLowerCase() === lower) {
+      console.log(`[resolveStyleBundleId] Display name match: "${input}" → "${key}"`);
+      return key;
     }
   }
 
-  console.log(`[generateUISpec] Resolved style "${input}" → "${bestMatch}" (score: ${bestScore})`);
+  // Layer 3: Slug conversion ("Modern SaaS" → "modern-saas")
+  const slugified = lower.replace(/\s+/g, '-');
+  if (STYLE_BUNDLE_TOKENS[slugified]) {
+    console.log(`[resolveStyleBundleId] Slug match: "${input}" → "${slugified}"`);
+    return slugified;
+  }
+
+  // Layer 4: Word-overlap match — requires ≥2 matching words
+  // This prevents the old bug where "modern" alone matched "neon-cyber"
+  const inputWords = lower.replace(/[-_]/g, ' ').split(/\s+/).filter(w => w.length > 2);
+  let bestMatch = 'professional-clean';
+  let bestScore = 0;
+
+  for (const key of validKeys) {
+    const keyWords = key.replace(/-/g, ' ').split(/\s+/);
+    const displayWords = (STYLE_DISPLAY_NAMES[key] || '').toLowerCase().split(/\s+/);
+    const candidateWords = [...new Set([...keyWords, ...displayWords])];
+
+    const score = inputWords.filter(w =>
+      candidateWords.some(cw => cw.includes(w) || w.includes(cw))
+    ).length;
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestMatch = key;
+    }
+  }
+
+  if (bestScore < 2) {
+    console.warn(
+      `[resolveStyleBundleId] Low confidence for "${input}" (score: ${bestScore}). Falling back to "professional-clean".`
+    );
+    return 'professional-clean';
+  }
+
+  console.log(`[resolveStyleBundleId] Fuzzy match: "${input}" → "${bestMatch}" (score: ${bestScore})`);
   return bestMatch;
 }
 
