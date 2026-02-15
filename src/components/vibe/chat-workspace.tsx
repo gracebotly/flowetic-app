@@ -204,14 +204,6 @@ export function ChatWorkspace({
   // Guard against concurrent init + user sends
   const initSendInFlight = useRef(false);
 
-  // Use ref to provide current auth context to transport-level body.
-  // This ensures auto-resubmissions (onFinish/shouldContinue) include tenantId.
-  // See: https://ai-sdk.dev/docs/troubleshooting/use-chat-stale-body-data
-  const authContextRef = useRef(authContext);
-  useEffect(() => { authContextRef.current = authContext; }, [authContext]);
-  const threadIdRef = useRef(threadId);
-  useEffect(() => { threadIdRef.current = threadId; }, [threadId]);
-
   const { messages: uiMessages, sendMessage: sendUiMessage, status: uiStatus, error: uiError } = useChat({
     transport: new DefaultChatTransport({
       api: '/api/chat',
@@ -650,6 +642,14 @@ export function ChatWorkspace({
     userId: string | null;
     tenantId: string | null;
   }>({ userId: null, tenantId: null });
+
+  // ── Refs for stale-closure protection ──
+  // This ensures auto-resubmissions (onFinish/shouldContinue) include tenantId.
+  // See: https://ai-sdk.dev/docs/troubleshooting/use-chat-stale-body-data
+  const authContextRef = useRef(authContext);
+  useEffect(() => { authContextRef.current = authContext; }, [authContext]);
+  const threadIdRef = useRef(threadId);
+  useEffect(() => { threadIdRef.current = threadId; }, [threadId]);
 
   const [backendWarning, setBackendWarning] = useState<string | null>(null);
 
