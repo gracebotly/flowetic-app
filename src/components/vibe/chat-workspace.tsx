@@ -878,8 +878,23 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
     if (journeyMode === "interactive_edit") {
       setEditPanelOpen(true);
       setView("edit");
+      // Auto-populate widgets from spec if showInteractiveEditPanel wasn't called
+      if (editWidgets.length === 0 && loadedSpec?.components?.length > 0) {
+        const derived: WidgetConfig[] = loadedSpec.components.map((comp: any, idx: number) => ({
+          id: comp.id || `widget-${idx}`,
+          title: comp.props?.title || comp.type || `Widget ${idx + 1}`,
+          kind: (
+            comp.type === "MetricCard" || comp.type === "kpi-card" || comp.type === "kpi" || comp.type === "kpi_card" || comp.type === "metric-card" ? "metric" as const :
+            comp.type === "LineChart" || comp.type === "BarChart" || comp.type === "PieChart" || comp.type === "DonutChart" || comp.type === "AreaChart" || comp.type === "TimeseriesChart" || comp.type === "line-chart" || comp.type === "bar-chart" || comp.type === "pie-chart" ? "chart" as const :
+            comp.type === "DataTable" || comp.type === "data-table" || comp.type === "data_table" || comp.type === "table" ? "table" as const :
+            "other" as const
+          ),
+          enabled: !comp.props?.hidden,
+        }));
+        setEditWidgets(derived);
+      }
     }
-  }, [journeyMode]);
+  }, [journeyMode, loadedSpec]);
 
   // ── Fetch dashboard spec when interfaceId/versionId are set ──
   useEffect(() => {
@@ -1791,6 +1806,60 @@ return (
                       setView("edit");
                       setJourneyMode("interactive_edit");
                       setEditPanelOpen(true);
+                      setDeviceMode("desktop");
+                      // Auto-populate editWidgets from loadedSpec when user clicks Edit
+                      // (showInteractiveEditPanel tool only runs when LLM initiates edit mode)
+                      if (editWidgets.length === 0 && loadedSpec?.components?.length > 0) {
+                        const derived: WidgetConfig[] = loadedSpec.components.map((comp: any, idx: number) => ({
+                          id: comp.id || `widget-${idx}`,
+                          title: comp.props?.title || comp.type || `Widget ${idx + 1}`,
+                          kind: (
+                            comp.type === "MetricCard" || comp.type === "kpi-card" || comp.type === "kpi" || comp.type === "kpi_card" || comp.type === "metric-card" ? "metric" as const :
+                            comp.type === "LineChart" || comp.type === "BarChart" || comp.type === "PieChart" || comp.type === "DonutChart" || comp.type === "AreaChart" || comp.type === "TimeseriesChart" || comp.type === "line-chart" || comp.type === "bar-chart" || comp.type === "pie-chart" ? "chart" as const :
+                            comp.type === "DataTable" || comp.type === "data-table" || comp.type === "data_table" || comp.type === "table" ? "table" as const :
+                            "other" as const
+                          ),
+                          enabled: !comp.props?.hidden,
+                        }));
+                        setEditWidgets(derived);
+                      }
+                      // Auto-populate palettes from design tokens if empty
+                      if (editPalettes.length === 0 && loadedDesignTokens) {
+                        const colors = loadedDesignTokens?.colors || {};
+                        setEditPalettes([
+                          {
+                            id: "current",
+                            name: "Current",
+                            swatches: [
+                              { name: "Primary", hex: colors.primary || "#2563EB" },
+                              { name: "Secondary", hex: colors.secondary || "#64748B" },
+                              { name: "Accent", hex: colors.accent || "#14B8A6" },
+                              { name: "Background", hex: colors.background || "#F8FAFC" },
+                            ],
+                          },
+                          {
+                            id: "dark",
+                            name: "Dark Mode",
+                            swatches: [
+                              { name: "Primary", hex: "#60A5FA" },
+                              { name: "Secondary", hex: "#94A3B8" },
+                              { name: "Accent", hex: "#2DD4BF" },
+                              { name: "Background", hex: "#0F172A" },
+                            ],
+                          },
+                          {
+                            id: "vibrant",
+                            name: "Vibrant",
+                            swatches: [
+                              { name: "Primary", hex: "#8B5CF6" },
+                              { name: "Secondary", hex: "#EC4899" },
+                              { name: "Accent", hex: "#F59E0B" },
+                              { name: "Background", hex: "#FFFBEB" },
+                            ],
+                          },
+                        ]);
+                        setSelectedPaletteId("current");
+                      }
                     }}
                     className={cn(
                       "inline-flex h-9 w-9 items-center justify-center rounded-md cursor-pointer transition-colors duration-200",
@@ -1879,7 +1948,13 @@ return (
             isOpen={editPanelOpen}
             isMobile={isMobile}
             isLoading={editActions.isLoading}
-            onClose={() => setEditPanelOpen(false)}
+            onClose={() => {
+              setEditPanelOpen(false);
+              setView("preview");
+              if (journeyMode === "interactive_edit") {
+                setJourneyMode("build_preview");
+              }
+            }}
             onToggleWidget={(widgetId) => {
               setEditWidgets((prev) =>
                 prev.map((w) => (w.id === widgetId ? { ...w, enabled: !w.enabled } : w))
