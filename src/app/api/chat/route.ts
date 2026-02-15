@@ -345,7 +345,7 @@ export async function POST(req: Request) {
         sendSources: false,
         defaultOptions: {
           toolCallConcurrency: 1,
-          maxSteps: 10,
+          maxSteps: 15,
           toolChoice: "auto",
         },
       }),
