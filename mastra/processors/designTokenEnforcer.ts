@@ -1,4 +1,4 @@
-import type { Processor, ProcessInputStepArgs } from "@mastra/core";
+import type { Processor, ProcessInputStepArgs } from "@mastra/core/processors";
 
 /**
  * Enforces design token system by preventing direct spec generation.
