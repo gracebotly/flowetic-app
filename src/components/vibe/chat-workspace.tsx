@@ -199,7 +199,7 @@ export function ChatWorkspace({
   const [input, setInput] = useState("");  const [chatMode, setChatMode] = useState<"chat" | "voice">("chat");
   const [isListening, setIsListening] = useState(false);
   const [isChatExpanded, setIsChatExpanded] = useState(false);
-  const [selectedModel, setSelectedModel] = useState<ModelId>("glm-4.7");
+  const [selectedModel, setSelectedModel] = useState<ModelId>("gemini-3-pro-preview");
 
   // Guard against concurrent init + user sends
   const initSendInFlight = useRef(false);
