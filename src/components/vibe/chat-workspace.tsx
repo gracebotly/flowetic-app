@@ -676,6 +676,33 @@ export function ChatWorkspace({
   const [editDensity, setEditDensity] = useState<Density>("comfortable");
   const [selectedPaletteId, setSelectedPaletteId] = useState<string | null>(null);
 
+  // Derive effective design tokens from selected palette
+  const effectiveDesignTokens = useMemo(() => {
+    const base = loadedDesignTokens ?? { colors: { primary: "#3b82f6" }, borderRadius: 8 };
+    if (!selectedPaletteId || editPalettes.length === 0) {
+      return base;
+    }
+    const selectedPalette = editPalettes.find((p) => p.id === selectedPaletteId);
+    if (!selectedPalette) {
+      return base;
+    }
+    // Extract colors from palette swatches (swatches format: { name, hex })
+    const paletteColors: Record<string, string> = {};
+    for (const swatch of selectedPalette.swatches) {
+      paletteColors[swatch.name.toLowerCase()] = swatch.hex;
+    }
+    return {
+      ...base,
+      colors: {
+        ...base.colors,
+        primary: paletteColors.primary || base.colors?.primary || "#3b82f6",
+        secondary: paletteColors.secondary || base.colors?.secondary || "#64748B",
+        accent: paletteColors.accent || base.colors?.accent || "#14B8A6",
+        background: paletteColors.background || base.colors?.background || "#F8FAFC",
+      },
+    };
+  }, [loadedDesignTokens, selectedPaletteId, editPalettes]);
+
   // Initialize edit actions hook
   const editActions = useEditActions({
     tenantId: authContext.tenantId ?? "default",
@@ -1058,10 +1085,10 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
     const json = await res.json();
     if (!res.ok || !json.ok) throw new Error(json?.error || "FAILED_TO_LOAD_SESSIONS");
     setSessions(json.sessions ?? []);
-    const first = (json.sessions ?? [])[0];
-    if (first && !activeSessionId) {
-      await switchToSession(first);
-    }
+    // FIXED: Do NOT auto-resume last session.
+    // Old behavior loaded stale phase state (e.g., interactive_edit with old selections).
+    // User must explicitly pick "Resume" or start a new conversation.
+    // The vibeContext from sessionStorage (set by the wizard) drives new sessions.
   }
 
   // Session switching
@@ -1118,10 +1145,17 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
   // Create new session
   async function createNewSession(title: string, platformType: string, sourceId: string, entityId: string) {
     const newThreadId = crypto.randomUUID();
-    
+
+    // Reset all journey state to prevent bleed from previous sessions
+    setJourneyMode("select_entity");
+    setSelectedOutcome(null);
+    setSelectedStyleBundleId(null);
+    setEditPanelOpen(false);
+    setMessages([]);
+
     // Load skillMD for the new session
     const skillMD = await loadSkillMD(platformType, sourceId, entityId);
-    
+
     try {
       const resp = await fetch("/api/journey-sessions", {
         method: "POST",
@@ -1500,19 +1534,42 @@ return (
                                   typography: `${ds.typography?.headingFont || 'Inter'} + ${ds.typography?.bodyFont || 'Inter'}`,
                                   bestFor: output.reasoning || 'Your workflow',
                                 };
+                                // FIXED: Show single card with "Show More" instead of duplicating
                                 return (
-                                  <DesignSystemPair
-                                    key={idx}
-                                    systems={[system1, system1] as [typeof system1, typeof system1]}
-                                    onSelect={(id) => {
-                                      setSelectedStyleBundleId(id);
-                                      void sendAi(`I selected style ${id}`, {
-                                        selectedStyleBundleId: id,
-                                      });
-                                    }}
-                                    onShowMore={() => { void sendAi("Show different styles"); }}
-                                    hasMore={true}
-                                  />
+                                  <div key={idx} className="space-y-3">
+                                    <div
+                                      onClick={() => {
+                                        setSelectedStyleBundleId(system1.id);
+                                        void sendAi(`I selected style ${system1.id}`, {
+                                          selectedStyleBundleId: system1.id,
+                                        });
+                                      }}
+                                      className="cursor-pointer rounded-xl border border-white/10 bg-white/5 p-4 hover:bg-white/10 transition-all"
+                                    >
+                                      <div className="flex items-center gap-2 mb-2">
+                                        <span className="text-lg">🎨</span>
+                                        <span className="font-semibold text-white">{system1.name}</span>
+                                      </div>
+                                      <div className="text-sm text-white/70 mb-2">{system1.style}</div>
+                                      <div className="flex gap-1 mb-2">
+                                        {system1.colors.split(' / ').map((c: string, i: number) => (
+                                          <div
+                                            key={i}
+                                            className="w-6 h-6 rounded-full border border-white/20"
+                                            style={{ backgroundColor: c }}
+                                          />
+                                        ))}
+                                      </div>
+                                      <div className="text-xs text-white/50">{system1.typography}</div>
+                                      <div className="mt-2 text-xs text-indigo-400">Click to select</div>
+                                    </div>
+                                    <button
+                                      onClick={() => { void sendAi("Show different styles"); }}
+                                      className="text-sm text-indigo-400 hover:text-indigo-300 transition-colors"
+                                    >
+                                      Show me more options →
+                                    </button>
+                                  </div>
                                 );
                               }
                             }
@@ -1942,10 +1999,7 @@ return (
                       })),
                       layout: { columns: 12, gap: 16 },
                     }}
-                    designTokens={loadedDesignTokens ?? {
-                      colors: { primary: "#3b82f6" },
-                      borderRadius: 8,
-                    }}
+                    designTokens={effectiveDesignTokens}
                     deviceMode={deviceMode}
                     isEditing={true}
                     onWidgetClick={(widgetId) => {

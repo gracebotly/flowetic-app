@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Layers, Palette, Settings, GripHorizontal } from "lucide-react";
+import { X, Layers, Palette, Settings, GripHorizontal, ChevronLeft, ChevronRight } from "lucide-react";
 import { EditableWidgetCard } from "./EditableWidgetCard";
 import { DragDropContainer } from "./DragDropContainer";
 import { DensitySelector } from "./DensitySelector";
@@ -104,7 +104,7 @@ function MobileSheet({
   );
 }
 
-// Desktop side panel component
+// Desktop side panel component — collapsible
 function DesktopPanel({
   isOpen,
   onClose,
@@ -114,33 +114,65 @@ function DesktopPanel({
   onClose: () => void;
   children: React.ReactNode;
 }) {
+  const [collapsed, setCollapsed] = useState(false);
+  // Reset collapsed state when panel opens
+  useEffect(() => {
+    if (isOpen) {
+      setCollapsed(false);
+    }
+  }, [isOpen]);
   return (
     <AnimatePresence>
       {isOpen && (
         <motion.div
           initial={{ x: "100%", opacity: 0 }}
-          animate={{ x: 0, opacity: 1 }}
+          animate={{
+            x: 0,
+            opacity: 1,
+            width: collapsed ? 48 : 320,
+          }}
           exit={{ x: "100%", opacity: 0 }}
           transition={{ type: "spring", damping: 25, stiffness: 300 }}
-          className="fixed top-0 right-0 bottom-0 w-80 bg-white border-l border-gray-200 shadow-xl z-40 flex flex-col"
+          className="fixed top-0 right-0 bottom-0 bg-white border-l border-gray-200 shadow-xl z-40 flex flex-col overflow-hidden"
         >
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-            <h2 className="text-lg font-semibold text-gray-900">Edit Dashboard</h2>
-            <button
-              type="button"
-              onClick={onClose}
-              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg cursor-pointer transition-colors"
-              aria-label="Close panel"
-            >
-              <X className="w-5 h-5" />
-            </button>
+          <div className="flex items-center justify-between px-2 py-3 border-b border-gray-200 min-h-[52px]">
+            {!collapsed && (
+              <h2 className="text-lg font-semibold text-gray-900 pl-2 truncate">
+                Edit Dashboard
+              </h2>
+            )}
+            <div className={`flex items-center gap-1 ${collapsed ? "mx-auto" : ""}`}>
+              <button
+                type="button"
+                onClick={() => setCollapsed((prev) => !prev)}
+                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg cursor-pointer transition-colors"
+                aria-label={collapsed ? "Expand panel" : "Collapse panel"}
+              >
+                {collapsed ? (
+                  <ChevronLeft className="w-5 h-5" />
+                ) : (
+                  <ChevronRight className="w-5 h-5" />
+                )}
+              </button>
+              {!collapsed && (
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg cursor-pointer transition-colors"
+                  aria-label="Close panel"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              )}
+            </div>
           </div>
-
-          {/* Content */}
-          <div className="flex-1 overflow-y-auto">
-            {children}
-          </div>
+          {/* Content — hidden when collapsed */}
+          {!collapsed && (
+            <div className="flex-1 overflow-y-auto">
+              {children}
+            </div>
+          )}
         </motion.div>
       )}
     </AnimatePresence>
