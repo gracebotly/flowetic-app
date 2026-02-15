@@ -76,15 +76,6 @@ export const savePreviewVersion = createTool({
     }
 
     // Override with canonical tokens (the actual enforcement)
-    spec_json.theme = {
-      ...spec_json.theme,
-      colors: canonicalTokens.colors,
-      fonts: canonicalTokens.fonts,
-      shadows: canonicalTokens.shadows,
-      effects: canonicalTokens.effects,
-    };
-
-    // Also update design_tokens to match
     design_tokens = {
       colors: canonicalTokens.colors,
       fonts: canonicalTokens.fonts,
