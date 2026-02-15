@@ -1373,7 +1373,15 @@ return (
                           <div className={cn(
                             "inline-block max-w-[90%] rounded-xl px-4 py-2 bg-gray-100 text-gray-900"
                           )}>
-                            {m.parts?.map((part, idx) => {
+                            {(() => {
+                              // Parts-based structural suppression: if this message has ANY tool output,
+                              // suppress ALL assistant text parts to prevent fabricated style descriptions.
+                              const hasToolOutput = m.parts?.some(
+                                (p: any) => p.type?.startsWith('tool-') &&
+                                  ((p as any).state === 'output-available' || (p as any).state === 'output-error')
+                              );
+
+                              return m.parts?.map((part, idx) => {
 
                               // ✅ RENDER: Custom outcome choices
                             if (part.type === 'data-outcome-choices') {
@@ -1444,14 +1452,45 @@ return (
                             // ✅ RENDER: runDesignSystemWorkflow → DesignSystemPair (AI SDK v5)
                             if (part.type === 'tool-runDesignSystemWorkflow' && (part as any).state === 'output-available') {
                               const output = (part as any).output;
+                              // New format: designSystems array with two distinct options
+                              if (output?.success && output?.designSystems?.length >= 2) {
+                                const systems = output.designSystems.map((item: any, i: number) => {
+                                  const ds = item.designSystem || item;
+                                  return {
+                                    id: `style-workflow-${i + 1}`,
+                                    name: ds.style?.name || `Style Option ${i + 1}`,
+                                    icon: 'Palette',
+                                    colors: [ds.colors?.primary, ds.colors?.secondary, ds.colors?.accent].filter(Boolean).join(' / '),
+                                    style: ds.style?.keywords || ds.style?.type || 'Professional',
+                                    typography: `${ds.typography?.headingFont || 'Inter'} + ${ds.typography?.bodyFont || 'Inter'}`,
+                                    bestFor: item.reasoning || 'Your workflow',
+                                  };
+                                });
+                                return (
+                                  <DesignSystemPair
+                                    key={idx}
+                                    systems={[systems[0], systems[1]] as [typeof systems[0], typeof systems[1]]}
+                                    onSelect={(id) => {
+                                      setSelectedStyleBundleId(id);
+                                      void sendAi(`I selected style ${id}`, {
+                                        selectedStyleBundleId: id,
+                                      });
+                                    }}
+                                    onShowMore={
+                                      output.designSystems.length > 2
+                                        ? () => { void sendAi("Show different styles"); }
+                                        : undefined
+                                    }
+                                  />
+                                );
+                              }
+                              // Fallback for single system (backward compat during transition)
                               if (output?.success && output?.designSystem) {
                                 const ds = output.designSystem;
-                                // Transform workflow output to DesignSystemPair format
-                                // NOTE: Using Lucide icon name instead of emoji
                                 const system1 = {
                                   id: 'style-workflow-1',
                                   name: ds.style?.name || 'Recommended Style',
-                                  icon: 'Palette', // Lucide icon name, NOT emoji
+                                  icon: 'Palette',
                                   colors: [
                                     ds.colors?.primary,
                                     ds.colors?.secondary,
@@ -1467,14 +1506,11 @@ return (
                                     systems={[system1, system1] as [typeof system1, typeof system1]}
                                     onSelect={(id) => {
                                       setSelectedStyleBundleId(id);
-                                      // FIX: Explicit extraData override for stale closure
-                                      void sendAi(`__ACTION__:select_style_bundle:${id}`, {
+                                      void sendAi(`I selected style ${id}`, {
                                         selectedStyleBundleId: id,
                                       });
                                     }}
-                                    onShowMore={() => {
-                                      void sendAi("Show different styles");
-                                    }}
+                                    onShowMore={() => { void sendAi("Show different styles"); }}
                                     hasMore={true}
                                   />
                                 );
@@ -1521,20 +1557,9 @@ return (
                               // ✅ SHOW: Text content (with fallback __ACTION__ parser for backwards compatibility)
                               if (part.type === 'text') {
                                 const text = (part as any).text || '';
-                                // Suppress markdown text that duplicates design system tool output
-                                // already rendered as DesignSystemPair cards above
-                                const hasDesignSystemToolInMessage = m.parts?.some(
-                                  (p) => p.type === 'tool-runDesignSystemWorkflow' &&
-                                         (p as any).state === 'output-available' &&
-                                         (p as any).output?.success &&
-                                         (p as any).output?.designSystem
-                                );
-                                if (hasDesignSystemToolInMessage && (
-                                  text.includes('Style Option') ||
-                                  text.includes('Design Philosophy') ||
-                                  text.includes('design system') ||
-                                  text.includes('Color Palette')
-                                )) {
+                                // Structural suppression: suppress ALL text when tool output exists
+                                // This prevents agents from fabricating style descriptions
+                                if (hasToolOutput) {
                                   return null;
                                 }
                                 // Parse __ACTION__ tokens for backwards compatibility with existing agent responses
@@ -1599,7 +1624,8 @@ return (
                               }
 
                               return null;
-                            })}
+                            });
+                            })()}
                           </div>
                         </div>
                       );

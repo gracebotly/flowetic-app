@@ -29,32 +29,34 @@ Present the results as 2 style options for the user to choose from.`,
 
   outputSchema: z.object({
     success: z.boolean(),
-    designSystem: z.object({
-      style: z.object({
-        name: z.string(),
-        type: z.string(),
-        keywords: z.string().optional(),
-        effects: z.string().optional(),
+    designSystems: z.array(z.object({
+      designSystem: z.object({
+        style: z.object({
+          name: z.string(),
+          type: z.string(),
+          keywords: z.string().optional(),
+          effects: z.string().optional(),
+        }),
+        colors: z.object({
+          primary: z.string(),
+          secondary: z.string(),
+          accent: z.string(),
+          background: z.string(),
+          text: z.string().optional(),
+        }),
+        typography: z.object({
+          headingFont: z.string(),
+          bodyFont: z.string(),
+          scale: z.string().optional(),
+        }),
+        charts: z.array(z.object({
+          type: z.string(),
+          bestFor: z.string(),
+        })).optional(),
+        uxGuidelines: z.array(z.string()).optional(),
       }),
-      colors: z.object({
-        primary: z.string(),
-        secondary: z.string(),
-        accent: z.string(),
-        background: z.string(),
-        text: z.string().optional(),
-      }),
-      typography: z.object({
-        headingFont: z.string(),
-        bodyFont: z.string(),
-        scale: z.string().optional(),
-      }),
-      charts: z.array(z.object({
-        type: z.string(),
-        bestFor: z.string(),
-      })).optional(),
-      uxGuidelines: z.array(z.string()).optional(),
-    }).optional(),
-    reasoning: z.string().optional(),
+      reasoning: z.string().optional(),
+    })).optional(),
     error: z.string().optional(),
   }),
 
@@ -95,10 +97,13 @@ Return JSON with: designSystem { style, colors, typography, charts, uxGuidelines
             const jsonMatch = result.text?.match(/\{[\s\S]*\}/);
             if (jsonMatch) {
               const parsed = JSON.parse(jsonMatch[0]);
+              // Fallback returns single system, wrap in array for compatibility
               return {
                 success: true,
-                designSystem: parsed.designSystem || parsed,
-                reasoning: parsed.reasoning || "Generated via direct agent fallback",
+                designSystems: [{
+                  designSystem: parsed.designSystem || parsed,
+                  reasoning: parsed.reasoning || "Generated via direct agent fallback",
+                }],
               };
             }
           }
@@ -128,8 +133,7 @@ Return JSON with: designSystem { style, colors, typography, charts, uxGuidelines
         const data = result.result as any;
         return {
           success: true,
-          designSystem: data.designSystem,
-          reasoning: data.reasoning,
+          designSystems: data.designSystems,
         };
       }
 
