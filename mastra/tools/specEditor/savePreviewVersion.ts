@@ -34,61 +34,69 @@ export const savePreviewVersion = createTool({
     const { spec_json, interfaceId } = inputData;
     let { design_tokens } = inputData;
 
-    // ── Validation Gate: Reject specs without valid styleBundleId ──────
-    // This prevents the LLM from bypassing generateUISpec and inventing colors
-    const rawBundleId = spec_json?.styleBundleId;
+    // ============================================================================
+    // PHASE 2: DESIGN TOKEN ENFORCEMENT
+    // ============================================================================
+    // This guard ensures ALL paths use canonical design tokens from STYLE_BUNDLE_TOKENS.
+    // Even if an agent bypasses generateUISpec, we re-apply tokens here as a safety net.
+    let resolvedStyleBundleId = spec_json.styleBundleId;
+    if (!resolvedStyleBundleId) {
+      console.warn(
+        '[savePreviewVersion] PHASE 2 WARNING: spec_json missing styleBundleId. ' +
+        'Defaulting to "professional-clean". This indicates Path B was used.'
+      );
+      resolvedStyleBundleId = 'professional-clean';
+      spec_json.styleBundleId = resolvedStyleBundleId;
+    }
 
-    if (!rawBundleId || typeof rawBundleId !== "string") {
-      const errorMsg =
-        "[savePreviewVersion] REJECTED: spec_json missing styleBundleId. " +
-        "Specs must be generated via generateUISpec tool to ensure deterministic design tokens. " +
-        "LLM attempted to bypass design token enforcement.";
-      console.error(errorMsg);
+    // Get canonical tokens
+    const canonicalTokens = STYLE_BUNDLE_TOKENS[resolvedStyleBundleId];
+    if (!canonicalTokens) {
       throw new Error(
-        "INVALID_SPEC: Missing styleBundleId. Use generateUISpec tool to create specs with proper design tokens."
+        `[savePreviewVersion] Invalid styleBundleId: "${resolvedStyleBundleId}". ` +
+        `Must be one of: ${Object.keys(STYLE_BUNDLE_TOKENS).join(', ')}`
       );
     }
 
-    const resolvedBundleId = resolveStyleBundleId(rawBundleId);
-    if (!STYLE_BUNDLE_TOKENS[resolvedBundleId]) {
-      const errorMsg =
-        `[savePreviewVersion] REJECTED: Invalid styleBundleId "${rawBundleId}" (resolved to "${resolvedBundleId}"). ` +
-        `Valid bundles: ${Object.keys(STYLE_BUNDLE_TOKENS).join(', ')}. ` +
-        "Use generateUISpec tool with a valid style bundle.";
-      console.error(errorMsg);
-      throw new Error(
-        `INVALID_STYLE_BUNDLE: "${rawBundleId}" is not a valid style bundle. Use generateUISpec tool.`
-      );
+    // Detect hallucinated colors
+    const llmColors = spec_json.theme?.colors;
+    const canonicalColors = canonicalTokens.colors;
+    if (llmColors && canonicalColors) {
+      const llmColorKeys = Object.keys(llmColors).sort();
+      const canonicalColorKeys = Object.keys(canonicalColors).sort();
+      const keysMatch = llmColorKeys.join(',') === canonicalColorKeys.join(',');
+
+      if (!keysMatch) {
+        console.warn(
+          '[savePreviewVersion] PHASE 2 WARNING: LLM hallucinated colors. ' +
+          `Expected keys: [${canonicalColorKeys.join(', ')}], ` +
+          `Got: [${llmColorKeys.join(', ')}]`
+        );
+      }
     }
+
+    // Override with canonical tokens (the actual enforcement)
+    spec_json.theme = {
+      ...spec_json.theme,
+      colors: canonicalTokens.colors,
+      fonts: canonicalTokens.fonts,
+      shadows: canonicalTokens.shadows,
+      effects: canonicalTokens.effects,
+    };
+
+    // Also update design_tokens to match
+    design_tokens = {
+      colors: canonicalTokens.colors,
+      fonts: canonicalTokens.fonts,
+      spacing: canonicalTokens.spacing,
+      radius: canonicalTokens.radius,
+      shadow: canonicalTokens.shadow,
+    };
 
     console.log(
-      `[savePreviewVersion] ✓ Validation passed: styleBundleId="${resolvedBundleId}" (from input: "${rawBundleId}")`
+      `[savePreviewVersion] Token lock: overriding with "${resolvedStyleBundleId}" canonical tokens`
     );
-
-    // ── Token-locking guard ──────────────────────────────────────────
-    // Override LLM-provided tokens with canonical tokens from STYLE_BUNDLE_TOKENS
-    const canonicalTokens = STYLE_BUNDLE_TOKENS[resolvedBundleId];
-    if (canonicalTokens) {
-      console.log(
-        `[savePreviewVersion] Token lock: overriding LLM tokens with "${resolvedBundleId}" canonical tokens`
-      );
-      design_tokens = {
-        colors: canonicalTokens.colors,
-        fonts: canonicalTokens.fonts,
-        spacing: canonicalTokens.spacing,
-        radius: canonicalTokens.radius,
-        shadow: canonicalTokens.shadow,
-      };
-    }
-
-    // Update spec_json with resolved bundle ID if it was different
-    if (resolvedBundleId !== rawBundleId) {
-      console.warn(
-        `[savePreviewVersion] Correcting styleBundleId: '${rawBundleId}' → '${resolvedBundleId}'`
-      );
-      spec_json.styleBundleId = resolvedBundleId;
-    }
-    // ── End validation gate and token-locking ──────────────────────────
+    // ============================================================================
 
     // Get platformType from context for interface naming
     const platformType =

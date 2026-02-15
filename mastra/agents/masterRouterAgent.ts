@@ -10,6 +10,7 @@ import type { RequestContext } from "@mastra/core/request-context";
 import { createFloweticMemory } from "../lib/memory";
 import { workspace } from '../workspace';  // ← ADD THIS IMPORT
 import { getCachedSkillAsync } from '../lib/skillCache';
+import { DesignTokenEnforcer } from "../processors/designTokenEnforcer";
 import {
   delegateToPlatformMapper,
   delegateToDashboardBuilder,
@@ -399,4 +400,7 @@ export const masterRouterAgent: Agent = new Agent({
     // Interactive edit panel
     showInteractiveEditPanel,
   },
+  inputProcessors: [
+    new DesignTokenEnforcer(),
+  ],
 });

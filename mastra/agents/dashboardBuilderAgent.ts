@@ -2,6 +2,7 @@ import { Agent } from "@mastra/core/agent";
 import { getModelById } from "../lib/models/modelSelector";
 import type { RequestContext } from "@mastra/core/request-context";
 import { z } from "zod";
+import { DesignTokenEnforcer } from "../processors/designTokenEnforcer";
 import {
   getCurrentSpec,
   applySpecPatch,
@@ -139,4 +140,7 @@ Use todo tools to track multi-step work. Never expose todo items to users.`,
     getUXGuidelines,
     getProductRecommendations,
   },
+  inputProcessors: [
+    new DesignTokenEnforcer(),
+  ],
 });

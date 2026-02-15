@@ -5,6 +5,7 @@ import { getModelById } from "../lib/models/modelSelector";
 import { getMastraStorage } from "../lib/storage";
 import type { RequestContext } from "@mastra/core/request-context";
 import { z } from "zod";
+import { DesignTokenEnforcer } from "../processors/designTokenEnforcer";
 
 import { createFloweticMemory } from "../lib/memory";
 import { getCachedSkill } from '../lib/skillCache';
@@ -136,4 +137,7 @@ export const platformMappingMaster: Agent = new Agent({
     getEventSamples,
     validatePreviewReadiness,
   },
+  inputProcessors: [
+    new DesignTokenEnforcer(),
+  ],
 });
