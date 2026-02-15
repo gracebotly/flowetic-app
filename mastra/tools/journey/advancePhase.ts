@@ -3,6 +3,7 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { createClient } from "@supabase/supabase-js";
 import { safeUuid } from "../../lib/safeUuid";
+import { resolveStyleBundleId, STYLE_BUNDLE_TOKENS } from "../generateUISpec";
 
 const FloweticPhase = z.enum([
   "select_entity",
@@ -79,7 +80,10 @@ Without calling this tool, the phase stays stuck and instructions won't update.`
 
     if (selectedValue) {
       if (nextPhase === 'style') context?.requestContext?.set('selectedOutcome', selectedValue);
-      if (nextPhase === 'build_preview') context?.requestContext?.set('selectedStyleBundleId', selectedValue);
+      if (nextPhase === 'build_preview') {
+        const resolvedKey = resolveStyleBundleId(selectedValue!);
+        context?.requestContext?.set('selectedStyleBundleId', STYLE_BUNDLE_TOKENS[resolvedKey] ? resolvedKey : 'professional-clean');
+      }
     }
 
     // Persist to journey_sessions in Supabase (non-blocking)
@@ -108,7 +112,14 @@ Without calling this tool, the phase stays stuck and instructions won't update.`
             updateData.selected_outcome = selectedValue;
           }
           if (selectedValue && nextPhase === 'build_preview') {
-            updateData.selected_style_bundle_id = selectedValue;
+            const resolvedStyleKey = resolveStyleBundleId(selectedValue);
+            if (!STYLE_BUNDLE_TOKENS[resolvedStyleKey]) {
+              console.warn(`[advancePhase] Could not resolve style "${selectedValue}". Storing fallback "professional-clean".`);
+              updateData.selected_style_bundle_id = 'professional-clean';
+            } else {
+              console.log(`[advancePhase] Resolved style "${selectedValue}" → "${resolvedStyleKey}"`);
+              updateData.selected_style_bundle_id = resolvedStyleKey;
+            }
           }
 
           // Determine correct column based on available ID
