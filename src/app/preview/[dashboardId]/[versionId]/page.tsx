@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import { notFound } from "next/navigation";
 import { ResponsiveDashboardRenderer } from "@/components/preview/ResponsiveDashboardRenderer";
 
@@ -11,10 +12,160 @@ interface PreviewPageProps {
   }>;
 }
 
-/**
- * Transform raw events into component-ready data arrays.
- * Matches each component type to the data shape the renderer expects.
- */
+// ---------------------------------------------------------------------------
+// Aggregation helpers — one per aggregation type the spec can request
+// ---------------------------------------------------------------------------
+
+/** Count non-null values of `field` across events */
+function aggCount(events: Record<string, any>[], field: string): number {
+  return events.filter((e) => e[field] != null && e[field] !== "").length;
+}
+
+/** Sum numeric values of `field` across events (skips non-numeric) */
+function aggSum(events: Record<string, any>[], field: string): number {
+  let total = 0;
+  for (const e of events) {
+    const v = Number(e[field]);
+    if (!isNaN(v)) total += v;
+  }
+  return total;
+}
+
+/** Average of numeric values of `field` (skips nulls) */
+function aggAvg(events: Record<string, any>[], field: string): number {
+  let total = 0;
+  let count = 0;
+  for (const e of events) {
+    const v = Number(e[field]);
+    if (e[field] != null && !isNaN(v)) {
+      total += v;
+      count += 1;
+    }
+  }
+  return count > 0 ? total / count : 0;
+}
+
+/** Percentage of events where `field` equals `matchValue` */
+function aggPercentage(
+  events: Record<string, any>[],
+  field: string,
+  matchValue: string
+): number {
+  const withField = events.filter((e) => e[field] != null && e[field] !== "");
+  if (withField.length === 0) return 0;
+  const matching = withField.filter((e) => String(e[field]) === matchValue);
+  return Math.round((matching.length / withField.length) * 100);
+}
+
+/** Format a numeric value for display */
+function formatMetricValue(
+  value: number,
+  aggregation: string,
+  unit?: string
+): string {
+  if (aggregation === "percentage") return `${value}%`;
+  if (aggregation === "avg" && unit === "seconds")
+    return `${(value / 1000).toFixed(1)}s`;
+  if (aggregation === "avg" && unit === "ms") return `${Math.round(value)}ms`;
+  if (aggregation === "avg") return `${(value / 1000).toFixed(1)}s`; // default: assume ms → s
+  if (Number.isInteger(value)) return value.toLocaleString();
+  return value.toFixed(1);
+}
+
+/** Group events by a field and count occurrences → [{name, value}] */
+function groupByField(
+  events: Record<string, any>[],
+  field: string
+): { name: string; value: number }[] {
+  const counts: Record<string, number> = {};
+  for (const e of events) {
+    const key = e[field] != null ? String(e[field]) : null;
+    if (key == null || key === "") continue;
+    counts[key] = (counts[key] || 0) + 1;
+  }
+  return Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, value]) => ({ name, value }));
+}
+
+/** Build time-series data from events, aggregated into buckets */
+function buildTimeSeries(
+  events: Record<string, any>[],
+  xField: string,
+  yField: string,
+  aggregation: string,
+  interval: string = "hour"
+): { date: string; value: number }[] {
+  const buckets: Record<string, { date: string; value: number; count: number }> = {};
+
+  for (const evt of events) {
+    // Only include events that have the yField (filter noise)
+    if (yField && yField !== "timestamp" && evt[yField] == null) continue;
+
+    const ts = evt[xField] ? new Date(evt[xField]) : new Date(evt.created_at);
+    let bucketKey: string;
+    if (interval === "day") {
+      bucketKey = ts.toISOString().slice(0, 10); // "2026-01-15"
+    } else {
+      bucketKey = ts.toISOString().slice(0, 13) + ":00"; // "2026-01-15T14:00"
+    }
+
+    if (!buckets[bucketKey]) {
+      buckets[bucketKey] = { date: bucketKey, value: 0, count: 0 };
+    }
+
+    if (aggregation === "count") {
+      buckets[bucketKey].value += 1;
+      buckets[bucketKey].count += 1;
+    } else if (aggregation === "sum") {
+      buckets[bucketKey].value += Number(evt[yField]) || 0;
+      buckets[bucketKey].count += 1;
+    } else if (aggregation === "avg") {
+      buckets[bucketKey].value += Number(evt[yField]) || 0;
+      buckets[bucketKey].count += 1;
+    } else {
+      buckets[bucketKey].value += 1;
+      buckets[bucketKey].count += 1;
+    }
+  }
+
+  // For avg, divide totals
+  if (aggregation === "avg") {
+    for (const b of Object.values(buckets)) {
+      if (b.count > 0) b.value = b.value / b.count;
+    }
+  }
+
+  return Object.values(buckets)
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((b) => ({
+      date: new Date(b.date).toLocaleString("en-US", {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+      }),
+      value: Math.round(b.value * 100) / 100,
+    }));
+}
+
+// ---------------------------------------------------------------------------
+// Type normalization map (mirrors the renderer's normalization)
+// ---------------------------------------------------------------------------
+const TYPE_MAP: Record<string, string> = {
+  "kpi-card": "MetricCard", kpi_card: "MetricCard", kpi: "MetricCard",
+  "metric-card": "MetricCard", MetricCard: "MetricCard",
+  "line-chart": "LineChart", line_chart: "LineChart", LineChart: "LineChart", chart: "LineChart",
+  "timeseries-chart": "LineChart", timeseries_chart: "LineChart",
+  TimeseriesChart: "LineChart", timeseries: "LineChart",
+  "bar-chart": "BarChart", bar_chart: "BarChart", BarChart: "BarChart",
+  "pie-chart": "PieChart", pie_chart: "PieChart", PieChart: "PieChart",
+  "donut-chart": "DonutChart", donut_chart: "DonutChart", DonutChart: "DonutChart",
+  "data-table": "DataTable", data_table: "DataTable", DataTable: "DataTable", table: "DataTable",
+};
+
+// ---------------------------------------------------------------------------
+// SPEC-AWARE transform — reads valueField, aggregation, condition per component
+// ---------------------------------------------------------------------------
 function transformDataForComponents(
   spec: Record<string, any>,
   events: Array<Record<string, any>>
@@ -23,104 +174,177 @@ function transformDataForComponents(
     return spec;
   }
 
-  // Build time-series buckets (hourly) for charts
-  const hourlyBuckets: Record<string, { date: string; value: number; count: number }> = {};
-  const nameCounts: Record<string, number> = {};
-  let totalValue = 0;
-  let eventCount = 0;
-
+  // Pre-build generic fallbacks for components that lack spec metadata
+  let fallbackEventCount = events.length;
+  let fallbackTotalValue = 0;
   for (const evt of events) {
-    // Time-series bucketing
-    const ts = evt.timestamp ? new Date(evt.timestamp) : new Date(evt.created_at);
-    const hourKey = ts.toISOString().slice(0, 13) + ":00"; // "2026-01-15T14:00"
-    if (!hourlyBuckets[hourKey]) {
-      hourlyBuckets[hourKey] = { date: hourKey, value: 0, count: 0 };
-    }
-    hourlyBuckets[hourKey].value += Number(evt.value) || 1;
-    hourlyBuckets[hourKey].count += 1;
-
-    // Name aggregation for pie/bar charts
-    const name = evt.name || evt.type || "unknown";
-    nameCounts[name] = (nameCounts[name] || 0) + 1;
-
-    // Totals for KPI cards
-    totalValue += Number(evt.value) || 0;
-    eventCount += 1;
+    fallbackTotalValue += Number(evt.value) || 0;
   }
 
-  const timeSeriesData = Object.values(hourlyBuckets)
-    .sort((a, b) => a.date.localeCompare(b.date))
-    .map((b) => ({
-      date: new Date(b.date).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric" }),
-      value: b.value,
-    }));
+  // Pre-build generic table rows
+  const tableRows = events.slice(0, 50).map((evt) => ({
+    id: evt.id?.slice(0, 8) ?? "—",
+    type: evt.type || "—",
+    name: evt.name || evt.type || "—",
+    status: evt.status || "—",
+    workflow_name: evt.workflow_name || "—",
+    duration_ms: evt.duration_ms != null ? `${Number(evt.duration_ms).toFixed(0)}ms` : "—",
+    value: evt.value ?? "—",
+    timestamp: evt.timestamp ? new Date(evt.timestamp).toLocaleString() : "—",
+  }));
 
-  const categoryData = Object.entries(nameCounts)
+  // Pre-build generic name-based categories (fallback for charts without field prop)
+  const nameCounts: Record<string, number> = {};
+  for (const evt of events) {
+    const name = evt.name || evt.type || "unknown";
+    nameCounts[name] = (nameCounts[name] || 0) + 1;
+  }
+  const fallbackCategoryData = Object.entries(nameCounts)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 10)
     .map(([name, value]) => ({ name, value }));
-
-  const tableRows = events.slice(0, 50).map((evt) => ({
-    id: evt.id?.slice(0, 8) ?? "—",
-    name: evt.name || evt.type || "—",
-    value: evt.value ?? "—",
-    timestamp: evt.timestamp
-      ? new Date(evt.timestamp).toLocaleString()
-      : "—",
-    ...(evt.state || {}),
-  }));
-
-  // Type normalization map (mirrors the renderer's normalization)
-  const TYPE_MAP: Record<string, string> = {
-    "kpi-card": "MetricCard", kpi_card: "MetricCard", kpi: "MetricCard",
-    "metric-card": "MetricCard", MetricCard: "MetricCard",
-    "line-chart": "LineChart", line_chart: "LineChart", LineChart: "LineChart", chart: "LineChart",
-    "timeseries-chart": "LineChart", timeseries_chart: "LineChart", TimeseriesChart: "LineChart", timeseries: "LineChart",
-    "bar-chart": "BarChart", bar_chart: "BarChart", BarChart: "BarChart",
-    "pie-chart": "PieChart", pie_chart: "PieChart", PieChart: "PieChart",
-    "donut-chart": "DonutChart", donut_chart: "DonutChart", DonutChart: "DonutChart",
-    "data-table": "DataTable", data_table: "DataTable", DataTable: "DataTable", table: "DataTable",
-  };
 
   const enrichedComponents = spec.components.map((comp: any) => {
     const normalized = TYPE_MAP[comp.type] || comp.type;
     const props = { ...(comp.props || {}) };
 
     switch (normalized) {
-      case "MetricCard":
-        if (!props.value || props.value === "—") {
-          props.value = totalValue > 0 ? totalValue.toLocaleString() : String(eventCount);
-          props.subtitle = props.subtitle || `${eventCount} events`;
+      case "MetricCard": {
+        // Skip if value is already a real computed number (not a placeholder)
+        if (
+          props.value != null &&
+          props.value !== "—" &&
+          props.value !== "" &&
+          !String(props.value).startsWith("{{")
+        ) {
+          break;
+        }
+
+        const vf = props.valueField;
+        const agg = props.aggregation || "count";
+        const condition = props.condition;
+        const unit = props.unit;
+
+        if (vf) {
+          let computed: number;
+          switch (agg) {
+            case "count":
+              computed = aggCount(events, vf);
+              break;
+            case "sum":
+              computed = aggSum(events, vf);
+              break;
+            case "avg":
+              computed = aggAvg(events, vf);
+              break;
+            case "percentage":
+              computed = aggPercentage(
+                events,
+                vf,
+                condition?.equals || "success"
+              );
+              break;
+            default:
+              computed = aggCount(events, vf);
+          }
+          props.value = formatMetricValue(computed, agg, unit);
+          props.subtitle =
+            props.subtitle || `from ${aggCount(events, vf)} events`;
+        } else {
+          // No valueField — use generic fallback
+          props.value =
+            fallbackTotalValue > 0
+              ? fallbackTotalValue.toLocaleString()
+              : String(fallbackEventCount);
+          props.subtitle = props.subtitle || `${fallbackEventCount} events`;
         }
         break;
+      }
+
       case "LineChart":
-      case "TimeseriesChart":
-        if (!props.data || props.data.length === 0) {
-          props.data = timeSeriesData.length > 0 ? timeSeriesData : undefined;
+      case "TimeseriesChart": {
+        if (props.data && props.data.length > 0) break;
+
+        const xField = props.xField || "timestamp";
+        const yField = props.yField || "value";
+        const agg = props.aggregation || "count";
+        const interval = props.interval || "hour";
+
+        const tsData = buildTimeSeries(events, xField, yField, agg, interval);
+        props.data = tsData.length > 0 ? tsData : undefined;
+        break;
+      }
+
+      case "BarChart": {
+        if (props.data && props.data.length > 0) break;
+
+        const field = props.field;
+        if (field) {
+          const grouped = groupByField(events, field);
+          props.data = grouped.length > 0 ? grouped : undefined;
+        } else {
+          props.data =
+            fallbackCategoryData.length > 0
+              ? fallbackCategoryData
+              : undefined;
         }
         break;
-      case "BarChart":
-        if (!props.data || props.data.length === 0) {
-          props.data = categoryData.length > 0 ? categoryData : undefined;
-        }
-        break;
+      }
+
       case "PieChart":
-      case "DonutChart":
-        if (!props.data || props.data.length === 0) {
-          props.data = categoryData.length > 0 ? categoryData.slice(0, 5) : undefined;
+      case "DonutChart": {
+        if (props.data && props.data.length > 0) break;
+
+        const field = props.field;
+        if (field) {
+          const grouped = groupByField(events, field);
+          props.data = grouped.length > 0 ? grouped.slice(0, 6) : undefined;
+        } else {
+          props.data =
+            fallbackCategoryData.length > 0
+              ? fallbackCategoryData.slice(0, 5)
+              : undefined;
         }
         break;
-      case "DataTable":
-        if (!props.data || props.data.length === 0) {
+      }
+
+      case "DataTable": {
+        if (props.data && props.data.length > 0) break;
+
+        // If the spec declares columns, use them to extract the right fields
+        if (props.columns && Array.isArray(props.columns) && props.columns.length > 0) {
+          const colKeys = props.columns.map((c: any) =>
+            typeof c === "string" ? c : c.key
+          );
+          props.data = events.slice(0, 50).map((evt) => {
+            const row: Record<string, any> = {};
+            for (const key of colKeys) {
+              if (key === "timestamp" && evt.timestamp) {
+                row[key] = new Date(evt.timestamp).toLocaleString();
+              } else if (key === "id" && evt.id) {
+                row[key] = evt.id.slice(0, 8);
+              } else if (key === "duration_ms" && evt.duration_ms != null) {
+                row[key] = `${Number(evt.duration_ms).toFixed(0)}ms`;
+              } else {
+                row[key] = evt[key] ?? "—";
+              }
+            }
+            return row;
+          });
+        } else {
+          // Fallback: use pre-built table rows and auto-generate columns
           props.data = tableRows.length > 0 ? tableRows : undefined;
-          if (tableRows.length > 0 && (!props.columns || props.columns.length === 0)) {
+          if (tableRows.length > 0) {
             props.columns = Object.keys(tableRows[0]).map((k) => ({
               key: k,
-              label: k.charAt(0).toUpperCase() + k.slice(1),
+              label: k
+                .replace(/_/g, " ")
+                .replace(/\b\w/g, (c) => c.toUpperCase()),
             }));
           }
         }
         break;
+      }
     }
 
     return { ...comp, props };
@@ -129,110 +353,159 @@ function transformDataForComponents(
   return { ...spec, components: enrichedComponents };
 }
 
+// ---------------------------------------------------------------------------
+// Server Component — fetches spec + events, transforms, renders
+// ---------------------------------------------------------------------------
 export default async function PreviewPage({ params }: PreviewPageProps) {
   const { dashboardId, versionId } = await params;
+
+  // Use authenticated client first (for spec — this respects RLS normally)
   const supabase = await createClient();
 
-  // 1. Fetch the spec + design tokens (existing behavior)
-  const { data: version, error } = await supabase
-    .from("interface_versions")
-    .select("id, interface_id, spec_json, design_tokens")
-    .eq("id", versionId)
-    .eq("interface_id", dashboardId)
-    .single();
-
-  if (error || !version) {
-    notFound();
-  }
-
-  // 2. Fetch real event data via flattened view (Bug 6 fix)
-  // events_flat extracts state JSONB fields as top-level columns
-  // View uses security_invoker=true so RLS on events table still applies
-  let resolvedEvents: any[] = [];
-  const { data: events, error: eventsError } = await supabase
-    .from("events_flat")
-    .select("id, type, name, value, unit, text, state, timestamp, created_at, workflow_id, status, duration_ms, mode, workflow_name, execution_id, error_message")
-    .eq("interface_id", dashboardId)
-    .order("timestamp", { ascending: false })
-    .limit(200);
-
-  if (eventsError?.message?.includes('events_flat')) {
-    // Fallback: if migration not yet applied, query events directly and flatten in JS
-    const { data: fallbackEvents } = await supabase
-      .from("events")
-      .select("id, type, name, value, unit, text, state, timestamp, created_at")
+  // 1. Fetch the spec + design tokens
+  //    Try authenticated first; fall back to service client for public previews
+  let version: any = null;
+  {
+    const { data, error } = await supabase
+      .from("interface_versions")
+      .select("id, interface_id, spec_json, design_tokens")
+      .eq("id", versionId)
       .eq("interface_id", dashboardId)
-      .order("timestamp", { ascending: false })
-      .limit(200);
-    resolvedEvents = (fallbackEvents || []).map((evt: any) => ({
-      ...evt,
-      workflow_id: evt.state?.workflow_id ?? null,
-      status: evt.state?.status ?? null,
-      duration_ms: evt.state?.duration_ms != null ? Number(evt.state.duration_ms) : null,
-      workflow_name: evt.state?.workflow_name ?? null,
-      execution_id: evt.state?.execution_id ?? null,
-      error_message: evt.state?.error_message ?? null,
-    }));
-  } else {
-    // Coerce numeric types (Supabase ->> returns text, ::numeric casts in view but JS may still get string)
-    resolvedEvents = (events || []).map((evt: any) => ({
-      ...evt,
-      duration_ms: evt.duration_ms != null ? Number(evt.duration_ms) : null,
-    }));
-  }
+      .single();
 
-  // 3. If no events found via interface_id, try via journey_sessions → source_id
-  if (resolvedEvents.length === 0) {
-    const { data: session } = await supabase
-      .from("journey_sessions")
-      .select("source_id")
-      .eq("preview_interface_id", dashboardId)
-      .maybeSingle();
-
-    if (session?.source_id) {
-      const { data: sourceEvents, error: sourceEventsError } = await supabase
-        .from("events_flat")
-        .select("id, type, name, value, unit, text, state, timestamp, created_at, workflow_id, status, duration_ms, mode, workflow_name, execution_id, error_message")
-        .eq("source_id", session.source_id)
-        .order("timestamp", { ascending: false })
-        .limit(200);
-
-      if (sourceEventsError?.message?.includes('events_flat')) {
-        const { data: fallbackSourceEvents } = await supabase
-          .from("events")
-          .select("id, type, name, value, unit, text, state, timestamp, created_at")
-          .eq("source_id", session.source_id)
-          .order("timestamp", { ascending: false })
-          .limit(200);
-        resolvedEvents = (fallbackSourceEvents || []).map((evt: any) => ({
-          ...evt,
-          workflow_id: evt.state?.workflow_id ?? null,
-          status: evt.state?.status ?? null,
-          duration_ms: evt.state?.duration_ms != null ? Number(evt.state.duration_ms) : null,
-          workflow_name: evt.state?.workflow_name ?? null,
-          execution_id: evt.state?.execution_id ?? null,
-          error_message: evt.state?.error_message ?? null,
-        }));
-      } else {
-        resolvedEvents = (sourceEvents || []).map((evt: any) => ({
-          ...evt,
-          duration_ms: evt.duration_ms != null ? Number(evt.duration_ms) : null,
-        }));
+    if (error || !data) {
+      // Unauthenticated visitor — try service client
+      try {
+        const svc = createServiceClient();
+        const { data: svcData, error: svcError } = await svc
+          .from("interface_versions")
+          .select("id, interface_id, spec_json, design_tokens")
+          .eq("id", versionId)
+          .eq("interface_id", dashboardId)
+          .single();
+        if (svcError || !svcData) notFound();
+        version = svcData;
+      } catch {
+        notFound();
       }
+    } else {
+      version = data;
     }
   }
 
-  // 4. Inject event data into spec components
-  const enrichedSpec = transformDataForComponents(version.spec_json, resolvedEvents);
+  if (!version) notFound();
+
+  // 2. Fetch event data using service client (bypasses RLS for public preview)
+  //    This is safe because we scope to the specific interface_id / source_id
+  let resolvedEvents: any[] = [];
+  try {
+    const svc = createServiceClient();
+
+    // 2a. Primary: fetch via interface_id
+    const { data: events, error: eventsError } = await svc
+      .from("events_flat")
+      .select(
+        "id, type, name, value, unit, text, state, timestamp, created_at, workflow_id, status, duration_ms, mode, workflow_name, execution_id, error_message"
+      )
+      .eq("interface_id", dashboardId)
+      .order("timestamp", { ascending: false })
+      .limit(200);
+
+    if (eventsError?.message?.includes("events_flat")) {
+      // View missing — fall back to events table + JS flattening
+      const { data: fallbackEvents } = await svc
+        .from("events")
+        .select("id, type, name, value, unit, text, state, timestamp, created_at")
+        .eq("interface_id", dashboardId)
+        .order("timestamp", { ascending: false })
+        .limit(200);
+      resolvedEvents = (fallbackEvents || []).map((evt: any) => ({
+        ...evt,
+        workflow_id: evt.state?.workflow_id ?? null,
+        status: evt.state?.status ?? null,
+        duration_ms:
+          evt.state?.duration_ms != null
+            ? Number(evt.state.duration_ms)
+            : null,
+        workflow_name: evt.state?.workflow_name ?? null,
+        execution_id: evt.state?.execution_id ?? null,
+        error_message: evt.state?.error_message ?? null,
+      }));
+    } else {
+      resolvedEvents = (events || []).map((evt: any) => ({
+        ...evt,
+        duration_ms: evt.duration_ms != null ? Number(evt.duration_ms) : null,
+      }));
+    }
+
+    // 2b. Fallback: if no events via interface_id, try journey_sessions → source_id
+    if (resolvedEvents.length === 0) {
+      const { data: session } = await svc
+        .from("journey_sessions")
+        .select("source_id")
+        .eq("preview_interface_id", dashboardId)
+        .maybeSingle();
+
+      if (session?.source_id) {
+        const { data: sourceEvents, error: sourceEventsError } = await svc
+          .from("events_flat")
+          .select(
+            "id, type, name, value, unit, text, state, timestamp, created_at, workflow_id, status, duration_ms, mode, workflow_name, execution_id, error_message"
+          )
+          .eq("source_id", session.source_id)
+          .order("timestamp", { ascending: false })
+          .limit(200);
+
+        if (sourceEventsError?.message?.includes("events_flat")) {
+          const { data: fallbackSourceEvents } = await svc
+            .from("events")
+            .select("id, type, name, value, unit, text, state, timestamp, created_at")
+            .eq("source_id", session.source_id)
+            .order("timestamp", { ascending: false })
+            .limit(200);
+          resolvedEvents = (fallbackSourceEvents || []).map((evt: any) => ({
+            ...evt,
+            workflow_id: evt.state?.workflow_id ?? null,
+            status: evt.state?.status ?? null,
+            duration_ms:
+              evt.state?.duration_ms != null
+                ? Number(evt.state.duration_ms)
+                : null,
+            workflow_name: evt.state?.workflow_name ?? null,
+            execution_id: evt.state?.execution_id ?? null,
+            error_message: evt.state?.error_message ?? null,
+          }));
+        } else {
+          resolvedEvents = (sourceEvents || []).map((evt: any) => ({
+            ...evt,
+            duration_ms:
+              evt.duration_ms != null ? Number(evt.duration_ms) : null,
+          }));
+        }
+      }
+    }
+  } catch (err) {
+    // If service client fails (e.g., missing env var in dev), continue with empty events
+    console.error("[PreviewPage] Service client error:", err);
+  }
+
+  // 3. Inject event data into spec components
+  const enrichedSpec = transformDataForComponents(
+    version.spec_json,
+    resolvedEvents
+  );
 
   return (
     <div className="min-h-screen bg-white">
       <ResponsiveDashboardRenderer
         spec={enrichedSpec}
         designTokens={{
-          colors: version.design_tokens?.colors ?? version.design_tokens?.theme?.colors ?? { primary: "#3b82f6" },
+          colors:
+            version.design_tokens?.colors ??
+            version.design_tokens?.theme?.colors ?? { primary: "#3b82f6" },
           borderRadius: version.design_tokens?.borderRadius ?? 8,
-          shadow: version.design_tokens?.shadow ?? "0 1px 3px rgba(0,0,0,0.1)",
+          shadow:
+            version.design_tokens?.shadow ?? "0 1px 3px rgba(0,0,0,0.1)",
         }}
         deviceMode="desktop"
         isEditing={false}
