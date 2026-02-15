@@ -11,6 +11,8 @@ const CSV_DOMAINS = [
   'typography',
   'icons',
   'web-interface',
+  'react-performance',
+  'ui-reasoning',
 ] as const;
 
 /**
@@ -71,27 +73,32 @@ async function loadCSV(domain: string): Promise<Record<string, string>[]> {
 }
 
 /**
- * Initialize UI/UX search if not already done.
- * Safe to call multiple times (checks initialization status).
+ * Promise-lock singleton: ensures initUIUXSearch() runs exactly once,
+ * even when multiple tools call ensureUIUXSearchInitialized() concurrently
+ * on a cold serverless start.
+ *
+ * Evidence: Vercel logs (2026-02-14 23:27:12-13) show two concurrent callers
+ * both entering initUIUXSearch(), doubling all 9 domain queries (18 Supabase
+ * requests, ~672 KB duplicate egress, ~1s wasted).
+ *
+ * Pattern: first caller creates the Promise; all subsequent callers await it.
  */
-let initialized = false;
+let initPromise: Promise<void> | null = null;
 export async function ensureUIUXSearchInitialized(): Promise<void> {
-  if (initialized) return;
-  
-  // Simple check: search for any uiux document
-  try {
-    const testResults = await workspace.search('test', { topK: 1 });
-    const hasUIUXDocs = testResults.some(r => r.id?.startsWith('uiux-'));
-    
-    if (hasUIUXDocs) {
-      console.log('[uiux] Search already initialized');
-      initialized = true;
-      return;
+  if (initPromise) return initPromise;
+  initPromise = (async () => {
+    // Probe: warm container may already have the index populated
+    try {
+      const testResults = await workspace.search('test', { topK: 1 });
+      const hasUIUXDocs = testResults.some(r => r.id?.startsWith('uiux-'));
+      if (hasUIUXDocs) {
+        console.log('[uiux] Search already initialized (warm container)');
+        return;
+      }
+    } catch {
+      // BM25 index empty or not ready — proceed with full initialization
     }
-  } catch (err) {
-    // Search might not be ready yet, continue with initialization
-  }
-
-  await initUIUXSearch();
-  initialized = true;
+    await initUIUXSearch();
+  })();
+  return initPromise;
 }
