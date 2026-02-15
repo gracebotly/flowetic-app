@@ -1557,9 +1557,15 @@ return (
                               // ✅ SHOW: Text content (with fallback __ACTION__ parser for backwards compatibility)
                               if (part.type === 'text') {
                                 const text = (part as any).text || '';
-                                // Structural suppression: suppress ALL text when tool output exists
-                                // This prevents agents from fabricating style descriptions
-                                if (hasToolOutput) {
+                                // Only suppress text that looks like fabricated style descriptions
+                                // Do NOT suppress all text — that kills the entire chat UX
+                                if (hasToolOutput && (
+                                  text.includes('## Phase 3:') ||
+                                  text.includes('**Option A:') ||
+                                  text.includes('**Option B:') ||
+                                  text.includes('Design Philosophy') ||
+                                  (text.includes('Color Palette') && text.includes('#'))
+                                )) {
                                   return null;
                                 }
                                 // Parse __ACTION__ tokens for backwards compatibility with existing agent responses
