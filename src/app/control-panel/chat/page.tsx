@@ -16,6 +16,7 @@ type VibeConnection = {
 
 type IndexedEntity = {
   id: string;
+  entityUuid: string;
   name: string;
   platform: string;
   kind: string;
@@ -172,7 +173,7 @@ export default function ControlPanelChatWizardPage() {
     const context = {
       platformType: selectedPlatform,
       sourceId: String(entity.sourceId),
-      entityId: String(entity.id),
+      entityId: String(entity.entityUuid || entity.id),
       externalId: String(entity.externalId),
       displayName: String(entity.name || ""),
       entityKind: String(entity.kind || ""),

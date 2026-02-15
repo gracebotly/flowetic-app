@@ -2,6 +2,7 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { createClient } from "@supabase/supabase-js";
+import { safeUuid } from "../../lib/safeUuid";
 
 const FloweticPhase = z.enum([
   "select_entity",
@@ -87,11 +88,9 @@ Without calling this tool, the phase stays stuck and instructions won't update.`
     // Get both thread IDs - they map to different columns
     const rawJourneyThreadId = context?.requestContext?.get('journeyThreadId') as string | undefined;
     const rawMastraThreadId = context?.requestContext?.get('threadId') as string | undefined;
-    // Extract clean UUID from potentially corrupted compound IDs (e.g., "uuid:nanoid")
-    // Mastra Memory.createThread() can return compound format that fails strict UUID_RE
-    const UUID_EXTRACT_RE = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
-    const journeyThreadId = rawJourneyThreadId?.match(UUID_EXTRACT_RE)?.[1] ?? rawJourneyThreadId;
-    const mastraThreadId = rawMastraThreadId?.match(UUID_EXTRACT_RE)?.[1] ?? rawMastraThreadId;
+    // Extract clean UUID from potentially compound IDs (e.g., "sourceId:externalId")
+    const journeyThreadId = safeUuid(rawJourneyThreadId, 'journeyThreadId') ?? rawJourneyThreadId;
+    const mastraThreadId = safeUuid(rawMastraThreadId, 'mastraThreadId') ?? rawMastraThreadId;
 
     if (accessToken && tenantId && (journeyThreadId || mastraThreadId)) {
       try {
