@@ -4,6 +4,7 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { persistPreviewVersion } from "../persistPreviewVersion";
 import { extractTenantContext } from "../../lib/tenant-verification";
+import { STYLE_BUNDLE_TOKENS, resolveStyleBundleId } from "../generateUISpec";
 
 /**
  * savePreviewVersion — thin delegate to persistPreviewVersion.
@@ -30,7 +31,31 @@ export const savePreviewVersion = createTool({
     previewUrl: z.string(),
   }),
   execute: async (inputData, context) => {
-    const { spec_json, design_tokens, interfaceId } = inputData;
+    const { spec_json, interfaceId } = inputData;
+    let { design_tokens } = inputData;
+
+    // ── Token-locking guard ──────────────────────────────────────────
+    // If spec_json contains a styleBundleId, re-resolve design tokens
+    // from the canonical STYLE_BUNDLE_TOKENS map instead of trusting
+    // whatever the LLM passed. This prevents hallucinated colors.
+    const rawBundleId = spec_json?.styleBundleId;
+    if (rawBundleId && typeof rawBundleId === "string") {
+      const resolvedId = resolveStyleBundleId(rawBundleId);
+      const canonicalTokens = STYLE_BUNDLE_TOKENS[resolvedId];
+      if (canonicalTokens) {
+        console.log(
+          `[savePreviewVersion] Token lock: overriding LLM tokens with "${resolvedId}" canonical tokens`
+        );
+        design_tokens = {
+          colors: canonicalTokens.colors,
+          fonts: canonicalTokens.fonts,
+          spacing: canonicalTokens.spacing,
+          radius: canonicalTokens.radius,
+          shadow: canonicalTokens.shadow,
+        };
+      }
+    }
+    // ── End token-locking guard ──────────────────────────────────────
 
     // Get platformType from context for interface naming
     const platformType =

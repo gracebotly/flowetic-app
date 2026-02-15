@@ -6,7 +6,7 @@ import { z } from 'zod';
 // Used to resolve selectedStyleBundleId → design tokens
 // Design selection now handled by designSystemWorkflow + ui-ux-pro-max skill
 // ============================================================================
-const STYLE_BUNDLE_TOKENS: Record<string, {
+export const STYLE_BUNDLE_TOKENS: Record<string, {
   colors: { primary: string; secondary: string; success: string; warning: string; error: string; background: string; text: string };
   fonts: { heading: string; body: string };
   spacing: { unit: number };
@@ -386,7 +386,7 @@ function getTemplateBlueprints(templateId: string, mappings: Record<string, stri
 // that don't match the hardcoded STYLE_BUNDLE_TOKENS keys.
 // Uses keyword matching to find the closest bundle.
 // ============================================================================
-function resolveStyleBundleId(input: string): string {
+export function resolveStyleBundleId(input: string): string {
   // Direct match — fast path
   if (STYLE_BUNDLE_TOKENS[input]) return input;
 

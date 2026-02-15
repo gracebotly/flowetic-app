@@ -75,6 +75,7 @@ function transformDataForComponents(
     "kpi-card": "MetricCard", kpi_card: "MetricCard", kpi: "MetricCard",
     "metric-card": "MetricCard", MetricCard: "MetricCard",
     "line-chart": "LineChart", line_chart: "LineChart", LineChart: "LineChart", chart: "LineChart",
+    "timeseries-chart": "LineChart", timeseries_chart: "LineChart", TimeseriesChart: "LineChart", timeseries: "LineChart",
     "bar-chart": "BarChart", bar_chart: "BarChart", BarChart: "BarChart",
     "pie-chart": "PieChart", pie_chart: "PieChart", PieChart: "PieChart",
     "donut-chart": "DonutChart", donut_chart: "DonutChart", DonutChart: "DonutChart",

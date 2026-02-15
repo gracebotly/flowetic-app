@@ -24,6 +24,13 @@ const TYPE_NORMALIZATION_MAP: Record<string, string> = {
   'LineChart': 'LineChart',
   'chart': 'LineChart',
 
+  // Timeseries chart variants (normalize to LineChart for rendering)
+  'timeseries-chart': 'LineChart',
+  'timeseries_chart': 'LineChart',
+  'timeserieschart': 'LineChart',
+  'TimeseriesChart': 'LineChart',
+  'timeseries': 'LineChart',
+
   // Bar chart variants
   'bar-chart': 'BarChart',
   'bar_chart': 'BarChart',
