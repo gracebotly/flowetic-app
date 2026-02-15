@@ -318,45 +318,6 @@ export async function POST(req: Request) {
       threadId: mastraThreadId.substring(0, 8) + '...',
     });
 
-    // ✅ Auto-advance phase based on user selections (CORRECTED)
-    const currentPhase = requestContext.get('currentPhase') as string | undefined;
-    const messages = (params as any)?.messages || [];
-    const userMessage = messages[messages.length - 1]?.content;
-
-    if (currentPhase && typeof userMessage === 'string') {
-      let nextPhase: string | null = null;
-
-      // Phase transition rules (event-driven)
-      if (currentPhase === 'select_entity' && userMessage.match(/selected|choose|pick|entity/i)) {
-        nextPhase = 'recommend';
-      } else if (currentPhase === 'recommend' && userMessage.match(/dashboard|product/i)) {
-        nextPhase = 'build_preview';
-      } else if (currentPhase === 'build_preview' && userMessage.match(/approve|looks good|deploy/i)) {
-        nextPhase = 'deploy';
-      }
-
-      if (nextPhase) {
-        const journeyThreadId = requestContext.get('journeyThreadId') as string | undefined;
-        if (journeyThreadId) {
-          const { advancePhase } = await import('@/mastra/tools/journey/advancePhase');
-
-          try {
-            await advancePhase.execute(
-              {
-                nextPhase: nextPhase,
-                reason: 'Auto-advance triggered by user selection',
-              },
-              { requestContext }
-            );
-
-            requestContext.set('currentPhase', nextPhase);
-          } catch (error) {
-            console.error('[Auto-advance] Failed to transition phase:', error);
-          }
-        }
-      }
-    }
-
     // 5. CALL MASTRA WITH VALIDATED CONTEXT
     const enhancedParams = {
       ...params,
