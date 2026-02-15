@@ -776,13 +776,20 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
     const externalId = String(entityId || "").trim();
     if (!externalId) return "";
 
-    const { data, error } = await supabase
+    // entityId can be either the UUID (source_entities.id) or the platform external_id
+    // Try UUID first (from journey_sessions.entity_id), fall back to external_id
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(externalId);
+    let query = supabase
       .from("source_entities")
       .select("skill_md")
       .eq("tenant_id", authContext.tenantId)
-      .eq("source_id", sourceId)
-      .eq("external_id", externalId)
-      .maybeSingle();
+      .eq("source_id", sourceId);
+    if (isUuid) {
+      query = query.eq("id", externalId);
+    } else {
+      query = query.eq("external_id", externalId);
+    }
+    const { data, error } = await query.maybeSingle();
 
     if (error) {
       console.error("[vibe] Error loading skillMD:", error);

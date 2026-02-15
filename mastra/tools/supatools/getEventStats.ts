@@ -4,7 +4,7 @@ import { createSupaTool } from '../_base';
 import { createAuthenticatedClient } from '../../lib/supabase';
 import { z } from 'zod';
 
-const EventType = z.enum(['message', 'metric', 'state', 'tool_event', 'error']);
+const EventType = z.enum(['message', 'metric', 'state', 'tool_event', 'error', 'workflow_execution']);
 
 const inputSchema = z.object({
   sourceId: z.string().uuid().optional(),
