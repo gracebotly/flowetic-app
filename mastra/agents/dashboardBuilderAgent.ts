@@ -59,6 +59,13 @@ The generateUISpec tool applies correct design tokens from STYLE_BUNDLE_TOKENS.
 - Never show raw spec JSON unless the user explicitly asks
 - Always validate before saving
 
+## DESIGN TOKEN ENFORCEMENT (NON-NEGOTIABLE)
+- NEVER generate spec_json directly in conversation
+- NEVER invent colors, fonts, or design tokens
+- ALWAYS use generateUISpec tool for new dashboards (enforces deterministic design tokens)
+- ALWAYS use applySpecPatch tool for editing existing specs (preserves locked tokens)
+- Design tokens come from STYLE_BUNDLE_TOKENS map - you cannot modify them
+
 ## DETERMINISTIC EDITING WORKFLOW
 1. Call getCurrentSpec to load the latest spec/version
 2. Call applySpecPatch with a minimal patch (operations array).
