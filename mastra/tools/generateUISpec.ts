@@ -6,7 +6,7 @@ import { z } from 'zod';
 // Used to resolve selectedStyleBundleId → design tokens
 // Design selection now handled by designSystemWorkflow + ui-ux-pro-max skill
 // ============================================================================
-const STYLE_BUNDLE_TOKENS: Record<string, {
+export const STYLE_BUNDLE_TOKENS: Record<string, {
   colors: { primary: string; secondary: string; success: string; warning: string; error: string; background: string; text: string };
   fonts: { heading: string; body: string };
   spacing: { unit: number };
@@ -382,6 +382,42 @@ function getTemplateBlueprints(templateId: string, mappings: Record<string, stri
 }
 
 // ============================================================================
+// Style bundle ID resolver — handles LLM-generated display names
+// that don't match the hardcoded STYLE_BUNDLE_TOKENS keys.
+// Uses keyword matching to find the closest bundle.
+// ============================================================================
+export function resolveStyleBundleId(input: string): string {
+  // Direct match — fast path
+  if (STYLE_BUNDLE_TOKENS[input]) return input;
+
+  const KEYWORD_MAP: Record<string, string[]> = {
+    'professional-clean': ['professional', 'clean', 'minimal', 'simple', 'executive', 'business'],
+    'premium-dark': ['premium', 'dark', 'elegant', 'luxury', 'sophisticated', 'night', 'sleek'],
+    'glass-premium': ['glass', 'glassmorphism', 'frosted', 'translucent', 'blur', 'transparent', 'aurora'],
+    'bold-startup': ['bold', 'startup', 'energetic', 'vibrant', 'playful', 'bright', 'fun'],
+    'corporate-trust': ['corporate', 'trust', 'formal', 'authority', 'banking', 'finance', 'enterprise'],
+    'neon-cyber': ['neon', 'cyber', 'monitoring', 'modern', 'electric', 'real-time', 'tech', 'hud', 'dashboard', 'analytics', 'terminal', 'matrix'],
+    'pastel-soft': ['pastel', 'soft', 'gentle', 'calming', 'wellness', 'health', 'light', 'friendly'],
+    'warm-earth': ['warm', 'earth', 'organic', 'natural', 'rustic', 'cozy', 'brown', 'sustainable'],
+  };
+
+  const inputLower = input.toLowerCase().replace(/[-_]/g, ' ');
+  let bestMatch = 'professional-clean';
+  let bestScore = 0;
+
+  for (const [bundleId, keywords] of Object.entries(KEYWORD_MAP)) {
+    const score = keywords.filter(kw => inputLower.includes(kw)).length;
+    if (score > bestScore) {
+      bestScore = score;
+      bestMatch = bundleId;
+    }
+  }
+
+  console.log(`[generateUISpec] Resolved style "${input}" → "${bestMatch}" (score: ${bestScore})`);
+  return bestMatch;
+}
+
+// ============================================================================
 // The tool itself
 // ============================================================================
 export const generateUISpec = createTool({
@@ -403,12 +439,14 @@ export const generateUISpec = createTool({
     const { templateId, mappings, platformType } = inputData;
 
     // Resolve style bundle: input param → RequestContext → fallback
-    const styleBundleId =
+    const rawStyleBundleId =
       inputData.selectedStyleBundleId ||
       (context?.requestContext?.get('selectedStyleBundleId') as string) ||
       'professional-clean';
 
-    const styleTokens = STYLE_BUNDLE_TOKENS[styleBundleId] || STYLE_BUNDLE_TOKENS['professional-clean'];
+    // Resolve display names (e.g. "Modern Monitoring") to valid token keys (e.g. "neon-cyber")
+    const styleBundleId = resolveStyleBundleId(rawStyleBundleId);
+    const styleTokens = STYLE_BUNDLE_TOKENS[styleBundleId];
 
     // Build deterministic component array from template blueprints
     const blueprints = getTemplateBlueprints(templateId, mappings);

@@ -39,6 +39,7 @@ Returns: pattern name, sections, cta strategy, conversion optimizations.`,
       rows,
       query: inputData.query,
       limit: inputData.limit ?? 3,
+      domain: 'landing',
     });
 
     return {

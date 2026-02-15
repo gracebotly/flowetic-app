@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
-import { DashboardRenderer } from "@/components/preview/dashboard-renderer";
+import { ResponsiveDashboardRenderer } from "@/components/preview/ResponsiveDashboardRenderer";
 
 export const dynamic = "force-dynamic";
 
@@ -75,6 +75,7 @@ function transformDataForComponents(
     "kpi-card": "MetricCard", kpi_card: "MetricCard", kpi: "MetricCard",
     "metric-card": "MetricCard", MetricCard: "MetricCard",
     "line-chart": "LineChart", line_chart: "LineChart", LineChart: "LineChart", chart: "LineChart",
+    "timeseries-chart": "LineChart", timeseries_chart: "LineChart", TimeseriesChart: "LineChart", timeseries: "LineChart",
     "bar-chart": "BarChart", bar_chart: "BarChart", BarChart: "BarChart",
     "pie-chart": "PieChart", pie_chart: "PieChart", PieChart: "PieChart",
     "donut-chart": "DonutChart", donut_chart: "DonutChart", DonutChart: "DonutChart",
@@ -177,9 +178,15 @@ export default async function PreviewPage({ params }: PreviewPageProps) {
 
   return (
     <div className="min-h-screen bg-white">
-      <DashboardRenderer
+      <ResponsiveDashboardRenderer
         spec={enrichedSpec}
-        designTokens={version.design_tokens}
+        designTokens={{
+          colors: version.design_tokens?.colors ?? version.design_tokens?.theme?.colors ?? { primary: "#3b82f6" },
+          borderRadius: version.design_tokens?.borderRadius ?? 8,
+          shadow: version.design_tokens?.shadow ?? "0 1px 3px rgba(0,0,0,0.1)",
+        }}
+        deviceMode="desktop"
+        isEditing={false}
       />
     </div>
   );

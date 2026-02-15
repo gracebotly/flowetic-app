@@ -2,31 +2,7 @@
 import { Memory } from "@mastra/memory";
 import { createClient } from "@/lib/supabase/server";
 import { getMastraStorage } from "./storage";
-
-// UUID validation regex
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/**
- * Safely extract UUID from a potentially corrupted value
- * Handles cases like "uuid:extradata" by extracting just the UUID part
- */
-function safeUuid(value: string | null | undefined): string | null {
-  if (!value) return null;
-
-  // If it's already a valid UUID, return it
-  if (UUID_RE.test(value)) return value;
-
-  // Try to extract UUID from start of string (handles "uuid:extra" format)
-  const uuidMatch = value.match(/^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
-  if (uuidMatch) {
-    console.warn(`[ensureMastraThreadId] Extracted UUID from corrupted value: "${value}" -> "${uuidMatch[1]}"`);
-    return uuidMatch[1];
-  }
-
-  // Not a valid UUID at all
-  console.warn(`[ensureMastraThreadId] Invalid UUID value ignored: "${value}"`);
-  return null;
-}
+import { safeUuid } from "./safeUuid";
 
 export async function ensureMastraThreadId(params: {
   tenantId: string;
@@ -71,8 +47,8 @@ export async function ensureMastraThreadId(params: {
   });
 
   const rawMastraThreadId = thread?.id;
-  // CRITICAL: Sanitize the thread ID - Mastra may return 'uuid:nanoid' format
-  const mastraThreadId = safeUuid(rawMastraThreadId);
+  // Sanitize thread ID — upstream may pass composite 'sourceId:externalId' format
+  const mastraThreadId = safeUuid(rawMastraThreadId, 'mastraThreadId');
   if (!mastraThreadId) {
     throw new Error("ensureMastraThreadId: Memory.createThread returned invalid thread id: " + String(rawMastraThreadId));
   }
@@ -81,8 +57,8 @@ export async function ensureMastraThreadId(params: {
   if (!session) {
     // Session doesn't exist - CREATE it
     // IMPORTANT: Validate UUIDs before inserting to prevent Postgres errors
-    const safeSourceId = safeUuid(params.sourceId);
-    const safeEntityId = safeUuid(params.entityId);
+    const safeSourceId = safeUuid(params.sourceId, 'sourceId');
+    const safeEntityId = safeUuid(params.entityId, 'entityId');
 
     console.log('[ensureMastraThreadId] Creating new journey_sessions row:', {
       tenantId: params.tenantId,

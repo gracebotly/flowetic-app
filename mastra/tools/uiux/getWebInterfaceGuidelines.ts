@@ -39,6 +39,7 @@ Returns: pattern name, best practices, do/don't examples, accessibility notes.`,
       rows,
       query: inputData.query,
       limit: inputData.limit ?? 3,
+      domain: 'web-interface',
     });
 
     return {

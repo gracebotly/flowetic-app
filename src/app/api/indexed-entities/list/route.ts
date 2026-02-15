@@ -7,6 +7,7 @@ type EntityKind = "workflow" | "scenario" | "flow" | "agent" | "assistant" | "sq
 
 type IndexedEntity = {
   id: string; // `${source_id}:${external_id}`
+  entityUuid: string; // Real source_entities.id primary key
   name: string;
   platform: string;
   kind: EntityKind;
@@ -49,7 +50,7 @@ export async function GET() {
 
   const { data: entities, error: eErr } = await supabase
     .from("source_entities")
-    .select("source_id,entity_kind,external_id,display_name,last_seen_at")
+    .select("id,source_id,entity_kind,external_id,display_name,last_seen_at")
     .in("source_id", sourceIds)
     .eq("tenant_id", membership.tenant_id)
     .eq("enabled_for_analytics", true);
@@ -79,6 +80,7 @@ export async function GET() {
 
     return {
       id: `${sourceId}:${String(e.external_id)}`,
+      entityUuid: String(e.id),
       name: String(e.display_name ?? ""),
       platform: String(meta?.type ?? "other"),
       kind: String(e.entity_kind ?? "workflow") as EntityKind,

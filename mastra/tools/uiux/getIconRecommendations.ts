@@ -39,6 +39,7 @@ Returns: icon library/style, aesthetic, use cases, library recommendations.`,
       rows,
       query: inputData.query,
       limit: inputData.limit ?? 3,
+      domain: 'icons',
     });
 
     return {

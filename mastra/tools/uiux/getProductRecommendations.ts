@@ -40,7 +40,7 @@ export const getProductRecommendations = createTool({
 
     const query = [inputData.productType, ...(inputData.keywords ?? [])].filter(Boolean).join(" ");
 
-    const ranked = await rankRowsByQuery({ rows, query, limit: inputData.limit ?? 3 });
+    const ranked = await rankRowsByQuery({ rows, query, limit: inputData.limit ?? 3, domain: 'product' });
 
     const recommendations = ranked.map((row) => ({
       productType: row["Product Type"] || "",

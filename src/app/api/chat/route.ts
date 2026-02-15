@@ -9,6 +9,7 @@ import {
 import { createClient } from '@/lib/supabase/server';
 import { getMastraSingleton } from '@/mastra/singleton';
 import { ensureMastraThreadId } from '@/mastra/lib/ensureMastraThread';
+import { safeUuid } from "@/mastra/lib/safeUuid";
 
 export const maxDuration = 300; // Fluid Compute + Hobby = 300s max
 
@@ -45,6 +46,13 @@ export async function POST(req: Request) {
       null;
 
     if (!clientProvidedTenantId || typeof clientProvidedTenantId !== 'string') {
+      // AI SDK v5 transport can send auto-resubmission requests without custom body.
+      // Log for visibility but keep the 400 so the frontend knows to stop retrying.
+      console.warn('[api/chat] Missing tenantId — likely a transport resubmission without body context', {
+        hasMessages: Array.isArray(clientData?.messages) && clientData.messages.length > 0,
+        trigger: clientData?.trigger,
+        keys: Object.keys(clientData || {}),
+      });
       return new Response(
         JSON.stringify({ error: 'Missing tenantId in request' }),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
@@ -93,7 +101,7 @@ export async function POST(req: Request) {
       const rawSourceId = (params as any)?.sourceId ||
                           (params as any)?.vibeContext?.sourceId ||
                           null;
-      const sourceId = rawSourceId?.match?.(/^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i)?.[1] ?? rawSourceId;
+      const sourceId = safeUuid(rawSourceId, 'sourceId') ?? rawSourceId;
       const entityId = (params as any)?.entityId ||
                        (params as any)?.vibeContext?.entityId ||
                        null;
@@ -181,11 +189,9 @@ export async function POST(req: Request) {
     // but the client doesn't update journeyMode before the next request.
     // BUG FIX: Query BOTH thread_id AND mastra_thread_id columns since advancePhase
     // may write to either depending on which ID was available.
-    // Extract clean UUIDs from potentially corrupted compound IDs (e.g., "uuid:nanoid")
-    // Mastra Memory.createThread() can return compound format
-    const UUID_EXTRACT_RE = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
-    const cleanJourneyThreadId = clientJourneyThreadId?.match(UUID_EXTRACT_RE)?.[1] ?? clientJourneyThreadId;
-    const cleanMastraThreadId = mastraThreadId?.match(UUID_EXTRACT_RE)?.[1] ?? mastraThreadId;
+    // Extract clean UUIDs from potentially compound IDs (e.g., "sourceId:externalId")
+    const cleanJourneyThreadId = safeUuid(clientJourneyThreadId, 'journeyThreadId') ?? clientJourneyThreadId;
+    const cleanMastraThreadId = safeUuid(mastraThreadId, 'mastraThreadId') ?? mastraThreadId;
     if (cleanJourneyThreadId && cleanJourneyThreadId !== 'default-thread') {
       try {
         // Query by thread_id first (primary), then fallback to mastra_thread_id
