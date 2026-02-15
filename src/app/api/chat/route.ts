@@ -318,7 +318,7 @@ export async function POST(req: Request) {
       threadId: mastraThreadId.substring(0, 8) + '...',
     });
 
-    // Auto-advance phase based on user selections
+    // ✅ Auto-advance phase based on user selections (CORRECTED)
     const currentPhase = requestContext.get('currentPhase') as string | undefined;
     const messages = (params as any)?.messages || [];
     const userMessage = messages[messages.length - 1]?.content;
@@ -336,27 +336,22 @@ export async function POST(req: Request) {
       }
 
       if (nextPhase) {
-        // Update phase in journey_sessions
         const journeyThreadId = requestContext.get('journeyThreadId') as string | undefined;
         if (journeyThreadId) {
-          const { getJourneySession } = await import('@/mastra/tools/journey/getJourneySession');
-          const session = await getJourneySession.execute(
-            { threadId: journeyThreadId },
-            { requestContext }
-          );
+          const { advancePhase } = await import('@/mastra/tools/journey/advancePhase');
 
-          if (session) {
-            const { updateJourneyPhase } = await import('@/mastra/tools/journey/updateJourneyPhase');
-            await updateJourneyPhase.execute(
+          try {
+            await advancePhase.execute(
               {
-                threadId: journeyThreadId,
-                phase: nextPhase,
+                nextPhase: nextPhase,
+                reason: 'Auto-advance triggered by user selection',
               },
               { requestContext }
             );
 
-            // Update context for this request
             requestContext.set('currentPhase', nextPhase);
+          } catch (error) {
+            console.error('[Auto-advance] Failed to transition phase:', error);
           }
         }
       }
