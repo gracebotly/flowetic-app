@@ -3,6 +3,7 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import type { EditAction } from "./types";
+import { InterfaceContextSchema } from "../../lib/REQUEST_CONTEXT_CONTRACT";
 
 const densityToSpacingBase = (density: "compact" | "normal" | "relaxed") => {
   switch (density) {
@@ -18,11 +19,8 @@ const densityToSpacingBase = (density: "compact" | "normal" | "relaxed") => {
 export const applyInteractiveEdits = createTool({
   id: "applyInteractiveEdits",
   description: "Applies interactive edits to dashboard spec and saves preview version",
+  requestContextSchema: InterfaceContextSchema,
   inputSchema: z.object({
-    tenantId: z.string().uuid().describe("The tenant ID"),
-    userId: z.string().uuid().describe("The user ID"),
-    interfaceId: z.string().uuid().describe("The interface ID"),
-    platformType: z.string().default("make").describe("The platform type"),
     actions: z.array(
       z.object({
         type: z.enum(["toggle_widget", "rename_widget", "switch_chart_type", "set_density"]),
@@ -38,7 +36,17 @@ export const applyInteractiveEdits = createTool({
     previewVersionId: z.string().uuid(),
   }),
   execute: async (inputData, context) => {
-    const { tenantId, userId, interfaceId, platformType, actions } = inputData;
+    const { actions } = inputData;
+    // Read from validated RequestContext (Mastra validates via requestContextSchema before execute)
+    const { tenantId, userId, supabaseAccessToken, interfaceId, platformType } =
+      context?.requestContext?.all ?? {};
+
+    if (!interfaceId) {
+      throw new Error(
+        '[applyInteractiveEdits] No interfaceId in RequestContext. ' +
+        'Cannot apply edits without a target interface.'
+      );
+    }
 
     const { getCurrentSpec, applySpecPatch, savePreviewVersion } = await import("@/mastra/tools/specEditor");
     const { validateSpec } = await import("@/mastra/tools/validateSpec");

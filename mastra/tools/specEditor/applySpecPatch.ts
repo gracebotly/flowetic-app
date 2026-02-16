@@ -152,6 +152,11 @@ function validateComponentIds(
 
 export const applySpecPatch = createTool({
   id: "applySpecPatch",
+  // Soft validation: tenantId optional because this is a pure transform,
+  // but when present gives us audit trail
+  requestContextSchema: z.object({
+    tenantId: z.string().optional(),
+  }),
   description:
     "Apply a small, deterministic patch to a dashboard UI spec and/or design tokens. " +
     "IMPORTANT: Always pass existing_design_tokens (the full tokens from getCurrentSpec) " +

@@ -93,6 +93,9 @@ function normalizeSpec(raw: Record<string, unknown>): Record<string, unknown> {
 
 export const validateSpec = createTool({
   id: "validate-spec",
+  requestContextSchema: z.object({
+    tenantId: z.string().optional(),
+  }),
   description:
     "Validates dashboard UI specification against schema. " +
     "Auto-normalizes agent-generated specs (adds defaults for missing fields) before validation.",
