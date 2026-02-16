@@ -1,5 +1,6 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
+import { createAuthenticatedClient } from '../../lib/supabase';
 
 /**
  * EDGE CASE TOOL - Manually advance journey phase
@@ -55,10 +56,11 @@ Valid phases: select_entity, recommend, style, build_preview, refine`,
       throw new Error('[advancePhase] Missing journeyThreadId in RequestContext');
     }
 
-    const supabase = context.mastra?.getStorage()?.client;
-    if (!supabase) {
-      throw new Error('[advancePhase] No Supabase client available');
+    const accessToken = context?.requestContext?.get('supabaseAccessToken') as string;
+    if (!accessToken) {
+      throw new Error('[advancePhase] Missing supabaseAccessToken in RequestContext');
     }
+    const supabase = createAuthenticatedClient(accessToken);
 
     // Validation: Check required data based on target phase
     const requiredDataMap: Record<string, {
