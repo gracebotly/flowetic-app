@@ -1,17 +1,17 @@
-import { createTool } from '@mastra/core';
-import { z } from 'zod';
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
 
 /**
  * EDGE CASE TOOL - Manually advance journey phase
- *
+ * 
  * IMPORTANT: This tool should RARELY be called because phase transitions
  * are now AUTOMATIC based on user selections. The chat route automatically
  * advances phases when:
- *
+ * 
  * - select_entity → recommend: When selectedEntities/selectedEntity exists
  * - recommend → style: When selectedOutcome exists
  * - style → build_preview: When selectedStyleBundleId exists AND schema_ready=true
- *
+ * 
  * Only use this tool for:
  * - Skipping phases (user explicitly requests to skip)
  * - Error recovery (stuck state, need manual override)
@@ -19,19 +19,19 @@ import { z } from 'zod';
  */
 export const advancePhase = createTool({
   id: 'advancePhase',
-  description: `Manually advance the journey phase.
+  description: `Manually advance the journey phase. 
 
-  ⚠️ IMPORTANT: Phase transitions are AUTOMATIC based on user selections:
-  - select_entity → recommend: Auto-advances when entity selected
-  - recommend → style: Auto-advances when outcome selected
-  - style → build_preview: Auto-advances when style selected AND schema ready
+⚠️ IMPORTANT: Phase transitions are AUTOMATIC based on user selections:
+- select_entity → recommend: Auto-advances when entity selected
+- recommend → style: Auto-advances when outcome selected  
+- style → build_preview: Auto-advances when style selected AND schema ready
 
-  Only use this tool for:
-  - User explicitly requests to skip a phase
-  - Error recovery (stuck state)
-  - Override when automatic transition failed
+Only use this tool for:
+- User explicitly requests to skip a phase
+- Error recovery (stuck state)
+- Override when automatic transition failed
 
-  Valid phases: select_entity, recommend, style, build_preview, refine`,
+Valid phases: select_entity, recommend, style, build_preview, refine`,
 
   inputSchema: z.object({
     newPhase: z.enum([
@@ -92,7 +92,7 @@ export const advancePhase = createTool({
               .eq('id', journeyThreadId)
               .eq('tenant_id', tenantId)
               .single();
-
+            
             if (!data?.selected_outcome) {
               missingFields.push('selectedOutcome');
             }
@@ -113,9 +113,9 @@ export const advancePhase = createTool({
           const selectedStyleBundleId = context.requestContext?.get('selectedStyleBundleId');
 
           const missingFields: string[] = [];
-
+          
           if (!selectedEntities && !selectedEntity) missingFields.push('selectedEntities or selectedEntity');
-
+          
           if (!selectedOutcome) {
             const { data } = await supabase
               .from('journey_sessions')
@@ -125,7 +125,7 @@ export const advancePhase = createTool({
               .single();
             if (!data?.selected_outcome) missingFields.push('selectedOutcome');
           }
-
+          
           if (!selectedStyleBundleId) {
             const { data } = await supabase
               .from('journey_sessions')
