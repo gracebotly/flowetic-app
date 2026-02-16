@@ -52,7 +52,7 @@ export const applyInteractiveEdits = createTool({
     const { validateSpec } = await import("@/mastra/tools/validateSpec");
 
     // Call getCurrentSpec directly (no destructuring needed)
-    const current = await getCurrentSpec.execute!({ interfaceId }, context);
+    const current = await getCurrentSpec.execute!({ interfaceId }, context as any);
 
     if (current instanceof Error) {
       throw current;
