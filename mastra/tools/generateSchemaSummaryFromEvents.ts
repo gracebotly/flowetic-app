@@ -5,6 +5,7 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { createAuthenticatedClient } from "../lib/supabase";
 import { extractTenantContext } from "../lib/tenant-verification";
+import { AuthenticatedContextSchema } from "../lib/REQUEST_CONTEXT_CONTRACT";
 
 function inferType(v: any): string {
   if (v === null || v === undefined) return "null";
@@ -25,6 +26,7 @@ export const generateSchemaSummaryFromEvents = createTool({
   id: "generateSchemaSummaryFromEvents",
   description:
     "Analyze stored events rows to infer a simple schema summary (fields, types, eventTypes, frequencies) for Phase 1 routing.",
+  requestContextSchema: AuthenticatedContextSchema,
   inputSchema: z.object({
     sourceId: z.string().min(1),
     sampleSize: z.number().int().min(1).max(500).default(100),

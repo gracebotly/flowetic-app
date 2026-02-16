@@ -5,10 +5,12 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { createAuthenticatedClient } from "../../lib/supabase";
 import { extractTenantContext } from "../../lib/tenant-verification";
+import { AuthenticatedContextSchema } from "../../lib/REQUEST_CONTEXT_CONTRACT";
 
 export const getRecentEventSamples = createTool({
   id: "getRecentEventSamples",
   description: "Fetch recent raw event rows for internal analysis. Do not expose raw JSON to user by default.",
+  requestContextSchema: AuthenticatedContextSchema,
   inputSchema: z.object({
     sourceId: z.string().uuid().optional(),
     lastN: z.number().int().min(1).max(500).default(100),

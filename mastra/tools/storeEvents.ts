@@ -2,11 +2,13 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { createAuthenticatedClient } from "../lib/supabase";
 import { extractTenantContext } from "../lib/tenant-verification";
+import { AuthenticatedContextSchema } from "../lib/REQUEST_CONTEXT_CONTRACT";
 
 export const storeEvents = createTool({
   id: "storeEvents",
   description:
     "Bulk insert normalized events into Supabase events table. Uses RPC for proper deduplication with partial unique index.",
+  requestContextSchema: AuthenticatedContextSchema,
   inputSchema: z.object({
     events: z.array(z.record(z.any())),
     sourceId: z.string().min(1),

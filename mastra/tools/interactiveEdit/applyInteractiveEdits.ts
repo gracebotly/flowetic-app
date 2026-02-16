@@ -37,15 +37,10 @@ export const applyInteractiveEdits = createTool({
   }),
   execute: async (inputData, context) => {
     const { actions } = inputData;
-    // Read from validated RequestContext (Mastra validates via requestContextSchema before execute)
-    const { tenantId, userId, supabaseAccessToken, interfaceId, platformType } =
-      context?.requestContext?.all ?? {};
-
-    if (!interfaceId) {
-      throw new Error(
-        '[applyInteractiveEdits] No interfaceId in RequestContext. ' +
-        'Cannot apply edits without a target interface.'
-      );
+    const { tenantId, userId, interfaceId, platformType } =
+      (context as any)?.requestContext?.all ?? {};
+    if (!tenantId || !userId) {
+      throw new Error("[applyInteractiveEdits] Missing tenantId or userId in RequestContext");
     }
 
     const { getCurrentSpec, applySpecPatch, savePreviewVersion } = await import("@/mastra/tools/specEditor");

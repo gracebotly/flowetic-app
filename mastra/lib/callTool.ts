@@ -1,5 +1,3 @@
-import type { ToolExecutionContext } from "@mastra/core/tools";
-
 type ValidationErrorLike = {
   error: boolean;
   message: string;
@@ -21,9 +19,9 @@ function isValidationErrorLike(value: unknown): value is ValidationErrorLike {
  * - tool outputs may return validation error objects
  */
 export async function callTool<TResult = any>(
-  tool: { execute?: (inputData: any, context: ToolExecutionContext) => Promise<any> },
+  tool: { execute?: (inputData: any, context: any) => Promise<any> },
   inputData: any,
-  context: ToolExecutionContext,
+  context: any,
 ): Promise<TResult> {
   if (typeof tool.execute !== "function") {
     throw new Error("TOOL_EXECUTE_MISSING");

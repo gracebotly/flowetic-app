@@ -4,10 +4,12 @@ import { z } from 'zod';
 import { createAuthenticatedClient } from '../lib/supabase';
 import { extractTenantContext } from '../lib/tenant-verification';
 import { getExpectedFieldsForPlatform } from '../normalizers';
+import { AuthenticatedContextSchema } from '../lib/REQUEST_CONTEXT_CONTRACT';
 
 export const analyzeSchema = createTool({
   id: 'analyze-schema',
   description: 'Analyzes event schema from a data source to detect field types and patterns. Inspects both labels and state columns.',
+  requestContextSchema: AuthenticatedContextSchema,
   inputSchema: z.object({
     sourceId: z.string().uuid(),
     sampleSize: z.number().default(100),

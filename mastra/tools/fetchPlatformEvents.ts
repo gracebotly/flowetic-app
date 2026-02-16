@@ -2,6 +2,7 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { createAuthenticatedClient } from "../lib/supabase";
 import { decryptSecret } from "@/lib/secrets";
+import { AuthenticatedContextSchema } from "../lib/REQUEST_CONTEXT_CONTRACT";
 
 const PlatformType = z.enum(["vapi", "n8n", "make", "retell"]);
 
@@ -32,6 +33,7 @@ export const fetchPlatformEvents = createTool({
   id: "fetchPlatformEvents",
   description:
     "Fetch historical events from a connected platform API. Resolves credentials from Supabase sources table. Returns raw platform events.",
+  requestContextSchema: AuthenticatedContextSchema,
   inputSchema: z.object({
     sourceId: z.string().min(1),
     threadId: z.string().min(1),

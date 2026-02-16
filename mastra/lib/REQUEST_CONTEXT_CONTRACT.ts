@@ -25,27 +25,22 @@ export const AuthenticatedContextSchema = z.object({
   supabaseAccessToken: z.string().min(1),
 });
 
-/** Tools that also need an interface target */
+/** Extended context for tools that also need interface + platform info. */
 export const InterfaceContextSchema = AuthenticatedContextSchema.extend({
-  interfaceId: z.string().min(1).optional(),
+  interfaceId: z.string().optional(),
   platformType: z.string().optional(),
 });
 
-/** Tools that need source context for data analysis */
+/** Extended context that also carries sourceId (for event/mapping tools). */
 export const SourceContextSchema = AuthenticatedContextSchema.extend({
-  sourceId: z.string().min(1),
-  platformType: z.string().optional(),
-});
-
-/** Full journey context */
-export const JourneyContextSchema = AuthenticatedContextSchema.extend({
   interfaceId: z.string().optional(),
   sourceId: z.string().optional(),
-  platformType: z.string().optional(),
-  phase: z.string().optional(),
-  journeyThreadId: z.string().optional(),
-  selectedOutcome: z.string().optional(),
-  selectedStyleBundleId: z.string().optional(),
+});
+
+/** Optional context — for pure-transform tools that don't require auth
+ *  but can accept tenantId for audit trail / logging. */
+export const OptionalAuditContextSchema = z.object({
+  tenantId: z.string().optional(),
 });
 
 /**
