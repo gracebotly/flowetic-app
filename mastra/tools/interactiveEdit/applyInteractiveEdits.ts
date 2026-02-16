@@ -99,7 +99,7 @@ export const applyInteractiveEdits = createTool({
     if (ops.length) {
       const patched = await applySpecPatch.execute!(
         { spec_json: nextSpec, design_tokens: nextTokens, operations: ops },
-        context
+        context as any
       );
 
       if (patched instanceof Error) {
@@ -110,7 +110,7 @@ export const applyInteractiveEdits = createTool({
       nextTokens = (patched as any).design_tokens;
     }
 
-    const validation = await validateSpec.execute!({ spec_json: nextSpec }, context);
+    const validation = await validateSpec.execute!({ spec_json: nextSpec }, context as any);
 
     if (validation instanceof Error) {
       throw validation;
@@ -121,7 +121,7 @@ export const applyInteractiveEdits = createTool({
       throw new Error("Validation score below threshold");
     }
 
-    const saved = await savePreviewVersion.execute!({ spec_json: nextSpec, design_tokens: nextTokens }, context);
+    const saved = await savePreviewVersion.execute!({ spec_json: nextSpec, design_tokens: nextTokens }, context as any);
 
     if (saved instanceof Error) {
       throw saved;
