@@ -59,6 +59,60 @@ export const runGeneratePreviewWorkflow = createTool({
       };
     }
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // PHASE GUARD: Refuse to generate preview unless session is in build_preview
+    // This prevents the LLM from bypassing advancePhase by calling this tool directly.
+    // Check DB as source of truth — RequestContext phase may be stale.
+    // ═══════════════════════════════════════════════════════════════════════
+    const journeyThreadId = context?.requestContext?.get('journeyThreadId') as string;
+    const supabaseToken = context?.requestContext?.get('supabaseAccessToken') as string;
+
+    if (journeyThreadId && supabaseToken) {
+      const supabase = createAuthenticatedClient(supabaseToken);
+
+      const { data: session } = await supabase
+        .from('journey_sessions')
+        .select('mode, selected_outcome, selected_style_bundle_id, selected_entities, schema_ready')
+        .eq('thread_id', journeyThreadId)
+        .eq('tenant_id', tenantId)
+        .single();
+
+      if (session) {
+        const missing: string[] = [];
+        if (session.mode !== 'build_preview') missing.push(`phase is "${session.mode}" (must be "build_preview")`);
+        if (!session.selected_outcome) missing.push('selectedOutcome not set');
+        if (!session.selected_style_bundle_id) missing.push('selectedStyleBundleId not set');
+        if (!session.schema_ready) missing.push('schema not ready');
+
+        if (missing.length > 0) {
+          console.error(
+            `[runGeneratePreviewWorkflow] PHASE GUARD BLOCKED execution. ${missing.join('; ')}`
+          );
+          return {
+            success: false,
+            error: "PHASE_GUARD",
+            message: `Cannot generate preview: ${missing.join('; ')}. ` +
+              `Complete the journey phases (select_entity → recommend → style → build_preview) first.`,
+            currentPhase: session.mode,
+          };
+        }
+      }
+    } else {
+      // If we can't verify from DB, check RequestContext phase as fallback
+      const currentPhase = context?.requestContext?.get('phase') as string;
+      if (currentPhase && currentPhase !== 'build_preview') {
+        console.error(
+          `[runGeneratePreviewWorkflow] PHASE GUARD (fallback): phase="${currentPhase}", blocked.`
+        );
+        return {
+          success: false,
+          error: "PHASE_GUARD",
+          message: `Cannot generate preview from phase "${currentPhase}". Must be in "build_preview" phase.`,
+          currentPhase,
+        };
+      }
+    }
+
     try {
       // Use the statically imported singleton - NEVER dynamic import
       const workflow = mastra.getWorkflow("generatePreviewWorkflow");
