@@ -1,26 +1,17 @@
-
-
-
-
-
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { createAuthenticatedClient } from '../../lib/supabase';
-import { extractTenantContext, verifyTenantAccess } from '../../lib/tenant-verification';
+import { extractTenantContext } from '../../lib/tenant-verification';
 
 export const setSchemaReady = createTool({
   id: 'setSchemaReady',
-  description: 'Marks a journey schema as ready for use',
+  description: 'Marks a journey session schema as ready for preview generation. Updates the schema_ready flag in journey_sessions.',
   inputSchema: z.object({
-    journeyId: z.string().uuid().describe('The journey schema ID to mark as ready'),
+    threadId: z.string().min(1).describe('The thread ID of the journey session'),
   }),
   outputSchema: z.object({
     success: z.boolean(),
-    journey: z.object({
-      id: z.string(),
-      ready: z.boolean(),
-      updated_at: z.string(),
-    }),
+    message: z.string(),
   }),
   execute: async (inputData, context) => {
     // 1. Get access token
@@ -30,37 +21,36 @@ export const setSchemaReady = createTool({
     }
 
     // 2. Get tenant context
-    const { tenantId, userId } = extractTenantContext(context);
+    const { tenantId } = extractTenantContext(context);
 
     // 3. Create authenticated client
     const supabase = createAuthenticatedClient(accessToken);
 
-    // 4. Optional: Verify tenant access (extra security layer)
-    await verifyTenantAccess(supabase, tenantId, userId);
-
-    // 5. Update with RLS enforcement
+    // 4. Update journey_sessions (the actual table with schema_ready column)
     const { data, error } = await supabase
-      .from('journey_schemas')
-      .update({ 
-        ready: true, 
-        updated_at: new Date().toISOString() 
+      .from('journey_sessions')
+      .update({
+        schema_ready: true,
+        updated_at: new Date().toISOString(),
       })
-      .eq('id', inputData.journeyId)
       .eq('tenant_id', tenantId)
-      .select()
+      .eq('thread_id', inputData.threadId)
+      .select('id, schema_ready')
       .single();
 
     if (error) {
-      throw new Error(`Failed to update schema: ${error.message}`);
+      throw new Error(`[setSchemaReady]: Failed to update journey session: ${error.message}`);
     }
 
-    return { 
-      success: true, 
-      journey: data 
+    if (!data) {
+      throw new Error(`[setSchemaReady]: No journey session found for thread ${inputData.threadId} in tenant ${tenantId}`);
+    }
+
+    console.log(`[setSchemaReady]: Updated journey_sessions schema_ready=true for thread ${inputData.threadId}`);
+
+    return {
+      success: true,
+      message: `Schema marked as ready for thread ${inputData.threadId}`,
     };
   },
 });
-
-
-
-
