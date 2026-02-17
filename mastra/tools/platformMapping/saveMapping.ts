@@ -38,7 +38,7 @@ export const saveMapping = createTool({
       throw new Error("[saveMapping] Missing tenantId or userId in RequestContext");
     }
     // sourceId comes from RequestContext, fall back to metadata
-    const resolvedSourceId = sourceId ?? metadata?.sourceId;
+    const resolvedSourceId = sourceId ?? (metadata as any)?.sourceId;
 
     try {
       // Validate inputs
