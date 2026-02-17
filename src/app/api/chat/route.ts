@@ -22,6 +22,91 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   return Promise.race([promise.finally(() => clearTimeout(t)), timeout]);
 }
 
+// ─── DETERMINISTIC PHASE ADVANCEMENT ────────────────────────────────────────
+// Phase 4A from refactor guide: code-driven phase transitions, NOT LLM-driven.
+// Runs AFTER each agent stream completes. Reads DB state, advances if ready.
+async function autoAdvancePhase(params: {
+  supabase: any;
+  tenantId: string;
+  journeyThreadId: string;
+  mastraThreadId: string;
+}): Promise<{ advanced: boolean; from?: string; to?: string }> {
+  const { supabase, tenantId, journeyThreadId, mastraThreadId } = params;
+
+  // 1. Read current session state from DB
+  let session = null;
+  const { data: byThread } = await supabase
+    .from('journey_sessions')
+    .select('id, mode, selected_entities, selected_outcome, selected_style_bundle_id, schema_ready')
+    .eq('thread_id', journeyThreadId)
+    .eq('tenant_id', tenantId)
+    .maybeSingle();
+
+  if (byThread) {
+    session = byThread;
+  } else {
+    const { data: byMastra } = await supabase
+      .from('journey_sessions')
+      .select('id, mode, selected_entities, selected_outcome, selected_style_bundle_id, schema_ready')
+      .eq('mastra_thread_id', mastraThreadId)
+      .eq('tenant_id', tenantId)
+      .maybeSingle();
+    session = byMastra;
+  }
+
+  if (!session) {
+    console.log('[autoAdvancePhase] No session found, skipping');
+    return { advanced: false };
+  }
+
+  const currentPhase = session.mode;
+  let nextPhase: string | null = null;
+
+  // 2. Deterministic transition rules
+  if (currentPhase === 'select_entity' && session.selected_entities) {
+    nextPhase = 'recommend';
+  } else if (currentPhase === 'recommend' && session.selected_outcome) {
+    nextPhase = 'style';
+  } else if (
+    currentPhase === 'style' &&
+    session.selected_style_bundle_id &&
+    session.schema_ready === true
+  ) {
+    nextPhase = 'build_preview';
+  }
+
+  if (!nextPhase) {
+    console.log('[autoAdvancePhase] No transition needed:', {
+      currentPhase,
+      hasEntities: !!session.selected_entities,
+      hasOutcome: !!session.selected_outcome,
+      hasStyle: !!session.selected_style_bundle_id,
+      schemaReady: session.schema_ready,
+    });
+    return { advanced: false };
+  }
+
+  // 3. Write the new phase to DB
+  const { error } = await supabase
+    .from('journey_sessions')
+    .update({ mode: nextPhase, updated_at: new Date().toISOString() })
+    .eq('id', session.id)
+    .eq('tenant_id', tenantId);
+
+  if (error) {
+    console.error('[autoAdvancePhase] Failed to advance:', error.message);
+    return { advanced: false };
+  }
+
+  console.log('[autoAdvancePhase] ✅ Phase advanced:', {
+    from: currentPhase,
+    to: nextPhase,
+    sessionId: session.id,
+  });
+
+  return { advanced: true, from: currentPhase, to: nextPhase };
+}
+
 export async function POST(req: Request) {
   try {
     const params = await req.json();
@@ -379,6 +464,27 @@ export async function POST(req: Request) {
           maxSteps: 15,
           toolChoice: "auto",
           activeTools: allowedTools,
+          onFinish: async () => {
+            // PHASE 4A: Deterministic phase advancement after stream completes
+            // This runs AFTER the agent is done generating. It checks what data
+            // was persisted to DB during the stream and advances the phase if ready.
+            try {
+              if (cleanJourneyThreadId && cleanJourneyThreadId !== 'default-thread') {
+                const result = await autoAdvancePhase({
+                  supabase,
+                  tenantId,
+                  journeyThreadId: cleanJourneyThreadId,
+                  mastraThreadId: cleanMastraThreadId,
+                });
+                if (result.advanced) {
+                  console.log('[api/chat] onFinish auto-advanced phase:', result);
+                }
+              }
+            } catch (err) {
+              // Non-fatal: log but don't crash the stream response
+              console.warn('[api/chat] onFinish autoAdvancePhase error:', err);
+            }
+          },
         },
       }),
       290000,
