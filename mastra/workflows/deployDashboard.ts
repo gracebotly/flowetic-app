@@ -489,7 +489,7 @@ export const deployDashboardWorkflow = createWorkflow({
               threadId: inputData.threadId,
               todoId: "deploy"
             },
-            { requestContext }
+            { requestContext } as any
           );
           unwrapToolResult(result);
         } catch {
@@ -545,7 +545,7 @@ export const deployDashboardWorkflow = createWorkflow({
               threadId: inputData.threadId,
               todoId: "deploy"
             },
-            { requestContext }
+            { requestContext } as any
           );
           unwrapToolResult(result);
         } catch {

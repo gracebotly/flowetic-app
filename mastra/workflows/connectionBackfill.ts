@@ -189,7 +189,7 @@ export const connectionBackfillWorkflow = createWorkflow({
               sourceId: inputData.sourceId,
               events: inputData.normalizedEvents
             },
-            { requestContext }
+            { requestContext } as any
           );
           
           // Handle ValidationError
