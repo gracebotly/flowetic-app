@@ -132,12 +132,32 @@ export async function POST(req: Request) {
       null;
 
     if (!clientProvidedTenantId || typeof clientProvidedTenantId !== 'string') {
-      // AI SDK v5 transport can send auto-resubmission requests without custom body.
-      // Log for visibility but keep the 400 so the frontend knows to stop retrying.
-      console.warn('[api/chat] Missing tenantId — likely a transport resubmission without body context', {
+      // AI SDK v5 transport sends internal tool-call resubmissions that don't include
+      // custom body fields (tenantId, userId, etc.). These are finalization pings —
+      // the tool results were already processed during the original streaming response.
+      // Detect this pattern: has 'toolCall' key but no messages and no trigger.
+      const bodyKeys = Object.keys(clientData || {});
+      const isToolCallResubmission = bodyKeys.includes('toolCall') &&
+        !Array.isArray(clientData?.messages) &&
+        !clientData?.trigger;
+
+      if (isToolCallResubmission) {
+        // Acknowledge gracefully — this is a known AI SDK v5 transport behavior.
+        // Returning 200 prevents noisy 400 errors in logs and stops client retries.
+        console.debug('[api/chat] Tool-call resubmission acknowledged (no-op)', {
+          keys: bodyKeys,
+        });
+        return new Response(
+          JSON.stringify({ ok: true }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Genuine missing tenantId — this is an actual problem (broken client, direct API call, etc.)
+      console.warn('[api/chat] Missing tenantId — rejecting request', {
         hasMessages: Array.isArray(clientData?.messages) && clientData.messages.length > 0,
         trigger: clientData?.trigger,
-        keys: Object.keys(clientData || {}),
+        keys: bodyKeys,
       });
       return new Response(
         JSON.stringify({ error: 'Missing tenantId in request' }),
