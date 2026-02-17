@@ -5,7 +5,7 @@ import { z } from "zod";
 import { persistPreviewVersion } from "../persistPreviewVersion";
 import { extractTenantContext } from "../../lib/tenant-verification";
 import { STYLE_BUNDLE_TOKENS, resolveStyleBundleId } from "../generateUISpec";
-import { AuthenticatedContextSchema } from "../../lib/REQUEST_CONTEXT_CONTRACT";
+import { InterfaceContextSchema } from "../../lib/REQUEST_CONTEXT_CONTRACT";
 
 /**
  * savePreviewVersion — thin delegate to persistPreviewVersion.
@@ -21,7 +21,7 @@ export const savePreviewVersion = createTool({
   description:
     "Persist a validated spec_json + design_tokens as a new preview interface version. " +
     "Creates the interface record automatically if interfaceId is not provided.",
-  requestContextSchema: AuthenticatedContextSchema,
+  requestContextSchema: InterfaceContextSchema,
   inputSchema: z.object({
     spec_json: z.record(z.any()),
     design_tokens: z.record(z.any()).default({}),
