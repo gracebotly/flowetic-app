@@ -10,6 +10,7 @@ import { createClient } from '@/lib/supabase/server';
 import { getMastraSingleton } from '@/mastra/singleton';
 import { ensureMastraThreadId } from '@/mastra/lib/ensureMastraThread';
 import { safeUuid } from "@/mastra/lib/safeUuid";
+import { PHASE_TOOL_ALLOWLIST, type FloweticPhase } from '@/mastra/agents/instructions/phase-instructions';
 
 export const maxDuration = 300; // Fluid Compute + Hobby = 300s max
 
@@ -349,6 +350,21 @@ export async function POST(req: Request) {
       });
     }
 
+    // PHASE GATE: Compute activeTools based on authoritative DB phase.
+    // This uses the AI SDK's official mechanism to physically remove tool
+    // schemas from the LLM context. The model CANNOT call tools not in
+    // this list — unlike instruction-based guards which the LLM can bypass
+    // via tool-error recovery (see AI SDK docs: tool-error content parts
+    // are fed back to the model, allowing it to try alternative tools).
+    const phaseForToolGate = (requestContext.get('phase') as FloweticPhase) || 'select_entity';
+    const allowedTools = PHASE_TOOL_ALLOWLIST[phaseForToolGate] || PHASE_TOOL_ALLOWLIST.select_entity;
+
+    console.log('[api/chat] Phase tool gate:', {
+      phase: phaseForToolGate,
+      allowedToolCount: allowedTools.length,
+      allowedTools,
+    });
+
     const stream = await withTimeout(
       handleChatStream({
         mastra,
@@ -356,12 +372,13 @@ export async function POST(req: Request) {
         params: enhancedParams,
         sendStart: false,
         sendFinish: true,
-        sendReasoning: true,    // ← Enable reasoning display in collapsible ReasoningBlock toggle
+        sendReasoning: true,
         sendSources: false,
         defaultOptions: {
           toolCallConcurrency: 1,
           maxSteps: 15,
           toolChoice: "auto",
+          activeTools: allowedTools,
         },
       }),
       290000,

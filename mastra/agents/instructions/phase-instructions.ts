@@ -332,3 +332,119 @@ export function getNextPhase(current: FloweticPhase): FloweticPhase | null {
   if (idx === -1) return null;
   return idx >= order.length - 1 ? null : order[idx + 1];
 }
+
+
+/**
+ * PHASE_TOOL_ALLOWLIST — The SDK-level gate that prevents LLM bypass.
+ *
+ * Per AI SDK docs: "activeTools" physically removes tool schemas from
+ * the LLM's context. The model cannot call tools not in this list.
+ *
+ * This replaces the instruction-only approach that failed because
+ * tool-error content parts let the LLM route around advancePhase.
+ *
+ * Tool names must match the keys in masterRouterAgent's tools object.
+ */
+export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
+  select_entity: [
+    // Discovery tools
+    'getEventStats',
+    'getDataDrivenEntities',
+    'listSources',
+    'getOutcomes',
+    // Phase advancement
+    'advancePhase',
+    // Utility (always available)
+    'navigateTo',
+    'suggestAction',
+    'todoAdd',
+    'todoList',
+    'todoUpdate',
+    'todoComplete',
+  ],
+
+  recommend: [
+    // Outcome recommendation
+    'recommendOutcome',
+    'getEventStats',
+    'getOutcomes',
+    // Phase advancement
+    'advancePhase',
+    // Utility
+    'navigateTo',
+    'suggestAction',
+    'todoAdd',
+    'todoList',
+    'todoUpdate',
+    'todoComplete',
+  ],
+
+  style: [
+    // Design tools ONLY — no preview generation, no platform mapping
+    'runDesignSystemWorkflow',
+    'delegateToDesignAdvisor',
+    'getStyleRecommendations',
+    'getTypographyRecommendations',
+    'getChartRecommendations',
+    'getUXGuidelines',
+    'getProductRecommendations',
+    // Phase advancement
+    'advancePhase',
+    // Utility
+    'navigateTo',
+    'suggestAction',
+    'todoAdd',
+    'todoList',
+    'todoUpdate',
+    'todoComplete',
+  ],
+
+  build_preview: [
+    // Platform mapping & preview generation
+    'delegateToPlatformMapper',
+    'validatePreviewReadiness',
+    'getEventStats',
+    // Phase advancement
+    'advancePhase',
+    // Utility
+    'navigateTo',
+    'suggestAction',
+    'todoAdd',
+    'todoList',
+    'todoUpdate',
+    'todoComplete',
+  ],
+
+  interactive_edit: [
+    // Edit tools
+    'showInteractiveEditPanel',
+    'delegateToDashboardBuilder',
+    // Can re-generate if needed
+    'delegateToPlatformMapper',
+    'validatePreviewReadiness',
+    // Phase advancement
+    'advancePhase',
+    // Utility
+    'navigateTo',
+    'suggestAction',
+    'todoAdd',
+    'todoList',
+    'todoUpdate',
+    'todoComplete',
+  ],
+
+  deploy: [
+    // Deployment
+    'advancePhase',
+    // Can still edit
+    'showInteractiveEditPanel',
+    'delegateToDashboardBuilder',
+    // Utility
+    'navigateTo',
+    'suggestAction',
+    'todoAdd',
+    'todoList',
+    'todoUpdate',
+    'todoComplete',
+  ],
+};
