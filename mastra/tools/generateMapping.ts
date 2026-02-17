@@ -2,7 +2,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 export const generateMapping = createTool({
-  id: 'generate-mapping',
+  id: 'generateMapping',
   description: 'Maps platform event fields to dashboard template requirements',
   inputSchema: z.object({
     templateId: z.string(),
