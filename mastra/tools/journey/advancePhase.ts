@@ -42,10 +42,11 @@ Valid phases: select_entity, recommend, style, build_preview, refine`,
       'build_preview',
       'refine',
     ]),
+    selectedValue: z.string().optional().describe('Optional value to persist (entities for recommend, outcome for style)'),
   }),
 
   execute: async (input, context) => {
-    const { newPhase } = input;
+    const { newPhase, selectedValue } = input;
     const tenantId = context.requestContext?.get('tenantId') as string;
     const journeyThreadId = context.requestContext?.get('journeyThreadId') as string;
 
@@ -62,6 +63,17 @@ Valid phases: select_entity, recommend, style, build_preview, refine`,
     }
     const supabase = createAuthenticatedClient(accessToken);
 
+    // Set RequestContext based on selectedValue and phase
+    if (selectedValue) {
+      if (newPhase === 'recommend') {
+        context?.requestContext?.set('selectedEntities', selectedValue);
+      }
+      if (newPhase === 'style') context?.requestContext?.set('selectedOutcome', selectedValue);
+      if (newPhase === 'build_preview') {
+        context?.requestContext?.set('selectedStyleBundleId', selectedValue);
+      }
+    }
+
     // Validation: Check required data based on target phase
     const requiredDataMap: Record<string, {
       check: () => Promise<{ valid: boolean; missing: string[] }>;
@@ -69,23 +81,19 @@ Valid phases: select_entity, recommend, style, build_preview, refine`,
     }> = {
       recommend: {
         check: async () => {
-          const selectedEntities = context.requestContext?.get('selectedEntities');
-          const selectedEntity = context.requestContext?.get('selectedEntity');
+          // Recommend phase gets entities via selectedValue param - no pre-existing requirement
           return {
-            valid: !!(selectedEntities || selectedEntity),
-            missing: selectedEntities || selectedEntity ? [] : ['selectedEntities or selectedEntity'],
+            valid: true,
+            missing: [],
           };
         },
-        message: 'Cannot advance to recommend: No entity selected',
+        message: 'Cannot advance to recommend',
       },
       style: {
         check: async () => {
-          const selectedEntities = context.requestContext?.get('selectedEntities');
-          const selectedEntity = context.requestContext?.get('selectedEntity');
           const selectedOutcome = context.requestContext?.get('selectedOutcome');
 
           const missingFields: string[] = [];
-          if (!selectedEntities && !selectedEntity) missingFields.push('selectedEntities or selectedEntity');
           if (!selectedOutcome) {
             // Check database fallback
             const { data } = await supabase
@@ -94,7 +102,7 @@ Valid phases: select_entity, recommend, style, build_preview, refine`,
               .eq('id', journeyThreadId)
               .eq('tenant_id', tenantId)
               .single();
-            
+
             if (!data?.selected_outcome) {
               missingFields.push('selectedOutcome');
             }
@@ -109,15 +117,11 @@ Valid phases: select_entity, recommend, style, build_preview, refine`,
       },
       build_preview: {
         check: async () => {
-          const selectedEntities = context.requestContext?.get('selectedEntities');
-          const selectedEntity = context.requestContext?.get('selectedEntity');
           const selectedOutcome = context.requestContext?.get('selectedOutcome');
           const selectedStyleBundleId = context.requestContext?.get('selectedStyleBundleId');
 
           const missingFields: string[] = [];
-          
-          if (!selectedEntities && !selectedEntity) missingFields.push('selectedEntities or selectedEntity');
-          
+
           if (!selectedOutcome) {
             const { data } = await supabase
               .from('journey_sessions')
@@ -127,7 +131,7 @@ Valid phases: select_entity, recommend, style, build_preview, refine`,
               .single();
             if (!data?.selected_outcome) missingFields.push('selectedOutcome');
           }
-          
+
           if (!selectedStyleBundleId) {
             const { data } = await supabase
               .from('journey_sessions')
@@ -168,10 +172,21 @@ Valid phases: select_entity, recommend, style, build_preview, refine`,
       }
     }
 
-    // Update phase
+    // Update phase and persist selected values
+    const updateData: Record<string, string> = {
+      mode: newPhase,
+      updated_at: new Date().toISOString(),
+    };
+    if (selectedValue && newPhase === 'recommend') {
+      updateData.selected_entities = selectedValue;
+    }
+    if (selectedValue && newPhase === 'style') {
+      updateData.selected_outcome = selectedValue;
+    }
+
     const { error } = await supabase
       .from('journey_sessions')
-      .update({ mode: newPhase })
+      .update(updateData)
       .eq('id', journeyThreadId)
       .eq('tenant_id', tenantId);
 

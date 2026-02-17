@@ -20,6 +20,7 @@ export const getJourneySession = createTool({
     selectedOutcome: z.string().nullable(),
     selectedStoryboard: z.string().nullable(),
     selectedStyleBundleId: z.string().nullable(),
+    selectedEntities: z.string().nullable(),
     previewInterfaceId: z.string().nullable(),
     previewVersionId: z.string().nullable(),
   }),
@@ -65,7 +66,7 @@ export const getJourneySession = createTool({
     const { data, error } = await supabase
       .from("journey_sessions")
       .select(
-        "tenant_id,thread_id,platform_type,source_id,entity_id,mode,schema_ready,selected_outcome,selected_storyboard,selected_style_bundle_id,preview_interface_id,preview_version_id",
+        "tenant_id,thread_id,platform_type,source_id,entity_id,mode,schema_ready,selected_outcome,selected_storyboard,selected_style_bundle_id,selected_entities,preview_interface_id,preview_version_id",
       )
       .eq("tenant_id", tenantId)
       .eq(queryColumn, queryValue)  // ✅ Query the CORRECT column
@@ -98,6 +99,7 @@ export const getJourneySession = createTool({
       selectedOutcome: data.selected_outcome ? String(data.selected_outcome) : null,
       selectedStoryboard: data.selected_storyboard ? String(data.selected_storyboard) : null,
       selectedStyleBundleId: data.selected_style_bundle_id ? String(data.selected_style_bundle_id) : null,
+      selectedEntities: data.selected_entities ? String(data.selected_entities) : null,
       previewInterfaceId: data.preview_interface_id ? String(data.preview_interface_id) : null,
       previewVersionId: data.preview_version_id ? String(data.preview_version_id) : null,
     };
