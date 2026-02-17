@@ -352,6 +352,62 @@ export async function POST(req: Request) {
           });
         }
 
+        // ─── PERSIST CLIENT SELECTIONS TO DB ─────────────────────────────
+        // Client sends selections (entityId, selectedOutcome, selectedStyleBundleId)
+        // in req body. These MUST be written to journey_sessions so that
+        // autoAdvancePhase (which reads DB in onFinish) can trigger transitions.
+        //
+        // Without this, autoAdvancePhase always finds null columns and never advances.
+        // Confirmed: 35/35 sessions stuck at select_entity with all selections null.
+        //
+        // Write rules:
+        //   - Only write if client sent a value AND DB doesn't already have it
+        //   - This prevents overwriting a value with a stale re-send
+        //   - Entity comes from vibeContext (set before chat launch)
+        //   - Outcome comes from InlineChoice onSelect → sendAi body
+        //   - Style comes from DesignSystemPair onSelect → sendAi extraData
+        // ──────────────────────────────────────────────────────────────────
+        if (sessionRow) {
+          const selectionUpdates: Record<string, any> = {};
+
+          // Entity: client sends entityId or selectedEntities from vibeContext
+          const clientEntity = clientData.entityId || clientData.selectedEntities;
+          if (clientEntity && !sessionRow.selected_entities) {
+            selectionUpdates.selected_entities = String(clientEntity);
+          }
+
+          // Outcome: client sends selectedOutcome after clicking outcome card
+          const clientOutcome = clientData.selectedOutcome;
+          if (clientOutcome && !sessionRow.selected_outcome) {
+            selectionUpdates.selected_outcome = String(clientOutcome);
+          }
+
+          // Style: client sends selectedStyleBundleId after clicking design system card
+          const clientStyle = clientData.selectedStyleBundleId;
+          if (clientStyle && !sessionRow.selected_style_bundle_id) {
+            selectionUpdates.selected_style_bundle_id = String(clientStyle);
+          }
+
+          if (Object.keys(selectionUpdates).length > 0) {
+            selectionUpdates.updated_at = new Date().toISOString();
+            const { error: persistErr } = await supabase
+              .from('journey_sessions')
+              .update(selectionUpdates)
+              .eq('thread_id', cleanJourneyThreadId)
+              .eq('tenant_id', tenantId);
+
+            if (persistErr) {
+              console.error('[api/chat] Failed to persist client selections:', persistErr.message);
+            } else {
+              console.log('[api/chat] ✅ Persisted client selections to DB:', Object.keys(selectionUpdates));
+              // Update sessionRow in memory so the RequestContext loading below uses fresh values
+              if (selectionUpdates.selected_entities) sessionRow.selected_entities = selectionUpdates.selected_entities;
+              if (selectionUpdates.selected_outcome) sessionRow.selected_outcome = selectionUpdates.selected_outcome;
+              if (selectionUpdates.selected_style_bundle_id) sessionRow.selected_style_bundle_id = selectionUpdates.selected_style_bundle_id;
+            }
+          }
+        }
+
         // Load entity selections from DB into RequestContext
         if (sessionRow?.selected_entities) {
           requestContext.set('selectedEntities', sessionRow.selected_entities);
