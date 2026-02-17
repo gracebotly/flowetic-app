@@ -6,11 +6,13 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { createAuthenticatedClient } from "../lib/supabase";
 import { extractTenantContext } from "../lib/tenant-verification";
+import { AuthenticatedContextSchema } from "../lib/REQUEST_CONTEXT_CONTRACT";
 
 export const updateJourneySchemaReady = createTool({
   id: "updateJourneySchemaReady",
   description:
     "Marks journey session schemaReady=true for tenant/thread. Uses journey_sessions as source of truth for gating.",
+  requestContextSchema: AuthenticatedContextSchema,
   inputSchema: z.object({
     threadId: z.string().min(1),
     schemaReady: z.boolean(),

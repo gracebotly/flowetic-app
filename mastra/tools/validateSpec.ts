@@ -1,5 +1,6 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
+import { OptionalAuditContextSchema } from "../lib/REQUEST_CONTEXT_CONTRACT";
 
 // ── Strict schema for a fully-formed spec ──────────────────────────────────
 const UISpecSchema = z.object({
@@ -93,6 +94,7 @@ function normalizeSpec(raw: Record<string, unknown>): Record<string, unknown> {
 
 export const validateSpec = createTool({
   id: "validate-spec",
+  requestContextSchema: OptionalAuditContextSchema,
   description:
     "Validates dashboard UI specification against schema. " +
     "Auto-normalizes agent-generated specs (adds defaults for missing fields) before validation.",

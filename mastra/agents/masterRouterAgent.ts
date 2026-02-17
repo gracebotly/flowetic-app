@@ -10,6 +10,7 @@ import type { RequestContext } from "@mastra/core/request-context";
 import { createFloweticMemory } from "../lib/memory";
 import { workspace } from '../workspace';  // ← ADD THIS IMPORT
 import { getCachedSkillAsync } from '../lib/skillCache';
+import { DesignTokenEnforcer } from "../processors/designTokenEnforcer";
 import {
   delegateToPlatformMapper,
   delegateToDashboardBuilder,
@@ -40,6 +41,7 @@ import {
 // NEW: Import Supatools
 import {
   getEventStats,
+  getDataDrivenEntities,
   recommendOutcome,
   // recommendStoryboard, // REMOVED: storyboard/align phase eliminated
   validatePreviewReadiness,
@@ -156,6 +158,12 @@ export const masterRouterAgent: Agent = new Agent({
       "5. ALWAYS explain problems clearly when blockers exist",
       "6. ALWAYS offer specific, actionable solutions when stuck",
       "",
+      "### DESIGN TOKEN ENFORCEMENT (NON-NEGOTIABLE):",
+      "1. NEVER generate spec_json directly - this causes generic dashboards with wrong colors",
+      "2. NEVER invent design tokens (colors, fonts, spacing, shadows) in conversation",
+      "3. ALWAYS delegate to generatePreviewWorkflow OR call generateUISpec tool directly",
+      "4. Design tokens are deterministic and locked in STYLE_BUNDLE_TOKENS - respect them",
+      "",
       "### DATA READINESS PROTOCOL:",
       "",
       "When checking if enough data exists to build a preview:",
@@ -269,6 +277,16 @@ export const masterRouterAgent: Agent = new Agent({
       "- These values are automatically available via context.requestContext.get('tenantId') and context.requestContext.get('threadId')",
       "- The tools will fall back to these values if not explicitly provided in the tool call",
       "",
+      "## CRITICAL: Design Token Usage",
+      "",
+      "NEVER generate spec_json directly. ALWAYS use the generateUISpec tool to create dashboard specifications.",
+      "The generateUISpec tool applies correct design tokens from the STYLE_BUNDLE_TOKENS catalog.",
+      "",
+      "If you need to modify an existing spec, use the applySpecPatch tool.",
+      "",
+      "DO NOT hallucinate color values. DO NOT create custom color palettes.",
+      "All colors must come from the selected style bundle via generateUISpec.",
+      "",
       "# suggestAction TOOL RULES (STRICT)",
       "The suggestAction tool renders clickable buttons in the chat UI. You MUST follow these rules:",
       "- ONLY use suggestAction when the user needs to make a clear, binary choice or trigger a specific action.",
@@ -371,6 +389,7 @@ export const masterRouterAgent: Agent = new Agent({
     getOutcomes,
     // NEW: Add Supatools
     getEventStats,
+    getDataDrivenEntities,
     recommendOutcome,
     // recommendStoryboard, // REMOVED: storyboard/align phase eliminated
     validatePreviewReadiness,
@@ -381,4 +400,7 @@ export const masterRouterAgent: Agent = new Agent({
     // Interactive edit panel
     showInteractiveEditPanel,
   },
+  inputProcessors: [
+    new DesignTokenEnforcer(),
+  ],
 });

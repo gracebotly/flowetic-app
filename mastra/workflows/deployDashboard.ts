@@ -81,7 +81,7 @@ export const deployDashboardWorkflow = createWorkflow({
         
         const pv = await getPreviewVersionSpec.execute(
           { previewVersionId: inputData.previewVersionId },
-          { requestContext }
+          { requestContext } as any
         );
 
         // Narrow union type
@@ -95,7 +95,7 @@ export const deployDashboardWorkflow = createWorkflow({
         
         const v = await validateSpec.execute(
           { spec_json: pv.spec_json },
-          { requestContext }
+          { requestContext } as any
         );
 
         // Narrow union type
@@ -183,7 +183,7 @@ export const deployDashboardWorkflow = createWorkflow({
             interfaceId: inputData.interfaceId,
             previewVersionId: inputData.previewVersionId
           },
-          { requestContext }
+          { requestContext } as any
         );
         const unwrapped = unwrapToolResult(result);
         
@@ -239,7 +239,7 @@ export const deployDashboardWorkflow = createWorkflow({
             interfaceId: inputData.interfaceId,
             keepDeploymentId: inputData.deploymentId
           },
-          { requestContext }
+          { requestContext } as any
         );
         const unwrapped = unwrapToolResult(result);
         
@@ -297,7 +297,7 @@ export const deployDashboardWorkflow = createWorkflow({
             interfaceId: inputData.interfaceId,
             previewVersionId: inputData.previewVersionId
           },
-          { requestContext }
+          { requestContext } as any
         );
         const unwrapped = unwrapToolResult(result);
         
@@ -355,7 +355,7 @@ export const deployDashboardWorkflow = createWorkflow({
             interfaceId: inputData.interfaceId,
             deploymentId: inputData.deploymentId
           },
-          { requestContext }
+          { requestContext } as any
         );
 
         // Handle validation errors
@@ -421,7 +421,7 @@ export const deployDashboardWorkflow = createWorkflow({
               interfaceId: inputData.interfaceId,
             }
           },
-          { requestContext }
+          { requestContext } as any
         );
 
         if (!setJourneyDeployed?.execute) {
@@ -435,7 +435,7 @@ export const deployDashboardWorkflow = createWorkflow({
             deploymentId: inputData.deploymentId,
             previewVersionId: inputData.previewVersionId
           },
-          { requestContext }
+          { requestContext } as any
         );
 
         return {
@@ -489,7 +489,7 @@ export const deployDashboardWorkflow = createWorkflow({
               threadId: inputData.threadId,
               todoId: "deploy"
             },
-            { requestContext }
+            { requestContext } as any
           );
           unwrapToolResult(result);
         } catch {
@@ -545,7 +545,7 @@ export const deployDashboardWorkflow = createWorkflow({
               threadId: inputData.threadId,
               todoId: "deploy"
             },
-            { requestContext }
+            { requestContext } as any
           );
           unwrapToolResult(result);
         } catch {

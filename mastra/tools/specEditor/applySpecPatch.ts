@@ -2,6 +2,7 @@
 
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
+import { OptionalAuditContextSchema } from "../../lib/REQUEST_CONTEXT_CONTRACT";
 
 const LayoutSchema = z.object({
   col: z.number().int().min(0),
@@ -152,6 +153,7 @@ function validateComponentIds(
 
 export const applySpecPatch = createTool({
   id: "applySpecPatch",
+  requestContextSchema: OptionalAuditContextSchema,
   description:
     "Apply a small, deterministic patch to a dashboard UI spec and/or design tokens. " +
     "IMPORTANT: Always pass existing_design_tokens (the full tokens from getCurrentSpec) " +

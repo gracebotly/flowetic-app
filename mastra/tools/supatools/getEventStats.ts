@@ -4,11 +4,8 @@ import { createSupaTool } from '../_base';
 import { createAuthenticatedClient } from '../../lib/supabase';
 import { z } from 'zod';
 
-const EventType = z.enum(['message', 'metric', 'state', 'tool_event', 'error', 'workflow_execution']);
-
 const inputSchema = z.object({
   sourceId: z.string().uuid().optional(),
-  type: EventType.optional(),
   sinceDays: z.number().int().min(1).max(365).default(30),
 });
 
@@ -57,7 +54,7 @@ export const getEventStats = createSupaTool<z.infer<typeof outputSchema>>({
 // ✅ FIX: Fall back to RequestContext sourceId if not provided
     const sourceId = input.sourceId || (context.requestContext?.get('sourceId') as string | undefined);
 
-    const { type, sinceDays } = input;
+    const { sinceDays } = input;
 
 
     const supabase = createAuthenticatedClient(accessToken);
@@ -73,7 +70,6 @@ export const getEventStats = createSupaTool<z.infer<typeof outputSchema>>({
       .gte('timestamp', sinceIso);
 
     if (sourceId) query = query.eq('source_id', sourceId);
-    if (type) query = query.eq('type', type);
 
     const { data, error, count } = await query;
     if (error) throw new Error(`Failed to fetch event stats: ${error.message}`);

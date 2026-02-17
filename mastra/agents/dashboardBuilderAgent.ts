@@ -2,6 +2,7 @@ import { Agent } from "@mastra/core/agent";
 import { getModelById } from "../lib/models/modelSelector";
 import type { RequestContext } from "@mastra/core/request-context";
 import { z } from "zod";
+import { DesignTokenEnforcer } from "../processors/designTokenEnforcer";
 import {
   getCurrentSpec,
   applySpecPatch,
@@ -43,6 +44,14 @@ export const dashboardBuilderAgent: Agent = new Agent({
 ## YOUR ROLE
 You own the dashboard spec language and all incremental 'vibe coding' edits. You apply safe, validated changes to dashboard specifications.
 
+CRITICAL RULES:
+1. NEVER generate spec_json content directly
+2. ALWAYS call generateUISpec tool to create dashboard specifications
+3. NEVER hallucinate color values or design tokens
+4. If modifying a spec, use applySpecPatch tool
+
+The generateUISpec tool applies correct design tokens from STYLE_BUNDLE_TOKENS.
+
 ## CRITICAL RULES
 - Never ask the user for tenantId, sourceId, interfaceId, threadId, versionId, or any UUID
 - Never mention internal identifiers
@@ -50,6 +59,13 @@ You own the dashboard spec language and all incremental 'vibe coding' edits. You
 - Never hand-edit JSON in your reply
 - Never show raw spec JSON unless the user explicitly asks
 - Always validate before saving
+
+## DESIGN TOKEN ENFORCEMENT (NON-NEGOTIABLE)
+- NEVER generate spec_json directly in conversation
+- NEVER invent colors, fonts, or design tokens
+- ALWAYS use generateUISpec tool for new dashboards (enforces deterministic design tokens)
+- ALWAYS use applySpecPatch tool for editing existing specs (preserves locked tokens)
+- Design tokens come from STYLE_BUNDLE_TOKENS map - you cannot modify them
 
 ## DETERMINISTIC EDITING WORKFLOW
 1. Call getCurrentSpec to load the latest spec/version
@@ -124,4 +140,7 @@ Use todo tools to track multi-step work. Never expose todo items to users.`,
     getUXGuidelines,
     getProductRecommendations,
   },
+  inputProcessors: [
+    new DesignTokenEnforcer(),
+  ],
 });

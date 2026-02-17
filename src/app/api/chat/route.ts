@@ -199,7 +199,7 @@ export async function POST(req: Request) {
 
         const { data: byThreadId } = await supabase
           .from('journey_sessions')
-          .select('id, mode, preview_interface_id, selected_style_bundle_id')
+          .select('id, mode, preview_interface_id, selected_style_bundle_id, selected_entities, selected_outcome, schema_ready')
           .eq('thread_id', cleanJourneyThreadId)
           .eq('tenant_id', tenantId)
           .maybeSingle();
@@ -210,7 +210,7 @@ export async function POST(req: Request) {
           // Fallback: query by mastra_thread_id (in case thread was created that way)
           const { data: byMastraId } = await supabase
             .from('journey_sessions')
-            .select('id, mode, preview_interface_id, selected_style_bundle_id')
+            .select('id, mode, preview_interface_id, selected_style_bundle_id, selected_entities, selected_outcome, schema_ready')
             .eq('mastra_thread_id', cleanMastraThreadId)
             .eq('tenant_id', tenantId)
             .maybeSingle();
@@ -244,6 +244,21 @@ export async function POST(req: Request) {
             threadId: clientJourneyThreadId,
             mastraThreadId,
           });
+        }
+
+        // Load entity selections from DB into RequestContext
+        if (sessionRow?.selected_entities) {
+          requestContext.set('selectedEntities', sessionRow.selected_entities);
+          console.log('[api/chat] Loaded selectedEntities from DB:', sessionRow.selected_entities);
+        }
+        // Load selected outcome from DB into RequestContext
+        if (sessionRow?.selected_outcome) {
+          requestContext.set('selectedOutcome', sessionRow.selected_outcome);
+          console.log('[api/chat] Loaded selectedOutcome from DB:', sessionRow.selected_outcome);
+        }
+        // Load schema_ready from DB into RequestContext
+        if (sessionRow?.schema_ready) {
+          requestContext.set('schemaReady', String(sessionRow.schema_ready));
         }
 
         // BUG FIX: Override client-provided selectedStyleBundleId with DB value.

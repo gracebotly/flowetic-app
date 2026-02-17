@@ -5,6 +5,7 @@ import { z } from "zod";
 import { persistPreviewVersion } from "../persistPreviewVersion";
 import { extractTenantContext } from "../../lib/tenant-verification";
 import { STYLE_BUNDLE_TOKENS, resolveStyleBundleId } from "../generateUISpec";
+import { InterfaceContextSchema } from "../../lib/REQUEST_CONTEXT_CONTRACT";
 
 /**
  * savePreviewVersion — thin delegate to persistPreviewVersion.
@@ -20,6 +21,7 @@ export const savePreviewVersion = createTool({
   description:
     "Persist a validated spec_json + design_tokens as a new preview interface version. " +
     "Creates the interface record automatically if interfaceId is not provided.",
+  requestContextSchema: InterfaceContextSchema,
   inputSchema: z.object({
     spec_json: z.record(z.any()),
     design_tokens: z.record(z.any()).default({}),
@@ -34,28 +36,60 @@ export const savePreviewVersion = createTool({
     const { spec_json, interfaceId } = inputData;
     let { design_tokens } = inputData;
 
-    // ── Token-locking guard ──────────────────────────────────────────
-    // If spec_json contains a styleBundleId, re-resolve design tokens
-    // from the canonical STYLE_BUNDLE_TOKENS map instead of trusting
-    // whatever the LLM passed. This prevents hallucinated colors.
-    const rawBundleId = spec_json?.styleBundleId;
-    if (rawBundleId && typeof rawBundleId === "string") {
-      const resolvedId = resolveStyleBundleId(rawBundleId);
-      const canonicalTokens = STYLE_BUNDLE_TOKENS[resolvedId];
-      if (canonicalTokens) {
-        console.log(
-          `[savePreviewVersion] Token lock: overriding LLM tokens with "${resolvedId}" canonical tokens`
+    // ============================================================================
+    // PHASE 2: DESIGN TOKEN ENFORCEMENT
+    // ============================================================================
+    // This guard ensures ALL paths use canonical design tokens from STYLE_BUNDLE_TOKENS.
+    // Even if an agent bypasses generateUISpec, we re-apply tokens here as a safety net.
+    let resolvedStyleBundleId = spec_json.styleBundleId;
+    if (!resolvedStyleBundleId) {
+      console.warn(
+        '[savePreviewVersion] PHASE 2 WARNING: spec_json missing styleBundleId. ' +
+        'Defaulting to "professional-clean". This indicates Path B was used.'
+      );
+      resolvedStyleBundleId = 'professional-clean';
+      spec_json.styleBundleId = resolvedStyleBundleId;
+    }
+
+    // Get canonical tokens
+    const canonicalTokens = STYLE_BUNDLE_TOKENS[resolvedStyleBundleId];
+    if (!canonicalTokens) {
+      throw new Error(
+        `[savePreviewVersion] Invalid styleBundleId: "${resolvedStyleBundleId}". ` +
+        `Must be one of: ${Object.keys(STYLE_BUNDLE_TOKENS).join(', ')}`
+      );
+    }
+
+    // Detect hallucinated colors
+    const llmColors = spec_json.theme?.colors;
+    const canonicalColors = canonicalTokens.colors;
+    if (llmColors && canonicalColors) {
+      const llmColorKeys = Object.keys(llmColors).sort();
+      const canonicalColorKeys = Object.keys(canonicalColors).sort();
+      const keysMatch = llmColorKeys.join(',') === canonicalColorKeys.join(',');
+
+      if (!keysMatch) {
+        console.warn(
+          '[savePreviewVersion] PHASE 2 WARNING: LLM hallucinated colors. ' +
+          `Expected keys: [${canonicalColorKeys.join(', ')}], ` +
+          `Got: [${llmColorKeys.join(', ')}]`
         );
-        design_tokens = {
-          colors: canonicalTokens.colors,
-          fonts: canonicalTokens.fonts,
-          spacing: canonicalTokens.spacing,
-          radius: canonicalTokens.radius,
-          shadow: canonicalTokens.shadow,
-        };
       }
     }
-    // ── End token-locking guard ──────────────────────────────────────
+
+    // Override with canonical tokens (the actual enforcement)
+    design_tokens = {
+      colors: canonicalTokens.colors,
+      fonts: canonicalTokens.fonts,
+      spacing: canonicalTokens.spacing,
+      radius: canonicalTokens.radius,
+      shadow: canonicalTokens.shadow,
+    };
+
+    console.log(
+      `[savePreviewVersion] Token lock: overriding with "${resolvedStyleBundleId}" canonical tokens`
+    );
+    // ============================================================================
 
     // Get platformType from context for interface naming
     const platformType =
@@ -75,7 +109,7 @@ export const savePreviewVersion = createTool({
         design_tokens: design_tokens ?? {},
         platformType,
       },
-      context
+      context as any
     );
 
     // Handle error case

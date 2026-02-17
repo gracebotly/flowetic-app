@@ -3,6 +3,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { extractTenantContext } from '../lib/tenant-verification';
 import { getNormalizer } from '../normalizers';
+import { AuthenticatedContextSchema } from '../lib/REQUEST_CONTEXT_CONTRACT';
 
 const PlatformType = z.enum(['vapi', 'n8n', 'make', 'retell']);
 
@@ -12,6 +13,7 @@ export const normalizeEvents = createTool({
     'Normalize raw platform events into Flowetic events rows for Supabase insertion. ' +
     'Uses platform-specific normalizers to extract structured fields into state. ' +
     'Adds platform_event_id for idempotency.',
+  requestContextSchema: AuthenticatedContextSchema,
   inputSchema: z.object({
     rawEvents: z.array(z.record(z.any())),
     platformType: PlatformType,

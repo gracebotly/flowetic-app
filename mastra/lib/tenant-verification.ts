@@ -33,15 +33,16 @@ export async function verifyTenantAccess(
   userId: string
 ): Promise<void> {
   const { data, error } = await supabase
-    .from('clients')
+    .from('memberships')
     .select('id')
-    .eq('id', tenantId)
-    .single();
+    .eq('tenant_id', tenantId)
+    .eq('user_id', userId)
+    .maybeSingle();
 
   if (error || !data) {
     throw new Error(
       `TENANT_ACCESS_DENIED: User ${userId} cannot access tenant ${tenantId}. ` +
-      `Error: ${error?.message || 'Tenant not found'}`
+      `Error: ${error?.message || 'No membership found for this user/tenant combination'}`
     );
   }
 }

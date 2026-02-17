@@ -3,6 +3,7 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import type { EditAction } from "./types";
+import { InterfaceContextSchema } from "../../lib/REQUEST_CONTEXT_CONTRACT";
 
 const densityToSpacingBase = (density: "compact" | "normal" | "relaxed") => {
   switch (density) {
@@ -18,11 +19,8 @@ const densityToSpacingBase = (density: "compact" | "normal" | "relaxed") => {
 export const applyInteractiveEdits = createTool({
   id: "applyInteractiveEdits",
   description: "Applies interactive edits to dashboard spec and saves preview version",
+  requestContextSchema: InterfaceContextSchema,
   inputSchema: z.object({
-    tenantId: z.string().uuid().describe("The tenant ID"),
-    userId: z.string().uuid().describe("The user ID"),
-    interfaceId: z.string().uuid().describe("The interface ID"),
-    platformType: z.string().default("make").describe("The platform type"),
     actions: z.array(
       z.object({
         type: z.enum(["toggle_widget", "rename_widget", "switch_chart_type", "set_density"]),
@@ -38,13 +36,18 @@ export const applyInteractiveEdits = createTool({
     previewVersionId: z.string().uuid(),
   }),
   execute: async (inputData, context) => {
-    const { tenantId, userId, interfaceId, platformType, actions } = inputData;
+    const { actions } = inputData;
+    const { tenantId, userId, interfaceId, platformType } =
+      (context as any)?.requestContext?.all ?? {};
+    if (!tenantId || !userId) {
+      throw new Error("[applyInteractiveEdits] Missing tenantId or userId in RequestContext");
+    }
 
     const { getCurrentSpec, applySpecPatch, savePreviewVersion } = await import("@/mastra/tools/specEditor");
     const { validateSpec } = await import("@/mastra/tools/validateSpec");
 
     // Call getCurrentSpec directly (no destructuring needed)
-    const current = await getCurrentSpec.execute!({ interfaceId }, context);
+    const current = await getCurrentSpec.execute!({ interfaceId }, context as any);
 
     if (current instanceof Error) {
       throw current;
@@ -91,7 +94,7 @@ export const applyInteractiveEdits = createTool({
     if (ops.length) {
       const patched = await applySpecPatch.execute!(
         { spec_json: nextSpec, design_tokens: nextTokens, operations: ops },
-        context
+        context as any
       );
 
       if (patched instanceof Error) {
@@ -102,7 +105,7 @@ export const applyInteractiveEdits = createTool({
       nextTokens = (patched as any).design_tokens;
     }
 
-    const validation = await validateSpec.execute!({ spec_json: nextSpec }, context);
+    const validation = await validateSpec.execute!({ spec_json: nextSpec }, context as any);
 
     if (validation instanceof Error) {
       throw validation;
@@ -113,7 +116,7 @@ export const applyInteractiveEdits = createTool({
       throw new Error("Validation score below threshold");
     }
 
-    const saved = await savePreviewVersion.execute!({ spec_json: nextSpec, design_tokens: nextTokens }, context);
+    const saved = await savePreviewVersion.execute!({ spec_json: nextSpec, design_tokens: nextTokens }, context as any);
 
     if (saved instanceof Error) {
       throw saved;

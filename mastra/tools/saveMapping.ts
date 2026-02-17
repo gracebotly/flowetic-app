@@ -6,20 +6,18 @@
 
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
+import { SourceContextSchema } from '../lib/REQUEST_CONTEXT_CONTRACT';
 
 export const saveMapping = createTool({
   id: 'saveMapping',
   description: 'Save mapping configuration to database',
+  requestContextSchema: SourceContextSchema,
   inputSchema: z.object({
-    tenantId: z.string().describe('Tenant ID'),
-    userId: z.string().describe('User ID'),
-    interfaceId: z.string().describe('Interface ID'),
     templateId: z.string().describe('Template ID'),
     mappings: z.record(z.string()).describe('Field mappings'),
     confidence: z.number().describe('Mapping confidence score'),
     metadata: z.object({
       platformType: z.string(),
-      sourceId: z.string(),
       eventTypes: z.array(z.string()),
       unmappedFields: z.array(z.string()).optional(),
     }),
@@ -33,12 +31,19 @@ export const saveMapping = createTool({
     requiresReview: z.boolean(),
   }),
   execute: async (inputData, context) => {
-    const { tenantId, userId, interfaceId, templateId, mappings, confidence, metadata } = inputData;
+    const { templateId, mappings, confidence, metadata } = inputData;
+    const { tenantId, userId, interfaceId, sourceId } =
+      (context as any)?.requestContext?.all ?? {};
+    if (!tenantId || !userId) {
+      throw new Error("[saveMapping] Missing tenantId or userId in RequestContext");
+    }
+    // sourceId comes from RequestContext, fall back to metadata
+    const resolvedSourceId = sourceId ?? (metadata as any)?.sourceId;
 
     try {
       // Validate inputs
-      if (!tenantId || !userId || !interfaceId) {
-        throw new Error('Missing required identifiers');
+      if (!interfaceId) {
+        throw new Error('Missing required interfaceId');
       }
 
       if (!mappings || Object.keys(mappings).length === 0) {
