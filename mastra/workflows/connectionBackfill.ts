@@ -95,7 +95,7 @@ export const connectionBackfillWorkflow = createWorkflow({
             sourceId: inputData.sourceId,
             eventCount
           },
-          { requestContext }
+          { requestContext } as any
         );
         const unwrapped = unwrapToolResult(result);
         return {
@@ -138,7 +138,7 @@ export const connectionBackfillWorkflow = createWorkflow({
             sourceId: inputData.sourceId,
             rawEvents: inputData.events
           },
-          { requestContext }
+          { requestContext } as any
         );
         const unwrapped = unwrapToolResult(result);
         return {
@@ -268,7 +268,7 @@ export const connectionBackfillWorkflow = createWorkflow({
             sourceId: inputData.sourceId,
             sampleSize
           },
-          { requestContext }
+          { requestContext } as any
         );
         const unwrapped = unwrapToolResult(result);
         return {
@@ -324,7 +324,7 @@ export const connectionBackfillWorkflow = createWorkflow({
             threadId: inputData.threadId,
             schemaReady: true
           },
-          { requestContext }
+          { requestContext } as any
         );
         const unwrapped = unwrapToolResult(result);
         
@@ -386,7 +386,7 @@ export const connectionBackfillWorkflow = createWorkflow({
               sourceId: inputData.sourceId,
             }
           },
-          { requestContext }
+          { requestContext } as any
         );
         const unwrapped = unwrapToolResult(result);
         return {
