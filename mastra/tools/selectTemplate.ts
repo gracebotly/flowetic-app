@@ -2,7 +2,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 export const selectTemplate = createTool({
-  id: 'select-template',
+  id: 'selectTemplate',
   description: 'Selects the best dashboard template based on platform type and schema',
   inputSchema: z.object({
     platformType: z.enum(['vapi', 'retell', 'n8n', 'mastra', 'crewai', 'activepieces', 'make']),

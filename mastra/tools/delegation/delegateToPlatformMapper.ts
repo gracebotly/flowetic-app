@@ -58,11 +58,76 @@ DO NOT try to generate previews yourself — always delegate to this specialist.
         };
       }
 
+      // ═══════════════════════════════════════════════════════════════════
+      // PHASE GUARD: Block preview generation if session isn't ready
+      // The LLM will try to bypass advancePhase by delegating here directly.
+      // This is the "garage door" — we must lock it too.
+      // ═══════════════════════════════════════════════════════════════════
+      const currentPhase = context?.requestContext?.get('phase') as string || '';
+      const taskLower = input.task.toLowerCase();
+      const isPreviewRequest = taskLower.includes('preview') ||
+        taskLower.includes('generate') ||
+        taskLower.includes('build') ||
+        taskLower.includes('dashboard');
+
+      if (isPreviewRequest && currentPhase !== 'build_preview') {
+        // Check what's actually missing from DB
+        const tenantId = context?.requestContext?.get('tenantId') as string;
+        const journeyThreadId = context?.requestContext?.get('journeyThreadId') as string;
+
+        if (tenantId && journeyThreadId) {
+          const supabaseToken = context?.requestContext?.get('supabaseAccessToken') as string;
+          const { createAuthenticatedClient } = await import('../../lib/supabase');
+          const supabase = createAuthenticatedClient(supabaseToken);
+
+          const { data: session } = await supabase
+            .from('journey_sessions')
+            .select('mode, selected_outcome, selected_style_bundle_id, selected_entities, schema_ready')
+            .eq('thread_id', journeyThreadId)
+            .eq('tenant_id', tenantId)
+            .single();
+
+          if (session) {
+            const missing: string[] = [];
+            if (!session.selected_entities) missing.push('entity selection');
+            if (!session.selected_outcome) missing.push('outcome selection');
+            if (!session.selected_style_bundle_id) missing.push('style selection');
+            if (!session.schema_ready) missing.push('schema readiness');
+
+            if (missing.length > 0) {
+              console.warn(
+                `[delegateToPlatformMapper] PHASE GUARD: Blocked preview generation. ` +
+                `Phase="${currentPhase}", missing: ${missing.join(', ')}`
+              );
+              return {
+                success: false,
+                response: `I need a few more selections before generating your dashboard preview. ` +
+                  `Still needed: ${missing.join(', ')}. ` +
+                  `Let's complete those steps first.`,
+                error: `PHASE_GUARD: Cannot generate preview from phase "${currentPhase}". ` +
+                  `Missing: ${missing.join(', ')}`,
+              };
+            }
+          }
+        }
+
+        // If we can't check DB but phase is wrong, still block
+        if (currentPhase !== 'build_preview') {
+          console.warn(
+            `[delegateToPlatformMapper] PHASE GUARD: Blocked - phase is "${currentPhase}", not "build_preview"`
+          );
+          return {
+            success: false,
+            response: "Let's finish the current step before generating a preview.",
+            error: `PHASE_GUARD: Phase is "${currentPhase}", must be "build_preview" for preview generation.`,
+          };
+        }
+      }
+
       // Also pass journeyThreadId if available (the client journey thread for journey_sessions lookups)
       const journeyThreadId = context?.requestContext?.get('journeyThreadId') as string;
 
       // Extract phase context from RequestContext so sub-agent knows which phase it's in
-      const currentPhase = context?.requestContext?.get('phase') as string || '';
       const platformType = context?.requestContext?.get('platformType') as string || '';
       const workflowName = context?.requestContext?.get('workflowName') as string || '';
       const sourceId = context?.requestContext?.get('sourceId') as string || '';

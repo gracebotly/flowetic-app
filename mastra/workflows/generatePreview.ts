@@ -66,8 +66,20 @@ const analyzeSchemaStep = createStep({
     confidence: z.number(),
   }),
   async execute({ inputData, requestContext, getStepResult, getInitData, suspend, runId }) {
-    // Phase gate REMOVED — the agent enforces the journey flow via instructions.
-    // No need to block here; the agent won't call this workflow until selections are complete.
+    // PHASE GATE: Verify journey prerequisites before running workflow
+    // The agent DOES call this workflow before selections are complete (proven by logs).
+    // This is the last line of defense.
+    const phase = requestContext?.get('phase') as string;
+    const selectedOutcome = requestContext?.get('selectedOutcome') as string;
+    const selectedStyleBundleId = requestContext?.get('selectedStyleBundleId') as string;
+
+    if (phase && phase !== 'build_preview') {
+      console.error(`[analyzeSchemaStep] PHASE GUARD: phase="${phase}", blocking workflow execution`);
+      throw new Error(
+        `PHASE_GUARD: generatePreviewWorkflow cannot run in phase "${phase}". ` +
+        `Required: "build_preview" with selectedOutcome and selectedStyleBundleId set.`
+      );
+    }
 
     // Get sourceId from context (set when connection was established)
     const sourceId = requestContext.get('sourceId');

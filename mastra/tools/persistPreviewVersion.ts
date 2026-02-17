@@ -5,7 +5,7 @@ import { extractTenantContext } from '../lib/tenant-verification';
 import { AuthenticatedContextSchema } from '../lib/REQUEST_CONTEXT_CONTRACT';
 
 export const persistPreviewVersion = createTool({
-  id: 'persist-preview-version',
+  id: 'persistPreviewVersion',
   description: 'Saves dashboard spec as a new interface version in Supabase',
   requestContextSchema: AuthenticatedContextSchema,
   inputSchema: z.object({

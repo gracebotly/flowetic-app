@@ -10,6 +10,7 @@ import { createClient } from '@/lib/supabase/server';
 import { getMastraSingleton } from '@/mastra/singleton';
 import { ensureMastraThreadId } from '@/mastra/lib/ensureMastraThread';
 import { safeUuid } from "@/mastra/lib/safeUuid";
+import { PHASE_TOOL_ALLOWLIST, type FloweticPhase } from '@/mastra/agents/instructions/phase-instructions';
 
 export const maxDuration = 300; // Fluid Compute + Hobby = 300s max
 
@@ -19,6 +20,91 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
     t = setTimeout(() => reject(new Error(`TIMEOUT_${label}_${ms}ms`)), ms);
   });
   return Promise.race([promise.finally(() => clearTimeout(t)), timeout]);
+}
+
+// ─── DETERMINISTIC PHASE ADVANCEMENT ────────────────────────────────────────
+// Phase 4A from refactor guide: code-driven phase transitions, NOT LLM-driven.
+// Runs AFTER each agent stream completes. Reads DB state, advances if ready.
+async function autoAdvancePhase(params: {
+  supabase: any;
+  tenantId: string;
+  journeyThreadId: string;
+  mastraThreadId: string;
+}): Promise<{ advanced: boolean; from?: string; to?: string }> {
+  const { supabase, tenantId, journeyThreadId, mastraThreadId } = params;
+
+  // 1. Read current session state from DB
+  let session = null;
+  const { data: byThread } = await supabase
+    .from('journey_sessions')
+    .select('id, mode, selected_entities, selected_outcome, selected_style_bundle_id, schema_ready')
+    .eq('thread_id', journeyThreadId)
+    .eq('tenant_id', tenantId)
+    .maybeSingle();
+
+  if (byThread) {
+    session = byThread;
+  } else {
+    const { data: byMastra } = await supabase
+      .from('journey_sessions')
+      .select('id, mode, selected_entities, selected_outcome, selected_style_bundle_id, schema_ready')
+      .eq('mastra_thread_id', mastraThreadId)
+      .eq('tenant_id', tenantId)
+      .maybeSingle();
+    session = byMastra;
+  }
+
+  if (!session) {
+    console.log('[autoAdvancePhase] No session found, skipping');
+    return { advanced: false };
+  }
+
+  const currentPhase = session.mode;
+  let nextPhase: string | null = null;
+
+  // 2. Deterministic transition rules
+  if (currentPhase === 'select_entity' && session.selected_entities) {
+    nextPhase = 'recommend';
+  } else if (currentPhase === 'recommend' && session.selected_outcome) {
+    nextPhase = 'style';
+  } else if (
+    currentPhase === 'style' &&
+    session.selected_style_bundle_id &&
+    session.schema_ready === true
+  ) {
+    nextPhase = 'build_preview';
+  }
+
+  if (!nextPhase) {
+    console.log('[autoAdvancePhase] No transition needed:', {
+      currentPhase,
+      hasEntities: !!session.selected_entities,
+      hasOutcome: !!session.selected_outcome,
+      hasStyle: !!session.selected_style_bundle_id,
+      schemaReady: session.schema_ready,
+    });
+    return { advanced: false };
+  }
+
+  // 3. Write the new phase to DB
+  const { error } = await supabase
+    .from('journey_sessions')
+    .update({ mode: nextPhase, updated_at: new Date().toISOString() })
+    .eq('id', session.id)
+    .eq('tenant_id', tenantId);
+
+  if (error) {
+    console.error('[autoAdvancePhase] Failed to advance:', error.message);
+    return { advanced: false };
+  }
+
+  console.log('[autoAdvancePhase] ✅ Phase advanced:', {
+    from: currentPhase,
+    to: nextPhase,
+    sessionId: session.id,
+  });
+
+  return { advanced: true, from: currentPhase, to: nextPhase };
 }
 
 export async function POST(req: Request) {
@@ -46,12 +132,32 @@ export async function POST(req: Request) {
       null;
 
     if (!clientProvidedTenantId || typeof clientProvidedTenantId !== 'string') {
-      // AI SDK v5 transport can send auto-resubmission requests without custom body.
-      // Log for visibility but keep the 400 so the frontend knows to stop retrying.
-      console.warn('[api/chat] Missing tenantId — likely a transport resubmission without body context', {
+      // AI SDK v5 transport sends internal tool-call resubmissions that don't include
+      // custom body fields (tenantId, userId, etc.). These are finalization pings —
+      // the tool results were already processed during the original streaming response.
+      // Detect this pattern: has 'toolCall' key but no messages and no trigger.
+      const bodyKeys = Object.keys(clientData || {});
+      const isToolCallResubmission = bodyKeys.includes('toolCall') &&
+        !Array.isArray(clientData?.messages) &&
+        !clientData?.trigger;
+
+      if (isToolCallResubmission) {
+        // Acknowledge gracefully — this is a known AI SDK v5 transport behavior.
+        // Returning 200 prevents noisy 400 errors in logs and stops client retries.
+        console.debug('[api/chat] Tool-call resubmission acknowledged (no-op)', {
+          keys: bodyKeys,
+        });
+        return new Response(
+          JSON.stringify({ ok: true }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Genuine missing tenantId — this is an actual problem (broken client, direct API call, etc.)
+      console.warn('[api/chat] Missing tenantId — rejecting request', {
         hasMessages: Array.isArray(clientData?.messages) && clientData.messages.length > 0,
         trigger: clientData?.trigger,
-        keys: Object.keys(clientData || {}),
+        keys: bodyKeys,
       });
       return new Response(
         JSON.stringify({ error: 'Missing tenantId in request' }),
@@ -246,6 +352,62 @@ export async function POST(req: Request) {
           });
         }
 
+        // ─── PERSIST CLIENT SELECTIONS TO DB ─────────────────────────────
+        // Client sends selections (entityId, selectedOutcome, selectedStyleBundleId)
+        // in req body. These MUST be written to journey_sessions so that
+        // autoAdvancePhase (which reads DB in onFinish) can trigger transitions.
+        //
+        // Without this, autoAdvancePhase always finds null columns and never advances.
+        // Confirmed: 35/35 sessions stuck at select_entity with all selections null.
+        //
+        // Write rules:
+        //   - Only write if client sent a value AND DB doesn't already have it
+        //   - This prevents overwriting a value with a stale re-send
+        //   - Entity comes from vibeContext (set before chat launch)
+        //   - Outcome comes from InlineChoice onSelect → sendAi body
+        //   - Style comes from DesignSystemPair onSelect → sendAi extraData
+        // ──────────────────────────────────────────────────────────────────
+        if (sessionRow) {
+          const selectionUpdates: Record<string, any> = {};
+
+          // Entity: client sends entityId or selectedEntities from vibeContext
+          const clientEntity = clientData.entityId || clientData.selectedEntities;
+          if (clientEntity && !sessionRow.selected_entities) {
+            selectionUpdates.selected_entities = String(clientEntity);
+          }
+
+          // Outcome: client sends selectedOutcome after clicking outcome card
+          const clientOutcome = clientData.selectedOutcome;
+          if (clientOutcome && !sessionRow.selected_outcome) {
+            selectionUpdates.selected_outcome = String(clientOutcome);
+          }
+
+          // Style: client sends selectedStyleBundleId after clicking design system card
+          const clientStyle = clientData.selectedStyleBundleId;
+          if (clientStyle && !sessionRow.selected_style_bundle_id) {
+            selectionUpdates.selected_style_bundle_id = String(clientStyle);
+          }
+
+          if (Object.keys(selectionUpdates).length > 0) {
+            selectionUpdates.updated_at = new Date().toISOString();
+            const { error: persistErr } = await supabase
+              .from('journey_sessions')
+              .update(selectionUpdates)
+              .eq('thread_id', cleanJourneyThreadId)
+              .eq('tenant_id', tenantId);
+
+            if (persistErr) {
+              console.error('[api/chat] Failed to persist client selections:', persistErr.message);
+            } else {
+              console.log('[api/chat] ✅ Persisted client selections to DB:', Object.keys(selectionUpdates));
+              // Update sessionRow in memory so the RequestContext loading below uses fresh values
+              if (selectionUpdates.selected_entities) sessionRow.selected_entities = selectionUpdates.selected_entities;
+              if (selectionUpdates.selected_outcome) sessionRow.selected_outcome = selectionUpdates.selected_outcome;
+              if (selectionUpdates.selected_style_bundle_id) sessionRow.selected_style_bundle_id = selectionUpdates.selected_style_bundle_id;
+            }
+          }
+        }
+
         // Load entity selections from DB into RequestContext
         if (sessionRow?.selected_entities) {
           requestContext.set('selectedEntities', sessionRow.selected_entities);
@@ -349,6 +511,21 @@ export async function POST(req: Request) {
       });
     }
 
+    // PHASE GATE: Compute activeTools based on authoritative DB phase.
+    // This uses the AI SDK's official mechanism to physically remove tool
+    // schemas from the LLM context. The model CANNOT call tools not in
+    // this list — unlike instruction-based guards which the LLM can bypass
+    // via tool-error recovery (see AI SDK docs: tool-error content parts
+    // are fed back to the model, allowing it to try alternative tools).
+    const phaseForToolGate = (requestContext.get('phase') as FloweticPhase) || 'select_entity';
+    const allowedTools = PHASE_TOOL_ALLOWLIST[phaseForToolGate] || PHASE_TOOL_ALLOWLIST.select_entity;
+
+    console.log('[api/chat] Phase tool gate:', {
+      phase: phaseForToolGate,
+      allowedToolCount: allowedTools.length,
+      allowedTools,
+    });
+
     const stream = await withTimeout(
       handleChatStream({
         mastra,
@@ -356,12 +533,34 @@ export async function POST(req: Request) {
         params: enhancedParams,
         sendStart: false,
         sendFinish: true,
-        sendReasoning: true,    // ← Enable reasoning display in collapsible ReasoningBlock toggle
+        sendReasoning: true,
         sendSources: false,
         defaultOptions: {
           toolCallConcurrency: 1,
           maxSteps: 15,
           toolChoice: "auto",
+          activeTools: allowedTools,
+          onFinish: async () => {
+            // PHASE 4A: Deterministic phase advancement after stream completes
+            // This runs AFTER the agent is done generating. It checks what data
+            // was persisted to DB during the stream and advances the phase if ready.
+            try {
+              if (cleanJourneyThreadId && cleanJourneyThreadId !== 'default-thread') {
+                const result = await autoAdvancePhase({
+                  supabase,
+                  tenantId,
+                  journeyThreadId: cleanJourneyThreadId,
+                  mastraThreadId: cleanMastraThreadId,
+                });
+                if (result.advanced) {
+                  console.log('[api/chat] onFinish auto-advanced phase:', result);
+                }
+              }
+            } catch (err) {
+              // Non-fatal: log but don't crash the stream response
+              console.warn('[api/chat] onFinish autoAdvancePhase error:', err);
+            }
+          },
         },
       }),
       290000,

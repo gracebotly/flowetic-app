@@ -464,7 +464,7 @@ export function resolveStyleBundleId(input: string): string {
 // The tool itself
 // ============================================================================
 export const generateUISpec = createTool({
-  id: 'generate-ui-spec',
+  id: 'generateUISpec',
   description:
     'Generates a full multi-component dashboard UI specification from template, mappings, and style bundle. ' +
     'Uses deterministic template blueprints with skill-aware design token resolution.',

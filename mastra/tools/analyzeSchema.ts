@@ -7,7 +7,7 @@ import { getExpectedFieldsForPlatform } from '../normalizers';
 import { AuthenticatedContextSchema } from '../lib/REQUEST_CONTEXT_CONTRACT';
 
 export const analyzeSchema = createTool({
-  id: 'analyze-schema',
+  id: 'analyzeSchema',
   description: 'Analyzes event schema from a data source to detect field types and patterns. Inspects both labels and state columns.',
   requestContextSchema: AuthenticatedContextSchema,
   inputSchema: z.object({

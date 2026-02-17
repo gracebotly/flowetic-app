@@ -93,7 +93,7 @@ function normalizeSpec(raw: Record<string, unknown>): Record<string, unknown> {
 }
 
 export const validateSpec = createTool({
-  id: "validate-spec",
+  id: "validateSpec",
   requestContextSchema: OptionalAuditContextSchema,
   description:
     "Validates dashboard UI specification against schema. " +
