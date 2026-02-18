@@ -7,6 +7,7 @@ import { createFloweticMemory } from "../lib/memory";
 
 // Supatool
 import { recommendStyleKeywords } from "../tools/supatools";
+import { getStyleBundles } from "../tools/getStyleBundles";
 
 // UI/UX tools (native Mastra tools with BM25 search)
 import {
@@ -120,6 +121,8 @@ After calling tools, synthesize results into clear recommendations:
   tools: {
     // Supatool
     recommendStyleKeywords,
+    // Style bundle selection
+    getStyleBundles,
     // UI/UX tools (BM25 search over design database)
     getStyleRecommendations,
     getChartRecommendations,

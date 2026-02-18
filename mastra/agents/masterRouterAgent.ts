@@ -17,6 +17,7 @@ import {
   delegateToDesignAdvisor,
 } from "../tools/delegation";
 import { advancePhase } from "../tools/journey/advancePhase";
+import { getStyleBundles } from "../tools/getStyleBundles";
 import { generatePreviewWorkflow } from "../workflows/generatePreview";
 import { connectionBackfillWorkflow } from "../workflows/connectionBackfill";
 import { deployDashboardWorkflow } from "../workflows/deployDashboard";
@@ -397,6 +398,9 @@ export const masterRouterAgent: Agent = new Agent({
     suggestAction,
     // Design system workflow
     runDesignSystemWorkflow,
+    // Style bundles - also on designAdvisorAgent but needed here because
+    // masterRouterAgent runs during style phase before delegation
+    getStyleBundles,
     // Interactive edit panel
     showInteractiveEditPanel,
   },

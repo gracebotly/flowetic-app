@@ -48,6 +48,7 @@ Valid phases: select_entity, recommend, style, build_preview, refine`,
   outputSchema: z.object({
     success: z.boolean(),
     newPhase: z.string(),
+    currentPhase: z.string(),  // UI compatibility alias — mirrors newPhase on success, unchanged phase on failure
     message: z.string(),
   }),
 
@@ -55,20 +56,21 @@ Valid phases: select_entity, recommend, style, build_preview, refine`,
     const { newPhase, selectedValue } = input;
     const tenantId = context.requestContext?.get('tenantId') as string;
     const journeyThreadId = context.requestContext?.get('journeyThreadId') as string;
+    const contextPhase = (context.requestContext?.get('phase') as string) || 'unknown';
 
     if (!tenantId) {
-      // RETURN instead of throw — thrown errors become tool-error content parts
-      // that cause Gemini to hallucinate non-existent tools (mastra#9815)
       return {
         success: false,
-        newPhase: 'unknown',
+        newPhase: contextPhase,
+        currentPhase: contextPhase,
         message: '[advancePhase] Missing tenantId in RequestContext',
       };
     }
     if (!journeyThreadId) {
       return {
         success: false,
-        newPhase: 'unknown',
+        newPhase: contextPhase,
+        currentPhase: contextPhase,
         message: '[advancePhase] Missing journeyThreadId in RequestContext',
       };
     }
@@ -77,7 +79,8 @@ Valid phases: select_entity, recommend, style, build_preview, refine`,
     if (!accessToken) {
       return {
         success: false,
-        newPhase: 'unknown',
+        newPhase: contextPhase,
+        currentPhase: contextPhase,
         message: '[advancePhase] Missing supabaseAccessToken in RequestContext',
       };
     }
@@ -95,43 +98,31 @@ Valid phases: select_entity, recommend, style, build_preview, refine`,
     }
 
     // Validation: Check required data based on target phase
+    // BUG FIX: Use thread_id column, not id column.
+    // ensureMastraThreadId inserts with thread_id = journeyThreadId; id = gen_random_uuid().
+    // Querying by id silently matches 0 rows.
     const requiredDataMap: Record<string, {
       check: () => Promise<{ valid: boolean; missing: string[] }>;
       message: string;
     }> = {
       recommend: {
-        check: async () => {
-          // Recommend phase gets entities via selectedValue param - no pre-existing requirement
-          return {
-            valid: true,
-            missing: [],
-          };
-        },
+        check: async () => ({ valid: true, missing: [] }),
         message: 'Cannot advance to recommend',
       },
       style: {
         check: async () => {
           const selectedOutcome = context.requestContext?.get('selectedOutcome');
-
           const missingFields: string[] = [];
           if (!selectedOutcome) {
-            // Check database fallback
             const { data } = await supabase
               .from('journey_sessions')
               .select('selected_outcome')
-              .eq('id', journeyThreadId)
+              .eq('thread_id', journeyThreadId)
               .eq('tenant_id', tenantId)
-              .single();
-
-            if (!data?.selected_outcome) {
-              missingFields.push('selectedOutcome');
-            }
+              .maybeSingle();
+            if (!data?.selected_outcome) missingFields.push('selectedOutcome');
           }
-
-          return {
-            valid: missingFields.length === 0,
-            missing: missingFields,
-          };
+          return { valid: missingFields.length === 0, missing: missingFields };
         },
         message: 'Cannot advance to style: Missing required selections',
       },
@@ -139,26 +130,24 @@ Valid phases: select_entity, recommend, style, build_preview, refine`,
         check: async () => {
           const selectedOutcome = context.requestContext?.get('selectedOutcome');
           const selectedStyleBundleId = context.requestContext?.get('selectedStyleBundleId');
-
           const missingFields: string[] = [];
 
           if (!selectedOutcome) {
             const { data } = await supabase
               .from('journey_sessions')
               .select('selected_outcome')
-              .eq('id', journeyThreadId)
+              .eq('thread_id', journeyThreadId)
               .eq('tenant_id', tenantId)
-              .single();
+              .maybeSingle();
             if (!data?.selected_outcome) missingFields.push('selectedOutcome');
           }
-
           if (!selectedStyleBundleId) {
             const { data } = await supabase
               .from('journey_sessions')
               .select('selected_style_bundle_id')
-              .eq('id', journeyThreadId)
+              .eq('thread_id', journeyThreadId)
               .eq('tenant_id', tenantId)
-              .single();
+              .maybeSingle();
             if (!data?.selected_style_bundle_id) missingFields.push('selectedStyleBundleId');
           }
 
@@ -166,42 +155,34 @@ Valid phases: select_entity, recommend, style, build_preview, refine`,
           const { data: sessionData } = await supabase
             .from('journey_sessions')
             .select('schema_ready')
-            .eq('id', journeyThreadId)
+            .eq('thread_id', journeyThreadId)
             .eq('tenant_id', tenantId)
-            .single();
-
+            .maybeSingle();
           if (sessionData?.schema_ready !== true) {
             missingFields.push('schemaReady (must be true in database)');
           }
 
-          return {
-            valid: missingFields.length === 0,
-            missing: missingFields,
-          };
+          return { valid: missingFields.length === 0, missing: missingFields };
         },
         message: 'Cannot advance to build_preview: Missing required data or schema not ready',
       },
     };
 
-    // Run validation if applicable
     const validation = requiredDataMap[newPhase];
     if (validation) {
       const result = await validation.check();
       if (!result.valid) {
-        // ✅ RETURN error object instead of throwing.
-        // Thrown errors become tool-error content parts that cause Gemini to
-        // hallucinate non-existent tools (e.g. "analyzeSchema"), which crashes
-        // the agentic loop due to Mastra issue #9815.
-        const currentPhase = context.requestContext?.get('phase') as string || 'unknown';
         return {
           success: false,
-          newPhase: currentPhase,
+          newPhase: contextPhase,
+          currentPhase: contextPhase,
           message: `${validation.message}. Still needed: ${result.missing.join(', ')}. Please complete the current phase first.`,
         };
       }
     }
 
     // Update phase and persist selected values
+    // BUG FIX: Query by thread_id, not id — use .select() to detect 0-row updates
     const updateData: Record<string, string> = {
       mode: newPhase,
       updated_at: new Date().toISOString(),
@@ -213,25 +194,36 @@ Valid phases: select_entity, recommend, style, build_preview, refine`,
       updateData.selected_outcome = selectedValue;
     }
 
-    const { error } = await supabase
+    const { data: updatedRows, error } = await supabase
       .from('journey_sessions')
       .update(updateData)
-      .eq('id', journeyThreadId)
-      .eq('tenant_id', tenantId);
+      .eq('thread_id', journeyThreadId)
+      .eq('tenant_id', tenantId)
+      .select();
 
     if (error) {
-      // ✅ RETURN instead of throw
-      const currentPhase = context.requestContext?.get('phase') as string || 'unknown';
       return {
         success: false,
-        newPhase: currentPhase,
+        newPhase: contextPhase,
+        currentPhase: contextPhase,
         message: `Failed to advance phase: ${error.message}`,
+      };
+    }
+
+    if (!updatedRows || updatedRows.length === 0) {
+      console.error('[advancePhase] No rows updated:', { journeyThreadId, tenantId });
+      return {
+        success: false,
+        newPhase: contextPhase,
+        currentPhase: contextPhase,
+        message: 'No matching journey session found. The session may have expired or the thread ID is incorrect.',
       };
     }
 
     return {
       success: true,
       newPhase,
+      currentPhase: newPhase,
       message: `✅ Phase manually advanced to: ${newPhase}`,
     };
   },

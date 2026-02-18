@@ -388,8 +388,10 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
     'getChartRecommendations',
     'getUXGuidelines',
     'getProductRecommendations',
-    'getStyleBundles',     // Required: shows 2-at-a-time style cards to user
-    'setSchemaReady',      // Required: marks schema as ready after style selection
+    'getStyleBundles',
+    // NOTE: setSchemaReady intentionally omitted — /api/chat auto-sets schema_ready=true
+    // when all selections (entities, outcome, style) are present. setSchemaReady is
+    // available in build_preview phase via platformMappingMaster only.
     // Phase advancement
     'advancePhase',
     // Utility

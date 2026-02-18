@@ -1497,8 +1497,18 @@ return (
                               if (output?.success && output?.designSystems?.length >= 2) {
                                 const systems = output.designSystems.map((item: any, i: number) => {
                                   const ds = item.designSystem || item;
+                                  // CRITICAL FIX: Convert style name to canonical slug format
+                                  // The DB CHECK constraint only accepts: professional-clean, premium-dark,
+                                  // glass-premium, bold-startup, corporate-trust, neon-cyber, pastel-soft,
+                                  // warm-earth, modern-saas
+                                  const styleName = String(ds.style?.name || `Style Option ${i + 1}`);
+                                  const styleBundleId = styleName
+                                    .trim()
+                                    .toLowerCase()
+                                    .replace(/[^a-z0-9]+/g, '-')
+                                    .replace(/^-+|-+$/g, '');
                                   return {
-                                    id: `style-workflow-${i + 1}`,
+                                    id: styleBundleId,
                                     name: ds.style?.name || `Style Option ${i + 1}`,
                                     icon: 'Palette',
                                     colors: [ds.colors?.primary, ds.colors?.secondary, ds.colors?.accent].filter(Boolean).join(' / '),
@@ -1528,9 +1538,16 @@ return (
                               // Fallback for single system (backward compat during transition)
                               if (output?.success && output?.designSystem) {
                                 const ds = output.designSystem;
+                                // CRITICAL FIX: Convert style name to canonical slug format
+                                const styleName = String(ds.style?.name || 'Professional Clean');
+                                const styleBundleId = styleName
+                                  .trim()
+                                  .toLowerCase()
+                                  .replace(/[^a-z0-9]+/g, '-')
+                                  .replace(/^-+|-+$/g, '');
                                 const system1 = {
-                                  id: 'style-workflow-1',
-                                  name: ds.style?.name || 'Recommended Style',
+                                  id: styleBundleId,
+                                  name: ds.style?.name || 'Professional Clean',
                                   icon: 'Palette',
                                   colors: [
                                     ds.colors?.primary,
