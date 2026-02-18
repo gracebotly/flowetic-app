@@ -368,8 +368,8 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
     'recommendOutcome',
     'getEventStats',
     'getOutcomes',
-    // Phase advancement (missing from this phase — every other phase has it)
-    'advancePhase',
+    // NOTE: advancePhase intentionally omitted — autoAdvancePhase handles
+    // recommend→style transition when selected_outcome is present in DB.
     // Utility
     'navigateTo',
     'suggestAction',
@@ -392,8 +392,12 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
     // NOTE: setSchemaReady intentionally omitted — /api/chat auto-sets schema_ready=true
     // when all selections (entities, outcome, style) are present. setSchemaReady is
     // available in build_preview phase via platformMappingMaster only.
-    // Phase advancement
-    'advancePhase',
+    // NOTE: advancePhase intentionally omitted from style phase.
+    // Phase transitions are deterministic via autoAdvancePhase in onFinish.
+    // Having advancePhase here caused a 14-step tool storm that created
+    // duplicate fc_ itemIds, crashing OpenAI Responses API with:
+    // "Duplicate item found with id fc_0445fd9e..."
+    // See: https://community.openai.com/t/duplicate-item-found-with-id-msg-when-submitting-tool-output-400-invalid-request-error/1373703
     // Utility
     'navigateTo',
     'suggestAction',

@@ -23,6 +23,34 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   return Promise.race([promise.finally(() => clearTimeout(t)), timeout]);
 }
 
+// ─── DEDUPLICATE OPENAI ITEM IDs ────────────────────────────────────────────
+// OpenAI Responses API rejects requests containing duplicate itemIds.
+// Mastra memory replays full conversation history, including providerMetadata
+// with itemIds. When the LLM makes repeated tool calls in one stream, the same
+// fc_ itemId can appear in multiple assistant message parts.
+// This filter keeps only the first occurrence of each itemId.
+// See: https://community.openai.com/t/1373703, https://github.com/vercel/ai/issues/7883
+function deduplicateProviderItemIds(messages: any[]): any[] {
+  const seenItemIds = new Set<string>();
+  return messages.map((msg: any) => {
+    if (msg.role !== 'assistant' || !Array.isArray(msg.parts)) return msg;
+    const filteredParts = msg.parts.filter((part: any) => {
+      // Check both providerMetadata and callProviderMetadata for itemId
+      const itemId =
+        part?.providerMetadata?.openai?.itemId ??
+        part?.callProviderMetadata?.openai?.itemId;
+      if (!itemId) return true; // No itemId → keep the part
+      if (seenItemIds.has(itemId)) {
+        console.log(`[deduplicateProviderItemIds] Dropping duplicate itemId: ${itemId.substring(0, 20)}...`);
+        return false; // Duplicate → drop
+      }
+      seenItemIds.add(itemId);
+      return true; // First occurrence → keep
+    });
+    return { ...msg, parts: filteredParts };
+  });
+}
+
 // ─── DETERMINISTIC PHASE ADVANCEMENT ────────────────────────────────────────
 // Phase 4A from refactor guide: code-driven phase transitions, NOT LLM-driven.
 // Runs AFTER each agent stream completes. Reads DB state, advances if ready.
@@ -523,8 +551,15 @@ export async function POST(req: Request) {
     });
 
     // 5. CALL MASTRA WITH VALIDATED CONTEXT
+    // Deduplicate OpenAI itemIds in message history before sending to agent.
+    // This prevents "Duplicate item found with id fc_..." crash from OpenAI Responses API.
+    const rawMessages = (params as any)?.messages;
+    const dedupedMessages = Array.isArray(rawMessages)
+      ? deduplicateProviderItemIds(rawMessages)
+      : rawMessages;
     const enhancedParams = {
       ...params,
+      ...(dedupedMessages ? { messages: dedupedMessages } : {}),
       requestContext,
       mode: "generate",
     };
@@ -533,8 +568,7 @@ export async function POST(req: Request) {
       console.log('[api/chat] Authorized request:', {
         tenantId, userId, userRole, mastraThreadId,
         clientJourneyThreadId,
-        messagesCount: Array.isArray((params as any)?.messages)
-          ? (params as any).messages.length : 0,
+        messagesCount: Array.isArray(dedupedMessages) ? dedupedMessages.length : 0,
       });
     }
 

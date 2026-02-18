@@ -87,11 +87,16 @@ Valid phases: select_entity, recommend, style, build_preview, refine`,
     const supabase = createAuthenticatedClient(accessToken);
 
     // Set RequestContext based on selectedValue and phase
+    // NOTE: advancePhase ONLY writes selectedEntities and selectedStyleBundleId.
+    // selected_outcome is owned exclusively by recommendOutcome tool.
+    // advancePhase previously wrote selectedOutcome with arbitrary LLM input,
+    // overwriting the correct data-computed value (e.g., "workflow_ops" over "dashboard").
     if (selectedValue) {
       if (newPhase === 'recommend') {
         context?.requestContext?.set('selectedEntities', selectedValue);
       }
-      if (newPhase === 'style') context?.requestContext?.set('selectedOutcome', selectedValue);
+      // REMOVED: newPhase === 'style' → selectedOutcome write
+      // recommendOutcome is the single source of truth for selected_outcome
       if (newPhase === 'build_preview') {
         context?.requestContext?.set('selectedStyleBundleId', selectedValue);
       }
@@ -182,6 +187,7 @@ Valid phases: select_entity, recommend, style, build_preview, refine`,
     }
 
     // Update phase and persist selected values
+    // NOTE: advancePhase does NOT write selected_outcome — that's owned by recommendOutcome.
     // BUG FIX: Query by thread_id, not id — use .select() to detect 0-row updates
     const updateData: Record<string, string> = {
       mode: newPhase,
@@ -190,9 +196,8 @@ Valid phases: select_entity, recommend, style, build_preview, refine`,
     if (selectedValue && newPhase === 'recommend') {
       updateData.selected_entities = selectedValue;
     }
-    if (selectedValue && newPhase === 'style') {
-      updateData.selected_outcome = selectedValue;
-    }
+    // REMOVED: selected_outcome write for newPhase === 'style'
+    // recommendOutcome tool is the single owner of selected_outcome.
 
     const { data: updatedRows, error } = await supabase
       .from('journey_sessions')
