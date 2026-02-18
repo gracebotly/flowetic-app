@@ -352,8 +352,8 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
     'getDataDrivenEntities',
     'listSources',
     'getOutcomes',
-    // Phase advancement
-    'advancePhase',
+    // NOTE: advancePhase intentionally omitted — autoAdvancePhase handles
+    // select_entity→recommend transition deterministically.
     // Utility (always available)
     'navigateTo',
     'suggestAction',
@@ -412,8 +412,7 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
     'delegateToPlatformMapper',
     'validatePreviewReadiness',
     'getEventStats',
-    // Phase advancement
-    'advancePhase',
+    // NOTE: advancePhase intentionally omitted — autoAdvancePhase handles transitions.
     // Utility
     'navigateTo',
     'suggestAction',
@@ -430,8 +429,7 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
     // Can re-generate if needed
     'delegateToPlatformMapper',
     'validatePreviewReadiness',
-    // Phase advancement
-    'advancePhase',
+    // NOTE: advancePhase intentionally omitted — autoAdvancePhase handles transitions.
     // Utility
     'navigateTo',
     'suggestAction',
@@ -442,8 +440,8 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
   ],
 
   deploy: [
-    // Deployment
-    'advancePhase',
+    // NOTE: advancePhase intentionally omitted — deploy is a terminal phase,
+    // transitions are handled by the deployment workflow, not the LLM.
     // Can still edit
     'showInteractiveEditPanel',
     'delegateToDashboardBuilder',

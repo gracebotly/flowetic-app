@@ -600,22 +600,36 @@ export async function POST(req: Request) {
           toolCallConcurrency: 1,
           maxSteps: 15,
           toolChoice: "auto",
-          // NOTE: Do NOT set activeTools here — AI SDK bug #8653 means
-          // static activeTools in defaultOptions is ignored by runToolsTransformation.
-          // Instead, use prepareStep to return activeTools on every step.
-          // Mastra's own agent loop (v0.14.0+) respects prepareStep returns.
+          // CRITICAL: Return { tools } object, NOT { activeTools } string array.
+          //
+          // AI SDK bug #8653: activeTools only filters what schemas the LLM sees,
+          // but runToolsTransformation still executes against the full tools object.
+          // The LLM can hallucinate tool calls from conversation history and they
+          // will succeed if the tool exists in the full tools object.
+          //
+          // Mastra #9346 (shipped): prepareStep now supports returning { tools }
+          // which replaces the execution-layer tools for this step. Tools NOT in
+          // this object will throw "tool does not exist" if the LLM tries to call them.
           prepareStep: async ({ stepNumber }: { stepNumber: number }) => {
-            // Re-read phase from DB on every step in case a tool
-            // persisted data that triggered autoAdvancePhase mid-stream.
-            // For step 0, use the phase we already read. For subsequent steps,
-            // the phase is unlikely to change mid-stream but this is defensive.
             const currentPhase = phaseForToolGate;
-            const tools = PHASE_TOOL_ALLOWLIST[currentPhase] || PHASE_TOOL_ALLOWLIST.select_entity;
+            const allowedToolNames = PHASE_TOOL_ALLOWLIST[currentPhase] || PHASE_TOOL_ALLOWLIST.select_entity;
 
-            console.log(`[prepareStep] step=${stepNumber} phase=${currentPhase} tools=${tools.length}`);
+            // Build filtered tools object from the agent's registered tools.
+            // Only tools that both exist on the agent AND are in the allowlist are included.
+            const agent = mastra.getAgent('masterRouterAgent');
+            const agentTools: Record<string, any> = (agent as any).tools || {};
+            const filteredTools: Record<string, any> = {};
+            for (const name of allowedToolNames) {
+              if (agentTools[name]) {
+                filteredTools[name] = agentTools[name];
+              }
+            }
+
+            console.log(`[prepareStep] step=${stepNumber} phase=${currentPhase} tools=${Object.keys(filteredTools).length}`);
 
             return {
-              activeTools: tools,
+              tools: filteredTools,
+              toolChoice: Object.keys(filteredTools).length > 0 ? 'auto' as const : 'none' as const,
             };
           },
           onFinish: async () => {
