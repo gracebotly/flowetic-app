@@ -4,15 +4,15 @@ import { createAuthenticatedClient } from '../../lib/supabase';
 
 /**
  * EDGE CASE TOOL - Manually advance journey phase
- * 
+ *
  * IMPORTANT: This tool should RARELY be called because phase transitions
  * are now AUTOMATIC based on user selections. The chat route automatically
  * advances phases when:
- * 
+ *
  * - select_entity → recommend: When selectedEntities/selectedEntity exists
  * - recommend → style: When selectedOutcome exists
  * - style → build_preview: When selectedStyleBundleId exists AND schema_ready=true
- * 
+ *
  * Only use this tool for:
  * - Skipping phases (user explicitly requests to skip)
  * - Error recovery (stuck state, need manual override)
@@ -20,11 +20,11 @@ import { createAuthenticatedClient } from '../../lib/supabase';
  */
 export const advancePhase = createTool({
   id: 'advancePhase',
-  description: `Manually advance the journey phase. 
+  description: `Manually advance the journey phase.
 
 ⚠️ IMPORTANT: Phase transitions are AUTOMATIC based on user selections:
 - select_entity → recommend: Auto-advances when entity selected
-- recommend → style: Auto-advances when outcome selected  
+- recommend → style: Auto-advances when outcome selected
 - style → build_preview: Auto-advances when style selected AND schema ready
 
 Only use this tool for:
@@ -45,21 +45,41 @@ Valid phases: select_entity, recommend, style, build_preview, refine`,
     selectedValue: z.string().optional().describe('Optional value to persist (entities for recommend, outcome for style)'),
   }),
 
+  outputSchema: z.object({
+    success: z.boolean(),
+    newPhase: z.string(),
+    message: z.string(),
+  }),
+
   execute: async (input, context) => {
     const { newPhase, selectedValue } = input;
     const tenantId = context.requestContext?.get('tenantId') as string;
     const journeyThreadId = context.requestContext?.get('journeyThreadId') as string;
 
     if (!tenantId) {
-      throw new Error('[advancePhase] Missing tenantId in RequestContext');
+      // RETURN instead of throw — thrown errors become tool-error content parts
+      // that cause Gemini to hallucinate non-existent tools (mastra#9815)
+      return {
+        success: false,
+        newPhase: 'unknown',
+        message: '[advancePhase] Missing tenantId in RequestContext',
+      };
     }
     if (!journeyThreadId) {
-      throw new Error('[advancePhase] Missing journeyThreadId in RequestContext');
+      return {
+        success: false,
+        newPhase: 'unknown',
+        message: '[advancePhase] Missing journeyThreadId in RequestContext',
+      };
     }
 
     const accessToken = context?.requestContext?.get('supabaseAccessToken') as string;
     if (!accessToken) {
-      throw new Error('[advancePhase] Missing supabaseAccessToken in RequestContext');
+      return {
+        success: false,
+        newPhase: 'unknown',
+        message: '[advancePhase] Missing supabaseAccessToken in RequestContext',
+      };
     }
     const supabase = createAuthenticatedClient(accessToken);
 
@@ -168,7 +188,16 @@ Valid phases: select_entity, recommend, style, build_preview, refine`,
     if (validation) {
       const result = await validation.check();
       if (!result.valid) {
-        throw new Error(`${validation.message}. Missing: ${result.missing.join(', ')}`);
+        // ✅ RETURN error object instead of throwing.
+        // Thrown errors become tool-error content parts that cause Gemini to
+        // hallucinate non-existent tools (e.g. "analyzeSchema"), which crashes
+        // the agentic loop due to Mastra issue #9815.
+        const currentPhase = context.requestContext?.get('phase') as string || 'unknown';
+        return {
+          success: false,
+          newPhase: currentPhase,
+          message: `${validation.message}. Still needed: ${result.missing.join(', ')}. Please complete the current phase first.`,
+        };
       }
     }
 
@@ -191,7 +220,13 @@ Valid phases: select_entity, recommend, style, build_preview, refine`,
       .eq('tenant_id', tenantId);
 
     if (error) {
-      throw new Error(`Failed to advance phase: ${error.message}`);
+      // ✅ RETURN instead of throw
+      const currentPhase = context.requestContext?.get('phase') as string || 'unknown';
+      return {
+        success: false,
+        newPhase: currentPhase,
+        message: `Failed to advance phase: ${error.message}`,
+      };
     }
 
     return {
