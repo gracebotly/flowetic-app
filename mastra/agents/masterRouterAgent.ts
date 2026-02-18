@@ -87,7 +87,9 @@ export const masterRouterAgent: Agent = new Agent({
 
     // Journey state (OPTIONAL)
     phase: z.enum(['select_entity', 'recommend', 'style', 'build_preview', 'interactive_edit', 'deploy']).optional(),
-    selectedOutcome: z.enum(['dashboard', 'product']).optional().nullable(),
+    // Accepts any outcome category string - frontend maps template IDs to categories
+    // Valid values: 'dashboard', 'product' (see OUTCOME_CATALOG in src/data/outcomes.ts)
+    selectedOutcome: z.string().optional().nullable(),
     // selectedStoryboard removed — storyboard/align phase eliminated
     selectedStyleBundleId: z.string().optional().nullable(),
     densityPreset: z.enum(['compact', 'comfortable', 'spacious']).optional(),

@@ -1445,7 +1445,11 @@ return (
 
                                     setSelectedOutcome(category);
                                     setJourneyMode("style");
-                                    await sendAi(`I selected ${id}`);  // Still send the specific ID in the message
+                                    // FIX: Pass category explicitly to avoid stale closure (AI SDK docs)
+                                    // https://ai-sdk.dev/docs/troubleshooting/use-chat-stale-body-data
+                                    await sendAi(`I selected ${id}`, {
+                                      selectedOutcome: category,
+                                    });
                                   }}
                                   onHelp={
                                     (part as any).data?.helpAvailable || (part as any).helpAvailable
@@ -1772,7 +1776,10 @@ return (
 
                           setSelectedOutcome(category);
                           setToolUi(null);
-                          await sendMessage(`__ACTION__:select_outcome:${id}`);
+                          // FIX: Pass category explicitly to avoid stale closure (AI SDK docs)
+                          await sendAi(`__ACTION__:select_outcome:${id}`, {
+                            selectedOutcome: category,
+                          });
                         }}
                         onHelp={toolUi.helpAvailable ? () => {
                           setToolUi(null);
