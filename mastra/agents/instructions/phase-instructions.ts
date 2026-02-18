@@ -368,6 +368,8 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
     'recommendOutcome',
     'getEventStats',
     'getOutcomes',
+    // Phase advancement (missing from this phase — every other phase has it)
+    'advancePhase',
     // Utility
     'navigateTo',
     'suggestAction',
