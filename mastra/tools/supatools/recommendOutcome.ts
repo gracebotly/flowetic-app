@@ -108,6 +108,30 @@ export const recommendOutcome = createSupaTool<z.infer<typeof outputSchema>>({
       reasoning += ' Elevated error rate suggests prioritizing operational visibility and debugging.';
     }
     
+    // ─── PERSIST to DB so autoAdvancePhase can detect recommend → style ───
+    // Without this write, journey_sessions.selected_outcome stays NULL
+    // and the deterministic phase transition never fires.
+    const journeyThreadId = context?.requestContext?.get('journeyThreadId') as string;
+
+    if (tenantId && journeyThreadId) {
+      const { error: persistErr } = await supabase
+        .from('journey_sessions')
+        .update({
+          selected_outcome: recommendedOutcome,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('thread_id', journeyThreadId)
+        .eq('tenant_id', tenantId);
+
+      if (persistErr) {
+        console.error('[recommendOutcome] Failed to persist selected_outcome:', persistErr.message);
+      } else {
+        console.log('[recommendOutcome] ✅ Persisted selected_outcome to DB:', recommendedOutcome);
+      }
+    } else {
+      console.warn('[recommendOutcome] Skipping DB persist — missing tenantId or journeyThreadId');
+    }
+
     return {
       recommendedOutcome,
       confidence: Number(confidence.toFixed(2)),

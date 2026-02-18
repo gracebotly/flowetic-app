@@ -566,7 +566,24 @@ export async function POST(req: Request) {
           toolCallConcurrency: 1,
           maxSteps: 15,
           toolChoice: "auto",
-          activeTools: allowedTools,
+          // NOTE: Do NOT set activeTools here — AI SDK bug #8653 means
+          // static activeTools in defaultOptions is ignored by runToolsTransformation.
+          // Instead, use prepareStep to return activeTools on every step.
+          // Mastra's own agent loop (v0.14.0+) respects prepareStep returns.
+          prepareStep: async ({ stepNumber }: { stepNumber: number }) => {
+            // Re-read phase from DB on every step in case a tool
+            // persisted data that triggered autoAdvancePhase mid-stream.
+            // For step 0, use the phase we already read. For subsequent steps,
+            // the phase is unlikely to change mid-stream but this is defensive.
+            const currentPhase = phaseForToolGate;
+            const tools = PHASE_TOOL_ALLOWLIST[currentPhase] || PHASE_TOOL_ALLOWLIST.select_entity;
+
+            console.log(`[prepareStep] step=${stepNumber} phase=${currentPhase} tools=${tools.length}`);
+
+            return {
+              activeTools: tools,
+            };
+          },
           onFinish: async () => {
             // PHASE 4A: Deterministic phase advancement after stream completes
             // This runs AFTER the agent is done generating. It checks what data
