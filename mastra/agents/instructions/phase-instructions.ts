@@ -386,6 +386,8 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
     'getChartRecommendations',
     'getUXGuidelines',
     'getProductRecommendations',
+    'getStyleBundles',     // Required: shows 2-at-a-time style cards to user
+    'setSchemaReady',      // Required: marks schema as ready after style selection
     // Phase advancement
     'advancePhase',
     // Utility

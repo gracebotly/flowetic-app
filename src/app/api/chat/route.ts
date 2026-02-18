@@ -11,6 +11,7 @@ import { getMastraSingleton } from '@/mastra/singleton';
 import { ensureMastraThreadId } from '@/mastra/lib/ensureMastraThread';
 import { safeUuid } from "@/mastra/lib/safeUuid";
 import { PHASE_TOOL_ALLOWLIST, type FloweticPhase } from '@/mastra/agents/instructions/phase-instructions';
+import { resolveStyleBundleId } from '@/mastra/lib/resolveStyleBundleId';
 
 export const maxDuration = 300; // Fluid Compute + Hobby = 300s max
 
@@ -383,13 +384,39 @@ export async function POST(req: Request) {
           }
 
           // Style: client sends selectedStyleBundleId after clicking design system card
+          // BUG FIX: Resolve display name → valid slug BEFORE writing to DB.
+          // CHECK constraint "valid_style_bundle_id" only accepts slugs like
+          // "professional-clean", NOT display names like "Minimalism & Swiss Style".
           const clientStyle = clientData.selectedStyleBundleId;
           if (clientStyle && !sessionRow.selected_style_bundle_id) {
-            selectionUpdates.selected_style_bundle_id = String(clientStyle);
+            const resolvedSlug = resolveStyleBundleId(String(clientStyle));
+            if (resolvedSlug) {
+              selectionUpdates.selected_style_bundle_id = resolvedSlug;
+              console.log('[api/chat] Resolved style bundle:', {
+                input: clientStyle,
+                resolved: resolvedSlug,
+              });
+            } else {
+              console.warn('[api/chat] Could not resolve style bundle to valid slug:', clientStyle);
+            }
           }
 
           if (Object.keys(selectionUpdates).length > 0) {
             selectionUpdates.updated_at = new Date().toISOString();
+
+            // BUG FIX: If we're persisting a style bundle AND the session
+            // already has entities + outcome, set schema_ready = true in the SAME write.
+            // Previously NOTHING ever set schema_ready=true after style selection,
+            // so autoAdvancePhase always found schema_ready=false and never advanced.
+            if (
+              (selectionUpdates.selected_style_bundle_id || sessionRow.selected_style_bundle_id) &&
+              (selectionUpdates.selected_entities || sessionRow.selected_entities) &&
+              (selectionUpdates.selected_outcome || sessionRow.selected_outcome)
+            ) {
+              selectionUpdates.schema_ready = true;
+              console.log('[api/chat] Setting schema_ready=true (all selections present)');
+            }
+
             const { error: persistErr } = await supabase
               .from('journey_sessions')
               .update(selectionUpdates)
@@ -400,10 +427,10 @@ export async function POST(req: Request) {
               console.error('[api/chat] Failed to persist client selections:', persistErr.message);
             } else {
               console.log('[api/chat] ✅ Persisted client selections to DB:', Object.keys(selectionUpdates));
-              // Update sessionRow in memory so the RequestContext loading below uses fresh values
               if (selectionUpdates.selected_entities) sessionRow.selected_entities = selectionUpdates.selected_entities;
               if (selectionUpdates.selected_outcome) sessionRow.selected_outcome = selectionUpdates.selected_outcome;
               if (selectionUpdates.selected_style_bundle_id) sessionRow.selected_style_bundle_id = selectionUpdates.selected_style_bundle_id;
+              if (selectionUpdates.schema_ready) sessionRow.schema_ready = selectionUpdates.schema_ready;
             }
           }
         }
