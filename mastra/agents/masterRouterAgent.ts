@@ -145,6 +145,13 @@ Guide entity selection and outcome framing with business context. Frame dashboar
 Use BM25 search tools (getStyleRecommendations, getTypographyRecommendations, etc.) for all design decisions. Never invent design tokens from memory. Use searchSkillKnowledge (domain: "design") for additional design guidelines.`
       : "";
 
+    // Load Data Dashboard Intelligence for phases that need component/mapping intelligence
+    const dashboardIntelPhases = ["recommend", "build_preview", "interactive_edit"];
+    const shouldLoadDashboardIntel = dashboardIntelPhases.includes(phase || "");
+    const dashboardIntelContent = shouldLoadDashboardIntel
+      ? await getCachedSkillAsync("data-dashboard-intelligence")
+      : "";
+
     const phaseInstructions = getPhaseInstructions(phase as FloweticPhase, {
       platformType: String(safePlatformType),
       workflowName: workflowName || undefined,
@@ -346,6 +353,7 @@ Use BM25 search tools (getStyleRecommendations, getTypographyRecommendations, et
       platformSkillSummary,
       businessSkillSummary,
       designSkillSummary,
+      dashboardIntelContent ? `\n\n# DATA DASHBOARD INTELLIGENCE\n\n${dashboardIntelContent}` : "",
     ].filter(Boolean).join("\n");
 
     return [

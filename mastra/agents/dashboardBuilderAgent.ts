@@ -10,6 +10,7 @@ import {
   savePreviewVersion,
 } from "../tools/specEditor";
 import { createFloweticMemory } from "../lib/memory";
+import { getCachedSkillAsync } from '../lib/skillCache';
 import { validateSpec } from "../tools/validateSpec";
 import { applyInteractiveEdits } from "../tools/interactiveEdit/applyInteractiveEdits";
 import { reorderComponents } from "../tools/interactiveEdit/reorderComponents";
@@ -36,6 +37,9 @@ export const dashboardBuilderAgent: Agent = new Agent({
     const mode = (requestContext.get("mode") as string | undefined) ?? "edit";
     const phase = (requestContext.get("phase") as string | undefined) ?? "editing";
     const platformType = (requestContext.get("platformType") as string | undefined) ?? "make";
+
+    // Load Data Dashboard Intelligence skill (always — this agent needs it for all edits)
+    const dashboardIntelContent = await getCachedSkillAsync("data-dashboard-intelligence");
 
     return [
       {
@@ -92,6 +96,10 @@ When the user requests design/style changes, you MUST call the appropriate tool 
 - UX improvements → Call getUXGuidelines
 
 Then apply the recommended values via applySpecPatch.
+
+## DATA DASHBOARD INTELLIGENCE
+When generating or editing dashboard specs, follow the Data Dashboard Intelligence skill for field-to-component mapping, aggregation selection, dashboard story structure, hero stat detection, and graceful degradation.
+${dashboardIntelContent || ''}
 
 ## TODO USAGE (INTERNAL ONLY)
 Use todo tools to track multi-step work. Never expose todo items to users.`,
