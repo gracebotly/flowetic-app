@@ -80,11 +80,10 @@ export async function ensureMastraThreadId(params: {
         entity_id: safeEntityId,  // Use validated UUID or null
         mode: "select_entity",
         density_preset: "comfortable",
-        // Persist entity selection at creation time — user already selected
-        // the entity in the wizard before chat launched. Without this,
-        // autoAdvancePhase finds selected_entities=null and never advances
-        // past select_entity phase.
-        selected_entities: safeEntityId || null,
+        // DO NOT persist entityId as selected_entities.
+        // entityId is the source_entity UUID, NOT a user entity selection.
+        // selected_entities should only be set when the user actually picks entities.
+        selected_entities: null,
         created_at: now,
         updated_at: now,
       });

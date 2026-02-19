@@ -840,13 +840,92 @@ export async function POST(req: Request) {
             console.log(`[TIMING] step-${stepCount}: ${Date.now() - streamStartMs}ms elapsed | tools: [${toolNames.join(', ')}] | finish: ${finishReason}`);
           },
           onFinish: async () => {
-            console.log(`[TIMING] stream-total: ${Date.now() - streamStartMs}ms | steps: ${stepCount}`);
-            console.log(`[TIMING] request-total: ${Date.now() - requestStartMs}ms`);
-            // PHASE 4A: Deterministic phase advancement after stream completes
-            // This runs AFTER the agent is done generating. It checks what data
-            // was persisted to DB during the stream and advances the phase if ready.
+            // PHASE 4A: Sync Working Memory → DB, then advance phase
+            // The agent writes selections to Mastra working memory via updateWorkingMemory,
+            // but autoAdvancePhase reads from journey_sessions in Postgres.
+            // We must bridge the two before checking for phase transitions.
             try {
               if (cleanJourneyThreadId && cleanJourneyThreadId !== 'default-thread') {
+
+                // ── STEP 1: Read working memory and sync selections to DB ──
+                try {
+                  const { Memory } = await import('@mastra/memory');
+                  const { getMastraStorage } = await import('../../mastra/lib/storage');
+                  const storage = getMastraStorage();
+                  const memory = new Memory({ storage });
+                  const workingMem = await memory.getWorkingMemory({
+                    threadId: cleanMastraThreadId,
+                  });
+
+                  if (workingMem) {
+                    // Parse working memory — it may be JSON string or object
+                    let memData: Record<string, any> = {};
+                    try {
+                      memData = typeof workingMem === 'string' ? JSON.parse(workingMem) : workingMem;
+                    } catch {
+                      // Not JSON, skip sync
+                    }
+
+                    const syncUpdates: Record<string, any> = {};
+
+                    // Sync selectedEntities (from agent's entity selection)
+                    if (memData.selectedEntities && typeof memData.selectedEntities === 'string') {
+                      const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+                      if (!UUID_RE.test(memData.selectedEntities.trim())) {
+                        syncUpdates.selected_entities = memData.selectedEntities;
+                      }
+                    }
+
+                    // Sync selectedOutcome
+                    if (memData.selectedOutcome && typeof memData.selectedOutcome === 'string') {
+                      syncUpdates.selected_outcome = memData.selectedOutcome;
+                    }
+
+                    // Sync selectedStyleBundleId
+                    if (memData.selectedStyleBundleId && typeof memData.selectedStyleBundleId === 'string') {
+                      syncUpdates.selected_style_bundle_id = memData.selectedStyleBundleId;
+                    }
+
+                    if (Object.keys(syncUpdates).length > 0) {
+                      syncUpdates.updated_at = new Date().toISOString();
+
+                      // Set schema_ready if all three selections are present
+                      // (need to read current DB state to check what's already there)
+                      const { data: currentSession } = await supabase
+                        .from('journey_sessions')
+                        .select('selected_entities, selected_outcome, selected_style_bundle_id')
+                        .eq('thread_id', cleanJourneyThreadId)
+                        .eq('tenant_id', tenantId)
+                        .maybeSingle();
+
+                      const finalEntities = syncUpdates.selected_entities || currentSession?.selected_entities;
+                      const finalOutcome = syncUpdates.selected_outcome || currentSession?.selected_outcome;
+                      const finalStyle = syncUpdates.selected_style_bundle_id || currentSession?.selected_style_bundle_id;
+
+                      if (finalEntities && finalOutcome && finalStyle) {
+                        syncUpdates.schema_ready = true;
+                        console.log('[api/chat] onFinish: Setting schema_ready=true (all selections present from working memory)');
+                      }
+
+                      const { error: syncErr } = await supabase
+                        .from('journey_sessions')
+                        .update(syncUpdates)
+                        .eq('thread_id', cleanJourneyThreadId)
+                        .eq('tenant_id', tenantId);
+
+                      if (syncErr) {
+                        console.error('[api/chat] onFinish: Failed to sync working memory to DB:', syncErr.message);
+                      } else {
+                        console.log('[api/chat] onFinish: ✅ Synced working memory selections to DB:', Object.keys(syncUpdates));
+                      }
+                    }
+                  }
+                } catch (memErr) {
+                  // Non-fatal: if memory read fails, autoAdvancePhase still runs with DB state
+                  console.warn('[api/chat] onFinish: Working memory sync failed (non-fatal):', memErr);
+                }
+
+                // ── STEP 2: Run autoAdvancePhase (now with synced DB data) ──
                 const result = await autoAdvancePhase({
                   supabase,
                   tenantId,
