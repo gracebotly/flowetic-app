@@ -13,6 +13,68 @@ import { safeUuid } from "@/mastra/lib/safeUuid";
 import { PHASE_TOOL_ALLOWLIST, type FloweticPhase } from '@/mastra/agents/instructions/phase-instructions';
 import { resolveStyleBundleId } from '@/mastra/lib/resolveStyleBundleId';
 
+// === Tool imports for prepareStep phase gating ===
+// Import the same tool references masterRouterAgent was constructed with.
+// We can't use (agent as any).tools — Mastra doesn't expose that object at runtime.
+import { getEventStats, getDataDrivenEntities, recommendOutcome, validatePreviewReadiness } from '@/mastra/tools/supatools';
+import { getOutcomes } from '@/mastra/tools/outcomes';
+import { listSources } from '@/mastra/tools/sources';
+import { navigateTo } from '@/mastra/tools/navigation';
+import { suggestAction } from '@/mastra/tools/suggestAction';
+import { todoAdd, todoList, todoUpdate, todoComplete } from '@/mastra/tools/todo';
+import { runDesignSystemWorkflow } from '@/mastra/tools/design';
+import { delegateToDesignAdvisor, delegateToPlatformMapper, delegateToDashboardBuilder } from '@/mastra/tools/delegation';
+import { getStyleRecommendations, getChartRecommendations, getTypographyRecommendations, getUXGuidelines, getProductRecommendations } from '@/mastra/tools/uiux';
+import { getStyleBundles } from '@/mastra/tools/getStyleBundles';
+import { showInteractiveEditPanel } from '@/mastra/tools/editor';
+import { advancePhase } from '@/mastra/tools/journey/advancePhase';
+
+/**
+ * Complete tool registry — same references masterRouterAgent was constructed with.
+ * Used by prepareStep to build filtered tool objects per phase without async.
+ *
+ * CRITICAL: Keep in sync with the tools:{} block in masterRouterAgent.ts.
+ * If you add a tool to the agent, add it here too.
+ */
+const ALL_AGENT_TOOLS: Record<string, any> = {
+  // Supatools
+  getEventStats,
+  getDataDrivenEntities,
+  recommendOutcome,
+  validatePreviewReadiness,
+  // Outcomes
+  getOutcomes,
+  // Sources
+  listSources,
+  // Navigation
+  navigateTo,
+  // Suggestions
+  suggestAction,
+  // Todo
+  todoAdd,
+  todoList,
+  todoUpdate,
+  todoComplete,
+  // Design
+  runDesignSystemWorkflow,
+  // Delegation
+  delegateToDesignAdvisor,
+  delegateToPlatformMapper,
+  delegateToDashboardBuilder,
+  // UI/UX
+  getStyleRecommendations,
+  getChartRecommendations,
+  getTypographyRecommendations,
+  getUXGuidelines,
+  getProductRecommendations,
+  // Style bundles
+  getStyleBundles,
+  // Editor
+  showInteractiveEditPanel,
+  // Phase advancement (in registry but removed from all allowlists)
+  advancePhase,
+};
+
 export const maxDuration = 300; // Fluid Compute + Hobby = 300s max
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
@@ -610,26 +672,31 @@ export async function POST(req: Request) {
           // Mastra #9346 (shipped): prepareStep now supports returning { tools }
           // which replaces the execution-layer tools for this step. Tools NOT in
           // this object will throw "tool does not exist" if the LLM tries to call them.
-          prepareStep: async ({ stepNumber }: { stepNumber: number }) => {
+          prepareStep: ({ stepNumber }: { stepNumber: number }) => {
             const currentPhase = phaseForToolGate;
             const allowedToolNames = PHASE_TOOL_ALLOWLIST[currentPhase] || PHASE_TOOL_ALLOWLIST.select_entity;
 
-            // Build filtered tools object from the agent's registered tools.
-            // Only tools that both exist on the agent AND are in the allowlist are included.
-            const agent = mastra.getAgent('masterRouterAgent');
-            const agentTools: Record<string, any> = (agent as any).tools || {};
+            // Build filtered tools object from the allowlist.
+            // Only tools that exist in ALL_AGENT_TOOLS AND are in the phase allowlist.
             const filteredTools: Record<string, any> = {};
             for (const name of allowedToolNames) {
-              if (agentTools[name]) {
-                filteredTools[name] = agentTools[name];
+              if (ALL_AGENT_TOOLS[name]) {
+                filteredTools[name] = ALL_AGENT_TOOLS[name];
               }
             }
 
-            console.log(`[prepareStep] step=${stepNumber} phase=${currentPhase} tools=${Object.keys(filteredTools).length}`);
+            const toolCount = Object.keys(filteredTools).length;
+            console.log(`[prepareStep] step=${stepNumber} phase=${currentPhase} tools=${toolCount}/${allowedToolNames.length}`);
+
+            // Warn if any allowlisted tools weren't found in the registry
+            if (toolCount < allowedToolNames.length) {
+              const missing = allowedToolNames.filter((n: string) => !ALL_AGENT_TOOLS[n]);
+              console.warn(`[prepareStep] Missing tools in ALL_AGENT_TOOLS: ${missing.join(', ')}`);
+            }
 
             return {
               tools: filteredTools,
-              toolChoice: Object.keys(filteredTools).length > 0 ? 'auto' as const : 'none' as const,
+              toolChoice: toolCount > 0 ? 'auto' as const : 'none' as const,
             };
           },
           onFinish: async () => {
