@@ -10,7 +10,8 @@ import { createClient } from '@/lib/supabase/server';
 import { getMastraSingleton } from '@/mastra/singleton';
 import { ensureMastraThreadId } from '@/mastra/lib/ensureMastraThread';
 import { safeUuid } from "@/mastra/lib/safeUuid";
-import { PHASE_TOOL_ALLOWLIST, type FloweticPhase } from '@/mastra/agents/instructions/phase-instructions';
+import { resolveStyleBundleId } from '@/mastra/lib/resolveStyleBundleId';
+import { PhaseToolGatingProcessor } from '@/mastra/processors/phase-tool-gating';
 
 export const maxDuration = 300; // Fluid Compute + Hobby = 300s max
 
@@ -20,6 +21,34 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
     t = setTimeout(() => reject(new Error(`TIMEOUT_${label}_${ms}ms`)), ms);
   });
   return Promise.race([promise.finally(() => clearTimeout(t)), timeout]);
+}
+
+// ─── DEDUPLICATE OPENAI ITEM IDs ────────────────────────────────────────────
+// OpenAI Responses API rejects requests containing duplicate itemIds.
+// Mastra memory replays full conversation history, including providerMetadata
+// with itemIds. When the LLM makes repeated tool calls in one stream, the same
+// fc_ itemId can appear in multiple assistant message parts.
+// This filter keeps only the first occurrence of each itemId.
+// See: https://community.openai.com/t/1373703, https://github.com/vercel/ai/issues/7883
+function deduplicateProviderItemIds(messages: any[]): any[] {
+  const seenItemIds = new Set<string>();
+  return messages.map((msg: any) => {
+    if (msg.role !== 'assistant' || !Array.isArray(msg.parts)) return msg;
+    const filteredParts = msg.parts.filter((part: any) => {
+      // Check both providerMetadata and callProviderMetadata for itemId
+      const itemId =
+        part?.providerMetadata?.openai?.itemId ??
+        part?.callProviderMetadata?.openai?.itemId;
+      if (!itemId) return true; // No itemId → keep the part
+      if (seenItemIds.has(itemId)) {
+        console.log(`[deduplicateProviderItemIds] Dropping duplicate itemId: ${itemId.substring(0, 20)}...`);
+        return false; // Duplicate → drop
+      }
+      seenItemIds.add(itemId);
+      return true; // First occurrence → keep
+    });
+    return { ...msg, parts: filteredParts };
+  });
 }
 
 // ─── DETERMINISTIC PHASE ADVANCEMENT ────────────────────────────────────────
@@ -383,13 +412,39 @@ export async function POST(req: Request) {
           }
 
           // Style: client sends selectedStyleBundleId after clicking design system card
+          // BUG FIX: Resolve display name → valid slug BEFORE writing to DB.
+          // CHECK constraint "valid_style_bundle_id" only accepts slugs like
+          // "professional-clean", NOT display names like "Minimalism & Swiss Style".
           const clientStyle = clientData.selectedStyleBundleId;
           if (clientStyle && !sessionRow.selected_style_bundle_id) {
-            selectionUpdates.selected_style_bundle_id = String(clientStyle);
+            const resolvedSlug = resolveStyleBundleId(String(clientStyle));
+            if (resolvedSlug) {
+              selectionUpdates.selected_style_bundle_id = resolvedSlug;
+              console.log('[api/chat] Resolved style bundle:', {
+                input: clientStyle,
+                resolved: resolvedSlug,
+              });
+            } else {
+              console.warn('[api/chat] Could not resolve style bundle to valid slug:', clientStyle);
+            }
           }
 
           if (Object.keys(selectionUpdates).length > 0) {
             selectionUpdates.updated_at = new Date().toISOString();
+
+            // BUG FIX: If we're persisting a style bundle AND the session
+            // already has entities + outcome, set schema_ready = true in the SAME write.
+            // Previously NOTHING ever set schema_ready=true after style selection,
+            // so autoAdvancePhase always found schema_ready=false and never advanced.
+            if (
+              (selectionUpdates.selected_style_bundle_id || sessionRow.selected_style_bundle_id) &&
+              (selectionUpdates.selected_entities || sessionRow.selected_entities) &&
+              (selectionUpdates.selected_outcome || sessionRow.selected_outcome)
+            ) {
+              selectionUpdates.schema_ready = true;
+              console.log('[api/chat] Setting schema_ready=true (all selections present)');
+            }
+
             const { error: persistErr } = await supabase
               .from('journey_sessions')
               .update(selectionUpdates)
@@ -400,10 +455,10 @@ export async function POST(req: Request) {
               console.error('[api/chat] Failed to persist client selections:', persistErr.message);
             } else {
               console.log('[api/chat] ✅ Persisted client selections to DB:', Object.keys(selectionUpdates));
-              // Update sessionRow in memory so the RequestContext loading below uses fresh values
               if (selectionUpdates.selected_entities) sessionRow.selected_entities = selectionUpdates.selected_entities;
               if (selectionUpdates.selected_outcome) sessionRow.selected_outcome = selectionUpdates.selected_outcome;
               if (selectionUpdates.selected_style_bundle_id) sessionRow.selected_style_bundle_id = selectionUpdates.selected_style_bundle_id;
+              if (selectionUpdates.schema_ready) sessionRow.schema_ready = selectionUpdates.schema_ready;
             }
           }
         }
@@ -496,8 +551,15 @@ export async function POST(req: Request) {
     });
 
     // 5. CALL MASTRA WITH VALIDATED CONTEXT
+    // Deduplicate OpenAI itemIds in message history before sending to agent.
+    // This prevents "Duplicate item found with id fc_..." crash from OpenAI Responses API.
+    const rawMessages = (params as any)?.messages;
+    const dedupedMessages = Array.isArray(rawMessages)
+      ? deduplicateProviderItemIds(rawMessages)
+      : rawMessages;
     const enhancedParams = {
       ...params,
+      ...(dedupedMessages ? { messages: dedupedMessages } : {}),
       requestContext,
       mode: "generate",
     };
@@ -506,26 +568,13 @@ export async function POST(req: Request) {
       console.log('[api/chat] Authorized request:', {
         tenantId, userId, userRole, mastraThreadId,
         clientJourneyThreadId,
-        messagesCount: Array.isArray((params as any)?.messages)
-          ? (params as any).messages.length : 0,
+        messagesCount: Array.isArray(dedupedMessages) ? dedupedMessages.length : 0,
       });
     }
 
-    // PHASE GATE: Compute activeTools based on authoritative DB phase.
-    // This uses the AI SDK's official mechanism to physically remove tool
-    // schemas from the LLM context. The model CANNOT call tools not in
-    // this list — unlike instruction-based guards which the LLM can bypass
-    // via tool-error recovery (see AI SDK docs: tool-error content parts
-    // are fed back to the model, allowing it to try alternative tools).
-    const phaseForToolGate = (requestContext.get('phase') as FloweticPhase) || 'select_entity';
-    const allowedTools = PHASE_TOOL_ALLOWLIST[phaseForToolGate] || PHASE_TOOL_ALLOWLIST.select_entity;
-
-    console.log('[api/chat] Phase tool gate:', {
-      phase: phaseForToolGate,
-      allowedToolCount: allowedTools.length,
-      allowedTools,
-    });
-
+    // Phase tool gating is handled by PhaseToolGatingProcessor (inputProcessor on defaultOptions).
+    // It receives Mastra-wrapped tools and filters per phase — preserving RequestContext
+    // while enforcing hard execution-layer gating (fixes AI SDK bug #8653).
     const stream = await withTimeout(
       handleChatStream({
         mastra,
@@ -537,9 +586,15 @@ export async function POST(req: Request) {
         sendSources: false,
         defaultOptions: {
           toolCallConcurrency: 1,
-          maxSteps: 15,
+          maxSteps: 5,
           toolChoice: "auto",
-          activeTools: allowedTools,
+          // Phase tool gating is handled by PhaseToolGatingProcessor (inputProcessor).
+          // It receives Mastra-wrapped tools and filters per phase — preserving
+          // RequestContext while enforcing hard execution-layer gating.
+          // See: mastra/processors/phase-tool-gating.ts
+          inputProcessors: [
+            new PhaseToolGatingProcessor(),
+          ],
           onFinish: async () => {
             // PHASE 4A: Deterministic phase advancement after stream completes
             // This runs AFTER the agent is done generating. It checks what data

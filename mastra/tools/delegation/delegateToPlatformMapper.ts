@@ -1,7 +1,6 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { platformMappingMaster } from "../../agents/platformMappingMaster";
-import { advancePhase } from "../journey/advancePhase";
 import { todoComplete } from "../todo";
 
 export const delegateToPlatformMapper = createTool({
@@ -149,7 +148,7 @@ DO NOT try to generate previews yourself — always delegate to this specialist.
           'If getEventStats returns no data or errors, THEN fall back to suggesting entities based on the workflow name and platform type — but explicitly tell the user: "I don\'t see stored events yet, so here are likely entities based on your workflow type."',
           '',
           'Present 3-5 entities specific to this workflow. Each should have a 1-sentence description.',
-          'After the user picks entities, call advancePhase with nextPhase="recommend".',
+          'After the user picks entities, the system advances to the recommend phase automatically.',
         ].join('\n');
       } else if (currentPhase === 'recommend') {
         phaseDirective = `\n## PHASE CONTEXT: recommend\nYou are in the RECOMMEND phase. Help the user choose between Dashboard and Product outcomes based on their selected entities and workflow data.`;
@@ -182,7 +181,6 @@ DO NOT try to generate previews yourself — always delegate to this specialist.
         // Pass parent tools that sub-agent needs but doesn't have in its config
         toolsets: {
           parentTools: {
-            advancePhase,
             todoComplete,
           },
         },

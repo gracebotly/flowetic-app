@@ -84,7 +84,7 @@ export function getPhaseInstructions(phase: FloweticPhase, ctx: PhaseInstruction
       "- Event count (if data exists)",
       "- 1-sentence description",
       "",
-      "After the user picks entities, call advancePhase with nextPhase=\"recommend\".",
+      "Phase transitions are automatic. When the user selects entities, the system advances to the recommend phase automatically.",
     ].join("\n"),
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -149,8 +149,10 @@ export function getPhaseInstructions(phase: FloweticPhase, ctx: PhaseInstruction
       "After the user picks a layout, acknowledge in ONE sentence and transition to style.",
       "",
       "## PHASE ADVANCEMENT",
-      "After user picks Dashboard or Product AND then selects a layout, call `advancePhase` with nextPhase='style' and selectedValue=<dashboard_or_product>.",
-      "Do NOT advance to style until the user has selected BOTH an outcome AND a layout.",
+      "Phase transitions are automatic. After the user selects both an outcome AND a layout,",
+      "the system advances to the style phase automatically via autoAdvancePhase.",
+      "You do NOT need to call any tool to advance the phase.",
+      "Do NOT attempt to advance to style until the user has selected BOTH an outcome AND a layout.",
       "",
       "## Behavior rules",
       "- Present STEP 1 first (if outcome not selected), then STEP 2.",
@@ -223,9 +225,9 @@ export function getPhaseInstructions(phase: FloweticPhase, ctx: PhaseInstruction
       "- Example: user says 'something darker' → delegateToDesignAdvisor with task: 'dark premium design system'",
       "",
       "## PHASE ADVANCEMENT",
-      "After user approves a style, IMMEDIATELY call `advancePhase` with:",
-      "- nextPhase: 'build_preview'",
-      "- selectedValue: the style name or design system summary",
+      "Phase transitions are automatic. When the user selects a style bundle,",
+      "the system writes the selection to the database and advances to build_preview automatically.",
+      "You do NOT need to call any tool to advance the phase.",
       "",
       "## Do NOT",
       "- Do not show more than 2 options at once",
@@ -256,7 +258,9 @@ export function getPhaseInstructions(phase: FloweticPhase, ctx: PhaseInstruction
       "- suggestAction({ label: 'Generate Dashboard Preview', actionId: 'generate-preview' })",
       "",
       "## PHASE ADVANCEMENT",
-      "After preview generates successfully, call `advancePhase` with nextPhase='interactive_edit'.",
+      "Phase transitions are automatic. After the preview is generated and saved,",
+      "the system advances to interactive_edit automatically via autoAdvancePhase.",
+      "You do NOT need to call any tool to advance the phase.",
       "",
       "## WHAT TO DO AFTER SPECIALIST COMPLETES:",
       "- If success: Tell user 'Your dashboard preview is ready!' and show the previewUrl",
@@ -279,7 +283,9 @@ export function getPhaseInstructions(phase: FloweticPhase, ctx: PhaseInstruction
       "3. Do NOT try to edit dashboard specs yourself — always delegate to this specialist",
       "",
       "## PHASE ADVANCEMENT",
-      "When user says 'deploy', 'ship it', 'looks good', call `advancePhase` with nextPhase='deploy'.",
+      "When the user confirms they want to deploy (e.g., 'deploy', 'ship it', 'looks good'),",
+      "acknowledge their intent. The system handles the phase transition automatically.",
+      "You do NOT need to call any tool to advance the phase.",
       "",
       "## EXAMPLES OF EDIT REQUESTS (all require tool calls):",
       "- 'Make it darker with a navy background' → delegateToDashboardBuilder",
@@ -352,8 +358,8 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
     'getDataDrivenEntities',
     'listSources',
     'getOutcomes',
-    // Phase advancement
-    'advancePhase',
+    // NOTE: advancePhase intentionally omitted — autoAdvancePhase handles
+    // select_entity→recommend transition deterministically.
     // Utility (always available)
     'navigateTo',
     'suggestAction',
@@ -368,6 +374,8 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
     'recommendOutcome',
     'getEventStats',
     'getOutcomes',
+    // NOTE: advancePhase intentionally omitted — autoAdvancePhase handles
+    // recommend→style transition when selected_outcome is present in DB.
     // Utility
     'navigateTo',
     'suggestAction',
@@ -386,8 +394,16 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
     'getChartRecommendations',
     'getUXGuidelines',
     'getProductRecommendations',
-    // Phase advancement
-    'advancePhase',
+    'getStyleBundles',
+    // NOTE: setSchemaReady intentionally omitted — /api/chat auto-sets schema_ready=true
+    // when all selections (entities, outcome, style) are present. setSchemaReady is
+    // available in build_preview phase via platformMappingMaster only.
+    // NOTE: advancePhase intentionally omitted from style phase.
+    // Phase transitions are deterministic via autoAdvancePhase in onFinish.
+    // Having advancePhase here caused a 14-step tool storm that created
+    // duplicate fc_ itemIds, crashing OpenAI Responses API with:
+    // "Duplicate item found with id fc_0445fd9e..."
+    // See: https://community.openai.com/t/duplicate-item-found-with-id-msg-when-submitting-tool-output-400-invalid-request-error/1373703
     // Utility
     'navigateTo',
     'suggestAction',
@@ -402,8 +418,7 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
     'delegateToPlatformMapper',
     'validatePreviewReadiness',
     'getEventStats',
-    // Phase advancement
-    'advancePhase',
+    // NOTE: advancePhase intentionally omitted — autoAdvancePhase handles transitions.
     // Utility
     'navigateTo',
     'suggestAction',
@@ -420,8 +435,7 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
     // Can re-generate if needed
     'delegateToPlatformMapper',
     'validatePreviewReadiness',
-    // Phase advancement
-    'advancePhase',
+    // NOTE: advancePhase intentionally omitted — autoAdvancePhase handles transitions.
     // Utility
     'navigateTo',
     'suggestAction',
@@ -432,8 +446,8 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
   ],
 
   deploy: [
-    // Deployment
-    'advancePhase',
+    // NOTE: advancePhase intentionally omitted — deploy is a terminal phase,
+    // transitions are handled by the deployment workflow, not the LLM.
     // Can still edit
     'showInteractiveEditPanel',
     'delegateToDashboardBuilder',

@@ -1,6 +1,23 @@
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
+/**
+ * Canonical style bundle display names.
+ * The workflow MUST choose from this list for designSystem.style.name.
+ * These map to the DB CHECK constraint values when slugified.
+ */
+const CANONICAL_STYLE_NAMES = [
+  'Professional Clean',
+  'Premium Dark',
+  'Glass Premium',
+  'Bold Startup',
+  'Corporate Trust',
+  'Neon Cyber',
+  'Pastel Soft',
+  'Warm Earth',
+  'Modern SaaS',
+] as const;
+
 const designSystemInputSchema = z.object({
   workflowName: z.string(),
   platformType: z.string(),
@@ -76,6 +93,20 @@ async function generateDesignSystem(
     `3. Call getTypographyRecommendations for font pairings`,
     `4. Call getUXGuidelines for best practices`,
     "",
+    `## CRITICAL: Style Name Constraint`,
+    `You MUST choose designSystem.style.name from this EXACT list (copy verbatim):`,
+    ...CANONICAL_STYLE_NAMES.map(name => `- "${name}"`),
+    `Do NOT invent new style names like "Data-Dense BI/Analytics" or "Bold Expressive".`,
+    `Pick the closest match from the list above.`,
+    `Example mappings:`,
+    `- Data/analytics dashboard → "Modern SaaS"`,
+    `- Premium/luxury feel → "Premium Dark" or "Glass Premium"`,
+    `- Startup/bold → "Bold Startup"`,
+    `- Corporate/enterprise → "Corporate Trust" or "Professional Clean"`,
+    `- Friendly/approachable → "Pastel Soft"`,
+    `- Tech/cyber → "Neon Cyber"`,
+    `- Natural/organic → "Warm Earth"`,
+    ``,
     `## Output Format`,
     `Return a JSON object with this structure:`,
     `{`,
@@ -131,7 +162,7 @@ async function generateDesignSystem(
   if (variation === "alternative") {
     return {
       designSystem: {
-        style: { name: "Bold Expressive", type: "Vibrant", keywords: "bold, colorful, expressive" },
+        style: { name: "Bold Startup", type: "Vibrant", keywords: "bold, colorful, expressive" },
         colors: {
           primary: "#7C3AED",
           secondary: "#14B8A6",

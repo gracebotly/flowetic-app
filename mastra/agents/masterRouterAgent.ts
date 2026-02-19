@@ -17,6 +17,7 @@ import {
   delegateToDesignAdvisor,
 } from "../tools/delegation";
 import { advancePhase } from "../tools/journey/advancePhase";
+import { getStyleBundles } from "../tools/getStyleBundles";
 import { generatePreviewWorkflow } from "../workflows/generatePreview";
 import { connectionBackfillWorkflow } from "../workflows/connectionBackfill";
 import { deployDashboardWorkflow } from "../workflows/deployDashboard";
@@ -86,7 +87,9 @@ export const masterRouterAgent: Agent = new Agent({
 
     // Journey state (OPTIONAL)
     phase: z.enum(['select_entity', 'recommend', 'style', 'build_preview', 'interactive_edit', 'deploy']).optional(),
-    selectedOutcome: z.enum(['dashboard', 'product']).optional().nullable(),
+    // Accepts any outcome category string - frontend maps template IDs to categories
+    // Valid values: 'dashboard', 'product' (see OUTCOME_CATALOG in src/data/outcomes.ts)
+    selectedOutcome: z.string().optional().nullable(),
     // selectedStoryboard removed — storyboard/align phase eliminated
     selectedStyleBundleId: z.string().optional().nullable(),
     densityPreset: z.enum(['compact', 'comfortable', 'spacious']).optional(),
@@ -246,11 +249,40 @@ export const masterRouterAgent: Agent = new Agent({
       "- Instead say: 'I ran into a technical issue. Let me try a different approach.' or 'Something went wrong, let me retry.'",
       "- Offer the user simple options: retry, try later, or take a different path.",
       "",
-      "# WORKING MEMORY (Phase 3)",
+      "# WORKING MEMORY",
       "You have access to <working_memory>, which persists across the conversation thread.",
-      "Treat <working_memory> as the durable source of truth for:",
-      "- Current phase",
-      "- Selected outcome/style bundle",
+      "It is a JSON object. Treat it as the durable source of truth for agent context.",
+      "",
+      "## How to update working memory",
+      "Call updateWorkingMemory with the key 'newMemory' and a flat JSON object:",
+      "",
+      "✅ CORRECT:",
+      "  updateWorkingMemory({ newMemory: { phase: 'recommend', workflowName: 'My Workflow' } })",
+      "  updateWorkingMemory({ newMemory: { selectedOutcome: 'dashboard' } })",
+      "  updateWorkingMemory({ newMemory: { selectedStyleBundleId: 'minimal', lastDecision: 'User picked minimal theme' } })",
+      "",
+      "❌ WRONG — these will silently fail:",
+      "  updateWorkingMemory({ content: { ... } })          // wrong key",
+      "  updateWorkingMemory({ working_memory: '...' })     // wrong key",
+      "  updateWorkingMemory({ workingMemory: { ... } })    // wrong key",
+      "  updateWorkingMemory({ current_phase: '...' })      // wrong key, not a top-level call",
+      "",
+      "## Valid field names (camelCase, flat, partial updates OK):",
+      "  phase              — current journey phase (e.g. 'recommend', 'style', 'build_preview')",
+      "  platformType       — connected platform (e.g. 'n8n', 'make', 'vapi')",
+      "  workflowName       — name of the connected workflow",
+      "  selectedEntities   — comma-separated entity names the user selected",
+      "  selectedOutcome    — 'dashboard' or 'product'",
+      "  selectedStyleBundleId — chosen style bundle ID",
+      "  lastDecision       — most recent user decision or action",
+      "  notes              — any additional context to remember",
+      "",
+      "## When to update:",
+      "- After the user selects an entity, outcome, or style bundle",
+      "- When the phase advances",
+      "- When any key context changes that you will need later",
+      "- You only need to send the fields that changed — existing fields are preserved",
+      "",
       "If <working_memory> conflicts with the user's latest message, ask one clarifying question.",
       "",
       "# CURRENT CONTEXT",
@@ -397,6 +429,9 @@ export const masterRouterAgent: Agent = new Agent({
     suggestAction,
     // Design system workflow
     runDesignSystemWorkflow,
+    // Style bundles - also on designAdvisorAgent but needed here because
+    // masterRouterAgent runs during style phase before delegation
+    getStyleBundles,
     // Interactive edit panel
     showInteractiveEditPanel,
   },
