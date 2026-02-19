@@ -3,6 +3,7 @@ import { getModelById } from "../lib/models/modelSelector";
 import type { RequestContext } from "@mastra/core/request-context";
 import { z } from "zod";
 import { DesignTokenEnforcer } from "../processors/designTokenEnforcer";
+import { TokenLimiterProcessor } from "@mastra/core/processors";
 import {
   getCurrentSpec,
   applySpecPatch,
@@ -106,7 +107,7 @@ Use todo tools to track multi-step work. Never expose todo items to users.`,
     return getModelById(selectedModelId);
   },
   memory: createFloweticMemory({
-    lastMessages: 30,
+    lastMessages: 10,
     workingMemory: {
       enabled: true,
       schema: z.object({
@@ -141,6 +142,7 @@ Use todo tools to track multi-step work. Never expose todo items to users.`,
     getProductRecommendations,
   },
   inputProcessors: [
+    new TokenLimiterProcessor({ limit: 16000 }),
     new DesignTokenEnforcer(),
   ],
 });

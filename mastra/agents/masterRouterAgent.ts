@@ -11,6 +11,7 @@ import { createFloweticMemory } from "../lib/memory";
 import { workspace } from '../workspace';  // ← ADD THIS IMPORT
 import { getCachedSkillAsync } from '../lib/skillCache';
 import { DesignTokenEnforcer } from "../processors/designTokenEnforcer";
+import { TokenLimiterProcessor } from "@mastra/core/processors";
 import {
   delegateToPlatformMapper,
   delegateToDashboardBuilder,
@@ -440,6 +441,7 @@ Use BM25 search tools (getStyleRecommendations, getTypographyRecommendations, et
     searchSkillKnowledge,
   },
   inputProcessors: [
+    new TokenLimiterProcessor({ limit: 12000 }),
     new DesignTokenEnforcer(),
   ],
 });
