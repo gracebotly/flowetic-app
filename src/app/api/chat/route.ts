@@ -136,6 +136,130 @@ async function autoAdvancePhase(params: {
   return { advanced: true, from: currentPhase, to: nextPhase };
 }
 
+// ─── DETERMINISTIC SELECT_ENTITY BYPASS ─────────────────────────────────────
+// Phase 1 ALWAYS does the same thing: call getDataDrivenEntities RPC, format
+// entities, present to user. No LLM reasoning needed. This eliminates the
+// 197s timeout by skipping the agentic loop entirely for initial entity discovery.
+//
+// Returns a ReadableStream that mimics AI SDK's UIMessageStream format so the
+// client's useChat hook processes it identically to an agent response.
+async function handleDeterministicSelectEntity(params: {
+  supabase: any;
+  tenantId: string;
+  sourceId: string;
+  platformType: string;
+  workflowName: string;
+  journeyThreadId: string;
+  mastraThreadId: string;
+}): Promise<ReadableStream | null> {
+  const { supabase, tenantId, sourceId, platformType, workflowName, journeyThreadId, mastraThreadId } = params;
+  if (!sourceId) {
+    console.log('[deterministic-select-entity] No sourceId, falling back to agent');
+    return null;
+  }
+  const startTime = Date.now();
+  try {
+    // 1. Call the SAME RPC the agent's tool would call — but directly, no LLM
+    const { data, error } = await supabase.rpc('get_data_driven_entities', {
+      p_tenant_id: tenantId,
+      p_source_id: sourceId,
+      p_since_days: 30,
+    });
+    const elapsed = Date.now() - startTime;
+    console.log(`[deterministic-select-entity] RPC completed in ${elapsed}ms`);
+    if (error) {
+      console.error('[deterministic-select-entity] RPC failed, falling back to agent:', error.message);
+      return null;
+    }
+    const result = data?.[0] ?? data;
+    // 2. Format the response exactly like the agent would
+    const hasData = result?.has_data ?? false;
+    const entities = result?.entities ?? [];
+    const totalEvents = result?.total_events ?? 0;
+    let responseText: string;
+    if (hasData && entities.length > 0) {
+      const entityLines = entities
+        .slice(0, 5)
+        .map((e: any, i: number) => {
+          const name = e.name || 'Unknown';
+          const count = e.count ?? 0;
+          const type = e.type || 'entity';
+          return `**${i + 1}. ${name}** — ${count.toLocaleString()} events tracked (${type})`;
+        })
+        .join('\n');
+      responseText = [
+        `I've analyzed your ${platformType} workflow${workflowName ? ` "${workflowName}"` : ''} and found **${totalEvents.toLocaleString()} events** across **${entities.length} entities**.`,
+        '',
+        'Here are the entities I discovered from your real data:',
+        '',
+        entityLines,
+        '',
+        'Which entities would you like to track in your dashboard? You can select one or more, or tell me more about what metrics matter to you.',
+      ].join('\n');
+    } else {
+      // No data — still respond quickly, agent can handle follow-up
+      responseText = [
+        `I've connected to your ${platformType} workflow${workflowName ? ` "${workflowName}"` : ''}, but I don't see any events stored yet.`,
+        '',
+        'This usually means:',
+        '- The workflow hasn\'t run since you connected it',
+        '- Events are still being backfilled',
+        '',
+        'You can either wait for events to come in, or tell me what entities you\'d like to track and I\'ll set things up based on your workflow structure.',
+      ].join('\n');
+    }
+    // 3. Persist the assistant message to journey_messages so it appears on reload
+    try {
+      await supabase.from('journey_messages').insert({
+        tenant_id: tenantId,
+        thread_id: journeyThreadId,
+        role: 'assistant',
+        content: responseText,
+        created_at: new Date().toISOString(),
+      });
+    } catch (persistErr) {
+      // Non-fatal — message still streams to client
+      console.warn('[deterministic-select-entity] Failed to persist message:', persistErr);
+    }
+    // 4. Build a UIMessageStream-compatible response
+    // AI SDK v5 useChat expects data stream protocol format
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        // AI SDK data stream protocol:
+        // "0:" prefix = text delta
+        // "e:" prefix = finish step
+        // "d:" prefix = finish message with metadata
+
+        // Send text content as a single chunk
+        const textPayload = JSON.stringify(responseText);
+        controller.enqueue(encoder.encode(`0:${textPayload}\n`));
+
+        // Send finish step
+        const stepFinish = JSON.stringify({
+          finishReason: 'stop',
+          usage: { promptTokens: 0, completionTokens: 0 },
+          isContinued: false,
+        });
+        controller.enqueue(encoder.encode(`e:${stepFinish}\n`));
+
+        // Send finish message
+        const finishPayload = JSON.stringify({
+          finishReason: 'stop',
+          usage: { promptTokens: 0, completionTokens: 0 },
+        });
+        controller.enqueue(encoder.encode(`d:${finishPayload}\n`));
+        controller.close();
+      },
+    });
+    console.log(`[deterministic-select-entity] ✅ Bypassed agent loop in ${Date.now() - startTime}ms`);
+    return stream;
+  } catch (err) {
+    console.error('[deterministic-select-entity] Unexpected error, falling back to agent:', err);
+    return null;
+  }
+}
+
 export async function POST(req: Request) {
   try {
     const params = await req.json();
@@ -550,6 +674,68 @@ export async function POST(req: Request) {
       threadId: mastraThreadId.substring(0, 8) + '...',
     });
 
+    // ─── DETERMINISTIC SELECT_ENTITY BYPASS ───────────────────────────────
+    // If phase is select_entity AND this is the initial system message (no
+    // prior conversation), bypass the agentic loop entirely. Call the RPC
+    // directly and stream a pre-formatted response. Saves ~190s.
+    const userMessages = Array.isArray((params as any)?.messages)
+      ? (params as any).messages.filter((m: any) => m.role === 'user')
+      : [];
+    const isInitMessage = userMessages.length <= 1;
+    const lastUserText = userMessages.length > 0
+      ? String(userMessages[userMessages.length - 1]?.content ?? userMessages[userMessages.length - 1]?.parts?.[0]?.text ?? '')
+      : '';
+    const isSystemInit = lastUserText.toLowerCase().includes('system: initialize') ||
+                         lastUserText.toLowerCase().includes('system:initialize');
+
+    if (
+      finalPhase === 'select_entity' &&
+      (isInitMessage || isSystemInit)
+    ) {
+      const sourceId = requestContext.get('sourceId') as string;
+      const platformType = requestContext.get('platformType') as string || 'other';
+      const workflowName = requestContext.get('workflowName') as string || '';
+
+      const deterministicStream = await handleDeterministicSelectEntity({
+        supabase,
+        tenantId,
+        sourceId,
+        platformType,
+        workflowName,
+        journeyThreadId: cleanJourneyThreadId,
+        mastraThreadId: cleanMastraThreadId,
+      });
+      if (deterministicStream) {
+        console.log('[api/chat] 🚀 Using deterministic select_entity bypass');
+
+        // Still run autoAdvancePhase — if entities were pre-selected (from wizard),
+        // this will advance to recommend
+        try {
+          if (cleanJourneyThreadId && cleanJourneyThreadId !== 'default-thread') {
+            const advResult = await autoAdvancePhase({
+              supabase,
+              tenantId,
+              journeyThreadId: cleanJourneyThreadId,
+              mastraThreadId: cleanMastraThreadId,
+            });
+            if (advResult.advanced) {
+              console.log('[api/chat] Deterministic bypass + auto-advance:', advResult);
+            }
+          }
+        } catch (advErr) {
+          console.warn('[api/chat] autoAdvancePhase after deterministic bypass:', advErr);
+        }
+        return new Response(deterministicStream, {
+          headers: {
+            'Content-Type': 'text/plain; charset=utf-8',
+            'X-Vercel-AI-Data-Stream': 'v1',
+          },
+        });
+      }
+      // If handleDeterministicSelectEntity returned null, fall through to normal agent
+      console.log('[api/chat] Deterministic bypass returned null, falling through to agent');
+    }
+
     // 5. CALL MASTRA WITH VALIDATED CONTEXT
     // Deduplicate OpenAI itemIds in message history before sending to agent.
     // This prevents "Duplicate item found with id fc_..." crash from OpenAI Responses API.
@@ -586,7 +772,18 @@ export async function POST(req: Request) {
         sendSources: false,
         defaultOptions: {
           toolCallConcurrency: 1,
-          maxSteps: 5,
+          maxSteps: (() => {
+            const phase = requestContext.get('phase') as string || 'select_entity';
+            const phaseMaxSteps: Record<string, number> = {
+              select_entity: 3,
+              recommend: 4,
+              style: 5,
+              build_preview: 8,
+              interactive_edit: 10,
+              deploy: 3,
+            };
+            return phaseMaxSteps[phase] || 5;
+          })(),
           toolChoice: "auto",
           // Phase tool gating is handled by PhaseToolGatingProcessor (inputProcessor).
           // It receives Mastra-wrapped tools and filters per phase — preserving

@@ -21,8 +21,16 @@ const KNOWN_AGENT_TOOLS = new Set([
   'validatePreviewReadiness',
   // Outcomes
   'getOutcomes',
-  // Sources
+  // Sources CRUD
+  'createSource',
   'listSources',
+  'updateSource',
+  'deleteSource',
+  // Projects CRUD
+  'createProject',
+  'listProjects',
+  'updateProject',
+  'deleteProject',
   // Navigation
   'navigateTo',
   // Suggestions
@@ -50,8 +58,6 @@ const KNOWN_AGENT_TOOLS = new Set([
   'showInteractiveEditPanel',
   // Phase advancement
   'advancePhase',
-  // Style keywords
-  'recommendStyleKeywords',
 ]);
 
 /**
