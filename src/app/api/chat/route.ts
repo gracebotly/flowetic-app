@@ -10,7 +10,6 @@ import { createClient } from '@/lib/supabase/server';
 import { getMastraSingleton } from '@/mastra/singleton';
 import { ensureMastraThreadId } from '@/mastra/lib/ensureMastraThread';
 import { safeUuid } from "@/mastra/lib/safeUuid";
-import { type FloweticPhase } from '@/mastra/agents/instructions/phase-instructions';
 import { resolveStyleBundleId } from '@/mastra/lib/resolveStyleBundleId';
 import { PhaseToolGatingProcessor } from '@/mastra/processors/phase-tool-gating';
 
@@ -576,9 +575,6 @@ export async function POST(req: Request) {
     // Phase tool gating is handled by PhaseToolGatingProcessor (inputProcessor on defaultOptions).
     // It receives Mastra-wrapped tools and filters per phase — preserving RequestContext
     // while enforcing hard execution-layer gating (fixes AI SDK bug #8653).
-    const phaseForToolGate = (requestContext.get('phase') as FloweticPhase) || 'select_entity';
-    console.log('[api/chat] Phase for tool gating:', phaseForToolGate);
-
     const stream = await withTimeout(
       handleChatStream({
         mastra,
@@ -597,7 +593,7 @@ export async function POST(req: Request) {
           // RequestContext while enforcing hard execution-layer gating.
           // See: mastra/processors/phase-tool-gating.ts
           inputProcessors: [
-            new PhaseToolGatingProcessor(phaseForToolGate),
+            new PhaseToolGatingProcessor(),
           ],
           onFinish: async () => {
             // PHASE 4A: Deterministic phase advancement after stream completes
