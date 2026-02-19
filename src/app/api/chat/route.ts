@@ -850,7 +850,7 @@ export async function POST(req: Request) {
                 // ── STEP 1: Read working memory and sync selections to DB ──
                 try {
                   const { Memory } = await import('@mastra/memory');
-                  const { getMastraStorage } = await import('../../mastra/lib/storage');
+                  const { getMastraStorage } = await import('@/mastra/lib/storage');
                   const storage = getMastraStorage();
                   const memory = new Memory({ storage });
                   const workingMem = await memory.getWorkingMemory({
