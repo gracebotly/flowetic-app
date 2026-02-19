@@ -1,4 +1,4 @@
-import type { Processor, ProcessInputStepArgs, ProcessInputStepResult } from "@mastra/core";
+import type { Processor, ProcessInputStepArgs, ProcessInputStepResult } from "@mastra/core/processors";
 import { PHASE_TOOL_ALLOWLIST, type FloweticPhase } from "@/mastra/agents/instructions/phase-instructions";
 
 /**
