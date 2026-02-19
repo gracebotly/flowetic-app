@@ -10,70 +10,9 @@ import { createClient } from '@/lib/supabase/server';
 import { getMastraSingleton } from '@/mastra/singleton';
 import { ensureMastraThreadId } from '@/mastra/lib/ensureMastraThread';
 import { safeUuid } from "@/mastra/lib/safeUuid";
-import { PHASE_TOOL_ALLOWLIST, type FloweticPhase } from '@/mastra/agents/instructions/phase-instructions';
+import { type FloweticPhase } from '@/mastra/agents/instructions/phase-instructions';
 import { resolveStyleBundleId } from '@/mastra/lib/resolveStyleBundleId';
-
-// === Tool imports for prepareStep phase gating ===
-// Import the same tool references masterRouterAgent was constructed with.
-// We can't use (agent as any).tools — Mastra doesn't expose that object at runtime.
-import { getEventStats, getDataDrivenEntities, recommendOutcome, validatePreviewReadiness } from '@/mastra/tools/supatools';
-import { getOutcomes } from '@/mastra/tools/outcomes';
-import { listSources } from '@/mastra/tools/sources';
-import { navigateTo } from '@/mastra/tools/navigation';
-import { suggestAction } from '@/mastra/tools/suggestAction';
-import { todoAdd, todoList, todoUpdate, todoComplete } from '@/mastra/tools/todo';
-import { runDesignSystemWorkflow } from '@/mastra/tools/design';
-import { delegateToDesignAdvisor, delegateToPlatformMapper, delegateToDashboardBuilder } from '@/mastra/tools/delegation';
-import { getStyleRecommendations, getChartRecommendations, getTypographyRecommendations, getUXGuidelines, getProductRecommendations } from '@/mastra/tools/uiux';
-import { getStyleBundles } from '@/mastra/tools/getStyleBundles';
-import { showInteractiveEditPanel } from '@/mastra/tools/editor';
-import { advancePhase } from '@/mastra/tools/journey/advancePhase';
-
-/**
- * Complete tool registry — same references masterRouterAgent was constructed with.
- * Used by prepareStep to build filtered tool objects per phase without async.
- *
- * CRITICAL: Keep in sync with the tools:{} block in masterRouterAgent.ts.
- * If you add a tool to the agent, add it here too.
- */
-const ALL_AGENT_TOOLS: Record<string, any> = {
-  // Supatools
-  getEventStats,
-  getDataDrivenEntities,
-  recommendOutcome,
-  validatePreviewReadiness,
-  // Outcomes
-  getOutcomes,
-  // Sources
-  listSources,
-  // Navigation
-  navigateTo,
-  // Suggestions
-  suggestAction,
-  // Todo
-  todoAdd,
-  todoList,
-  todoUpdate,
-  todoComplete,
-  // Design
-  runDesignSystemWorkflow,
-  // Delegation
-  delegateToDesignAdvisor,
-  delegateToPlatformMapper,
-  delegateToDashboardBuilder,
-  // UI/UX
-  getStyleRecommendations,
-  getChartRecommendations,
-  getTypographyRecommendations,
-  getUXGuidelines,
-  getProductRecommendations,
-  // Style bundles
-  getStyleBundles,
-  // Editor
-  showInteractiveEditPanel,
-  // Phase advancement (in registry but removed from all allowlists)
-  advancePhase,
-};
+import { PhaseToolGatingProcessor } from '@/mastra/processors/phase-tool-gating';
 
 export const maxDuration = 300; // Fluid Compute + Hobby = 300s max
 
@@ -634,20 +573,11 @@ export async function POST(req: Request) {
       });
     }
 
-    // PHASE GATE: Compute activeTools based on authoritative DB phase.
-    // This uses the AI SDK's official mechanism to physically remove tool
-    // schemas from the LLM context. The model CANNOT call tools not in
-    // this list — unlike instruction-based guards which the LLM can bypass
-    // via tool-error recovery (see AI SDK docs: tool-error content parts
-    // are fed back to the model, allowing it to try alternative tools).
+    // Phase tool gating is handled by PhaseToolGatingProcessor (inputProcessor on defaultOptions).
+    // It receives Mastra-wrapped tools and filters per phase — preserving RequestContext
+    // while enforcing hard execution-layer gating (fixes AI SDK bug #8653).
     const phaseForToolGate = (requestContext.get('phase') as FloweticPhase) || 'select_entity';
-    const allowedTools = PHASE_TOOL_ALLOWLIST[phaseForToolGate] || PHASE_TOOL_ALLOWLIST.select_entity;
-
-    console.log('[api/chat] Phase tool gate:', {
-      phase: phaseForToolGate,
-      allowedToolCount: allowedTools.length,
-      allowedTools,
-    });
+    console.log('[api/chat] Phase for tool gating:', phaseForToolGate);
 
     const stream = await withTimeout(
       handleChatStream({
@@ -660,45 +590,15 @@ export async function POST(req: Request) {
         sendSources: false,
         defaultOptions: {
           toolCallConcurrency: 1,
-          maxSteps: 15,
+          maxSteps: 5,
           toolChoice: "auto",
-          // CRITICAL: Return { tools } object, NOT { activeTools } string array.
-          //
-          // AI SDK bug #8653: activeTools only filters what schemas the LLM sees,
-          // but runToolsTransformation still executes against the full tools object.
-          // The LLM can hallucinate tool calls from conversation history and they
-          // will succeed if the tool exists in the full tools object.
-          //
-          // Mastra #9346 (shipped): prepareStep now supports returning { tools }
-          // which replaces the execution-layer tools for this step. Tools NOT in
-          // this object will throw "tool does not exist" if the LLM tries to call them.
-          prepareStep: ({ stepNumber }: { stepNumber: number }) => {
-            const currentPhase = phaseForToolGate;
-            const allowedToolNames = PHASE_TOOL_ALLOWLIST[currentPhase] || PHASE_TOOL_ALLOWLIST.select_entity;
-
-            // Build filtered tools object from the allowlist.
-            // Only tools that exist in ALL_AGENT_TOOLS AND are in the phase allowlist.
-            const filteredTools: Record<string, any> = {};
-            for (const name of allowedToolNames) {
-              if (ALL_AGENT_TOOLS[name]) {
-                filteredTools[name] = ALL_AGENT_TOOLS[name];
-              }
-            }
-
-            const toolCount = Object.keys(filteredTools).length;
-            console.log(`[prepareStep] step=${stepNumber} phase=${currentPhase} tools=${toolCount}/${allowedToolNames.length}`);
-
-            // Warn if any allowlisted tools weren't found in the registry
-            if (toolCount < allowedToolNames.length) {
-              const missing = allowedToolNames.filter((n: string) => !ALL_AGENT_TOOLS[n]);
-              console.warn(`[prepareStep] Missing tools in ALL_AGENT_TOOLS: ${missing.join(', ')}`);
-            }
-
-            return {
-              tools: filteredTools,
-              toolChoice: toolCount > 0 ? 'auto' as const : 'none' as const,
-            };
-          },
+          // Phase tool gating is handled by PhaseToolGatingProcessor (inputProcessor).
+          // It receives Mastra-wrapped tools and filters per phase — preserving
+          // RequestContext while enforcing hard execution-layer gating.
+          // See: mastra/processors/phase-tool-gating.ts
+          inputProcessors: [
+            new PhaseToolGatingProcessor(phaseForToolGate),
+          ],
           onFinish: async () => {
             // PHASE 4A: Deterministic phase advancement after stream completes
             // This runs AFTER the agent is done generating. It checks what data
