@@ -272,6 +272,7 @@ async function handleDeterministicSelectEntity(params: {
 }
 
 export async function POST(req: Request) {
+  const requestStartMs = Date.now();
   try {
     const params = await req.json();
     
@@ -350,7 +351,9 @@ export async function POST(req: Request) {
     
     const tenantId = membership.tenant_id; // Use VALIDATED tenant ID, not client's
     const userRole = membership.role;
-    
+    const authDoneMs = Date.now();
+    console.log(`[TIMING] auth+setup: ${authDoneMs - requestStartMs}ms`);
+
     // 3. GET/CREATE STABLE MASTRA THREAD
     // Validate journeyThreadId is a UUID. Reject route slugs like "vibe" or other garbage.
     const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -463,6 +466,7 @@ export async function POST(req: Request) {
     const cleanJourneyThreadId = safeUuid(clientJourneyThreadId, 'journeyThreadId') ?? clientJourneyThreadId;
     const cleanMastraThreadId = safeUuid(mastraThreadId, 'mastraThreadId') ?? mastraThreadId;
     if (cleanJourneyThreadId && cleanJourneyThreadId !== 'default-thread') {
+      const phaseLookupStartMs = Date.now();
       try {
         // Query by thread_id first (primary), then fallback to mastra_thread_id
         let sessionRow = null;
@@ -668,6 +672,7 @@ export async function POST(req: Request) {
         } else if (sessionRow?.preview_interface_id) {
           requestContext.set('interfaceId', sessionRow.preview_interface_id);
         }
+        console.log(`[TIMING] phase-lookup: ${Date.now() - phaseLookupStartMs}ms`);
       } catch (phaseErr) {
         // Non-fatal: if DB read fails, client-provided phase is used as fallback
         console.warn('[api/chat] Failed to read phase from DB, using client value:', phaseErr);
@@ -782,6 +787,8 @@ export async function POST(req: Request) {
     // Phase tool gating is handled by PhaseToolGatingProcessor (inputProcessor on defaultOptions).
     // It receives Mastra-wrapped tools and filters per phase — preserving RequestContext
     // while enforcing hard execution-layer gating (fixes AI SDK bug #8653).
+    const streamStartMs = Date.now();
+    let stepCount = 0;
     const stream = await withTimeout(
       handleChatStream({
         mastra,
@@ -813,7 +820,14 @@ export async function POST(req: Request) {
           inputProcessors: [
             new PhaseToolGatingProcessor(),
           ],
+          onStepFinish: ({ toolCalls, finishReason }: { toolCalls?: any[]; finishReason?: string }) => {
+            stepCount++;
+            const toolNames = (toolCalls ?? []).map((tc: any) => tc.toolName ?? tc.args?.toolName ?? 'unknown');
+            console.log(`[TIMING] step-${stepCount}: ${Date.now() - streamStartMs}ms elapsed | tools: [${toolNames.join(', ')}] | finish: ${finishReason}`);
+          },
           onFinish: async () => {
+            console.log(`[TIMING] stream-total: ${Date.now() - streamStartMs}ms | steps: ${stepCount}`);
+            console.log(`[TIMING] request-total: ${Date.now() - requestStartMs}ms`);
             // PHASE 4A: Deterministic phase advancement after stream completes
             // This runs AFTER the agent is done generating. It checks what data
             // was persisted to DB during the stream and advances the phase if ready.
