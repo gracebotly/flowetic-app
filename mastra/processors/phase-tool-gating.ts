@@ -87,13 +87,23 @@ export class PhaseToolGatingProcessor implements Processor {
     requestContext,
   }: ProcessInputStepArgs): ProcessInputStepResult {
     const currentPhase = (requestContext?.get?.("phase") as FloweticPhase) || "select_entity";
-    const allowedToolNames = new Set(
-      PHASE_TOOL_ALLOWLIST[currentPhase] || PHASE_TOOL_ALLOWLIST.select_entity
-    );
+    const rawAllowedNames = PHASE_TOOL_ALLOWLIST[currentPhase] || PHASE_TOOL_ALLOWLIST.select_entity;
 
     if (!tools) {
       return {};
     }
+
+    // CRITICAL: Only include tools that ACTUALLY EXIST in the tools map.
+    // LLMs can hallucinate tool names. If we pass them through, Mastra crashes with
+    // "Tool X not found" which kills the entire stream.
+    // The gating processor is the last line of defense.
+    const existingToolNames = new Set(Object.keys(tools));
+    const safeAllowed = rawAllowedNames.filter(name => existingToolNames.has(name));
+    if (safeAllowed.length !== rawAllowedNames.length) {
+      const missing = rawAllowedNames.filter(name => !existingToolNames.has(name));
+      console.warn(`[PhaseToolGating] Removed ${missing.length} non-existent tools from allowlist:`, missing);
+    }
+    const allowedToolNames = new Set(safeAllowed);
 
     const totalTools = Object.keys(tools).length;
     const activeToolNames: string[] = [];

@@ -93,7 +93,18 @@ async function autoAdvancePhase(params: {
 
   // 2. Deterministic transition rules
   if (currentPhase === 'select_entity' && session.selected_entities) {
-    nextPhase = 'recommend';
+    // SAFETY: Validate that selected_entities is an actual entity selection,
+    // not a sourceId that was incorrectly stored here.
+    // Real entity selections are comma-separated names like "Leads, ROI Metrics"
+    // or contain descriptive text. A bare UUID is NOT a valid entity selection.
+    const entities = String(session.selected_entities).trim();
+    const isBareUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(entities);
+    if (isBareUuid) {
+      console.warn('[autoAdvancePhase] selected_entities contains a bare UUID (likely a sourceId, not an entity selection). Skipping advance:', entities);
+      // Don't advance — this is bad data
+    } else {
+      nextPhase = 'recommend';
+    }
   } else if (currentPhase === 'recommend' && session.selected_outcome) {
     nextPhase = 'style';
   } else if (
@@ -523,10 +534,20 @@ export async function POST(req: Request) {
         if (sessionRow) {
           const selectionUpdates: Record<string, any> = {};
 
-          // Entity: client sends entityId or selectedEntities from vibeContext
-          const clientEntity = clientData.entityId || clientData.selectedEntities;
-          if (clientEntity && !sessionRow.selected_entities) {
-            selectionUpdates.selected_entities = String(clientEntity);
+          // Entity: client sends selectedEntities (comma-separated names) from vibeContext
+          // IMPORTANT: Do NOT persist entityId here — that's the source_entity UUID,
+          // not the user's entity selection (which should be names like "Leads, ROI Metrics").
+          // Persisting entityId caused autoAdvancePhase to think entities were already selected,
+          // skipping the entire select_entity phase.
+          const clientSelectedEntities = clientData.selectedEntities;
+          if (clientSelectedEntities && !sessionRow.selected_entities) {
+            // Only persist if it's NOT a bare UUID (which would be an entityId, not a selection)
+            const isBareUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(clientSelectedEntities).trim());
+            if (!isBareUuid) {
+              selectionUpdates.selected_entities = String(clientSelectedEntities);
+            } else {
+              console.warn('[api/chat] Blocked persisting bare UUID as selected_entities:', clientSelectedEntities);
+            }
           }
 
           // Outcome: client sends selectedOutcome after clicking outcome card
