@@ -56,6 +56,7 @@ import { runDesignSystemWorkflow } from "../tools/design";
 
 // Interactive edit panel
 import { showInteractiveEditPanel } from "../tools/editor";
+import { searchSkillKnowledge } from "../tools/searchSkillKnowledge";
 
 export const masterRouterAgent: Agent = new Agent({
   id: "masterRouterAgent",
@@ -122,22 +123,25 @@ export const masterRouterAgent: Agent = new Agent({
     ].join("\n");
 
     // =========================================================================
-    // SKILL LOADING - Load Platform Skill + Business Outcomes Advisor
+    // SKILL SUMMARIES — Replace full skill injection (~25K tokens) with
+    // brief summaries (~600 tokens total). Agent uses searchSkillKnowledge
+    // tool + existing BM25 tools for on-demand knowledge retrieval.
     // =========================================================================
-    const platformSkillContent = await getCachedSkillAsync(safePlatformType);
+    const platformSkillSummary = `## Platform: ${safePlatformType.toUpperCase()}
+You are advising on ${safePlatformType} workflow dashboards. Key concepts: workflow executions, node-level metrics, error rates, execution times, webhook events. Use the searchSkillKnowledge tool (domain: "platform") to look up specific ${safePlatformType} patterns, field mappings, or template recommendations when needed.`;
 
-    // Load business outcomes advisor for recommend phase
     const businessPhases = ["outcome", "recommend", "select_entity"];
     const shouldLoadBusinessSkill = businessPhases.includes(phase || "select_entity");
-    const businessSkillContent = shouldLoadBusinessSkill
-      ? await getCachedSkillAsync("business-outcomes-advisor")
+    const businessSkillSummary = shouldLoadBusinessSkill
+      ? `## Business Outcomes Advisor
+Guide entity selection and outcome framing with business context. Frame dashboards as client retention tools, products as scalable revenue. Use searchSkillKnowledge (domain: "business") for specific outcome frameworks and KPI patterns.`
       : "";
 
-    // Load UI/UX skill for design phases (style, build_preview)
     const designPhases = ["style", "build_preview"];
     const shouldLoadDesignSkill = designPhases.includes(phase || "");
-    const designSkillContent = shouldLoadDesignSkill
-      ? await getCachedSkillAsync("ui-ux-pro-max")
+    const designSkillSummary = shouldLoadDesignSkill
+      ? `## Design System Advisor
+Use BM25 search tools (getStyleRecommendations, getTypographyRecommendations, etc.) for all design decisions. Never invent design tokens from memory. Use searchSkillKnowledge (domain: "design") for additional design guidelines.`
       : "";
 
     const phaseInstructions = getPhaseInstructions(phase as FloweticPhase, {
@@ -337,12 +341,10 @@ export const masterRouterAgent: Agent = new Agent({
       "- After calling updateWorkingMemory or any tool, do NOT repeat text you already wrote before the tool call.",
       "- Your pre-tool text was already delivered. Continue with NEW content only.",
       "",
-      // =========================================================================
-      // INJECTED SKILLS (loaded from workspace at runtime)
-      // =========================================================================
-      platformSkillContent ? `\n\n# PLATFORM SKILL: ${safePlatformType.toUpperCase()}\n\n${platformSkillContent}` : "",
-      businessSkillContent ? `\n\n# BUSINESS OUTCOMES ADVISOR\n\n${businessSkillContent}` : "",
-      designSkillContent ? `\n\n# UI/UX DESIGN ADVISOR\n\n${designSkillContent}` : "",
+      `\n\n# KNOWLEDGE CONTEXT (use searchSkillKnowledge for detailed lookups)\n`,
+      platformSkillSummary,
+      businessSkillSummary,
+      designSkillSummary,
     ].filter(Boolean).join("\n");
 
     return [
@@ -434,6 +436,8 @@ export const masterRouterAgent: Agent = new Agent({
     getStyleBundles,
     // Interactive edit panel
     showInteractiveEditPanel,
+    // On-demand skill knowledge search (replaces full skill injection)
+    searchSkillKnowledge,
   },
   inputProcessors: [
     new DesignTokenEnforcer(),

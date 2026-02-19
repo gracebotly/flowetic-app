@@ -58,6 +58,8 @@ const KNOWN_AGENT_TOOLS = new Set([
   'showInteractiveEditPanel',
   // Phase advancement
   'advancePhase',
+  // On-demand skill knowledge search
+  'searchSkillKnowledge',
 ]);
 
 /**
