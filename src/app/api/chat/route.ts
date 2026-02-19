@@ -788,6 +788,14 @@ export async function POST(req: Request) {
       ...(dedupedMessages ? { messages: dedupedMessages } : {}),
       requestContext,
       mode: "generate",
+      // CRITICAL: Memory config tells Mastra which thread/resource to use
+      // for working memory reads/writes. Without this, updateWorkingMemory
+      // has no target and silently fails to persist.
+      // See: https://mastra.ai/docs/agents/agent-memory
+      memory: {
+        thread: cleanMastraThreadId,
+        resource: userId,
+      },
     };
 
     if (process.env.DEBUG_CHAT_ROUTE === 'true') {
