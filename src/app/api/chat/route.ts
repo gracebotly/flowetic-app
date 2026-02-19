@@ -848,107 +848,11 @@ export async function POST(req: Request) {
             console.log(`[TIMING] step-${stepCount}: ${Date.now() - streamStartMs}ms elapsed | tools: [${toolNames.join(', ')}] | finish: ${finishReason}`);
           },
           onFinish: async () => {
-            // PHASE 4A: Sync Working Memory → DB, then advance phase
-            // The agent writes selections to Mastra working memory via updateWorkingMemory,
-            // but autoAdvancePhase reads from journey_sessions in Postgres.
-            // We must bridge the two before checking for phase transitions.
+            // PHASE 4A: Deterministic phase advancement after stream completes.
+            // autoAdvancePhase reads journey_sessions (populated by tools during the stream)
+            // and advances the phase if selections are complete.
             try {
               if (cleanJourneyThreadId && cleanJourneyThreadId !== 'default-thread') {
-
-                // ── STEP 1: Read working memory directly from mastra_threads table ──
-                // The agent writes selections to Mastra working memory via updateWorkingMemory.
-                // Working memory is stored in mastra_threads.metadata->'workingMemory' as a JSON string.
-                // We read it directly with SQL rather than going through the Memory API,
-                // which requires matching the agent's exact memory config (schema, scope, etc.).
-                try {
-                  const { data: threadRow } = await supabase
-                    .from('mastra_threads')
-                    .select('metadata')
-                    .eq('id', cleanMastraThreadId)
-                    .maybeSingle();
-
-                  const rawWM = threadRow?.metadata?.workingMemory;
-                  if (rawWM) {
-                    let memData: Record<string, any> = {};
-                    try {
-                      memData = typeof rawWM === 'string' ? JSON.parse(rawWM) : rawWM;
-                    } catch {
-                      console.warn('[api/chat] onFinish: Failed to parse working memory JSON');
-                    }
-
-                    if (Object.keys(memData).length > 0) {
-                      console.log('[api/chat] onFinish: Working memory from mastra_threads:', {
-                        phase: memData.phase,
-                        selectedEntities: memData.selectedEntities,
-                        selectedOutcome: memData.selectedOutcome,
-                        selectedStyleBundleId: memData.selectedStyleBundleId,
-                      });
-
-                      const syncUpdates: Record<string, any> = {};
-                      const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-                      // Sync selectedEntities — skip bare UUIDs
-                      if (memData.selectedEntities && typeof memData.selectedEntities === 'string') {
-                        if (!UUID_RE.test(memData.selectedEntities.trim())) {
-                          syncUpdates.selected_entities = memData.selectedEntities;
-                        }
-                      }
-
-                      // Sync selectedOutcome
-                      if (memData.selectedOutcome && typeof memData.selectedOutcome === 'string') {
-                        syncUpdates.selected_outcome = memData.selectedOutcome;
-                      }
-
-                      // Sync selectedStyleBundleId
-                      if (memData.selectedStyleBundleId && typeof memData.selectedStyleBundleId === 'string') {
-                        syncUpdates.selected_style_bundle_id = memData.selectedStyleBundleId;
-                      }
-
-                      if (Object.keys(syncUpdates).length > 0) {
-                        syncUpdates.updated_at = new Date().toISOString();
-
-                        // Read current DB state to merge with sync data
-                        const { data: currentSession } = await supabase
-                          .from('journey_sessions')
-                          .select('selected_entities, selected_outcome, selected_style_bundle_id')
-                          .eq('thread_id', cleanJourneyThreadId)
-                          .eq('tenant_id', tenantId)
-                          .maybeSingle();
-
-                        const finalEntities = syncUpdates.selected_entities || currentSession?.selected_entities;
-                        const finalOutcome = syncUpdates.selected_outcome || currentSession?.selected_outcome;
-                        const finalStyle = syncUpdates.selected_style_bundle_id || currentSession?.selected_style_bundle_id;
-
-                        // Set schema_ready if all three selections are now present
-                        if (finalEntities && finalOutcome && finalStyle) {
-                          syncUpdates.schema_ready = true;
-                          console.log('[api/chat] onFinish: Setting schema_ready=true (all selections present)');
-                        }
-
-                        const { error: syncErr } = await supabase
-                          .from('journey_sessions')
-                          .update(syncUpdates)
-                          .eq('thread_id', cleanJourneyThreadId)
-                          .eq('tenant_id', tenantId);
-
-                        if (syncErr) {
-                          console.error('[api/chat] onFinish: Failed to sync working memory to DB:', syncErr.message);
-                        } else {
-                          console.log('[api/chat] onFinish: ✅ Synced working memory to DB:', Object.keys(syncUpdates));
-                        }
-                      } else {
-                        console.log('[api/chat] onFinish: No new selections to sync from working memory');
-                      }
-                    }
-                  } else {
-                    console.log('[api/chat] onFinish: No working memory found in mastra_threads');
-                  }
-                } catch (memErr) {
-                  // Non-fatal: log the FULL error so we can debug, then continue
-                  console.error('[api/chat] onFinish: Working memory sync failed:', String(memErr));
-                }
-
-                // ── STEP 2: Run autoAdvancePhase (now with synced DB data) ──
                 const result = await autoAdvancePhase({
                   supabase,
                   tenantId,
