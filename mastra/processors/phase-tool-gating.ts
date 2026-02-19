@@ -1,69 +1,121 @@
-import type { Processor, ProcessInputStepArgs } from "@mastra/core/processors";
+import type { Processor, ProcessInputStepArgs, ProcessInputStepResult } from "@mastra/core";
 import { PHASE_TOOL_ALLOWLIST, type FloweticPhase } from "@/mastra/agents/instructions/phase-instructions";
+
+/**
+ * KNOWN AGENT TOOLS — the tools explicitly registered on masterRouterAgent.
+ * These are the ONLY tools we gate. Everything else (e.g. updateWorkingMemory,
+ * other Mastra-internal tools) passes through untouched.
+ *
+ * WHY: Mastra's Memory class injects `updateWorkingMemory` into the agent's
+ * ToolSet at runtime. processInputStep's `tools` return is a FULL REPLACE
+ * (per official docs: "Replace or modify tools for this step. Use spread to merge").
+ * If we only return our allowlisted tools, we strip updateWorkingMemory → crash.
+ *
+ * KEEP IN SYNC with the tools:{} block in masterRouterAgent.ts.
+ */
+const KNOWN_AGENT_TOOLS = new Set([
+  // Supatools
+  'getEventStats',
+  'getDataDrivenEntities',
+  'recommendOutcome',
+  'validatePreviewReadiness',
+  // Outcomes
+  'getOutcomes',
+  // Sources
+  'listSources',
+  // Navigation
+  'navigateTo',
+  // Suggestions
+  'suggestAction',
+  // Todo
+  'todoAdd',
+  'todoList',
+  'todoUpdate',
+  'todoComplete',
+  // Design
+  'runDesignSystemWorkflow',
+  // Delegation
+  'delegateToDesignAdvisor',
+  'delegateToPlatformMapper',
+  'delegateToDashboardBuilder',
+  // UI/UX
+  'getStyleRecommendations',
+  'getChartRecommendations',
+  'getTypographyRecommendations',
+  'getUXGuidelines',
+  'getProductRecommendations',
+  // Style bundles
+  'getStyleBundles',
+  // Editor
+  'showInteractiveEditPanel',
+  // Phase advancement
+  'advancePhase',
+  // Style keywords
+  'recommendStyleKeywords',
+]);
 
 /**
  * PhaseToolGatingProcessor — Hard execution-layer tool gating per journey phase.
  *
- * WHY THIS EXISTS:
- * - activeTools (AI SDK) only filters schemas, NOT execution (bug #8653)
- * - prepareStep with raw tool imports bypasses Mastra's RequestContext wrapping
- * - processInputStep receives ALREADY-WRAPPED tools from the agent, so filtering
- *   them preserves RequestContext while enforcing hard execution gating
- *
  * HOW IT WORKS:
- * 1. Uses the phase captured at request time (set authoritatively from DB in route.ts)
- * 2. Filters the tools object to only include phase-allowed tools
- * 3. Returns { tools: filteredTools } which REPLACES the execution-layer tools
- * 4. Tools not in the filtered set literally don't exist — LLM can't call them
+ * 1. Reads current phase from RequestContext (set authoritatively from DB in route.ts)
+ * 2. For each tool in the current tools set:
+ *    - If it's a KNOWN_AGENT_TOOL: only keep if it's in the phase allowlist
+ *    - If it's NOT a known agent tool (e.g. updateWorkingMemory): always keep
+ * 3. Returns { tools: filteredTools } which replaces the execution-layer tools
  *
- * EXECUTION ORDER (per Mastra docs):
- * processInput (once) → processInputStep (each step) → prepareStep → LLM → tools → loop
+ * This preserves Mastra-internal tools (memory, etc.) while gating our agent tools.
  */
 export class PhaseToolGatingProcessor implements Processor {
   readonly id = "phase-tool-gating";
   readonly name = "Phase Tool Gating";
 
-  private readonly phase: FloweticPhase;
-
-  constructor(phase: FloweticPhase = "select_entity") {
-    this.phase = phase;
-  }
-
-  processInputStep({ stepNumber, tools }: ProcessInputStepArgs) {
-    const currentPhase = this.phase;
-    const allowedToolNames =
-      PHASE_TOOL_ALLOWLIST[currentPhase] || PHASE_TOOL_ALLOWLIST.select_entity;
+  processInputStep({
+    stepNumber,
+    tools,
+    requestContext,
+  }: ProcessInputStepArgs): ProcessInputStepResult {
+    const currentPhase = (requestContext?.get?.("phase") as FloweticPhase) || "select_entity";
+    const allowedToolNames = new Set(
+      PHASE_TOOL_ALLOWLIST[currentPhase] || PHASE_TOOL_ALLOWLIST.select_entity
+    );
 
     if (!tools) {
       return {};
     }
 
-    // Filter to only allowed tools — these retain their Mastra wrapping + RequestContext
+    // Filter tools: gate known agent tools by phase, pass through everything else
     const filteredTools: Record<string, any> = {};
-    for (const name of allowedToolNames) {
-      if ((tools as Record<string, any>)[name]) {
-        filteredTools[name] = (tools as Record<string, any>)[name];
+    let gatedCount = 0;
+    const passedThrough: string[] = [];
+
+    for (const [name, tool] of Object.entries(tools)) {
+      if (KNOWN_AGENT_TOOLS.has(name)) {
+        // This is one of our agent tools — only include if phase-allowed
+        if (allowedToolNames.has(name)) {
+          filteredTools[name] = tool;
+        } else {
+          gatedCount++;
+        }
+      } else {
+        // Not a known agent tool (e.g. updateWorkingMemory) — always pass through
+        filteredTools[name] = tool;
+        passedThrough.push(name);
       }
     }
 
-    const totalTools = Object.keys(tools as object).length;
-    const allowedCount = Object.keys(filteredTools).length;
+    const totalTools = Object.keys(tools).length;
+    const resultCount = Object.keys(filteredTools).length;
 
     if (stepNumber === 0) {
-      // Only log on first step to avoid noise
-      console.log(`[PhaseToolGating] phase=${currentPhase} tools=${allowedCount}/${totalTools}`);
-
-      if (allowedCount < allowedToolNames.length) {
-        const missing = allowedToolNames.filter(
-          (n) => !(tools as Record<string, any>)[n]
-        );
-        console.warn(`[PhaseToolGating] Missing from agent tools: ${missing.join(", ")}`);
-      }
+      console.log(
+        `[PhaseToolGating] phase=${currentPhase} tools=${resultCount}/${totalTools} (gated=${gatedCount}, passthrough=[${passedThrough.join(',')}])`
+      );
     }
 
     return {
       tools: filteredTools,
-      toolChoice: allowedCount > 0 ? ("auto" as const) : ("none" as const),
+      toolChoice: resultCount > 0 ? ("auto" as const) : ("none" as const),
     };
   }
 }
