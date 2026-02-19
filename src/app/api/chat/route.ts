@@ -613,6 +613,20 @@ export async function POST(req: Request) {
         }
 
         // Load entity selections from DB into RequestContext
+        // GUARD: If selected_entities is a bare UUID (from stale entityId persistence bug),
+        // clear it from DB so the entity selection flow can restart properly.
+        // A real entity selection is a display name or comma-separated list, not a UUID.
+        const UUID_ONLY_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (sessionRow?.selected_entities && UUID_ONLY_RE.test(sessionRow.selected_entities.trim())) {
+          console.warn('[api/chat] Clearing stale UUID from selected_entities:', sessionRow.selected_entities);
+          // Clear in DB so autoAdvancePhase doesn't see stale data
+          await supabase
+            .from('journey_sessions')
+            .update({ selected_entities: null, updated_at: new Date().toISOString() })
+            .eq('id', sessionRow.id)
+            .eq('tenant_id', tenantId);
+          sessionRow.selected_entities = null;
+        }
         if (sessionRow?.selected_entities) {
           requestContext.set('selectedEntities', sessionRow.selected_entities);
           console.log('[api/chat] Loaded selectedEntities from DB:', sessionRow.selected_entities);
