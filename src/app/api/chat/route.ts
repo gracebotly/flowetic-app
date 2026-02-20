@@ -919,28 +919,34 @@ export async function POST(req: Request) {
             // and advances the phase if selections are complete.
             try {
               if (cleanJourneyThreadId && cleanJourneyThreadId !== 'default-thread') {
-                // SERVER-SIDE WIREFRAME CONFIRMATION DETECTION
-                // When in recommend phase with outcome set, detect user confirmation of wireframe.
-                // The agent shows a wireframe and asks "Does this look right?"
-                // If the user's message is a confirmation, set wireframe_confirmed=true
-                // so autoAdvancePhase can proceed to style.
-                if (session && session.mode === 'recommend' && session.selected_outcome && !session.wireframe_confirmed) {
+                // Re-query journey session for wireframe confirmation detection
+                // (the `session` var in onFinish is Supabase Auth, not the journey session)
+                const { data: journeySessionForWf } = await supabase
+                  .from('journey_sessions')
+                  .select('id, mode, selected_outcome, wireframe_confirmed')
+                  .eq('tenant_id', tenantId)
+                  .eq('thread_id', journeyThreadId)
+                  .maybeSingle();
+
+                if (journeySessionForWf && journeySessionForWf.mode === 'recommend' && journeySessionForWf.selected_outcome && !journeySessionForWf.wireframe_confirmed) {
                   const lastUserMessage = messages[messages.length - 1];
                   const userText = typeof lastUserMessage?.content === 'string'
                     ? lastUserMessage.content.toLowerCase().trim()
                     : '';
-                  const confirmationPattern = /^(yes|yeah|yep|yup|sure|ok|okay|correct|confirmed|approve|approved|looks?\s*good|let'?s?\s*go|go\s*ahead|perfect|great|that'?s?\s*(right|correct|good|perfect)|proceed|do\s*it|build\s*it|generate|lgtm)/i;
-                  if (confirmationPattern.test(userText)) {
+                  const confirmationPatterns = [
+                    /^(yes|yeah|yep|yup|sure|ok|okay|correct|confirmed|approve|approved|looks?\s*good|let'?s?\s*go|go\s*ahead|perfect|great|that'?s?\s*(right|correct|good|perfect)|proceed|do\s*it|build\s*it|generate|lgtm)/i,
+                  ];
+                  const isConfirmation = confirmationPatterns.some(p => p.test(userText));
+
+                  if (isConfirmation) {
                     console.log('[api/chat] Wireframe confirmation detected from user message:', userText);
                     const { error: wfError } = await supabase
                       .from('journey_sessions')
                       .update({ wireframe_confirmed: true, updated_at: new Date().toISOString() })
-                      .eq('id', session.id)
+                      .eq('id', journeySessionForWf.id)
                       .eq('tenant_id', tenantId);
                     if (wfError) {
                       console.error('[api/chat] Failed to set wireframe_confirmed:', wfError.message);
-                    } else {
-                      session.wireframe_confirmed = true;
                     }
                   }
                 }
