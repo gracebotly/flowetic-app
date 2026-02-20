@@ -356,8 +356,13 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
     // Discovery tools
     'getEventStats',
     'getDataDrivenEntities',
-    'listSources',
     'getOutcomes',
+    'searchSkillKnowledge',
+    // Sources CRUD (discovery phase — user may connect sources)
+    'createSource',
+    'listSources',
+    'updateSource',
+    'deleteSource',
     // NOTE: advancePhase intentionally omitted — autoAdvancePhase handles
     // select_entity→recommend transition deterministically.
     // Utility (always available)
@@ -374,6 +379,7 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
     'recommendOutcome',
     'getEventStats',
     'getOutcomes',
+    'searchSkillKnowledge',
     // NOTE: advancePhase intentionally omitted — autoAdvancePhase handles
     // recommend→style transition when selected_outcome is present in DB.
     // Utility
@@ -395,6 +401,7 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
     'getUXGuidelines',
     'getProductRecommendations',
     'getStyleBundles',
+    'searchSkillKnowledge',
     // NOTE: setSchemaReady intentionally omitted — /api/chat auto-sets schema_ready=true
     // when all selections (entities, outcome, style) are present. setSchemaReady is
     // available in build_preview phase via platformMappingMaster only.
@@ -418,6 +425,12 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
     'delegateToPlatformMapper',
     'validatePreviewReadiness',
     'getEventStats',
+    'searchSkillKnowledge',
+    // Projects CRUD (may need to create/update project during build)
+    'createProject',
+    'listProjects',
+    'updateProject',
+    'deleteProject',
     // NOTE: advancePhase intentionally omitted — autoAdvancePhase handles transitions.
     // Utility
     'navigateTo',
@@ -432,9 +445,15 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
     // Edit tools
     'showInteractiveEditPanel',
     'delegateToDashboardBuilder',
+    'searchSkillKnowledge',
     // Can re-generate if needed
     'delegateToPlatformMapper',
     'validatePreviewReadiness',
+    // Projects CRUD
+    'createProject',
+    'listProjects',
+    'updateProject',
+    'deleteProject',
     // NOTE: advancePhase intentionally omitted — autoAdvancePhase handles transitions.
     // Utility
     'navigateTo',
@@ -450,7 +469,11 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
     // transitions are handled by the deployment workflow, not the LLM.
     // Can still edit
     'showInteractiveEditPanel',
+    'searchSkillKnowledge',
     'delegateToDashboardBuilder',
+    // Projects CRUD (final project updates during deploy)
+    'listProjects',
+    'updateProject',
     // Utility
     'navigateTo',
     'suggestAction',

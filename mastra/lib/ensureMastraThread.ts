@@ -80,11 +80,12 @@ export async function ensureMastraThreadId(params: {
         entity_id: safeEntityId,  // Use validated UUID or null
         mode: "select_entity",
         density_preset: "comfortable",
-        // Persist entity selection at creation time — user already selected
-        // the entity in the wizard before chat launched. Without this,
-        // autoAdvancePhase finds selected_entities=null and never advances
-        // past select_entity phase.
-        selected_entities: safeEntityId || null,
+        // DO NOT persist entityId as selected_entities here.
+        // entityId is the source_entity UUID (e.g. "8e538b26-..."), NOT a user
+        // entity selection (which should be display names like "Chat Session, Daily Analytics Report").
+        // selected_entities is populated later by working memory → DB sync in onFinish
+        // or by client-side persistence in route.ts when the user actually picks entities.
+        selected_entities: null,
         created_at: now,
         updated_at: now,
       });

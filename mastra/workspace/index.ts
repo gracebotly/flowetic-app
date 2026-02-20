@@ -28,4 +28,8 @@ export const workspace = new Workspace({
 
   // BM25 search for skill-based recommendations
   bm25: true,
+
+  // Auto-index skill SKILL.md files on init() so agent can search them via BM25
+  // instead of injecting full 25K+ token skill content into every prompt
+  autoIndexPaths: ['/skills'],
 });

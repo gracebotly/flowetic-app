@@ -21,8 +21,16 @@ const KNOWN_AGENT_TOOLS = new Set([
   'validatePreviewReadiness',
   // Outcomes
   'getOutcomes',
-  // Sources
+  // Sources CRUD
+  'createSource',
   'listSources',
+  'updateSource',
+  'deleteSource',
+  // Projects CRUD
+  'createProject',
+  'listProjects',
+  'updateProject',
+  'deleteProject',
   // Navigation
   'navigateTo',
   // Suggestions
@@ -50,8 +58,8 @@ const KNOWN_AGENT_TOOLS = new Set([
   'showInteractiveEditPanel',
   // Phase advancement
   'advancePhase',
-  // Style keywords
-  'recommendStyleKeywords',
+  // On-demand skill knowledge search
+  'searchSkillKnowledge',
 ]);
 
 /**
@@ -60,11 +68,16 @@ const KNOWN_AGENT_TOOLS = new Set([
  * HOW IT WORKS:
  * 1. Reads current phase from RequestContext (set authoritatively from DB in route.ts)
  * 2. For each tool in the current tools set:
- *    - If it's a KNOWN_AGENT_TOOL: only keep if it's in the phase allowlist
- *    - If it's NOT a known agent tool (e.g. updateWorkingMemory): always keep
- * 3. Returns { tools: filteredTools } which replaces the execution-layer tools
+ *    - If it's a KNOWN_AGENT_TOOL: only include if it's in the phase allowlist
+ *    - If it's NOT a known agent tool (e.g. updateWorkingMemory): always pass through
+ * 3. Returns { activeTools: string[] } which FILTERS the existing tool set without
+ *    REPLACING it — Mastra-internal tools like updateWorkingMemory stay in the registry.
  *
- * This preserves Mastra-internal tools (memory, etc.) while gating our agent tools.
+ * WHY activeTools instead of tools:
+ * Returning { tools: filteredTools } is a FULL REPLACE of the tool registry per Mastra
+ * docs. This strips updateWorkingMemory (injected by Mastra's Memory class at runtime),
+ * causing "Tool updateWorkingMemory not found" crashes. activeTools is an additive filter
+ * that preserves all registered tools while controlling which are active for this step.
  */
 export class PhaseToolGatingProcessor implements Processor {
   readonly id = "phase-tool-gating";
@@ -76,46 +89,61 @@ export class PhaseToolGatingProcessor implements Processor {
     requestContext,
   }: ProcessInputStepArgs): ProcessInputStepResult {
     const currentPhase = (requestContext?.get?.("phase") as FloweticPhase) || "select_entity";
-    const allowedToolNames = new Set(
-      PHASE_TOOL_ALLOWLIST[currentPhase] || PHASE_TOOL_ALLOWLIST.select_entity
-    );
+    const rawAllowedNames = PHASE_TOOL_ALLOWLIST[currentPhase] || PHASE_TOOL_ALLOWLIST.select_entity;
 
     if (!tools) {
       return {};
     }
 
-    // Filter tools: gate known agent tools by phase, pass through everything else
-    const filteredTools: Record<string, any> = {};
-    let gatedCount = 0;
-    const passedThrough: string[] = [];
+    // CRITICAL: Only include tools that ACTUALLY EXIST in the tools map.
+    // LLMs can hallucinate tool names. If we pass them through, Mastra crashes with
+    // "Tool X not found" which kills the entire stream.
+    // The gating processor is the last line of defense.
+    const existingToolNames = new Set(Object.keys(tools));
+    const safeAllowed = rawAllowedNames.filter(name => existingToolNames.has(name));
+    if (safeAllowed.length !== rawAllowedNames.length) {
+      const missing = rawAllowedNames.filter(name => !existingToolNames.has(name));
+      console.warn(`[PhaseToolGating] Removed ${missing.length} non-existent tools from allowlist:`, missing);
+    }
+    const allowedToolNames = new Set(safeAllowed);
 
-    for (const [name, tool] of Object.entries(tools)) {
-      if (KNOWN_AGENT_TOOLS.has(name)) {
+    const totalTools = Object.keys(tools).length;
+    const activeToolNames: string[] = [];
+    const passedThrough: string[] = [];
+    let gatedCount = 0;
+
+    for (const toolName of Object.keys(tools)) {
+      if (KNOWN_AGENT_TOOLS.has(toolName)) {
         // This is one of our agent tools — only include if phase-allowed
-        if (allowedToolNames.has(name)) {
-          filteredTools[name] = tool;
+        if (allowedToolNames.has(toolName)) {
+          activeToolNames.push(toolName);
         } else {
           gatedCount++;
         }
       } else {
         // Not a known agent tool (e.g. updateWorkingMemory) — always pass through
-        filteredTools[name] = tool;
-        passedThrough.push(name);
+        activeToolNames.push(toolName);
+        passedThrough.push(toolName);
       }
     }
 
-    const totalTools = Object.keys(tools).length;
-    const resultCount = Object.keys(filteredTools).length;
-
     if (stepNumber === 0) {
       console.log(
-        `[PhaseToolGating] phase=${currentPhase} tools=${resultCount}/${totalTools} (gated=${gatedCount}, passthrough=[${passedThrough.join(',')}])`
+        `[PhaseToolGating] phase=${currentPhase} active=${activeToolNames.length}/${totalTools} (gated=${gatedCount}, passthrough=[${passedThrough.join(',')}])`
       );
     }
 
+    // If nothing was gated, don't modify anything
+    if (gatedCount === 0) {
+      return {};
+    }
+
+    // Use activeTools (string array) instead of tools (object replace).
+    // This FILTERS the existing tool set without REPLACING it —
+    // Mastra-internal tools like updateWorkingMemory stay in the registry.
     return {
-      tools: filteredTools,
-      toolChoice: resultCount > 0 ? ("auto" as const) : ("none" as const),
+      activeTools: activeToolNames,
+      toolChoice: activeToolNames.length > 0 ? ("auto" as const) : ("none" as const),
     };
   }
 }

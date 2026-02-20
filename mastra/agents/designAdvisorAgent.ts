@@ -4,6 +4,7 @@ import { getModelById } from "../lib/models/modelSelector";
 import type { RequestContext } from "@mastra/core/request-context";
 import { z } from "zod";
 import { createFloweticMemory } from "../lib/memory";
+import { TokenLimiterProcessor } from "@mastra/core/processors";
 
 // Supatool
 import { recommendStyleKeywords } from "../tools/supatools";
@@ -106,7 +107,7 @@ After calling tools, synthesize results into clear recommendations:
     return getModelById(selectedModelId);
   },
   memory: createFloweticMemory({
-    lastMessages: 20,
+    lastMessages: 10,
     workingMemory: {
       enabled: true,
       schema: z.object({
@@ -136,4 +137,7 @@ After calling tools, synthesize results into clear recommendations:
     getReactPerformanceGuidelines,
     getUIReasoningPatterns,
   },
+  inputProcessors: [
+    new TokenLimiterProcessor({ limit: 10000 }),
+  ],
 });

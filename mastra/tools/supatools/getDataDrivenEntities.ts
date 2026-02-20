@@ -58,11 +58,13 @@ export const getDataDrivenEntities = createSupaTool<z.infer<typeof outputSchema>
     const supabase = createAuthenticatedClient(accessToken);
 
     // ✅ Call PostgreSQL RPC function (production-grade aggregation)
+    const rpcStartMs = Date.now();
     const { data, error } = await supabase.rpc('get_data_driven_entities', {
       p_tenant_id: tenantId,
       p_source_id: sourceId,
       p_since_days: sinceDays,
     });
+    console.log(`[TIMING] getDataDrivenEntities.rpc: ${Date.now() - rpcStartMs}ms`);
 
     if (error) {
       throw new Error(

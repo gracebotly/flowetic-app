@@ -6,6 +6,7 @@ import { getMastraStorage } from "../lib/storage";
 import type { RequestContext } from "@mastra/core/request-context";
 import { z } from "zod";
 import { DesignTokenEnforcer } from "../processors/designTokenEnforcer";
+import { TokenLimiterProcessor } from "@mastra/core/processors";
 
 import { createFloweticMemory } from "../lib/memory";
 import { getCachedSkill } from '../lib/skillCache';
@@ -44,6 +45,9 @@ export const platformMappingMaster: Agent = new Agent({
 
     // Load platform skill for deep mapping knowledge
     const platformSkillContent = await getCachedSkill(platformType);
+
+    // Load Data Dashboard Intelligence for field→component mapping knowledge
+    const dashboardIntelContent = await getCachedSkill("data-dashboard-intelligence");
 
     return {
       role: "system" as const,
@@ -96,6 +100,7 @@ export const platformMappingMaster: Agent = new Agent({
         "- When you have enough information to proceed, proceed without asking for confirmation.",
         "- Only suspend / ask a question when a required mapping field is missing or schemaReady is false.",
         platformSkillContent ? `\n\n# PLATFORM SKILL: ${platformType.toUpperCase()}\n\n${platformSkillContent}` : "",
+        dashboardIntelContent ? `\n\n# DATA DASHBOARD INTELLIGENCE\n\n${dashboardIntelContent}` : "",
       ].filter(Boolean).join("\n"),
     };
   },
@@ -107,7 +112,7 @@ export const platformMappingMaster: Agent = new Agent({
     connectionBackfillWorkflow,
   },
   memory: createFloweticMemory({
-    lastMessages: 30,
+    lastMessages: 10,
     workingMemory: {
       enabled: true,
       schema: z.object({
@@ -138,6 +143,7 @@ export const platformMappingMaster: Agent = new Agent({
     validatePreviewReadiness,
   },
   inputProcessors: [
+    new TokenLimiterProcessor({ limit: 12000 }),
     new DesignTokenEnforcer(),
   ],
 });

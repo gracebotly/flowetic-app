@@ -85,9 +85,6 @@ export function createFloweticMemory(opts: CreateFloweticMemoryOpts = {}) {
   }
   
   // FULL AUTONOMOUS MEMORY: Message History + Working Memory + Semantic Recall
-  const indexName = String(
-    process.env.MASTRA_MEMORY_VECTOR_INDEX_NAME || "mastra_memory"
-  ).trim() || "mastra_memory";
   
   const vector = new PgVector({
     connectionString,
@@ -108,8 +105,7 @@ export function createFloweticMemory(opts: CreateFloweticMemoryOpts = {}) {
         topK: 3,
         messageRange: { before: 2, after: 1 },
         scope: "thread",
-        indexName,
-      } as any,
+      },
     },
   });
   
@@ -118,10 +114,9 @@ export function createFloweticMemory(opts: CreateFloweticMemoryOpts = {}) {
     console.log('[FloweticMemory] Semantic recall ENABLED with full configuration:', {
       lastMessages,
       workingMemoryEnabled: workingMemory.enabled,
-      topK: 5,
-      messageRange: 3,
+      topK: 3,
+      messageRange: { before: 2, after: 1 },
       scope: 'thread',
-      indexName,
       connectionString: connectionString.replace(/:[^:]+@/, ':****@'), // Hide password in logs
     });
   }
