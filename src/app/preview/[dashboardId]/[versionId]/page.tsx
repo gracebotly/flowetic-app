@@ -453,6 +453,7 @@ export default async function PreviewPage({ params }: PreviewPageProps) {
             "id, type, name, value, unit, text, state, timestamp, created_at, workflow_id, status, duration_ms, mode, workflow_name, execution_id, error_message"
           )
           .eq("source_id", session.source_id)
+          .in("type", ["workflow_execution", "metric", "tool_event", "error"])
           .order("timestamp", { ascending: false })
           .limit(200);
 
@@ -461,6 +462,7 @@ export default async function PreviewPage({ params }: PreviewPageProps) {
             .from("events")
             .select("id, type, name, value, unit, text, state, timestamp, created_at")
             .eq("source_id", session.source_id)
+            .in("type", ["workflow_execution", "metric", "tool_event", "error"])
             .order("timestamp", { ascending: false })
             .limit(200);
           resolvedEvents = (fallbackSourceEvents || []).map((evt: any) => ({
