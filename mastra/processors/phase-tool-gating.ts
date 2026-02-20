@@ -144,10 +144,14 @@ export class PhaseToolGatingProcessor implements Processor {
       // which means it's available in ALL phases — defeating the purpose of gating.
       // This catches the case where a new tool is added to masterRouterAgent.tools
       // but not added to KNOWN_AGENT_TOOLS, creating a silent phase leakage.
+      // FIX (Bug 4): Remove updateWorkingMemory to prevent dual-state confusion.
+      // updateWorkingMemory writes to Mastra thread metadata, creating separate state
+      // from journey_sessions DB. This causes agent to think it's in "style" phase
+      // while DB says "recommend", leading to phase confusion and tool storms.
+      // Remove it from passthrough so it gets gated like other tools.
       // Known Mastra-internal tools that should always pass through:
       const MASTRA_INTERNAL_TOOLS = new Set([
-        'updateWorkingMemory',
-        'getWorkingMemory',
+        'getWorkingMemory', // Keep getWorkingMemory for read-only access
       ]);
       const unregisteredAgentTools = passedThrough.filter(
         toolName => !MASTRA_INTERNAL_TOOLS.has(toolName)

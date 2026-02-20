@@ -1,6 +1,6 @@
 
 import { handleChatStream } from '@mastra/ai-sdk';
-import { createUIMessageStreamResponse } from 'ai';
+import { createUIMessageStreamResponse, createUIMessageStream, generateId } from 'ai';
 import {
   RequestContext,
   MASTRA_RESOURCE_ID_KEY,
@@ -277,35 +277,38 @@ async function handleDeterministicSelectEntity(params: {
       // Non-fatal — message still streams to client
       console.warn('[deterministic-select-entity] Failed to persist message:', persistErr);
     }
-    // 4. Build a UIMessageStream-compatible response
-    // AI SDK v5 useChat expects data stream protocol format
-    const encoder = new TextEncoder();
-    const stream = new ReadableStream({
-      start(controller) {
-        // AI SDK data stream protocol:
-        // "0:" prefix = text delta
-        // "e:" prefix = finish step
-        // "d:" prefix = finish message with metadata
-
-        // Send text content as a single chunk
-        const textPayload = JSON.stringify(responseText);
-        controller.enqueue(encoder.encode(`0:${textPayload}\n`));
-
-        // Send finish step
-        const stepFinish = JSON.stringify({
-          finishReason: 'stop',
-          usage: { promptTokens: 0, completionTokens: 0 },
-          isContinued: false,
+    // 4. FIX (Bug 1): Build proper AI SDK v5 UIMessageStream with SSE format
+    // The previous implementation used legacy "0:", "e:", "d:" prefixes which
+    // useChat doesn't recognize → no assistant message → "Starting session..." stuck.
+    // AI SDK v5 requires text-start/text-delta/text-end SSE chunks per official docs.
+    const stream = createUIMessageStream({
+      execute: async ({ writer }) => {
+        // Start text block
+        const textId = generateId();
+        await writer.write({
+          type: 'text-start',
+          id: textId,
         });
-        controller.enqueue(encoder.encode(`e:${stepFinish}\n`));
-
-        // Send finish message
-        const finishPayload = JSON.stringify({
-          finishReason: 'stop',
-          usage: { promptTokens: 0, completionTokens: 0 },
+        // Stream the response text word by word for progressive display
+        const words = responseText.split(' ');
+        for (let i = 0; i < words.length; i++) {
+          await writer.write({
+            type: 'text-delta',
+            id: textId,
+            delta: i === words.length - 1 ? words[i] : words[i] + ' ',
+          });
+        }
+        // End text block
+        await writer.write({
+          type: 'text-end',
+          id: textId,
         });
-        controller.enqueue(encoder.encode(`d:${finishPayload}\n`));
-        controller.close();
+        // Stream selected entities as data part for client UI
+        await writer.write({
+          type: 'data-selected-entities',
+          id: generateId(),
+          data: entities,
+        });
       },
     });
     console.log(`[deterministic-select-entity] ✅ Bypassed agent loop in ${Date.now() - startTime}ms`);
@@ -858,12 +861,10 @@ export async function POST(req: Request) {
         } catch (advErr) {
           console.warn('[api/chat] autoAdvancePhase after deterministic bypass:', advErr);
         }
-        return new Response(deterministicStream, {
-          headers: {
-            'Content-Type': 'text/plain; charset=utf-8',
-            'X-Vercel-AI-Data-Stream': 'v1',
-          },
-        });
+        // FIX (Bug 1): Use createUIMessageStreamResponse for proper headers.
+        // The manual Response construction with 'X-Vercel-AI-Data-Stream' header was incorrect.
+        // AI SDK v5 requires specific header: 'x-vercel-ai-ui-message-stream: v1'
+        return createUIMessageStreamResponse({ stream: deterministicStream });
       }
       // If handleDeterministicSelectEntity returned null, fall through to normal agent
       console.log('[api/chat] Deterministic bypass returned null, falling through to agent');
@@ -935,9 +936,13 @@ export async function POST(req: Request) {
           inputProcessors: [
             new PhaseToolGatingProcessor(),
           ],
+          // FIX (Bug 3): Improve tool name extraction to prevent [unknown] in logs
           onStepFinish: ({ toolCalls, finishReason }: { toolCalls?: any[]; finishReason?: string }) => {
             stepCount++;
-            const toolNames = (toolCalls ?? []).map((tc: any) => tc.toolName ?? tc.args?.toolName ?? 'unknown');
+            const toolNames = (toolCalls ?? []).map((tc: any) => {
+              // Try multiple paths where tool name might be stored
+              return tc.toolName || tc.tool?.name || tc.name || tc.args?.toolName || 'unknown';
+            });
             console.log(`[TIMING] step-${stepCount}: ${Date.now() - streamStartMs}ms elapsed | tools: [${toolNames.join(', ')}] | finish: ${finishReason}`);
           },
           onFinish: async () => {
@@ -957,11 +962,25 @@ export async function POST(req: Request) {
 
                 if (journeySessionForWf && journeySessionForWf.mode === 'recommend' && journeySessionForWf.selected_outcome && !journeySessionForWf.wireframe_confirmed) {
                   const lastUserMessage = rawMessages[rawMessages.length - 1];
-                  const userText = typeof lastUserMessage?.content === 'string'
-                    ? lastUserMessage.content.toLowerCase().trim()
-                    : '';
+                  // FIX (Bug 2): AI SDK v5 messages use parts[] array, not content string.
+                  // User text is in parts[{ type: "text", text: "..." }]
+                  const userText = lastUserMessage?.parts
+                    ? lastUserMessage.parts
+                        .filter((p: any) => p.type === 'text')
+                        .map((p: any) => p.text)
+                        .join(' ')
+                        .toLowerCase()
+                        .trim()
+                    : (typeof lastUserMessage?.content === 'string'
+                        ? lastUserMessage.content.toLowerCase().trim()
+                        : '');
+                  // FIX (Bug 2): Broaden confirmation patterns - original was too strict.
+                  // User said "This looks right" but pattern only matched "looks good" (not "looks right").
                   const confirmationPatterns = [
-                    /^(yes|yeah|yep|yup|sure|ok|okay|correct|confirmed|approve|approved|looks?\s*good|let'?s?\s*go|go\s*ahead|perfect|great|that'?s?\s*(right|correct|good|perfect)|proceed|do\s*it|build\s*it|generate|lgtm)/i,
+                    /\b(yes|yeah|yep|yup|sure|ok|okay|correct|confirmed|approve|approved)\b/i,
+                    /\b(looks?\s+(good|right|perfect|correct|fine|great))\b/i,
+                    /\b(that'?s?\s+(right|correct|good|perfect))\b/i,
+                    /\b(let'?s?\s*go|go\s*ahead|proceed|do\s*it|build\s*it|generate|lgtm)\b/i,
                   ];
                   const isConfirmation = confirmationPatterns.some(p => p.test(userText));
 
