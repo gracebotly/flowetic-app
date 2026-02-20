@@ -925,7 +925,7 @@ export async function POST(req: Request) {
                   .from('journey_sessions')
                   .select('id, mode, selected_outcome, wireframe_confirmed')
                   .eq('tenant_id', tenantId)
-                  .eq('thread_id', journeyThreadId)
+                  .eq('thread_id', cleanJourneyThreadId)
                   .maybeSingle();
 
                 if (journeySessionForWf && journeySessionForWf.mode === 'recommend' && journeySessionForWf.selected_outcome && !journeySessionForWf.wireframe_confirmed) {
