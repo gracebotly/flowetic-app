@@ -772,6 +772,33 @@ export async function POST(req: Request) {
       });
     }
 
+    // ─── EAGER PHASE ADVANCE (BUG 1 FIX) ────────────────────────────────────────
+    // Without this, style selection requests run the agent in phase="style"
+    // because autoAdvancePhase only ran in onFinish (after stream completed).
+    // The agent's style allowlist doesn't include delegateToPlatformMapper,
+    // so it calls suggestAction("Generate Dashboard Preview") instead.
+    // By advancing BEFORE agent invocation, the agent enters build_preview
+    // on the SAME request as style selection → auto-generates preview.
+    try {
+      const eagerAdvance = await autoAdvancePhase({
+        supabase,
+        tenantId,
+        journeyThreadId: cleanJourneyThreadId,
+        mastraThreadId: cleanMastraThreadId,
+      });
+      if (eagerAdvance?.advanced && eagerAdvance?.to) {
+        requestContext.set('phase', eagerAdvance.to);
+        console.log('[api/chat] ✅ Eager phase advance before agent:', {
+          from: eagerAdvance.from,
+          to: eagerAdvance.to,
+        });
+      }
+    } catch (eagerErr: any) {
+      // Non-fatal: if eager advance fails, onFinish autoAdvance is the fallback
+      console.warn('[api/chat] Eager autoAdvancePhase failed (non-fatal):', eagerErr?.message || eagerErr);
+    }
+    // ─── END EAGER PHASE ADVANCE ─────────────────────────────────────────────
+
     // PHASE VERIFICATION: Log final phase value before agent execution
     const finalPhase = requestContext.get('phase') as string;
     console.log('[api/chat] Final RequestContext phase before agent:', {
