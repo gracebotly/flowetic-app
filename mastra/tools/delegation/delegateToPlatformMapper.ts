@@ -18,7 +18,7 @@ USE THIS TOOL WHEN:
 The Platform Mapping specialist has access to: analyzeSchema, generateMapping,
 getSchemaSummary, runGeneratePreviewWorkflow, getJourneySession, setSchemaReady,
 appendThreadEvent, getRecentEventSamples, recommendTemplates,
-saveMapping, connectionBackfillWorkflow, getEventStats, getEventSamples,
+connectionBackfillWorkflow, getEventStats, getEventSamples,
 validatePreviewReadiness, and platform-specific skills.
 
 DO NOT try to generate previews yourself — always delegate to this specialist.`,

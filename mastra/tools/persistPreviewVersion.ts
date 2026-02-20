@@ -112,6 +112,31 @@ export const persistPreviewVersion = createTool({
     } else if (rpcResult) {
       const previewUrl = `/preview/${finalInterfaceId}/${rpcResult.version_id}`;
       console.log(`[persistPreviewVersion] ${rpcResult.was_inserted ? 'Created' : 'Found'} version: ${rpcResult.version_id}`);
+      // BUG 5 FIX: Persist preview linkage + advance journey mode to interactive_edit.
+      // Without this, autoAdvancePhase has no rule for build_preview → interactive_edit
+      // and the session stays stuck in build_preview forever.
+      const journeyThreadId = context?.requestContext?.get('journeyThreadId') as string | undefined;
+      if (journeyThreadId && finalInterfaceId) {
+        const { error: sessionUpdateErr } = await supabase
+          .from('journey_sessions')
+          .update({
+            preview_interface_id: finalInterfaceId,
+            preview_version_id: rpcResult.version_id,
+            mode: 'interactive_edit',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('tenant_id', tenantId)
+          .eq('thread_id', journeyThreadId);
+        if (sessionUpdateErr) {
+          console.warn('[persistPreviewVersion] Failed to advance journey to interactive_edit:', sessionUpdateErr.message);
+        } else {
+          console.log('[persistPreviewVersion] ✅ Journey advanced to interactive_edit, preview linked:', {
+            journeyThreadId,
+            previewInterfaceId: finalInterfaceId,
+            previewVersionId: rpcResult.version_id,
+          });
+        }
+      }
       // BUG 4 FIX: Backfill interface_id on events that were ingested before
       // the interface existed. connectionBackfill stores events with interface_id=NULL
       // because the interface doesn't exist during initial data pull.
@@ -200,6 +225,30 @@ export const persistPreviewVersion = createTool({
     }
 
     const previewUrl = `/preview/${finalInterfaceId}/${version.id}`;
+
+    // BUG 5 FIX: Persist preview linkage + advance journey mode (fallback INSERT path).
+    const journeyThreadIdFallback = context?.requestContext?.get('journeyThreadId') as string | undefined;
+    if (journeyThreadIdFallback && finalInterfaceId) {
+      const { error: sessionUpdateErr } = await supabase
+        .from('journey_sessions')
+        .update({
+          preview_interface_id: finalInterfaceId,
+          preview_version_id: version.id,
+          mode: 'interactive_edit',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('tenant_id', tenantId)
+        .eq('thread_id', journeyThreadIdFallback);
+      if (sessionUpdateErr) {
+        console.warn('[persistPreviewVersion] Failed to advance journey to interactive_edit (fallback):', sessionUpdateErr.message);
+      } else {
+        console.log('[persistPreviewVersion] ✅ Journey advanced to interactive_edit (fallback), preview linked:', {
+          journeyThreadId: journeyThreadIdFallback,
+          previewInterfaceId: finalInterfaceId,
+          previewVersionId: version.id,
+        });
+      }
+    }
 
     // BUG 4 FIX: Backfill interface_id on orphaned events (fallback path)
     const sourceIdFallback = context?.requestContext?.get('sourceId') as string | undefined;
