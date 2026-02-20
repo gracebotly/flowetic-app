@@ -924,7 +924,7 @@ export async function POST(req: Request) {
                 // The agent shows a wireframe and asks "Does this look right?"
                 // If the user's message is a confirmation, set wireframe_confirmed=true
                 // so autoAdvancePhase can proceed to style.
-                if (sessionRow && sessionRow.mode === 'recommend' && sessionRow.selected_outcome && !sessionRow.wireframe_confirmed) {
+                if (session && session.mode === 'recommend' && session.selected_outcome && !session.wireframe_confirmed) {
                   const lastUserMessage = messages[messages.length - 1];
                   const userText = typeof lastUserMessage?.content === 'string'
                     ? lastUserMessage.content.toLowerCase().trim()
@@ -935,12 +935,12 @@ export async function POST(req: Request) {
                     const { error: wfError } = await supabase
                       .from('journey_sessions')
                       .update({ wireframe_confirmed: true, updated_at: new Date().toISOString() })
-                      .eq('id', sessionRow.id)
+                      .eq('id', session.id)
                       .eq('tenant_id', tenantId);
                     if (wfError) {
                       console.error('[api/chat] Failed to set wireframe_confirmed:', wfError.message);
                     } else {
-                      sessionRow.wireframe_confirmed = true;
+                      session.wireframe_confirmed = true;
                     }
                   }
                 }
