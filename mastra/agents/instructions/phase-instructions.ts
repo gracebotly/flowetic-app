@@ -394,6 +394,11 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
     'todoList',
     'todoUpdate',
     'todoComplete',
+    // Workspace tools (read-only filesystem + BM25 skill search)
+    'mastra_workspace_read_file',
+    'mastra_workspace_list_files',
+    'mastra_workspace_file_stat',
+    'mastra_workspace_search',
   ],
 
   recommend: [
@@ -413,6 +418,11 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
     'todoList',
     'todoUpdate',
     'todoComplete',
+    // Workspace tools (read-only filesystem + BM25 skill search)
+    'mastra_workspace_read_file',
+    'mastra_workspace_list_files',
+    'mastra_workspace_file_stat',
+    'mastra_workspace_search',
   ],
 
   style: [
@@ -442,6 +452,11 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
     'todoList',
     'todoUpdate',
     'todoComplete',
+    // Workspace tools (read-only filesystem + BM25 skill search)
+    'mastra_workspace_read_file',
+    'mastra_workspace_list_files',
+    'mastra_workspace_file_stat',
+    'mastra_workspace_search',
   ],
 
   build_preview: [
@@ -469,6 +484,11 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
     'todoList',
     'todoUpdate',
     'todoComplete',
+    // Workspace tools (read-only filesystem + BM25 skill search)
+    'mastra_workspace_read_file',
+    'mastra_workspace_list_files',
+    'mastra_workspace_file_stat',
+    'mastra_workspace_search',
   ],
 
   interactive_edit: [
@@ -492,6 +512,11 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
     'todoList',
     'todoUpdate',
     'todoComplete',
+    // Workspace tools (read-only filesystem + BM25 skill search)
+    'mastra_workspace_read_file',
+    'mastra_workspace_list_files',
+    'mastra_workspace_file_stat',
+    'mastra_workspace_search',
   ],
 
   deploy: [
@@ -511,5 +536,10 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
     'todoList',
     'todoUpdate',
     'todoComplete',
+    // Workspace tools (read-only filesystem + BM25 skill search)
+    'mastra_workspace_read_file',
+    'mastra_workspace_list_files',
+    'mastra_workspace_file_stat',
+    'mastra_workspace_search',
   ],
 };

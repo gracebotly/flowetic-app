@@ -402,12 +402,17 @@ export default async function PreviewPage({ params }: PreviewPageProps) {
     const svc = createServiceClient();
 
     // 2a. Primary: fetch via interface_id
+    // BUG 2 FIX: Exclude tool_event/state from primary query.
+    // If only these non-metric event types exist for this interface_id,
+    // the query returns 0 rows → source_id fallback triggers → real
+    // workflow_execution events load → metrics actually render.
     const { data: events, error: eventsError } = await svc
       .from("events_flat")
       .select(
         "id, type, name, value, unit, text, state, timestamp, created_at, workflow_id, status, duration_ms, mode, workflow_name, execution_id, error_message"
       )
       .eq("interface_id", dashboardId)
+      .not("type", "in", '("state","tool_event")')
       .order("timestamp", { ascending: false })
       .limit(200);
 
@@ -417,6 +422,7 @@ export default async function PreviewPage({ params }: PreviewPageProps) {
         .from("events")
         .select("id, type, name, value, unit, text, state, timestamp, created_at")
         .eq("interface_id", dashboardId)
+        .not("type", "in", '("state","tool_event")')
         .order("timestamp", { ascending: false })
         .limit(200);
       // ✅ FIX (BUG 6c): ALWAYS flatten state JSONB to top-level fields.

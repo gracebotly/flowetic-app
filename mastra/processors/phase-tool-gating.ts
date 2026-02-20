@@ -60,6 +60,14 @@ const KNOWN_AGENT_TOOLS = new Set([
   'advancePhase',
   // On-demand skill knowledge search
   'searchSkillKnowledge',
+  // Workspace-injected tools (auto-added by Mastra when workspace is assigned).
+  // MUST be registered here to prevent phase leakage — without this,
+  // these tools pass through the gating processor ungated (available in ALL phases).
+  // See: mastra/workspace/index.ts (filesystem: readOnly, bm25: true)
+  'mastra_workspace_read_file',
+  'mastra_workspace_list_files',
+  'mastra_workspace_file_stat',
+  'mastra_workspace_search',
 ]);
 
 /**

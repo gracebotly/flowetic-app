@@ -15,7 +15,6 @@ import {
   getClientContext,
   getRecentEventSamples,
   recommendTemplates,
-  saveMapping,
   runGeneratePreviewWorkflow,
   // NEW: Add Supatools
   getEventStats,
@@ -133,7 +132,6 @@ export const platformMappingMaster: Agent = new Agent({
     getClientContext,
     getRecentEventSamples,
     recommendTemplates,
-    saveMapping,
     runGeneratePreviewWorkflow,
     getJourneySession,
     setSchemaReady,
