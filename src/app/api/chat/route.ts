@@ -185,8 +185,21 @@ async function handleDeterministicSelectEntity(params: {
     const result = data?.[0] ?? data;
     // 2. Format the response exactly like the agent would
     const hasData = result?.has_data ?? false;
-    const entities = result?.entities ?? [];
-    const totalEvents = result?.total_events ?? 0;
+    // ✅ FIX (BUG 1): Filter out internal agent bookkeeping events before display.
+    // The RPC now filters these at DB level too, but double-filter here for safety.
+    // 'state' type with name 'thread_event' = agent thread management (48 events)
+    // 'tool_event' type = internal tool execution traces (1 event)
+    // 'error' type with name 'thread_event' = agent error traces (4 events)
+    const allEntities = result?.entities ?? [];
+    const entities = allEntities.filter((e: any) => {
+      // Exclude internal thread events regardless of type
+      if (e.name === 'thread_event') return false;
+      // Exclude pure state/tool_event types (agent bookkeeping)
+      if (e.type === 'state' || e.type === 'tool_event') return false;
+      return true;
+    });
+    // Recompute total from filtered entities only
+    const totalEvents = entities.reduce((sum: number, e: any) => sum + (e.count ?? 0), 0);
     let responseText: string;
     if (hasData && entities.length > 0) {
       const entityLines = entities
