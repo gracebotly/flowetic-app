@@ -293,9 +293,8 @@ export function ResponsiveDashboardRenderer({
   // Responsive values
   const columns = getResponsiveColumns(baseColumns, deviceMode);
   const gap = getResponsiveGap(baseGap, deviceMode);
-  const containerStyle = getDeviceContainerStyle(deviceMode, backgroundColor);
 
-  // Design tokens
+  // Design tokens (must be extracted BEFORE containerStyle which uses backgroundColor)
   const colors = designTokens?.colors ?? {};
   const primaryColor = colors?.primary ?? "#3b82f6";
   const secondaryColor = colors?.secondary ?? "#64748B";
@@ -307,6 +306,8 @@ export function ResponsiveDashboardRenderer({
   const cardBackground = isDark
     ? `${textColor}08`  // Very faint light overlay on dark backgrounds
     : "#ffffff";         // White cards on light backgrounds
+  const containerStyle = getDeviceContainerStyle(deviceMode, backgroundColor);
+
   const borderRadius = designTokens?.borderRadius ?? 8;
   const shadow = designTokens?.shadow ?? "0 2px 4px rgba(0,0,0,0.05)";
 
