@@ -135,7 +135,9 @@ Valid phases: select_entity, recommend, style, build_preview, refine`,
       style: {
         check: async () => {
           const selectedOutcome = context.requestContext?.get('selectedOutcome');
+          const wireframeConfirmed = context.requestContext?.get('wireframeConfirmed');
           const missingFields: string[] = [];
+          // Check selected_outcome (existing validation)
           if (!selectedOutcome) {
             const { data } = await supabase
               .from('journey_sessions')
@@ -145,9 +147,26 @@ Valid phases: select_entity, recommend, style, build_preview, refine`,
               .maybeSingle();
             if (!data?.selected_outcome) missingFields.push('selectedOutcome');
           }
+          // BUG 4 FIX: Check wireframe_confirmed before allowing recommend → style.
+          // The recommend phase requires the user to explicitly confirm the wireframe
+          // preview before advancing. Without this check, the agent can call
+          // advancePhase({ newPhase: 'style' }) and bypass the wireframe gate entirely,
+          // defeating the deterministic autoAdvancePhase refactor.
+          // See: AI SDK Issue #8653 — activeTools doesn't prevent tool execution.
+          if (wireframeConfirmed !== 'true') {
+            const { data: wfData } = await supabase
+              .from('journey_sessions')
+              .select('wireframe_confirmed')
+              .eq('thread_id', journeyThreadId)
+              .eq('tenant_id', tenantId)
+              .maybeSingle();
+            if (wfData?.wireframe_confirmed !== true) {
+              missingFields.push('wireframeConfirmed (user must confirm wireframe preview first)');
+            }
+          }
           return { valid: missingFields.length === 0, missing: missingFields };
         },
-        message: 'Cannot advance to style: Missing required selections',
+        message: 'Cannot advance to style: wireframe not confirmed or missing selections',
       },
       build_preview: {
         check: async () => {
