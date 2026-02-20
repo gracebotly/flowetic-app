@@ -18,7 +18,6 @@ const nextConfig: NextConfig = {
     "@mastra/ai-sdk",
     "@mastra/libsql",
     "@mastra/pg",
-    "@mastra/rag",
     "@mastra/mcp",
   ],
 
