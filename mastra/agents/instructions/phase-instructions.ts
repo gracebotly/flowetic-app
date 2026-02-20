@@ -402,10 +402,15 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
     'getEventStats',
     'getOutcomes',
     'searchSkillKnowledge',
-    // Layout persistence — agent calls advancePhase({ newPhase: 'style', selectedValue: '<layout>' })
-    // after user picks a wireframe layout. autoAdvancePhase requires BOTH
-    // selected_outcome AND selected_layout before advancing recommend→style.
-    'advancePhase',
+    // BUG 4 FIX: advancePhase REMOVED from recommend phase.
+    // Phase transitions are deterministic via autoAdvancePhase in onFinish.
+    // autoAdvancePhase handles recommend → style when BOTH selected_outcome
+    // AND wireframe_confirmed are true. The agent must NOT manually advance
+    // phases during recommend — this was the root cause of Bug 4 where the
+    // agent bypassed the wireframe confirmation gate.
+    // See also: AI SDK Issue #8653 — activeTools filtering doesn't prevent
+    // tool execution from conversation memory, making allowlist removal
+    // insufficient alone (tool-level validation in advancePhase.ts is primary defense).
     // Utility
     'navigateTo',
     'suggestAction',

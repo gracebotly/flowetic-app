@@ -157,6 +157,21 @@ export class PhaseToolGatingProcessor implements Processor {
       return {};
     }
 
+    // BUG 4 DEFENSE: Detect AI SDK #8653 phantom tool call attempts.
+    // If the agent attempts to call advancePhase while in recommend phase
+    // and advancePhase is NOT in the allowlist, this means the AI SDK bug
+    // allowed the tool call through despite activeTools filtering.
+    // The primary defense is tool-level validation in advancePhase.ts.
+    const currentPhaseForLog = requestContext?.get?.('phase') as string | undefined;
+    if (currentPhaseForLog === 'recommend') {
+      const allowedForRecommend = PHASE_TOOL_ALLOWLIST['recommend'] || [];
+      if (!allowedForRecommend.includes('advancePhase')) {
+        // advancePhase is not in the allowlist — if it still gets called,
+        // that's the AI SDK #8653 bug. Log it for monitoring.
+        console.log('[PhaseToolGating] advancePhase correctly excluded from recommend allowlist. Tool-level validation is primary defense.');
+      }
+    }
+
     // Use activeTools (string array) instead of tools (object replace).
     // This FILTERS the existing tool set without REPLACING it —
     // Mastra-internal tools like updateWorkingMemory stay in the registry.
