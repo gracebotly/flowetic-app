@@ -112,6 +112,27 @@ export const persistPreviewVersion = createTool({
     } else if (rpcResult) {
       const previewUrl = `/preview/${finalInterfaceId}/${rpcResult.version_id}`;
       console.log(`[persistPreviewVersion] ${rpcResult.was_inserted ? 'Created' : 'Found'} version: ${rpcResult.version_id}`);
+      // BUG 4 FIX: Backfill interface_id on events that were ingested before
+      // the interface existed. connectionBackfill stores events with interface_id=NULL
+      // because the interface doesn't exist during initial data pull.
+      const sourceId = context?.requestContext?.get('sourceId') as string | undefined;
+      if (sourceId && finalInterfaceId) {
+        const { data: backfilled, error: backfillErr } = await supabase
+          .from('events')
+          .update({ interface_id: finalInterfaceId })
+          .eq('tenant_id', tenantId)
+          .eq('source_id', sourceId)
+          .is('interface_id', null)
+          .select('id');
+        if (backfillErr) {
+          console.warn('[persistPreviewVersion] Event backfill failed:', backfillErr.message);
+        } else {
+          const count = backfilled?.length ?? 0;
+          if (count > 0) {
+            console.log(`[persistPreviewVersion] ✅ Backfilled interface_id on ${count} orphaned events`);
+          }
+        }
+      }
       return {
         interfaceId: finalInterfaceId,
         versionId: rpcResult.version_id,
@@ -179,6 +200,26 @@ export const persistPreviewVersion = createTool({
     }
 
     const previewUrl = `/preview/${finalInterfaceId}/${version.id}`;
+
+    // BUG 4 FIX: Backfill interface_id on orphaned events (fallback path)
+    const sourceIdFallback = context?.requestContext?.get('sourceId') as string | undefined;
+    if (sourceIdFallback && finalInterfaceId) {
+      const { data: backfilled, error: backfillErr } = await supabase
+        .from('events')
+        .update({ interface_id: finalInterfaceId })
+        .eq('tenant_id', tenantId)
+        .eq('source_id', sourceIdFallback)
+        .is('interface_id', null)
+        .select('id');
+      if (backfillErr) {
+        console.warn('[persistPreviewVersion] Event backfill failed:', backfillErr.message);
+      } else {
+        const count = backfilled?.length ?? 0;
+        if (count > 0) {
+          console.log(`[persistPreviewVersion] ✅ Backfilled interface_id on ${count} orphaned events`);
+        }
+      }
+    }
 
     return {
       interfaceId: finalInterfaceId,

@@ -66,7 +66,7 @@ async function autoAdvancePhase(params: {
   let session = null;
   const { data: byThread } = await supabase
     .from('journey_sessions')
-    .select('id, mode, selected_entities, selected_outcome, selected_style_bundle_id, schema_ready')
+    .select('id, mode, selected_entities, selected_outcome, selected_layout, selected_style_bundle_id, schema_ready, wireframe_confirmed')
     .eq('thread_id', journeyThreadId)
     .eq('tenant_id', tenantId)
     .maybeSingle();
@@ -76,7 +76,7 @@ async function autoAdvancePhase(params: {
   } else {
     const { data: byMastra } = await supabase
       .from('journey_sessions')
-      .select('id, mode, selected_entities, selected_outcome, selected_style_bundle_id, schema_ready')
+      .select('id, mode, selected_entities, selected_outcome, selected_layout, selected_style_bundle_id, schema_ready, wireframe_confirmed')
       .eq('mastra_thread_id', mastraThreadId)
       .eq('tenant_id', tenantId)
       .maybeSingle();
@@ -105,7 +105,7 @@ async function autoAdvancePhase(params: {
     } else {
       nextPhase = 'recommend';
     }
-  } else if (currentPhase === 'recommend' && session.selected_outcome) {
+  } else if (currentPhase === 'recommend' && session.selected_outcome && session.wireframe_confirmed === true) {
     nextPhase = 'style';
   } else if (
     currentPhase === 'style' &&
@@ -120,6 +120,8 @@ async function autoAdvancePhase(params: {
       currentPhase,
       hasEntities: !!session.selected_entities,
       hasOutcome: !!session.selected_outcome,
+      hasLayout: !!session.selected_layout,
+      wireframeConfirmed: !!session.wireframe_confirmed,
       hasStyle: !!session.selected_style_bundle_id,
       schemaReady: session.schema_ready,
     });
@@ -516,7 +518,7 @@ export async function POST(req: Request) {
 
         const { data: byThreadId } = await supabase
           .from('journey_sessions')
-          .select('id, mode, preview_interface_id, selected_style_bundle_id, selected_entities, selected_outcome, schema_ready')
+          .select('id, mode, preview_interface_id, selected_style_bundle_id, selected_entities, selected_outcome, selected_layout, schema_ready, wireframe_confirmed')
           .eq('thread_id', cleanJourneyThreadId)
           .eq('tenant_id', tenantId)
           .maybeSingle();
@@ -527,7 +529,7 @@ export async function POST(req: Request) {
           // Fallback: query by mastra_thread_id (in case thread was created that way)
           const { data: byMastraId } = await supabase
             .from('journey_sessions')
-            .select('id, mode, preview_interface_id, selected_style_bundle_id, selected_entities, selected_outcome, schema_ready')
+            .select('id, mode, preview_interface_id, selected_style_bundle_id, selected_entities, selected_outcome, selected_layout, schema_ready, wireframe_confirmed')
             .eq('mastra_thread_id', cleanMastraThreadId)
             .eq('tenant_id', tenantId)
             .maybeSingle();
@@ -601,6 +603,18 @@ export async function POST(req: Request) {
           const clientOutcome = clientData.selectedOutcome;
           if (clientOutcome && !sessionRow.selected_outcome) {
             selectionUpdates.selected_outcome = String(clientOutcome);
+          }
+
+          // Layout: client sends selectedLayout after picking a wireframe layout
+          const clientLayout = clientData.selectedLayout;
+          if (clientLayout && !sessionRow.selected_layout) {
+            selectionUpdates.selected_layout = String(clientLayout);
+          }
+
+          // Wireframe confirmation: client sends wireframeConfirmed after user approves preview
+          const clientWireframeConfirmed = clientData.wireframeConfirmed;
+          if (clientWireframeConfirmed === true && !sessionRow.wireframe_confirmed) {
+            selectionUpdates.wireframe_confirmed = true;
           }
 
           // Style: client sends selectedStyleBundleId after clicking design system card
@@ -678,6 +692,15 @@ export async function POST(req: Request) {
         if (sessionRow?.selected_outcome) {
           requestContext.set('selectedOutcome', sessionRow.selected_outcome);
           console.log('[api/chat] Loaded selectedOutcome from DB:', sessionRow.selected_outcome);
+        }
+        if (sessionRow?.selected_layout) {
+          requestContext.set('selectedLayout', sessionRow.selected_layout);
+          console.log('[api/chat] Loaded selectedLayout from DB:', sessionRow.selected_layout);
+        }
+        // Load wireframe_confirmed from DB into RequestContext
+        if (sessionRow?.wireframe_confirmed) {
+          requestContext.set('wireframeConfirmed', 'true');
+          console.log('[api/chat] Loaded wireframeConfirmed from DB: true');
         }
         // Load schema_ready from DB into RequestContext
         if (sessionRow?.schema_ready) {
@@ -896,6 +919,31 @@ export async function POST(req: Request) {
             // and advances the phase if selections are complete.
             try {
               if (cleanJourneyThreadId && cleanJourneyThreadId !== 'default-thread') {
+                // SERVER-SIDE WIREFRAME CONFIRMATION DETECTION
+                // When in recommend phase with outcome set, detect user confirmation of wireframe.
+                // The agent shows a wireframe and asks "Does this look right?"
+                // If the user's message is a confirmation, set wireframe_confirmed=true
+                // so autoAdvancePhase can proceed to style.
+                if (sessionRow && sessionRow.mode === 'recommend' && sessionRow.selected_outcome && !sessionRow.wireframe_confirmed) {
+                  const lastUserMessage = messages[messages.length - 1];
+                  const userText = typeof lastUserMessage?.content === 'string'
+                    ? lastUserMessage.content.toLowerCase().trim()
+                    : '';
+                  const confirmationPattern = /^(yes|yeah|yep|yup|sure|ok|okay|correct|confirmed|approve|approved|looks?\s*good|let'?s?\s*go|go\s*ahead|perfect|great|that'?s?\s*(right|correct|good|perfect)|proceed|do\s*it|build\s*it|generate|lgtm)/i;
+                  if (confirmationPattern.test(userText)) {
+                    console.log('[api/chat] Wireframe confirmation detected from user message:', userText);
+                    const { error: wfError } = await supabase
+                      .from('journey_sessions')
+                      .update({ wireframe_confirmed: true, updated_at: new Date().toISOString() })
+                      .eq('id', sessionRow.id)
+                      .eq('tenant_id', tenantId);
+                    if (wfError) {
+                      console.error('[api/chat] Failed to set wireframe_confirmed:', wfError.message);
+                    } else {
+                      sessionRow.wireframe_confirmed = true;
+                    }
+                  }
+                }
                 const result = await autoAdvancePhase({
                   supabase,
                   tenantId,
