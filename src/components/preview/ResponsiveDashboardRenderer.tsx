@@ -115,7 +115,7 @@ function getResponsiveGap(baseGap: number, deviceMode: DeviceMode): number {
   }
 }
 
-function getDeviceContainerStyle(deviceMode: DeviceMode): React.CSSProperties {
+function getDeviceContainerStyle(deviceMode: DeviceMode, bgColor: string): React.CSSProperties {
   switch (deviceMode) {
     case "mobile":
       return {
@@ -123,7 +123,7 @@ function getDeviceContainerStyle(deviceMode: DeviceMode): React.CSSProperties {
         margin: "0 auto",
         border: "8px solid #1f2937",
         borderRadius: "24px",
-        backgroundColor: "#ffffff",
+        backgroundColor: bgColor,
         boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
       };
     case "tablet":
@@ -132,13 +132,13 @@ function getDeviceContainerStyle(deviceMode: DeviceMode): React.CSSProperties {
         margin: "0 auto",
         border: "6px solid #374151",
         borderRadius: "16px",
-        backgroundColor: "#ffffff",
+        backgroundColor: bgColor,
         boxShadow: "0 20px 40px -10px rgba(0, 0, 0, 0.2)",
       };
     case "desktop":
       return {
         maxWidth: "100%",
-        backgroundColor: "#ffffff",
+        backgroundColor: bgColor,
       };
   }
 }
@@ -149,6 +149,8 @@ function ComponentCard({
   primaryColor,
   secondaryColor,
   accentColor,
+  textColor,
+  cardBackground,
   borderRadius,
   shadow,
   isEditing,
@@ -158,6 +160,8 @@ function ComponentCard({
   primaryColor: string;
   secondaryColor: string;
   accentColor: string;
+  textColor: string;
+  cardBackground: string;
   borderRadius: number;
   shadow: string;
   isEditing: boolean;
@@ -171,13 +175,15 @@ function ComponentCard({
   return (
     <div
       className={`
-        h-full bg-white border border-gray-200 p-4
+        h-full border p-4
         transition-all duration-200
         ${isEditing ? "cursor-pointer hover:border-blue-400 hover:shadow-md" : ""}
       `}
       style={{
         borderRadius: `${borderRadius}px`,
         boxShadow: shadow,
+        backgroundColor: cardBackground,
+        borderColor: `${textColor}15`,
       }}
       onClick={isEditing ? onClick : undefined}
       role={isEditing ? "button" : undefined}
@@ -186,17 +192,17 @@ function ComponentCard({
     >
       {/* Header */}
       <div className="mb-3">
-        <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
+        <h3 className="text-sm font-semibold" style={{ color: textColor }}>{title}</h3>
       </div>
 
       {/* Premium content based on type */}
       <div className="flex-1 min-h-0">
         {type === "MetricCard" ? (
           <div className="text-center py-4">
-            <Metric className="text-gray-900">
+            <Metric style={{ color: textColor }}>
               {props?.value ?? "—"}
             </Metric>
-            <Text className="text-gray-500">
+            <Text style={{ color: `${textColor}99` }}>
               {props?.subtitle ?? props?.label ?? "Metric"}
             </Text>
           </div>
@@ -245,8 +251,8 @@ function ComponentCard({
             showLabel={true}
           />
         ) : type === "DataTable" ? (
-          <div className="text-xs text-gray-500">
-            <div className="grid grid-cols-4 gap-2 font-medium border-b pb-2 mb-2">
+          <div className="text-xs" style={{ color: `${textColor}99` }}>
+            <div className="grid grid-cols-4 gap-2 font-medium pb-2 mb-2" style={{ borderBottomColor: `${textColor}20`, borderBottomWidth: '1px' }}>
               {(props?.columns ?? ["ID", "Name", "Status", "Date"]).slice(0, 4).map((col: string | { key: string; label: string }, i: number) => (
                 <div key={i} className="truncate">
                   {typeof col === 'string' ? col : col.label}
@@ -256,13 +262,13 @@ function ComponentCard({
             {[1, 2, 3].map((row) => (
               <div key={row} className="grid grid-cols-4 gap-2 py-1 border-b border-gray-100">
                 {[1, 2, 3, 4].map((cell) => (
-                  <div key={cell} className="h-3 bg-gray-100 rounded animate-pulse" />
+                  <div key={cell} className="h-3 rounded animate-pulse" style={{ backgroundColor: `${textColor}15` }} />
                 ))}
               </div>
             ))}
           </div>
         ) : (
-          <div className="flex items-center justify-center h-full text-gray-400 text-sm">
+          <div className="flex items-center justify-center h-full text-sm" style={{ color: `${textColor}66` }}>
             {type} component
           </div>
         )}
@@ -287,14 +293,21 @@ export function ResponsiveDashboardRenderer({
   // Responsive values
   const columns = getResponsiveColumns(baseColumns, deviceMode);
   const gap = getResponsiveGap(baseGap, deviceMode);
-  const containerStyle = getDeviceContainerStyle(deviceMode);
 
-  // Design tokens
+  // Design tokens (must be extracted BEFORE containerStyle which uses backgroundColor)
   const colors = designTokens?.colors ?? {};
   const primaryColor = colors?.primary ?? "#3b82f6";
   const secondaryColor = colors?.secondary ?? "#64748B";
   const accentColor = colors?.accent ?? "#14B8A6";
   const backgroundColor = colors?.background ?? "#ffffff";
+  const textColor = colors?.text ?? "#111827";
+  // Card backgrounds: slightly lighter/darker than the page background
+  const isDark = backgroundColor.toLowerCase() < "#888888";
+  const cardBackground = isDark
+    ? `${textColor}08`  // Very faint light overlay on dark backgrounds
+    : "#ffffff";         // White cards on light backgrounds
+  const containerStyle = getDeviceContainerStyle(deviceMode, backgroundColor);
+
   const borderRadius = designTokens?.borderRadius ?? 8;
   const shadow = designTokens?.shadow ?? "0 2px 4px rgba(0,0,0,0.05)";
 
@@ -318,7 +331,7 @@ export function ResponsiveDashboardRenderer({
       <div style={containerStyle} className="overflow-hidden">
         <div className="p-4">
           {spec?.title && (
-            <h1 className="text-xl font-bold text-gray-900 mb-4">{spec.title}</h1>
+            <h1 className="text-xl font-bold mb-4" style={{ color: textColor }}>{spec.title}</h1>
           )}
           <div
             className="grid"
@@ -334,6 +347,8 @@ export function ResponsiveDashboardRenderer({
                 primaryColor={primaryColor}
                 secondaryColor={secondaryColor}
                 accentColor={accentColor}
+                textColor={textColor}
+                cardBackground={cardBackground}
                 borderRadius={borderRadius}
                 shadow={shadow}
                 isEditing={isEditing}
@@ -351,7 +366,7 @@ export function ResponsiveDashboardRenderer({
     <div style={containerStyle}>
       <div className="p-6">
         {spec?.title && (
-          <h1 className="text-2xl font-bold text-gray-900 mb-6">{spec.title}</h1>
+          <h1 className="text-2xl font-bold mb-6" style={{ color: textColor }}>{spec.title}</h1>
         )}
         <div
           className="grid"
@@ -373,6 +388,8 @@ export function ResponsiveDashboardRenderer({
                 primaryColor={primaryColor}
                 secondaryColor={secondaryColor}
                 accentColor={accentColor}
+                textColor={textColor}
+                cardBackground={cardBackground}
                 borderRadius={borderRadius}
                 shadow={shadow}
                 isEditing={isEditing}

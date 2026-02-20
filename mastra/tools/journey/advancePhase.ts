@@ -1,6 +1,7 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { createAuthenticatedClient } from '../../lib/supabase';
+import { resolveStyleBundleId } from '../../lib/resolveStyleBundleId';
 
 /**
  * EDGE CASE TOOL - Manually advance journey phase
@@ -91,14 +92,31 @@ Valid phases: select_entity, recommend, style, build_preview, refine`,
     // selected_outcome is owned exclusively by recommendOutcome tool.
     // advancePhase previously wrote selectedOutcome with arbitrary LLM input,
     // overwriting the correct data-computed value (e.g., "workflow_ops" over "dashboard").
+    // BUG 7 FIX: resolve slug here so it can be used both for RC and updateData below.
+    let resolvedStyleSlug: string | null = null;
     if (selectedValue) {
       if (newPhase === 'recommend') {
         context?.requestContext?.set('selectedEntities', selectedValue);
       }
       // REMOVED: newPhase === 'style' → selectedOutcome write
       // recommendOutcome is the single source of truth for selected_outcome
+      if (newPhase === 'style') {
+        // Layout selection triggers recommend → style
+        context?.requestContext?.set('selectedLayout', selectedValue);
+      }
       if (newPhase === 'build_preview') {
-        context?.requestContext?.set('selectedStyleBundleId', selectedValue);
+        // BUG 7 FIX: Resolve display name → canonical slug BEFORE storing.
+        // Without this, raw display names like "Modern SaaS" get stored,
+        // which later fuzzy-match to wrong themes (e.g. "neon-cyber").
+        resolvedStyleSlug = resolveStyleBundleId(selectedValue);
+        if (resolvedStyleSlug) {
+          context?.requestContext?.set('selectedStyleBundleId', resolvedStyleSlug);
+        } else {
+          // If resolution fails, still set the raw value on context
+          // but do NOT write to DB (CHECK constraint would reject it)
+          console.warn('[advancePhase] Could not resolve style bundle:', selectedValue);
+          context?.requestContext?.set('selectedStyleBundleId', selectedValue);
+        }
       }
     }
 
@@ -195,6 +213,14 @@ Valid phases: select_entity, recommend, style, build_preview, refine`,
     };
     if (selectedValue && newPhase === 'recommend') {
       updateData.selected_entities = selectedValue;
+    }
+    // Persist layout selection when advancing to style
+    if (selectedValue && newPhase === 'style') {
+      updateData.selected_layout = selectedValue;
+    }
+    // BUG 7 FIX: Persist resolved style slug to DB when advancing to build_preview
+    if (resolvedStyleSlug && newPhase === 'build_preview') {
+      updateData.selected_style_bundle_id = resolvedStyleSlug;
     }
     // REMOVED: selected_outcome write for newPhase === 'style'
     // recommendOutcome tool is the single owner of selected_outcome.

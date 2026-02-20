@@ -66,7 +66,7 @@ async function autoAdvancePhase(params: {
   let session = null;
   const { data: byThread } = await supabase
     .from('journey_sessions')
-    .select('id, mode, selected_entities, selected_outcome, selected_style_bundle_id, schema_ready')
+    .select('id, mode, selected_entities, selected_outcome, selected_layout, selected_style_bundle_id, schema_ready, wireframe_confirmed')
     .eq('thread_id', journeyThreadId)
     .eq('tenant_id', tenantId)
     .maybeSingle();
@@ -76,7 +76,7 @@ async function autoAdvancePhase(params: {
   } else {
     const { data: byMastra } = await supabase
       .from('journey_sessions')
-      .select('id, mode, selected_entities, selected_outcome, selected_style_bundle_id, schema_ready')
+      .select('id, mode, selected_entities, selected_outcome, selected_layout, selected_style_bundle_id, schema_ready, wireframe_confirmed')
       .eq('mastra_thread_id', mastraThreadId)
       .eq('tenant_id', tenantId)
       .maybeSingle();
@@ -105,7 +105,7 @@ async function autoAdvancePhase(params: {
     } else {
       nextPhase = 'recommend';
     }
-  } else if (currentPhase === 'recommend' && session.selected_outcome) {
+  } else if (currentPhase === 'recommend' && session.selected_outcome && session.wireframe_confirmed === true) {
     nextPhase = 'style';
   } else if (
     currentPhase === 'style' &&
@@ -120,6 +120,8 @@ async function autoAdvancePhase(params: {
       currentPhase,
       hasEntities: !!session.selected_entities,
       hasOutcome: !!session.selected_outcome,
+      hasLayout: !!session.selected_layout,
+      wireframeConfirmed: !!session.wireframe_confirmed,
       hasStyle: !!session.selected_style_bundle_id,
       schemaReady: session.schema_ready,
     });
@@ -185,8 +187,21 @@ async function handleDeterministicSelectEntity(params: {
     const result = data?.[0] ?? data;
     // 2. Format the response exactly like the agent would
     const hasData = result?.has_data ?? false;
-    const entities = result?.entities ?? [];
-    const totalEvents = result?.total_events ?? 0;
+    // ✅ FIX (BUG 1): Filter out internal agent bookkeeping events before display.
+    // The RPC now filters these at DB level too, but double-filter here for safety.
+    // 'state' type with name 'thread_event' = agent thread management (48 events)
+    // 'tool_event' type = internal tool execution traces (1 event)
+    // 'error' type with name 'thread_event' = agent error traces (4 events)
+    const allEntities = result?.entities ?? [];
+    const entities = allEntities.filter((e: any) => {
+      // Exclude internal thread events regardless of type
+      if (e.name === 'thread_event') return false;
+      // Exclude pure state/tool_event types (agent bookkeeping)
+      if (e.type === 'state' || e.type === 'tool_event') return false;
+      return true;
+    });
+    // Recompute total from filtered entities only
+    const totalEvents = entities.reduce((sum: number, e: any) => sum + (e.count ?? 0), 0);
     let responseText: string;
     if (hasData && entities.length > 0) {
       const entityLines = entities
@@ -218,6 +233,36 @@ async function handleDeterministicSelectEntity(params: {
         '',
         'You can either wait for events to come in, or tell me what entities you\'d like to track and I\'ll set things up based on your workflow structure.',
       ].join('\n');
+    }
+    // 2b. CRITICAL FIX (P0): Persist discovered entities to journey_sessions.
+    // Root cause of 3-week stuck bug: handleDeterministicSelectEntity was display-only.
+    // It called the RPC, formatted entities, streamed to UI — but never wrote to DB.
+    // autoAdvancePhase reads journey_sessions.selected_entities to decide whether to
+    // advance from select_entity → recommend. Without this write, it always found null.
+    // Confirmed: 35/35 sessions stuck at select_entity with selected_entities = null.
+    if (hasData && entities.length > 0) {
+      const entityNames = entities
+        .slice(0, 5)
+        .map((e: any) => e.name || 'Unknown')
+        .join(', ');
+      try {
+        const { error: writeError } = await supabase
+          .from('journey_sessions')
+          .update({
+            selected_entities: entityNames,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('thread_id', journeyThreadId)
+          .eq('tenant_id', tenantId);
+        if (writeError) {
+          console.error('[deterministic-select-entity] Failed to persist selected_entities:', writeError.message);
+        } else {
+          console.log('[deterministic-select-entity] ✅ Persisted selected_entities to DB:', entityNames);
+        }
+      } catch (persistEntitiesErr) {
+        // Non-fatal — entities still stream to client, user can re-select
+        console.warn('[deterministic-select-entity] Entity persistence error:', persistEntitiesErr);
+      }
     }
     // 3. Persist the assistant message to journey_messages so it appears on reload
     try {
@@ -473,7 +518,7 @@ export async function POST(req: Request) {
 
         const { data: byThreadId } = await supabase
           .from('journey_sessions')
-          .select('id, mode, preview_interface_id, selected_style_bundle_id, selected_entities, selected_outcome, schema_ready')
+          .select('id, mode, preview_interface_id, selected_style_bundle_id, selected_entities, selected_outcome, selected_layout, schema_ready, wireframe_confirmed')
           .eq('thread_id', cleanJourneyThreadId)
           .eq('tenant_id', tenantId)
           .maybeSingle();
@@ -484,7 +529,7 @@ export async function POST(req: Request) {
           // Fallback: query by mastra_thread_id (in case thread was created that way)
           const { data: byMastraId } = await supabase
             .from('journey_sessions')
-            .select('id, mode, preview_interface_id, selected_style_bundle_id, selected_entities, selected_outcome, schema_ready')
+            .select('id, mode, preview_interface_id, selected_style_bundle_id, selected_entities, selected_outcome, selected_layout, schema_ready, wireframe_confirmed')
             .eq('mastra_thread_id', cleanMastraThreadId)
             .eq('tenant_id', tenantId)
             .maybeSingle();
@@ -558,6 +603,18 @@ export async function POST(req: Request) {
           const clientOutcome = clientData.selectedOutcome;
           if (clientOutcome && !sessionRow.selected_outcome) {
             selectionUpdates.selected_outcome = String(clientOutcome);
+          }
+
+          // Layout: client sends selectedLayout after picking a wireframe layout
+          const clientLayout = clientData.selectedLayout;
+          if (clientLayout && !sessionRow.selected_layout) {
+            selectionUpdates.selected_layout = String(clientLayout);
+          }
+
+          // Wireframe confirmation: client sends wireframeConfirmed after user approves preview
+          const clientWireframeConfirmed = clientData.wireframeConfirmed;
+          if (clientWireframeConfirmed === true && !sessionRow.wireframe_confirmed) {
+            selectionUpdates.wireframe_confirmed = true;
           }
 
           // Style: client sends selectedStyleBundleId after clicking design system card
@@ -635,6 +692,15 @@ export async function POST(req: Request) {
         if (sessionRow?.selected_outcome) {
           requestContext.set('selectedOutcome', sessionRow.selected_outcome);
           console.log('[api/chat] Loaded selectedOutcome from DB:', sessionRow.selected_outcome);
+        }
+        if (sessionRow?.selected_layout) {
+          requestContext.set('selectedLayout', sessionRow.selected_layout);
+          console.log('[api/chat] Loaded selectedLayout from DB:', sessionRow.selected_layout);
+        }
+        // Load wireframe_confirmed from DB into RequestContext
+        if (sessionRow?.wireframe_confirmed) {
+          requestContext.set('wireframeConfirmed', 'true');
+          console.log('[api/chat] Loaded wireframeConfirmed from DB: true');
         }
         // Load schema_ready from DB into RequestContext
         if (sessionRow?.schema_ready) {
@@ -853,6 +919,37 @@ export async function POST(req: Request) {
             // and advances the phase if selections are complete.
             try {
               if (cleanJourneyThreadId && cleanJourneyThreadId !== 'default-thread') {
+                // Re-query journey session for wireframe confirmation detection
+                // (the `session` var in onFinish is Supabase Auth, not the journey session)
+                const { data: journeySessionForWf } = await supabase
+                  .from('journey_sessions')
+                  .select('id, mode, selected_outcome, wireframe_confirmed')
+                  .eq('tenant_id', tenantId)
+                  .eq('thread_id', cleanJourneyThreadId)
+                  .maybeSingle();
+
+                if (journeySessionForWf && journeySessionForWf.mode === 'recommend' && journeySessionForWf.selected_outcome && !journeySessionForWf.wireframe_confirmed) {
+                  const lastUserMessage = rawMessages[rawMessages.length - 1];
+                  const userText = typeof lastUserMessage?.content === 'string'
+                    ? lastUserMessage.content.toLowerCase().trim()
+                    : '';
+                  const confirmationPatterns = [
+                    /^(yes|yeah|yep|yup|sure|ok|okay|correct|confirmed|approve|approved|looks?\s*good|let'?s?\s*go|go\s*ahead|perfect|great|that'?s?\s*(right|correct|good|perfect)|proceed|do\s*it|build\s*it|generate|lgtm)/i,
+                  ];
+                  const isConfirmation = confirmationPatterns.some(p => p.test(userText));
+
+                  if (isConfirmation) {
+                    console.log('[api/chat] Wireframe confirmation detected from user message:', userText);
+                    const { error: wfError } = await supabase
+                      .from('journey_sessions')
+                      .update({ wireframe_confirmed: true, updated_at: new Date().toISOString() })
+                      .eq('id', journeySessionForWf.id)
+                      .eq('tenant_id', tenantId);
+                    if (wfError) {
+                      console.error('[api/chat] Failed to set wireframe_confirmed:', wfError.message);
+                    }
+                  }
+                }
                 const result = await autoAdvancePhase({
                   supabase,
                   tenantId,

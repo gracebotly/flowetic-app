@@ -12,6 +12,7 @@ export const storeEvents = createTool({
   inputSchema: z.object({
     events: z.array(z.record(z.any())),
     sourceId: z.string().min(1),
+    interfaceId: z.string().uuid().optional(),
   }),
   outputSchema: z.object({
     stored: z.number().int(),
@@ -40,10 +41,14 @@ export const storeEvents = createTool({
       return { stored: 0, skipped: 0, errors: [], status: 'success' as const };
     }
 
-    // Ensure all rows have tenant_id set
+    // Ensure all rows have tenant_id and interface_id set
     const enrichedRows = rows.map((r: Record<string, unknown>) => ({
       ...r,
       tenant_id: r.tenant_id || tenantId,
+      // BUG 4 FIX: Propagate interface_id to events when available.
+      // During initial backfill, interface doesn't exist yet so this is undefined.
+      // After preview creation, caller passes interfaceId to link events.
+      ...(inputData.interfaceId && !r.interface_id ? { interface_id: inputData.interfaceId } : {}),
     }));
 
     try {

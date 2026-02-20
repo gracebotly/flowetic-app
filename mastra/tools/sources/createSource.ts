@@ -48,16 +48,24 @@ export const createSource = createTool({
 
     const secret_hash = encryptSecret(JSON.stringify(secretPayload));
 
+    // FIX (P1): Use upsert instead of insert to make createSource idempotent.
+    // If the agent calls this twice with the same tenant_id+type+method (retry,
+    // hallucination, or duplicate tool call), the second call updates the existing
+    // row instead of crashing with a duplicate key error.
+    // This matches the pattern already used in /api/connections/connect/route.ts.
     const { data, error } = await supabase
       .from("sources")
-      .insert({
-        tenant_id: tenantId,
-        type,
-        name,
-        status,
-        method,
-        secret_hash,
-      })
+      .upsert(
+        {
+          tenant_id: tenantId,
+          type,
+          name,
+          status,
+          method,
+          secret_hash,
+        },
+        { onConflict: "tenant_id,type,method" }
+      )
       .select("id, tenant_id, type, name, method, status, created_at")
       .single();
 

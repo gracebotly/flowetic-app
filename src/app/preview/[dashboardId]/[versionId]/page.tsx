@@ -419,23 +419,39 @@ export default async function PreviewPage({ params }: PreviewPageProps) {
         .eq("interface_id", dashboardId)
         .order("timestamp", { ascending: false })
         .limit(200);
-      resolvedEvents = (fallbackEvents || []).map((evt: any) => ({
-        ...evt,
-        workflow_id: evt.state?.workflow_id ?? null,
-        status: evt.state?.status ?? null,
-        duration_ms:
-          evt.state?.duration_ms != null
-            ? Number(evt.state.duration_ms)
-            : null,
-        workflow_name: evt.state?.workflow_name ?? null,
-        execution_id: evt.state?.execution_id ?? null,
-        error_message: evt.state?.error_message ?? null,
-      }));
+      // ✅ FIX (BUG 6c): ALWAYS flatten state JSONB to top-level fields.
+      resolvedEvents = (fallbackEvents || []).map((evt: any) => {
+        const flat: Record<string, any> = { ...evt };
+        if (evt.state && typeof evt.state === 'object') {
+          for (const [key, value] of Object.entries(evt.state)) {
+            if (flat[key] == null || flat[key] === '') flat[key] = value;
+          }
+          if (flat.duration_ms != null) flat.duration_ms = Number(flat.duration_ms);
+        }
+        if (evt.labels && typeof evt.labels === 'object') {
+          for (const [key, value] of Object.entries(evt.labels)) {
+            if (flat[key] == null || flat[key] === '') flat[key] = value;
+          }
+        }
+        return flat;
+      });
     } else {
-      resolvedEvents = (events || []).map((evt: any) => ({
-        ...evt,
-        duration_ms: evt.duration_ms != null ? Number(evt.duration_ms) : null,
-      }));
+      // ✅ FIX (BUG 6c): Universal flattening for events_flat path too.
+      resolvedEvents = (events || []).map((evt: any) => {
+        const flat: Record<string, any> = { ...evt };
+        if (evt.state && typeof evt.state === 'object') {
+          for (const [key, value] of Object.entries(evt.state)) {
+            if (flat[key] == null || flat[key] === '') flat[key] = value;
+          }
+          if (flat.duration_ms != null) flat.duration_ms = Number(flat.duration_ms);
+        }
+        if (evt.labels && typeof evt.labels === 'object') {
+          for (const [key, value] of Object.entries(evt.labels)) {
+            if (flat[key] == null || flat[key] === '') flat[key] = value;
+          }
+        }
+        return flat;
+      });
     }
 
     // 2b. Fallback: if no events via interface_id, try journey_sessions → source_id
@@ -453,34 +469,55 @@ export default async function PreviewPage({ params }: PreviewPageProps) {
             "id, type, name, value, unit, text, state, timestamp, created_at, workflow_id, status, duration_ms, mode, workflow_name, execution_id, error_message"
           )
           .eq("source_id", session.source_id)
+          .not("type", "in", '("state","tool_event")')
           .order("timestamp", { ascending: false })
           .limit(200);
 
         if (sourceEventsError?.message?.includes("events_flat")) {
           const { data: fallbackSourceEvents } = await svc
             .from("events")
-            .select("id, type, name, value, unit, text, state, timestamp, created_at")
+            .select("id, type, name, value, unit, text, state, labels, timestamp, created_at")
             .eq("source_id", session.source_id)
+            .not("type", "in", '("state","tool_event")')
             .order("timestamp", { ascending: false })
             .limit(200);
-          resolvedEvents = (fallbackSourceEvents || []).map((evt: any) => ({
-            ...evt,
-            workflow_id: evt.state?.workflow_id ?? null,
-            status: evt.state?.status ?? null,
-            duration_ms:
-              evt.state?.duration_ms != null
-                ? Number(evt.state.duration_ms)
-                : null,
-            workflow_name: evt.state?.workflow_name ?? null,
-            execution_id: evt.state?.execution_id ?? null,
-            error_message: evt.state?.error_message ?? null,
-          }));
+          // ✅ FIX (BUG 6c): ALWAYS flatten state JSONB to top-level fields.
+          // All platforms (n8n, Make, Vapi) store important fields like status,
+          // duration_ms, workflow_id inside the state JSONB column. Without
+          // flattening, aggCount/aggPercentage/aggAvg can't find them and
+          // MetricCards show "0" or "—".
+          resolvedEvents = (fallbackSourceEvents || []).map((evt: any) => {
+            const flat: Record<string, any> = { ...evt };
+            if (evt.state && typeof evt.state === 'object') {
+              for (const [key, value] of Object.entries(evt.state)) {
+                if (flat[key] == null || flat[key] === '') flat[key] = value;
+              }
+              if (flat.duration_ms != null) flat.duration_ms = Number(flat.duration_ms);
+            }
+            if (evt.labels && typeof evt.labels === 'object') {
+              for (const [key, value] of Object.entries(evt.labels)) {
+                if (flat[key] == null || flat[key] === '') flat[key] = value;
+              }
+            }
+            return flat;
+          });
         } else {
-          resolvedEvents = (sourceEvents || []).map((evt: any) => ({
-            ...evt,
-            duration_ms:
-              evt.duration_ms != null ? Number(evt.duration_ms) : null,
-          }));
+          // ✅ FIX (BUG 6c): Universal flattening for events_flat path too.
+          resolvedEvents = (sourceEvents || []).map((evt: any) => {
+            const flat: Record<string, any> = { ...evt };
+            if (evt.state && typeof evt.state === 'object') {
+              for (const [key, value] of Object.entries(evt.state)) {
+                if (flat[key] == null || flat[key] === '') flat[key] = value;
+              }
+              if (flat.duration_ms != null) flat.duration_ms = Number(flat.duration_ms);
+            }
+            if (evt.labels && typeof evt.labels === 'object') {
+              for (const [key, value] of Object.entries(evt.labels)) {
+                if (flat[key] == null || flat[key] === '') flat[key] = value;
+              }
+            }
+            return flat;
+          });
         }
       }
     }
