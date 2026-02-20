@@ -219,6 +219,36 @@ async function handleDeterministicSelectEntity(params: {
         'You can either wait for events to come in, or tell me what entities you\'d like to track and I\'ll set things up based on your workflow structure.',
       ].join('\n');
     }
+    // 2b. CRITICAL FIX (P0): Persist discovered entities to journey_sessions.
+    // Root cause of 3-week stuck bug: handleDeterministicSelectEntity was display-only.
+    // It called the RPC, formatted entities, streamed to UI — but never wrote to DB.
+    // autoAdvancePhase reads journey_sessions.selected_entities to decide whether to
+    // advance from select_entity → recommend. Without this write, it always found null.
+    // Confirmed: 35/35 sessions stuck at select_entity with selected_entities = null.
+    if (hasData && entities.length > 0) {
+      const entityNames = entities
+        .slice(0, 5)
+        .map((e: any) => e.name || 'Unknown')
+        .join(', ');
+      try {
+        const { error: writeError } = await supabase
+          .from('journey_sessions')
+          .update({
+            selected_entities: entityNames,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('thread_id', journeyThreadId)
+          .eq('tenant_id', tenantId);
+        if (writeError) {
+          console.error('[deterministic-select-entity] Failed to persist selected_entities:', writeError.message);
+        } else {
+          console.log('[deterministic-select-entity] ✅ Persisted selected_entities to DB:', entityNames);
+        }
+      } catch (persistEntitiesErr) {
+        // Non-fatal — entities still stream to client, user can re-select
+        console.warn('[deterministic-select-entity] Entity persistence error:', persistEntitiesErr);
+      }
+    }
     // 3. Persist the assistant message to journey_messages so it appears on reload
     try {
       await supabase.from('journey_messages').insert({

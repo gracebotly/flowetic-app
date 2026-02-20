@@ -131,6 +131,25 @@ export class PhaseToolGatingProcessor implements Processor {
       console.log(
         `[PhaseToolGating] phase=${currentPhase} active=${activeToolNames.length}/${totalTools} (gated=${gatedCount}, passthrough=[${passedThrough.join(',')}])`
       );
+      // FIX (P2): Warn when agent tools are missing from KNOWN_AGENT_TOOLS.
+      // Any tool NOT in KNOWN_AGENT_TOOLS becomes phase-agnostic (pass-through),
+      // which means it's available in ALL phases — defeating the purpose of gating.
+      // This catches the case where a new tool is added to masterRouterAgent.tools
+      // but not added to KNOWN_AGENT_TOOLS, creating a silent phase leakage.
+      // Known Mastra-internal tools that should always pass through:
+      const MASTRA_INTERNAL_TOOLS = new Set([
+        'updateWorkingMemory',
+        'getWorkingMemory',
+      ]);
+      const unregisteredAgentTools = passedThrough.filter(
+        toolName => !MASTRA_INTERNAL_TOOLS.has(toolName)
+      );
+      if (unregisteredAgentTools.length > 0) {
+        console.warn(
+          `[PhaseToolGating] ⚠️ PHASE LEAKAGE RISK: ${unregisteredAgentTools.length} tool(s) not in KNOWN_AGENT_TOOLS — these are phase-agnostic (available in ALL phases): [${unregisteredAgentTools.join(', ')}]. ` +
+          `Add them to KNOWN_AGENT_TOOLS in phase-tool-gating.ts and to the appropriate phase in PHASE_TOOL_ALLOWLIST.`
+        );
+      }
     }
 
     // If nothing was gated, don't modify anything

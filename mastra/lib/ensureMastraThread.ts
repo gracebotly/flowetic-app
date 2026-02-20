@@ -83,8 +83,9 @@ export async function ensureMastraThreadId(params: {
         // DO NOT persist entityId as selected_entities here.
         // entityId is the source_entity UUID (e.g. "8e538b26-..."), NOT a user
         // entity selection (which should be display names like "Chat Session, Daily Analytics Report").
-        // selected_entities is populated later by working memory → DB sync in onFinish
-        // or by client-side persistence in route.ts when the user actually picks entities.
+        // selected_entities is populated by:
+        //   1. handleDeterministicSelectEntity (writes discovered entities to DB)
+        //   2. Client-side persistence in route.ts (when user explicitly picks entities)
         selected_entities: null,
         created_at: now,
         updated_at: now,

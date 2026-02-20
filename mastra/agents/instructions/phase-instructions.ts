@@ -358,11 +358,12 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
     'getDataDrivenEntities',
     'getOutcomes',
     'searchSkillKnowledge',
-    // Sources CRUD (discovery phase — user may connect sources)
-    'createSource',
+    // Sources — read-only in discovery phase
+    // FIX (P0): createSource/updateSource/deleteSource REMOVED from select_entity.
+    // Having write tools here caused the agent to hallucinate source creation during
+    // entity discovery, leading to duplicate key crashes. Source CRUD is available
+    // in build_preview and interactive_edit phases where it belongs.
     'listSources',
-    'updateSource',
-    'deleteSource',
     // NOTE: advancePhase intentionally omitted — autoAdvancePhase handles
     // select_entity→recommend transition deterministically.
     // Utility (always available)
@@ -426,6 +427,12 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
     'validatePreviewReadiness',
     'getEventStats',
     'searchSkillKnowledge',
+    // Sources CRUD (moved here from select_entity — agent may need to
+    // create/update sources during build phase for data connectivity)
+    'createSource',
+    'listSources',
+    'updateSource',
+    'deleteSource',
     // Projects CRUD (may need to create/update project during build)
     'createProject',
     'listProjects',
