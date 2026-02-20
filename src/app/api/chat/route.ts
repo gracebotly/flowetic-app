@@ -929,7 +929,7 @@ export async function POST(req: Request) {
                   .maybeSingle();
 
                 if (journeySessionForWf && journeySessionForWf.mode === 'recommend' && journeySessionForWf.selected_outcome && !journeySessionForWf.wireframe_confirmed) {
-                  const lastUserMessage = messages[messages.length - 1];
+                  const lastUserMessage = rawMessages[rawMessages.length - 1];
                   const userText = typeof lastUserMessage?.content === 'string'
                     ? lastUserMessage.content.toLowerCase().trim()
                     : '';
