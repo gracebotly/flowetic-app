@@ -115,7 +115,7 @@ export const persistPreviewVersion = createTool({
       // BUG 5 FIX: Persist preview linkage + advance journey mode to interactive_edit.
       // Without this, autoAdvancePhase has no rule for build_preview → interactive_edit
       // and the session stays stuck in build_preview forever.
-      const journeyThreadId = context?.requestContext?.get('journeyThreadId') as string | undefined;
+      const journeyThreadId = (context?.requestContext as any)?.get?.('journeyThreadId') as string | undefined;
       if (journeyThreadId && finalInterfaceId) {
         const { error: sessionUpdateErr } = await supabase
           .from('journey_sessions')
@@ -227,7 +227,7 @@ export const persistPreviewVersion = createTool({
     const previewUrl = `/preview/${finalInterfaceId}/${version.id}`;
 
     // BUG 5 FIX: Persist preview linkage + advance journey mode (fallback INSERT path).
-    const journeyThreadIdFallback = context?.requestContext?.get('journeyThreadId') as string | undefined;
+    const journeyThreadIdFallback = (context?.requestContext as any)?.get?.('journeyThreadId') as string | undefined;
     if (journeyThreadIdFallback && finalInterfaceId) {
       const { error: sessionUpdateErr } = await supabase
         .from('journey_sessions')
