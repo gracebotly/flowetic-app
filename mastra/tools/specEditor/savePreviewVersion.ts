@@ -28,13 +28,67 @@ export const savePreviewVersion = createTool({
     interfaceId: z.string().uuid().optional(),
   }),
   outputSchema: z.object({
-    interfaceId: z.string().uuid(),
-    versionId: z.string().uuid(),
+    success: z.boolean().optional(),
+    error: z.string().optional(),
+    message: z.string().optional(),
+    interfaceId: z.string(),
+    versionId: z.string(),
     previewUrl: z.string(),
   }),
   execute: async (inputData, context) => {
     const { spec_json, interfaceId } = inputData;
     let { design_tokens } = inputData;
+
+    // ============================================================================
+    // PHASE 2 FIX: REJECT SPECS THAT BYPASS generateUISpec
+    // ============================================================================
+    // Per Refactor Guide: "Path B is where generic dashboards come from"
+    // If spec was generated directly by LLM (not via generateUISpec), reject it
+
+    const styleBundleId = spec_json.styleBundleId;
+    const hasValidStyleBundle = styleBundleId && (
+      styleBundleId === 'custom' ||
+      STYLE_BUNDLE_TOKENS[styleBundleId]
+    );
+
+    if (!hasValidStyleBundle) {
+      console.error('[savePreviewVersion] ❌ REJECTED: spec has invalid/missing styleBundleId:', styleBundleId);
+      return {
+        success: false,
+        error: 'INVALID_SPEC',
+        message: 'This spec was not generated through generateUISpec tool. Call generateUISpec first to apply correct design tokens.',
+        interfaceId: '',
+        versionId: '',
+        previewUrl: '',
+      };
+    }
+
+    // ADDITIONAL CHECK: If spec has components, verify they're using real colors
+    // Detect hallucinated colors like rgba(255,255,255,0.1) or semi-transparent whites
+    if (spec_json.components && Array.isArray(spec_json.components)) {
+      const suspiciousColors = spec_json.components.some((comp: any) => {
+        const propsStr = JSON.stringify(comp.props || {});
+        // Check for rgba with low alpha (opacity < 0.3 = translucent/opaque)
+        const hasTranslucent = /rgba?\([^)]*,\s*0\.[0-2]\d*\)/i.test(propsStr);
+        // Check for near-white colors that aren't from bundles
+        const hasNearWhite = /rgb?\(25[0-5],\s*25[0-5],\s*25[0-5]\)/i.test(propsStr);
+        return hasTranslucent || hasNearWhite;
+      });
+
+      if (suspiciousColors) {
+        console.error('[savePreviewVersion] ❌ REJECTED: spec contains translucent/opaque colors');
+        return {
+          success: false,
+          error: 'HALLUCINATED_COLORS',
+          message: 'This spec contains translucent or near-white colors that were not from the style bundle. Call generateUISpec to use deterministic design tokens.',
+          interfaceId: '',
+          versionId: '',
+          previewUrl: '',
+        };
+      }
+    }
+
+    console.log('[savePreviewVersion] ✅ Validation passed, style bundle:', styleBundleId);
 
     // ============================================================================
     // DESIGN TOKEN RESOLUTION
@@ -108,6 +162,7 @@ export const savePreviewVersion = createTool({
     }
 
     return {
+      success: true,
       interfaceId: (result as any).interfaceId,
       versionId: (result as any).versionId,
       previewUrl: (result as any).previewUrl,

@@ -65,6 +65,17 @@ The generateUISpec tool applies correct design tokens from STYLE_BUNDLE_TOKENS.
 - Never show raw spec JSON unless the user explicitly asks
 - Always validate before saving
 
+## CRITICAL: SPEC GENERATION ENFORCEMENT
+savePreviewVersion tool has validation that REJECTS specs not created via generateUISpec.
+If you try to save a spec you created yourself, you will get this error:
+"This spec was not generated through generateUISpec tool. Call generateUISpec first."
+If you try to save a spec with translucent/opaque colors, you will get:
+"This spec contains translucent or near-white colors that were not from the style bundle."
+The ONLY way to create a valid spec is:
+1. Call generateUISpec (it applies locked design tokens)
+2. Call savePreviewVersion with the spec from generateUISpec
+DO NOT attempt to create spec_json in your response text.
+
 ## DESIGN TOKEN ENFORCEMENT (NON-NEGOTIABLE)
 - NEVER generate spec_json directly in conversation
 - NEVER invent colors, fonts, or design tokens
