@@ -882,14 +882,14 @@ export async function POST(req: Request) {
       ...(dedupedMessages ? { messages: dedupedMessages } : {}),
       requestContext,
       mode: "generate",
-      // CRITICAL: Memory config tells Mastra which thread/resource to use
-      // for working memory reads/writes. Without this, updateWorkingMemory
-      // has no target and silently fails to persist.
-      // See: https://mastra.ai/docs/agents/agent-memory
-      memory: {
-        thread: cleanMastraThreadId,
-        resource: userId,
-      },
+      // DISABLED: Mastra working memory creates dual-state bugs.
+      // journey_sessions DB is the single source of truth for phase/outcome/entities.
+      // Keeping working memory disabled to prevent confusion — agent gets all context
+      // from journey_sessions + skill knowledge search instead.
+      // memory: {
+      //   thread: cleanMastraThreadId,
+      //   resource: userId,
+      // },
     };
 
     if (process.env.DEBUG_CHAT_ROUTE === 'true') {
@@ -905,6 +905,7 @@ export async function POST(req: Request) {
     // while enforcing hard execution-layer gating (fixes AI SDK bug #8653).
     const streamStartMs = Date.now();
     let stepCount = 0;
+    const calledTools: string[] = []; // Fix 4: track all tool calls for onFinish checks
     const stream = await withTimeout(
       handleChatStream({
         mastra,
@@ -943,12 +944,21 @@ export async function POST(req: Request) {
               // Try multiple paths where tool name might be stored
               return tc.toolName || tc.tool?.name || tc.name || tc.args?.toolName || 'unknown';
             });
+            // Fix 4: accumulate for onFinish to detect which tools ran this stream
+            calledTools.push(...toolNames);
             console.log(`[TIMING] step-${stepCount}: ${Date.now() - streamStartMs}ms elapsed | tools: [${toolNames.join(', ')}] | finish: ${finishReason}`);
           },
           onFinish: async () => {
             // PHASE 4A: Deterministic phase advancement after stream completes.
             // autoAdvancePhase reads journey_sessions (populated by tools during the stream)
             // and advances the phase if selections are complete.
+            //
+            // Fix 4: Log explicitly when recommendOutcome ran this stream.
+            // recommendOutcome writes selected_outcome to DB — autoAdvancePhase below
+            // will detect it and advance recommend → style if wireframe_confirmed is set.
+            if (calledTools.includes('recommendOutcome')) {
+              console.log('[api/chat] recommendOutcome called this stream — checking for auto-advance to style phase');
+            }
             try {
               if (cleanJourneyThreadId && cleanJourneyThreadId !== 'default-thread') {
                 // Re-query journey session for wireframe confirmation detection
