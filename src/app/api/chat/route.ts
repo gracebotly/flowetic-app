@@ -615,7 +615,7 @@ export async function POST(req: Request) {
 
         const { data: byThreadId } = await supabase
           .from('journey_sessions')
-          .select('id, mode, preview_interface_id, selected_style_bundle_id, selected_entities, selected_outcome, selected_layout, schema_ready, wireframe_confirmed, design_tokens, style_confirmed')
+          .select('id, mode, source_id, preview_interface_id, selected_style_bundle_id, selected_entities, selected_outcome, selected_layout, schema_ready, wireframe_confirmed, design_tokens, style_confirmed')
           .eq('thread_id', cleanJourneyThreadId)
           .eq('tenant_id', tenantId)
           .maybeSingle();
@@ -626,12 +626,34 @@ export async function POST(req: Request) {
           // Fallback: query by mastra_thread_id (in case thread was created that way)
           const { data: byMastraId } = await supabase
             .from('journey_sessions')
-            .select('id, mode, preview_interface_id, selected_style_bundle_id, selected_entities, selected_outcome, selected_layout, schema_ready, wireframe_confirmed, design_tokens, style_confirmed')
+            .select('id, mode, source_id, preview_interface_id, selected_style_bundle_id, selected_entities, selected_outcome, selected_layout, schema_ready, wireframe_confirmed, design_tokens, style_confirmed')
             .eq('mastra_thread_id', cleanMastraThreadId)
             .eq('tenant_id', tenantId)
             .maybeSingle();
           sessionRow = byMastraId;
         }
+        // ─── AUTO-DETECT SCHEMA READY ─────────────────────────────────────────
+        // schema_ready is normally set by connectionBackfillWorkflow.updateJourneyStateStep,
+        // but data ingested via webhook/API (not backfill) bypasses that workflow.
+        // Auto-detect: if interface_schemas exists for this source, flip the flag.
+        if (sessionRow && !sessionRow.schema_ready && sessionRow.source_id) {
+          const { data: existingSchema } = await supabase
+            .from('interface_schemas')
+            .select('id')
+            .eq('source_id', sessionRow.source_id)
+            .eq('tenant_id', tenantId)
+            .maybeSingle();
+          if (existingSchema) {
+            await supabase
+              .from('journey_sessions')
+              .update({ schema_ready: true, updated_at: new Date().toISOString() })
+              .eq('id', sessionRow.id)
+              .eq('tenant_id', tenantId);
+            sessionRow.schema_ready = true;
+            console.log('[api/chat] Auto-detected schema_ready=true for source:', sessionRow.source_id);
+          }
+        }
+
         const VALID_PHASES = ['select_entity', 'recommend', 'style', 'build_preview', 'interactive_edit', 'deploy'] as const;
 
         if (sessionRow?.mode) {
@@ -979,10 +1001,84 @@ export async function POST(req: Request) {
       console.log('[api/chat] Deterministic bypass returned null, falling through to agent');
     }
 
-    // ─── CLIENT-SIDE OUTCOME PERSISTENCE ──────────────────────────────────
-    // Outcome selection comes from client (InlineChoice onClick → sendAi extraData)
-    // This is already handled in the client-sent selections block below
-    // No deterministic parsing needed - client sends explicit selectedOutcome value
+    // ─── DETERMINISTIC RECOMMEND OUTCOME DETECTION ───────────────────────
+    // If phase is recommend AND selected_outcome is not yet set, check the
+    // user's message for outcome selection (natural language or __ACTION__ token).
+    // Write to DB if detected. The agent still runs after this.
+    if (finalPhase === 'recommend') {
+      const { data: recommendSession } = await supabase
+        .from('journey_sessions')
+        .select('selected_outcome, wireframe_confirmed')
+        .eq('thread_id', cleanJourneyThreadId)
+        .eq('tenant_id', tenantId)
+        .maybeSingle();
+      if (recommendSession && !recommendSession.selected_outcome) {
+        const userMsgs = Array.isArray(rawMessages)
+          ? rawMessages.filter((m: any) => m.role === 'user')
+          : [];
+        const lastMsg = userMsgs[userMsgs.length - 1];
+        let messageText = '';
+        if (lastMsg?.parts && Array.isArray(lastMsg.parts)) {
+          messageText = lastMsg.parts
+            .filter((p: any) => p.type === 'text')
+            .map((p: any) => p.text || '')
+            .join(' ');
+        } else if (typeof lastMsg?.content === 'string') {
+          messageText = lastMsg.content;
+        }
+        if (messageText) {
+          const result = await handleDeterministicRecommendOutcome({
+            supabase,
+            tenantId,
+            journeyThreadId: cleanJourneyThreadId,
+            userMessage: messageText,
+          });
+          if (result) {
+            requestContext.set('selectedOutcome', result.outcome);
+            console.log('[api/chat] 🚀 Deterministic recommend outcome set:', result.outcome);
+          }
+        }
+      }
+    }
+    // ─── DETERMINISTIC WIREFRAME CONFIRMATION (EAGER) ────────────────────
+    // Check for wireframe confirmation BEFORE agent runs.
+    if (finalPhase === 'recommend') {
+      const { data: wfSession } = await supabase
+        .from('journey_sessions')
+        .select('id, selected_outcome, wireframe_confirmed')
+        .eq('thread_id', cleanJourneyThreadId)
+        .eq('tenant_id', tenantId)
+        .maybeSingle();
+      if (wfSession?.selected_outcome && !wfSession.wireframe_confirmed) {
+        const userMsgs = Array.isArray(rawMessages)
+          ? rawMessages.filter((m: any) => m.role === 'user')
+          : [];
+        const lastMsg = userMsgs[userMsgs.length - 1];
+        let userText = '';
+        if (lastMsg?.parts && Array.isArray(lastMsg.parts)) {
+          userText = lastMsg.parts
+            .filter((p: any) => p.type === 'text')
+            .map((p: any) => p.text || '')
+            .join(' ')
+            .toLowerCase()
+            .trim();
+        } else if (typeof lastMsg?.content === 'string') {
+          userText = lastMsg.content.toLowerCase().trim();
+        }
+        const confirmationPatterns = [
+          /^(yes|yeah|yep|yup|sure|ok|okay|correct|confirmed?|approve[d]?|looks?\s*good|looks?\s*right|looks?\s*great|looks?\s*fine|let'?s?\s*go|go\s*ahead|perfect|great|that'?s?\s*(right|correct|good|perfect|fine)|proceed|do\s*it|build\s*it|generate|lgtm|fine|this\s*is\s*(good|right|correct|fine|perfect))/i,
+        ];
+        const isConfirmation = confirmationPatterns.some(p => p.test(userText));
+        if (isConfirmation) {
+          console.log('[api/chat] Eager wireframe confirmation detected:', userText);
+          await supabase
+            .from('journey_sessions')
+            .update({ wireframe_confirmed: true, updated_at: new Date().toISOString() })
+            .eq('id', wfSession.id)
+            .eq('tenant_id', tenantId);
+        }
+      }
+    }
 
     // ─── DETERMINISTIC STYLE CONFIRMATION (EAGER) ────────────────────────
     // If phase is style AND design_tokens exist AND style_confirmed is not yet set,

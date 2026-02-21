@@ -3,75 +3,70 @@ import { z } from 'zod';
 import { workspace } from '@/mastra/workspace';
 
 /**
- * searchSkillKnowledge — Fast regex search over workspace skills.
+ * searchSkillKnowledge — On-demand BM25 search over platform skills,
+ * business frameworks, and design guidelines.
  *
- * Replaces BM25 search with grep for exact pattern matching.
- * Use for finding specific code patterns, function names, or exact phrases
- * in skill documentation.
+ * This replaces injecting full skill content (~25K tokens) into the
+ * system prompt. The agent calls this tool when it needs specific
+ * knowledge about n8n patterns, business outcome frameworks, etc.
  *
- * The workspace grep tool is automatically available when filesystem
- * is configured (Mastra 1.5.0+).
+ * The workspace must have bm25: true and autoIndexPaths: ['/skills']
+ * configured so skill SKILL.md files are indexed on init().
+ *
+ * NOTE: There is NO mastra_workspace_grep tool in Mastra.
+ * Official search tools: mastra_workspace_search (BM25/vector/hybrid)
+ * and mastra_workspace_index. See:
+ * https://mastra.ai/reference/workspace/workspace-class#search-tools
  */
 export const searchSkillKnowledge = createTool({
   id: 'searchSkillKnowledge',
-  description: 'Search platform knowledge and design guidelines using regex patterns. Use this to find specific n8n patterns, shadcn components, field mappings, KPI recommendations, or template guidance. Examples: "shadcn.*Button", "n8n.*execution", "KPI.*retention"',
+  description: 'Search platform knowledge, business frameworks, and design guidelines. Use this to find specific n8n patterns, field mappings, KPI recommendations, outcome frameworks, or template guidance when needed.',
   inputSchema: z.object({
-    pattern: z.string().describe('Regex pattern to search for (e.g., "shadcn.*Button", "n8n.*workflow")'),
-    domain: z.enum(['platform', 'business', 'design', 'all']).optional().default('all').describe('Narrow search to specific skill domain: platform (n8n/make/vapi), business (outcomes/KPIs), design (ui-ux-pro-max), or all'),
+    query: z.string().describe('What to search for (e.g., "n8n execution time metrics", "SaaS retention KPIs", "client dashboard outcome framing")'),
+    domain: z.enum(['platform', 'business', 'design', 'all']).optional().default('all').describe('Narrow search to a specific knowledge domain, or "all" to search everything'),
   }),
   outputSchema: z.object({
     results: z.array(z.object({
-      file: z.string(),
-      lineNumber: z.number(),
       content: z.string(),
+      source: z.string().optional(),
+      score: z.number(),
     })),
     resultCount: z.number(),
-    pattern: z.string(),
   }),
-  execute: async ({ pattern, domain }) => {
+  execute: async ({ query, domain }) => {
     try {
-      // Map domain to skill paths
-      const domainPathMap: Record<string, string> = {
-        platform: '/skills/n8n',
-        business: '/skills/business-outcomes-advisor',
-        design: '/skills/ui-ux-pro-max',
-        all: '/skills',
-      };
-      const searchPath = domainPathMap[domain ?? 'all'] || '/skills';
-
-      // Call the workspace grep tool (available in Mastra 1.5.0+ with filesystem configured)
-      const grepResults = await (workspace as any).tools.mastra_workspace_grep({
-        pattern,
-        path: searchPath,
+      const results = await workspace.search(query, {
+        topK: domain === 'all' ? 5 : 3,
+        mode: 'bm25',
       });
 
-      // Parse and format results
-      const results = (grepResults as string).split('\n')
-        .filter(Boolean)
-        .map((line: string) => {
-          // Parse grep output: file:lineNumber:content
-          const match = line.match(/^(.+?):(\d+):(.+)$/);
-          if (!match) return null;
-          const [, file, lineNumber, content] = match;
-          return {
-            file,
-            lineNumber: parseInt(lineNumber, 10),
-            content: content.trim(),
-          };
-        })
-        .filter(Boolean) as { file: string; lineNumber: number; content: string }[];
+      // Filter by domain if specified (skill files have paths like /skills/n8n/SKILL.md)
+      const domainPathMap: Record<string, string[]> = {
+        platform: ['n8n', 'make', 'vapi', 'zapier'],
+        business: ['business-outcomes-advisor'],
+        design: ['ui-ux-pro-max'],
+      };
+
+      const filtered = domain && domain !== 'all'
+        ? results.filter(r => {
+            const path = String(r.id || r.metadata?.path || '');
+            return domainPathMap[domain]?.some(d => path.includes(d)) ?? false;
+          })
+        : results;
 
       return {
-        results,
-        resultCount: results.length,
-        pattern,
+        results: filtered.slice(0, 5).map(r => ({
+          content: r.content?.substring(0, 800) || '',
+          source: String(r.id || r.metadata?.path || 'unknown'),
+          score: r.score ?? 0,
+        })),
+        resultCount: filtered.length,
       };
     } catch (error) {
-      console.error('[searchSkillKnowledge] Grep failed:', error);
+      console.error('[searchSkillKnowledge] Search failed:', error);
       return {
         results: [],
         resultCount: 0,
-        pattern,
       };
     }
   },

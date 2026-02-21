@@ -54,19 +54,17 @@ export const appendThreadEvent = createTool({
     }
 
     const { data, error } = await supabase
-      .from("events")
+      .from("thread_events")
       .insert({
         tenant_id: tenantId,
-        interface_id: interfaceId ?? null,
+        thread_id: threadId,
         source_id: sourceId ?? null,
+        interface_id: interfaceId ?? null,
         run_id: runId ?? null,
         type,
-        name: "thread_event",
-        text: message,
-        state: metadata ?? null,
-        // Store actionButton in labels if provided
+        message,
+        metadata: metadata ?? null,
         labels: {
-          threadId,
           ...(actionButton ? { actionButton } : {}),
         },
         timestamp: new Date().toISOString(),

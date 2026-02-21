@@ -394,12 +394,11 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
     'todoList',
     'todoUpdate',
     'todoComplete',
-    // Workspace tools (read-only filesystem + BM25/grep skill search)
+    // Workspace tools (read-only filesystem + BM25 skill search)
     'mastra_workspace_read_file',
     'mastra_workspace_list_files',
     'mastra_workspace_file_stat',
     'mastra_workspace_search',
-    'mastra_workspace_grep',
   ],
 
   recommend: [
@@ -431,12 +430,11 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
     'todoList',
     'todoUpdate',
     'todoComplete',
-    // Workspace tools (read-only filesystem + BM25/grep skill search)
+    // Workspace tools (read-only filesystem + BM25 skill search)
     'mastra_workspace_read_file',
     'mastra_workspace_list_files',
     'mastra_workspace_file_stat',
     'mastra_workspace_search',
-    'mastra_workspace_grep',
   ],
 
   style: [
@@ -466,12 +464,11 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
     'todoList',
     'todoUpdate',
     'todoComplete',
-    // Workspace tools (read-only filesystem + BM25/grep skill search)
+    // Workspace tools (read-only filesystem + BM25 skill search)
     'mastra_workspace_read_file',
     'mastra_workspace_list_files',
     'mastra_workspace_file_stat',
     'mastra_workspace_search',
-    'mastra_workspace_grep',
   ],
 
   build_preview: [
@@ -499,12 +496,11 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
     'todoList',
     'todoUpdate',
     'todoComplete',
-    // Workspace tools (read-only filesystem + BM25/grep skill search)
+    // Workspace tools (read-only filesystem + BM25 skill search)
     'mastra_workspace_read_file',
     'mastra_workspace_list_files',
     'mastra_workspace_file_stat',
     'mastra_workspace_search',
-    'mastra_workspace_grep',
   ],
 
   interactive_edit: [
@@ -528,12 +524,11 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
     'todoList',
     'todoUpdate',
     'todoComplete',
-    // Workspace tools (read-only filesystem + BM25/grep skill search)
+    // Workspace tools (read-only filesystem + BM25 skill search)
     'mastra_workspace_read_file',
     'mastra_workspace_list_files',
     'mastra_workspace_file_stat',
     'mastra_workspace_search',
-    'mastra_workspace_grep',
   ],
 
   deploy: [
@@ -553,11 +548,10 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
     'todoList',
     'todoUpdate',
     'todoComplete',
-    // Workspace tools (read-only filesystem + BM25/grep skill search)
+    // Workspace tools (read-only filesystem + BM25 skill search)
     'mastra_workspace_read_file',
     'mastra_workspace_list_files',
     'mastra_workspace_file_stat',
     'mastra_workspace_search',
-    'mastra_workspace_grep',
   ],
 };
