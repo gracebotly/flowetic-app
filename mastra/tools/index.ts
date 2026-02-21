@@ -64,4 +64,3 @@ export * from "./supatools";
 // Action suggestion tool
 export { suggestAction } from "./suggestAction";
 
-export { getStyleBundles, CANONICAL_STYLE_BUNDLES } from "./getStyleBundles";

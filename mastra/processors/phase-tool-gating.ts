@@ -52,8 +52,6 @@ const KNOWN_AGENT_TOOLS = new Set([
   'getTypographyRecommendations',
   'getUXGuidelines',
   'getProductRecommendations',
-  // Style bundles
-  'getStyleBundles',
   // Editor
   'showInteractiveEditPanel',
   // Phase advancement
