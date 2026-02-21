@@ -36,6 +36,10 @@ interface DesignTokens {
   };
   borderRadius?: number;
   shadow?: string;
+  fonts?: {
+    heading?: string;
+    body?: string;
+  };
 }
 
 interface ResponsiveDashboardRendererProps {
@@ -310,6 +314,8 @@ export function ResponsiveDashboardRenderer({
 
   const borderRadius = designTokens?.borderRadius ?? 8;
   const shadow = designTokens?.shadow ?? "0 2px 4px rgba(0,0,0,0.05)";
+  const headingFont = designTokens?.fonts?.heading ?? undefined;
+  const bodyFont = designTokens?.fonts?.body ?? undefined;
 
   // Filter visible components
   const visibleComponents = useMemo(
@@ -328,10 +334,10 @@ export function ResponsiveDashboardRenderer({
   // Mobile/tablet: Stack vertically
   if (deviceMode === "mobile" || deviceMode === "tablet") {
     return (
-      <div style={containerStyle} className="overflow-hidden">
+      <div style={{ ...containerStyle, fontFamily: bodyFont || undefined }} className="overflow-hidden">
         <div className="p-4">
           {spec?.title && (
-            <h1 className="text-xl font-bold mb-4" style={{ color: textColor }}>{spec.title}</h1>
+            <h1 className="text-xl font-bold mb-4" style={{ color: textColor, fontFamily: headingFont || undefined }}>{spec.title}</h1>
           )}
           <div
             className="grid"
@@ -363,10 +369,10 @@ export function ResponsiveDashboardRenderer({
 
   // Desktop: Full grid with positioning
   return (
-    <div style={containerStyle}>
+    <div style={{ ...containerStyle, fontFamily: bodyFont || undefined }}>
       <div className="p-6">
         {spec?.title && (
-          <h1 className="text-2xl font-bold mb-6" style={{ color: textColor }}>{spec.title}</h1>
+          <h1 className="text-2xl font-bold mb-6" style={{ color: textColor, fontFamily: headingFont || undefined }}>{spec.title}</h1>
         )}
         <div
           className="grid"

@@ -440,8 +440,8 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
     'getChartRecommendations',
     'getUXGuidelines',
     'getProductRecommendations',
-    'getStyleBundles',
     'searchSkillKnowledge',
+    // getStyleBundles REMOVED — preset system deprecated in favour of custom tokens
     // NOTE: setSchemaReady intentionally omitted — /api/chat auto-sets schema_ready=true
     // when all selections (entities, outcome, style) are present. setSchemaReady is
     // available in build_preview phase via platformMappingMaster only.

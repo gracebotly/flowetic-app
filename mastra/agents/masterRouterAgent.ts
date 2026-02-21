@@ -18,7 +18,6 @@ import {
   delegateToDesignAdvisor,
 } from "../tools/delegation";
 import { advancePhase } from "../tools/journey/advancePhase";
-import { getStyleBundles } from "../tools/getStyleBundles";
 import { generatePreviewWorkflow } from "../workflows/generatePreview";
 import { connectionBackfillWorkflow } from "../workflows/connectionBackfill";
 import { deployDashboardWorkflow } from "../workflows/deployDashboard";
@@ -414,9 +413,6 @@ Use BM25 search tools (getStyleRecommendations, getTypographyRecommendations, et
     suggestAction,
     // Design system workflow
     runDesignSystemWorkflow,
-    // Style bundles - also on designAdvisorAgent but needed here because
-    // masterRouterAgent runs during style phase before delegation
-    getStyleBundles,
     // Interactive edit panel
     showInteractiveEditPanel,
     // On-demand skill knowledge search (replaces full skill injection)

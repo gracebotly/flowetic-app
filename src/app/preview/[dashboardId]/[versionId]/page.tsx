@@ -538,17 +538,29 @@ export default async function PreviewPage({ params }: PreviewPageProps) {
     resolvedEvents
   );
 
+  // Extract font names for Google Fonts loading
+  const headingFont = (version.design_tokens?.fonts?.heading as string | undefined)?.split(',')[0]?.trim();
+  const bodyFont = (version.design_tokens?.fonts?.body as string | undefined)?.split(',')[0]?.trim();
+  const fontsToLoad = [...new Set([headingFont, bodyFont].filter(Boolean))] as string[];
+
   return (
     <div className="min-h-screen bg-white">
+      {fontsToLoad.length > 0 && (
+        <link
+          rel="stylesheet"
+          href={`https://fonts.googleapis.com/css2?${fontsToLoad.map(f => `family=${encodeURIComponent(f)}:wght@400;500;600;700`).join('&')}&display=swap`}
+        />
+      )}
       <ResponsiveDashboardRenderer
         spec={enrichedSpec}
         designTokens={{
           colors:
             version.design_tokens?.colors ??
             version.design_tokens?.theme?.colors ?? { primary: "#3b82f6" },
-          borderRadius: version.design_tokens?.borderRadius ?? 8,
+          borderRadius: version.design_tokens?.radius ?? version.design_tokens?.borderRadius ?? 8,
           shadow:
             version.design_tokens?.shadow ?? "0 1px 3px rgba(0,0,0,0.1)",
+          fonts: version.design_tokens?.fonts ?? undefined,
         }}
         deviceMode="desktop"
         isEditing={false}

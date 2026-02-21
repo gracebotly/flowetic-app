@@ -428,36 +428,9 @@ export function resolveStyleBundleId(input: string): string {
     return slugified;
   }
 
-  // Layer 4: Word-overlap match — requires ≥2 matching words
-  // This prevents the old bug where "modern" alone matched "neon-cyber"
-  const inputWords = lower.replace(/[-_]/g, ' ').split(/\s+/).filter(w => w.length > 2);
-  let bestMatch = 'professional-clean';
-  let bestScore = 0;
-
-  for (const key of validKeys) {
-    const keyWords = key.replace(/-/g, ' ').split(/\s+/);
-    const displayWords = (STYLE_DISPLAY_NAMES[key] || '').toLowerCase().split(/\s+/);
-    const candidateWords = [...new Set([...keyWords, ...displayWords])];
-
-    const score = inputWords.filter(w =>
-      candidateWords.some(cw => cw.includes(w) || w.includes(cw))
-    ).length;
-
-    if (score > bestScore) {
-      bestScore = score;
-      bestMatch = key;
-    }
-  }
-
-  if (bestScore < 2) {
-    console.warn(
-      `[resolveStyleBundleId] Low confidence for "${input}" (score: ${bestScore}). Falling back to "professional-clean".`
-    );
-    return 'professional-clean';
-  }
-
-  console.log(`[resolveStyleBundleId] Fuzzy match: "${input}" → "${bestMatch}" (score: ${bestScore})`);
-  return bestMatch;
+  // No match found — default to professional-clean
+  console.warn(`[resolveStyleBundleId] Unknown: "${input}" → defaulting to professional-clean`);
+  return 'professional-clean';
 }
 
 // ============================================================================
@@ -481,15 +454,56 @@ export const generateUISpec = createTool({
   execute: async (inputData, context) => {
     const { templateId, mappings, platformType } = inputData;
 
-    // Resolve style bundle: input param → RequestContext → fallback
-    const rawStyleBundleId =
-      inputData.selectedStyleBundleId ||
-      (context?.requestContext?.get('selectedStyleBundleId') as string) ||
-      'professional-clean';
+    // ── PRIORITY 1: Custom design tokens from RequestContext ──────────────────
+    // If runDesignSystemWorkflow ran and persisted tokens, they're loaded into RC.
+    // Use them directly — no preset resolution needed.
+    const customTokensJson = context?.requestContext?.get('designTokens') as string;
+    let styleTokens: typeof STYLE_BUNDLE_TOKENS[string];
+    let styleBundleId: string;
 
-    // Resolve display names (e.g. "Modern Monitoring") to valid token keys (e.g. "neon-cyber")
-    const styleBundleId = resolveStyleBundleId(rawStyleBundleId);
-    const styleTokens = STYLE_BUNDLE_TOKENS[styleBundleId];
+    if (customTokensJson) {
+      try {
+        const custom = JSON.parse(customTokensJson);
+        styleTokens = {
+          colors: {
+            primary: custom.colors.primary,
+            secondary: custom.colors.secondary ?? custom.colors.primary,
+            success: custom.colors.success ?? '#10B981',
+            warning: custom.colors.warning ?? '#F59E0B',
+            error: custom.colors.error ?? '#EF4444',
+            background: custom.colors.background,
+            text: custom.colors.text ?? '#0F172A',
+          },
+          fonts: {
+            heading: custom.fonts?.heading ?? 'Inter, sans-serif',
+            body: custom.fonts?.body ?? 'Inter, sans-serif',
+          },
+          spacing: custom.spacing ?? { unit: 8 },
+          radius: custom.radius ?? 8,
+          shadow: custom.shadow ?? 'soft',
+        };
+        styleBundleId = 'custom';
+        console.log('[generateUISpec] Using CUSTOM tokens:', {
+          primary: styleTokens.colors.primary,
+          heading: styleTokens.fonts.heading,
+        });
+      } catch {
+        console.warn('[generateUISpec] Failed to parse custom tokens — falling back to preset');
+        // fall through to preset path
+        const rawId = inputData.selectedStyleBundleId ||
+          (context?.requestContext?.get('selectedStyleBundleId') as string) ||
+          'professional-clean';
+        styleBundleId = resolveStyleBundleId(rawId);
+        styleTokens = STYLE_BUNDLE_TOKENS[styleBundleId];
+      }
+    } else {
+      // ── PRIORITY 2: Preset fallback ───────────────────────────────────────
+      const rawId = inputData.selectedStyleBundleId ||
+        (context?.requestContext?.get('selectedStyleBundleId') as string) ||
+        'professional-clean';
+      styleBundleId = resolveStyleBundleId(rawId);
+      styleTokens = STYLE_BUNDLE_TOKENS[styleBundleId];
+    }
 
     // Build deterministic component array from template blueprints
     const blueprints = getTemplateBlueprints(templateId, mappings);

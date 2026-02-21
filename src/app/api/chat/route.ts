@@ -76,7 +76,7 @@ async function autoAdvancePhase(params: {
   } else {
     const { data: byMastra } = await supabase
       .from('journey_sessions')
-      .select('id, mode, selected_entities, selected_outcome, selected_layout, selected_style_bundle_id, schema_ready, wireframe_confirmed')
+      .select('id, mode, selected_entities, selected_outcome, selected_layout, selected_style_bundle_id, schema_ready, wireframe_confirmed, design_tokens, style_confirmed')
       .eq('mastra_thread_id', mastraThreadId)
       .eq('tenant_id', tenantId)
       .maybeSingle();
@@ -109,9 +109,25 @@ async function autoAdvancePhase(params: {
     nextPhase = 'style';
   } else if (
     currentPhase === 'style' &&
+    session.design_tokens &&
+    session.style_confirmed === true
+  ) {
+    // Custom design system confirmed — ensure schema_ready is set
+    if (!session.schema_ready) {
+      await supabase
+        .from('journey_sessions')
+        .update({ schema_ready: true, updated_at: new Date().toISOString() })
+        .eq('id', session.id)
+        .eq('tenant_id', tenantId);
+    }
+    nextPhase = 'build_preview';
+  } else if (
+    currentPhase === 'style' &&
     session.selected_style_bundle_id &&
+    session.selected_style_bundle_id !== 'custom' &&
     session.schema_ready === true
   ) {
+    // Legacy preset path
     nextPhase = 'build_preview';
   }
 
@@ -594,7 +610,7 @@ export async function POST(req: Request) {
 
         const { data: byThreadId } = await supabase
           .from('journey_sessions')
-          .select('id, mode, preview_interface_id, selected_style_bundle_id, selected_entities, selected_outcome, selected_layout, schema_ready, wireframe_confirmed')
+          .select('id, mode, preview_interface_id, selected_style_bundle_id, selected_entities, selected_outcome, selected_layout, schema_ready, wireframe_confirmed, design_tokens, style_confirmed')
           .eq('thread_id', cleanJourneyThreadId)
           .eq('tenant_id', tenantId)
           .maybeSingle();
@@ -605,7 +621,7 @@ export async function POST(req: Request) {
           // Fallback: query by mastra_thread_id (in case thread was created that way)
           const { data: byMastraId } = await supabase
             .from('journey_sessions')
-            .select('id, mode, preview_interface_id, selected_style_bundle_id, selected_entities, selected_outcome, selected_layout, schema_ready, wireframe_confirmed')
+            .select('id, mode, preview_interface_id, selected_style_bundle_id, selected_entities, selected_outcome, selected_layout, schema_ready, wireframe_confirmed, design_tokens, style_confirmed')
             .eq('mastra_thread_id', cleanMastraThreadId)
             .eq('tenant_id', tenantId)
             .maybeSingle();
@@ -719,7 +735,7 @@ export async function POST(req: Request) {
             // Previously NOTHING ever set schema_ready=true after style selection,
             // so autoAdvancePhase always found schema_ready=false and never advanced.
             if (
-              (selectionUpdates.selected_style_bundle_id || sessionRow.selected_style_bundle_id) &&
+              (selectionUpdates.selected_style_bundle_id || sessionRow.selected_style_bundle_id || sessionRow.design_tokens) &&
               (selectionUpdates.selected_entities || sessionRow.selected_entities) &&
               (selectionUpdates.selected_outcome || sessionRow.selected_outcome)
             ) {
@@ -781,6 +797,18 @@ export async function POST(req: Request) {
         // Load schema_ready from DB into RequestContext
         if (sessionRow?.schema_ready) {
           requestContext.set('schemaReady', String(sessionRow.schema_ready));
+        }
+        // Load design_tokens (custom design system) into RequestContext
+        if (sessionRow?.design_tokens) {
+          requestContext.set('designTokens', JSON.stringify(sessionRow.design_tokens));
+          requestContext.set('designSystemGenerated', 'true');
+          console.log('[api/chat] Loaded design_tokens from DB:', {
+            styleName: (sessionRow.design_tokens as any)?.style?.name,
+            primary: (sessionRow.design_tokens as any)?.colors?.primary,
+          });
+        }
+        if (sessionRow?.style_confirmed) {
+          requestContext.set('styleConfirmed', 'true');
         }
 
         // BUG FIX: Override client-provided selectedStyleBundleId with DB value.
@@ -1040,6 +1068,67 @@ export async function POST(req: Request) {
           } catch (eagerErr: any) {
             console.warn('[api/chat] Eager advance after wireframe confirm failed:', eagerErr?.message);
           }
+        }
+      }
+    }
+
+    // ─── DETERMINISTIC STYLE CONFIRMATION (EAGER) ────────────────────────
+    // If phase is style AND design_tokens exist AND style_confirmed is not yet set,
+    // detect confirmation from the user message and set style_confirmed=true.
+    // Then run autoAdvancePhase — might transition style→build_preview right now.
+    if (finalPhase === 'style') {
+      const { data: styleSession } = await supabase
+        .from('journey_sessions')
+        .select('id, design_tokens, style_confirmed, selected_entities, selected_outcome')
+        .eq('thread_id', cleanJourneyThreadId)
+        .eq('tenant_id', tenantId)
+        .maybeSingle();
+
+      if (styleSession?.design_tokens && !styleSession.style_confirmed) {
+        const userMsgs = Array.isArray(rawMessages) ? rawMessages.filter((m: any) => m.role === 'user') : [];
+        const lastMsg = userMsgs[userMsgs.length - 1];
+        let messageText = '';
+        if (lastMsg?.parts && Array.isArray(lastMsg.parts)) {
+          messageText = lastMsg.parts.filter((p: any) => p.type === 'text').map((p: any) => p.text || '').join(' ').toLowerCase().trim();
+        } else if (typeof lastMsg?.content === 'string') {
+          messageText = lastMsg.content.toLowerCase().trim();
+        }
+        const styleConfirmPatterns = [
+          /^(yes|yeah|yep|sure|ok|okay|love\s*it|looks?\s*(good|great|perfect|right|fine|amazing)|perfect|great|that'?s?\s*(it|perfect|great|good)|proceed|let'?s?\s*go|go\s*ahead|confirmed?|approve[d]?|lgtm|build\s*it|generate|do\s*it|this\s*is\s*(good|perfect|great|fine))/i,
+        ];
+        const isStyleConfirmation = messageText && styleConfirmPatterns.some(p => p.test(messageText));
+        if (isStyleConfirmation) {
+          console.log('[api/chat] 🎨 Eager style confirmation detected:', messageText.substring(0, 40));
+          await supabase
+            .from('journey_sessions')
+            .update({ style_confirmed: true, schema_ready: true, updated_at: new Date().toISOString() })
+            .eq('id', styleSession.id)
+            .eq('tenant_id', tenantId);
+          requestContext.set('styleConfirmed', 'true');
+          try {
+            const eagerStyleResult = await autoAdvancePhase({
+              supabase,
+              tenantId,
+              journeyThreadId: cleanJourneyThreadId,
+              mastraThreadId: cleanMastraThreadId,
+            });
+            if (eagerStyleResult?.advanced) {
+              requestContext.set('phase', eagerStyleResult.to!);
+              console.log('[api/chat] ✅ Eager style→build_preview advance:', eagerStyleResult);
+            }
+          } catch (eagerStyleErr: any) {
+            console.warn('[api/chat] Eager advance after style confirm failed:', eagerStyleErr?.message);
+          }
+        }
+
+        // Detect adjustment requests (darker/lighter/more X/hex codes)
+        const adjustmentPatterns = [
+          /\b(darker|lighter|more\s+\w+|less\s+\w+|change\s+the\s+color|different\s+(color|style|font)|#[0-9a-f]{3,6}|too\s+(dark|light|bright|bold|minimal))\b/i,
+        ];
+        const isAdjustmentRequest = messageText && adjustmentPatterns.some(p => p.test(messageText));
+        if (isAdjustmentRequest && !isStyleConfirmation) {
+          console.log('[api/chat] 🎨 Style adjustment request detected:', messageText.substring(0, 60));
+          requestContext.set('styleAdjustmentRequested', messageText);
         }
       }
     }

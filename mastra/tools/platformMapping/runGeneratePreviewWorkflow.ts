@@ -72,7 +72,7 @@ export const runGeneratePreviewWorkflow = createTool({
 
       const { data: session } = await supabase
         .from('journey_sessions')
-        .select('mode, selected_outcome, selected_style_bundle_id, selected_entities, schema_ready')
+        .select('mode, selected_outcome, selected_style_bundle_id, selected_entities, schema_ready, design_tokens')
         .eq('thread_id', journeyThreadId)
         .eq('tenant_id', tenantId)
         .single();
@@ -81,7 +81,7 @@ export const runGeneratePreviewWorkflow = createTool({
         const missing: string[] = [];
         if (session.mode !== 'build_preview') missing.push(`phase is "${session.mode}" (must be "build_preview")`);
         if (!session.selected_outcome) missing.push('selectedOutcome not set');
-        if (!session.selected_style_bundle_id) missing.push('selectedStyleBundleId not set');
+        if (!session.selected_style_bundle_id && !session.design_tokens) missing.push('design system not set');
         if (!session.schema_ready) missing.push('schema not ready');
 
         if (missing.length > 0) {

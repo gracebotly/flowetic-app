@@ -81,7 +81,7 @@ DO NOT try to generate previews yourself — always delegate to this specialist.
 
           const { data: session } = await supabase
             .from('journey_sessions')
-            .select('mode, selected_outcome, selected_style_bundle_id, selected_entities, schema_ready')
+            .select('mode, selected_outcome, selected_style_bundle_id, selected_entities, schema_ready, design_tokens')
             .eq('thread_id', journeyThreadId)
             .eq('tenant_id', tenantId)
             .single();
@@ -90,7 +90,7 @@ DO NOT try to generate previews yourself — always delegate to this specialist.
             const missing: string[] = [];
             if (!session.selected_entities) missing.push('entity selection');
             if (!session.selected_outcome) missing.push('outcome selection');
-            if (!session.selected_style_bundle_id) missing.push('style selection');
+            if (!session.selected_style_bundle_id && !session.design_tokens) missing.push('style selection');
             if (!session.schema_ready) missing.push('schema readiness');
 
             if (missing.length > 0) {

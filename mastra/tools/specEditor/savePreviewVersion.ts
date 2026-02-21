@@ -37,58 +37,48 @@ export const savePreviewVersion = createTool({
     let { design_tokens } = inputData;
 
     // ============================================================================
-    // PHASE 2: DESIGN TOKEN ENFORCEMENT
+    // DESIGN TOKEN RESOLUTION
     // ============================================================================
-    // This guard ensures ALL paths use canonical design tokens from STYLE_BUNDLE_TOKENS.
-    // Even if an agent bypasses generateUISpec, we re-apply tokens here as a safety net.
-    let resolvedStyleBundleId = spec_json.styleBundleId;
-    if (!resolvedStyleBundleId) {
-      console.warn(
-        '[savePreviewVersion] PHASE 2 WARNING: spec_json missing styleBundleId. ' +
-        'Defaulting to "professional-clean". This indicates Path B was used.'
-      );
-      resolvedStyleBundleId = 'professional-clean';
-      spec_json.styleBundleId = resolvedStyleBundleId;
-    }
-
-    // Get canonical tokens
-    const canonicalTokens = STYLE_BUNDLE_TOKENS[resolvedStyleBundleId];
-    if (!canonicalTokens) {
-      throw new Error(
-        `[savePreviewVersion] Invalid styleBundleId: "${resolvedStyleBundleId}". ` +
-        `Must be one of: ${Object.keys(STYLE_BUNDLE_TOKENS).join(', ')}`
-      );
-    }
-
-    // Detect hallucinated colors
-    const llmColors = spec_json.theme?.colors;
-    const canonicalColors = canonicalTokens.colors;
-    if (llmColors && canonicalColors) {
-      const llmColorKeys = Object.keys(llmColors).sort();
-      const canonicalColorKeys = Object.keys(canonicalColors).sort();
-      const keysMatch = llmColorKeys.join(',') === canonicalColorKeys.join(',');
-
-      if (!keysMatch) {
-        console.warn(
-          '[savePreviewVersion] PHASE 2 WARNING: LLM hallucinated colors. ' +
-          `Expected keys: [${canonicalColorKeys.join(', ')}], ` +
-          `Got: [${llmColorKeys.join(', ')}]`
-        );
+    // Priority: custom tokens (styleBundleId === 'custom') > preset tokens
+    // Custom tokens are LLM-generated and unique to this workflow.
+    if (spec_json.styleBundleId === 'custom' || !STYLE_BUNDLE_TOKENS[spec_json.styleBundleId]) {
+      // Custom design system — use tokens as provided, validate minimums
+      console.log('[savePreviewVersion] Using custom design tokens (not overwriting)');
+      if (!design_tokens?.colors?.primary) {
+        console.warn('[savePreviewVersion] Custom tokens missing colors.primary — applying safe defaults');
+        design_tokens = {
+          ...design_tokens,
+          colors: {
+            primary: '#2563EB',
+            secondary: '#64748B',
+            success: '#10B981',
+            warning: '#F59E0B',
+            error: '#EF4444',
+            background: '#F8FAFC',
+            text: '#0F172A',
+            ...design_tokens?.colors,
+          },
+          fonts: design_tokens?.fonts ?? { heading: 'Inter, sans-serif', body: 'Inter, sans-serif' },
+          spacing: design_tokens?.spacing ?? { unit: 8 },
+          radius: design_tokens?.radius ?? 8,
+          shadow: design_tokens?.shadow ?? 'soft',
+        };
+      }
+    } else {
+      // Preset fallback — apply canonical tokens (legacy sessions only)
+      const resolvedStyleBundleId = resolveStyleBundleId(spec_json.styleBundleId || 'professional-clean');
+      const canonical = STYLE_BUNDLE_TOKENS[resolvedStyleBundleId];
+      if (canonical) {
+        design_tokens = {
+          colors: canonical.colors,
+          fonts: canonical.fonts,
+          spacing: canonical.spacing,
+          radius: canonical.radius,
+          shadow: canonical.shadow,
+        };
+        console.log(`[savePreviewVersion] Preset path: "${resolvedStyleBundleId}" tokens`);
       }
     }
-
-    // Override with canonical tokens (the actual enforcement)
-    design_tokens = {
-      colors: canonicalTokens.colors,
-      fonts: canonicalTokens.fonts,
-      spacing: canonicalTokens.spacing,
-      radius: canonicalTokens.radius,
-      shadow: canonicalTokens.shadow,
-    };
-
-    console.log(
-      `[savePreviewVersion] Token lock: overriding with "${resolvedStyleBundleId}" canonical tokens`
-    );
     // ============================================================================
 
     // Get platformType from context for interface naming
