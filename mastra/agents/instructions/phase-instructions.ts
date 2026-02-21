@@ -100,7 +100,7 @@ export function getPhaseInstructions(phase: FloweticPhase, ctx: PhaseInstruction
       "### STEP 1: Dashboard vs Product",
       selectedOutcome ? `✅ Outcome already selected: ${selectedOutcome}. Skip to STEP 2.` : "",
       !selectedOutcome ? "Present Dashboard (monitoring) vs Product (client-facing tool) as a quick 2-3 sentence choice." : "",
-      !selectedOutcome ? "MANDATORY FIRST STEP: Call the recommendOutcome tool to analyze event patterns. This persists the recommendation to the database automatically. Then present the choice to the user in 2-3 sentences based on the tool's reasoning." : "",
+      !selectedOutcome ? "Ask the user: 'Would you like a **Dashboard** for monitoring your workflows, or a **Product** interface for your clients?' Keep it to 2-3 sentences explaining each option." : "",
       "",
       "### STEP 2: Generate ONE Smart Wireframe Preview (MANDATORY after outcome selection)",
       "",
@@ -402,8 +402,9 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
   ],
 
   recommend: [
-    // Outcome recommendation
-    'recommendOutcome',
+    // NOTE: recommendOutcome REMOVED — outcome selection is now deterministic.
+    // Code in route.ts detects "dashboard" / "product" from user message and
+    // writes selected_outcome to DB. Agent only presents the choice conversationally.
     'getEventStats',
     'getOutcomes',
     'searchSkillKnowledge',

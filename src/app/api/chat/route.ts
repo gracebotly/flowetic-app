@@ -319,6 +319,79 @@ async function handleDeterministicSelectEntity(params: {
   }
 }
 
+// ─── DETERMINISTIC RECOMMEND OUTCOME DETECTION ──────────────────────────────
+// The recommend phase has TWO selections that must be persisted:
+//   1. selected_outcome (dashboard | product) — from user's choice or __ACTION__ token
+//   2. wireframe_confirmed (boolean) — from user confirming the wireframe preview
+//
+// The agent PRESENTS the choice and generates the wireframe (text output).
+// CODE detects the selection and persists it. Same pattern as select_entity bypass.
+//
+// Detection sources (priority order):
+//   1. __ACTION__:select_outcome:dashboard / __ACTION__:select_outcome:product (from UI buttons)
+//   2. Natural language: "dashboard", "monitoring", "product", "client-facing", etc.
+//   3. Implicit confirmation: "yes", "go", "let's do it" → defaults to "dashboard"
+//
+// This runs BEFORE the agent on every recommend-phase request.
+// If it detects an outcome, it writes to DB immediately.
+// The agent still runs (to present wireframe / continue conversation).
+// autoAdvancePhase in onFinish handles recommend → style when BOTH are set.
+async function handleDeterministicRecommendOutcome(params: {
+  supabase: any;
+  tenantId: string;
+  journeyThreadId: string;
+  userMessage: string;
+}): Promise<{ outcome: string; confidence: number } | null> {
+  const { supabase, tenantId, journeyThreadId, userMessage } = params;
+  const msg = userMessage.toLowerCase().trim();
+  let outcome: string | null = null;
+  let confidence = 0.9;
+  // Priority 1: __ACTION__ tokens from UI button clicks (highest confidence)
+  const actionMatch = userMessage.match(/__ACTION__:select_outcome:(dashboard|product)/);
+  if (actionMatch) {
+    outcome = actionMatch[1];
+    confidence = 1.0;
+    console.log(`[deterministic-recommend] __ACTION__ token detected: outcome="${outcome}"`);
+  }
+  // Priority 2: Explicit keyword matching (natural language)
+  if (!outcome) {
+    if (msg.match(/\b(dashboard|monitoring|analytics|metrics|tracking|overview|internal)\b/)) {
+      outcome = 'dashboard';
+      confidence = 0.9;
+    } else if (msg.match(/\b(product|client.?facing|customer|portal|app|application|external)\b/)) {
+      outcome = 'product';
+      confidence = 0.9;
+    }
+  }
+  // Priority 3: Implicit confirmation (user says "yes" after agent presents choice)
+  // Only default to dashboard if message is clearly a confirmation, not a question
+  if (!outcome) {
+    if (msg.match(/^(yes|yeah|yep|yup|sure|ok|okay|go|let'?s?\s*(go|do)|sounds?\s*good|first\s*(one|option)|option\s*(1|a|one))\b/i)) {
+      outcome = 'dashboard';
+      confidence = 0.7;
+    } else if (msg.match(/\b(second\s*(one|option)|option\s*(2|b|two))\b/i)) {
+      outcome = 'product';
+      confidence = 0.7;
+    }
+  }
+  if (!outcome) return null;
+  console.log(`[deterministic-recommend] Detected outcome="${outcome}" confidence=${confidence} from: "${userMessage.substring(0, 80)}"`);
+  const { error } = await supabase
+    .from('journey_sessions')
+    .update({
+      selected_outcome: outcome,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('thread_id', journeyThreadId)
+    .eq('tenant_id', tenantId);
+  if (error) {
+    console.error('[deterministic-recommend] DB write failed:', error.message);
+    return null;
+  }
+  console.log(`[deterministic-recommend] ✅ Persisted selected_outcome="${outcome}" to DB`);
+  return { outcome, confidence };
+}
+
 export async function POST(req: Request) {
   const requestStartMs = Date.now();
   try {
@@ -870,10 +943,110 @@ export async function POST(req: Request) {
       console.log('[api/chat] Deterministic bypass returned null, falling through to agent');
     }
 
+    // Extract raw messages early — used by deterministic checks below AND by agent call
+    const rawMessages = (params as any)?.messages;
+
+    // ─── DETERMINISTIC RECOMMEND OUTCOME DETECTION ───────────────────────
+    // If phase is recommend AND selected_outcome is not yet set, check the
+    // user's message for outcome selection. Write to DB if detected.
+    // The agent still runs — this just ensures the DB state is set.
+    if (finalPhase === 'recommend') {
+      // Re-read session to check current state
+      const { data: recommendSession } = await supabase
+        .from('journey_sessions')
+        .select('selected_outcome, wireframe_confirmed')
+        .eq('thread_id', cleanJourneyThreadId)
+        .eq('tenant_id', tenantId)
+        .maybeSingle();
+      if (recommendSession && !recommendSession.selected_outcome) {
+        const userMsgs = Array.isArray(rawMessages)
+          ? rawMessages.filter((m: any) => m.role === 'user')
+          : [];
+        const lastMsg = userMsgs[userMsgs.length - 1];
+        // AI SDK v5: extract text from parts[] array
+        let messageText = '';
+        if (lastMsg?.parts && Array.isArray(lastMsg.parts)) {
+          messageText = lastMsg.parts
+            .filter((p: any) => p.type === 'text')
+            .map((p: any) => p.text || '')
+            .join(' ');
+        } else if (typeof lastMsg?.content === 'string') {
+          messageText = lastMsg.content;
+        }
+        if (messageText) {
+          const result = await handleDeterministicRecommendOutcome({
+            supabase,
+            tenantId,
+            journeyThreadId: cleanJourneyThreadId,
+            userMessage: messageText,
+          });
+          if (result) {
+            // Update RequestContext so phase instructions see the outcome
+            requestContext.set('selectedOutcome', result.outcome);
+            console.log('[api/chat] 🚀 Deterministic recommend outcome set:', result.outcome);
+          }
+        }
+      }
+    }
+    // ─── DETERMINISTIC WIREFRAME CONFIRMATION (EAGER) ────────────────────
+    // Also check for wireframe confirmation BEFORE agent runs (not just in onFinish).
+    // This handles the case where user confirms wireframe on the same request.
+    if (finalPhase === 'recommend') {
+      const { data: wfSession } = await supabase
+        .from('journey_sessions')
+        .select('id, selected_outcome, wireframe_confirmed')
+        .eq('thread_id', cleanJourneyThreadId)
+        .eq('tenant_id', tenantId)
+        .maybeSingle();
+      if (wfSession?.selected_outcome && !wfSession.wireframe_confirmed) {
+        const userMsgs = Array.isArray(rawMessages)
+          ? rawMessages.filter((m: any) => m.role === 'user')
+          : [];
+        const lastMsg = userMsgs[userMsgs.length - 1];
+        let messageText = '';
+        if (lastMsg?.parts && Array.isArray(lastMsg.parts)) {
+          messageText = lastMsg.parts
+            .filter((p: any) => p.type === 'text')
+            .map((p: any) => p.text || '')
+            .join(' ')
+            .toLowerCase()
+            .trim();
+        } else if (typeof lastMsg?.content === 'string') {
+          messageText = lastMsg.content.toLowerCase().trim();
+        }
+        const confirmationPatterns = [
+          /^(yes|yeah|yep|yup|sure|ok|okay|correct|confirmed?|approve[d]?|looks?\s*good|looks?\s*right|looks?\s*great|looks?\s*fine|let'?s?\s*go|go\s*ahead|perfect|great|that'?s?\s*(right|correct|good|perfect|fine)|proceed|do\s*it|build\s*it|generate|lgtm|fine|this\s*is\s*(good|right|correct|fine|perfect))/i,
+        ];
+        const isConfirmation = messageText && confirmationPatterns.some(p => p.test(messageText));
+        if (isConfirmation) {
+          console.log('[api/chat] 🚀 Eager wireframe confirmation detected:', messageText.substring(0, 40));
+          await supabase
+            .from('journey_sessions')
+            .update({ wireframe_confirmed: true, updated_at: new Date().toISOString() })
+            .eq('id', wfSession.id)
+            .eq('tenant_id', tenantId);
+          // Run eager advance — might transition recommend → style right now
+          try {
+            const eagerResult = await autoAdvancePhase({
+              supabase,
+              tenantId,
+              journeyThreadId: cleanJourneyThreadId,
+              mastraThreadId: cleanMastraThreadId,
+            });
+            if (eagerResult?.advanced) {
+              requestContext.set('phase', eagerResult.to!);
+              console.log('[api/chat] ✅ Eager recommend→style advance:', eagerResult);
+            }
+          } catch (eagerErr: any) {
+            console.warn('[api/chat] Eager advance after wireframe confirm failed:', eagerErr?.message);
+          }
+        }
+      }
+    }
+
     // 5. CALL MASTRA WITH VALIDATED CONTEXT
     // Deduplicate OpenAI itemIds in message history before sending to agent.
     // This prevents "Duplicate item found with id fc_..." crash from OpenAI Responses API.
-    const rawMessages = (params as any)?.messages;
     const dedupedMessages = Array.isArray(rawMessages)
       ? deduplicateProviderItemIds(rawMessages)
       : rawMessages;
@@ -972,25 +1145,20 @@ export async function POST(req: Request) {
 
                 if (journeySessionForWf && journeySessionForWf.mode === 'recommend' && journeySessionForWf.selected_outcome && !journeySessionForWf.wireframe_confirmed) {
                   const lastUserMessage = rawMessages[rawMessages.length - 1];
-                  // FIX (Bug 2): AI SDK v5 messages use parts[] array, not content string.
-                  // User text is in parts[{ type: "text", text: "..." }]
-                  const userText = lastUserMessage?.parts
-                    ? lastUserMessage.parts
-                        .filter((p: any) => p.type === 'text')
-                        .map((p: any) => p.text)
-                        .join(' ')
-                        .toLowerCase()
-                        .trim()
-                    : (typeof lastUserMessage?.content === 'string'
-                        ? lastUserMessage.content.toLowerCase().trim()
-                        : '');
-                  // FIX (Bug 2): Broaden confirmation patterns - original was too strict.
-                  // User said "This looks right" but pattern only matched "looks good" (not "looks right").
+                  // AI SDK v5: extract text from parts[] array, fallback to content string
+                  let userText = '';
+                  if (lastUserMessage?.parts && Array.isArray(lastUserMessage.parts)) {
+                    userText = lastUserMessage.parts
+                      .filter((p: any) => p.type === 'text')
+                      .map((p: any) => p.text || '')
+                      .join(' ')
+                      .toLowerCase()
+                      .trim();
+                  } else if (typeof lastUserMessage?.content === 'string') {
+                    userText = lastUserMessage.content.toLowerCase().trim();
+                  }
                   const confirmationPatterns = [
-                    /\b(yes|yeah|yep|yup|sure|ok|okay|correct|confirmed|approve|approved)\b/i,
-                    /\b(looks?\s+(good|right|perfect|correct|fine|great))\b/i,
-                    /\b(that'?s?\s+(right|correct|good|perfect))\b/i,
-                    /\b(let'?s?\s*go|go\s*ahead|proceed|do\s*it|build\s*it|generate|lgtm)\b/i,
+                    /^(yes|yeah|yep|yup|sure|ok|okay|correct|confirmed?|approve[d]?|looks?\s*good|looks?\s*right|looks?\s*great|looks?\s*fine|let'?s?\s*go|go\s*ahead|perfect|great|that'?s?\s*(right|correct|good|perfect|fine)|proceed|do\s*it|build\s*it|generate|lgtm|fine|this\s*is\s*(good|right|correct|fine|perfect))/i,
                   ];
                   const isConfirmation = confirmationPatterns.some(p => p.test(userText));
 
