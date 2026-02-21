@@ -193,6 +193,7 @@ async function handleDeterministicSelectEntity(params: {
       p_tenant_id: tenantId,
       p_source_id: sourceId,
       p_since_days: 30,
+      p_workflow_name: workflowName || null,  // BUG 1 FIX: Filter by selected workflow
     });
     const elapsed = Date.now() - startTime;
     console.log(`[deterministic-select-entity] RPC completed in ${elapsed}ms`);
@@ -876,6 +877,55 @@ export async function POST(req: Request) {
       });
     }
 
+    // Extract raw messages early — used by wireframe confirmation and deterministic checks below
+    const rawMessages = (params as any)?.messages;
+
+    // BUG 2 FIX: Detect and SET wireframe_confirmed BEFORE autoAdvancePhase runs
+    {
+      const preAdvancePhase = requestContext.get('phase') as string;
+      if (preAdvancePhase === 'recommend') {
+        const { data: wfSession } = await supabase
+          .from('journey_sessions')
+          .select('id, selected_outcome, wireframe_confirmed')
+          .eq('thread_id', cleanJourneyThreadId)
+          .eq('tenant_id', tenantId)
+          .maybeSingle();
+        if (wfSession?.selected_outcome && !wfSession.wireframe_confirmed) {
+          const userMsgs = Array.isArray(rawMessages)
+            ? rawMessages.filter((m: any) => m.role === 'user')
+            : [];
+          const lastMsg = userMsgs[userMsgs.length - 1];
+          let messageText = '';
+          if (lastMsg?.parts && Array.isArray(lastMsg.parts)) {
+            messageText = lastMsg.parts
+              .filter((p: any) => p.type === 'text')
+              .map((p: any) => p.text || '')
+              .join(' ')
+              .toLowerCase()
+              .trim();
+          } else if (typeof lastMsg?.content === 'string') {
+            messageText = lastMsg.content.toLowerCase().trim();
+          }
+          const confirmationPatterns = [
+            /^(yes|yeah|yep|yup|sure|ok|okay|correct|confirmed?|approve[d]?|looks?\s*good|looks?\s*right|looks?\s*great|looks?\s*fine|this\s*looks?\s*right|let'?s?\s*go|go\s*ahead|perfect|great|that'?s?\s*(right|correct|good|perfect|fine)|proceed|do\s*it|build\s*it|generate|lgtm|fine)/i,
+          ];
+          const isConfirmation = messageText && confirmationPatterns.some(p => p.test(messageText));
+          if (isConfirmation) {
+            console.log('[api/chat] ✅ EAGER wireframe confirmation:', messageText.substring(0, 40));
+            // ⚠️ CRITICAL: Set wireframe_confirmed = true BEFORE autoAdvancePhase
+            await supabase
+              .from('journey_sessions')
+              .update({
+                wireframe_confirmed: true,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', wfSession.id)
+              .eq('tenant_id', tenantId);
+          }
+        }
+      }
+    }
+
     // ─── EAGER PHASE ADVANCE (BUG 1 FIX) ────────────────────────────────────────
     // Without this, style selection requests run the agent in phase="style"
     // because autoAdvancePhase only ran in onFinish (after stream completed).
@@ -970,9 +1020,6 @@ export async function POST(req: Request) {
       // If handleDeterministicSelectEntity returned null, fall through to normal agent
       console.log('[api/chat] Deterministic bypass returned null, falling through to agent');
     }
-
-    // Extract raw messages early — used by deterministic checks below AND by agent call
-    const rawMessages = (params as any)?.messages;
 
     // ─── DETERMINISTIC RECOMMEND OUTCOME DETECTION ───────────────────────
     // If phase is recommend AND selected_outcome is not yet set, check the

@@ -239,13 +239,12 @@ const combineDesignOptions = createStep({
   },
 });
 
+// BUG 4 FIX: Remove parallel execution to avoid OpenAI duplicate ID errors
+// Premium plan: ONE intelligent design system, not 2 generic options
 export const designSystemWorkflow = createWorkflow({
   id: "designSystemWorkflow",
   inputSchema: designSystemInputSchema,
-  outputSchema: z.object({
-    designSystems: z.array(designSystemOutputSchema).length(2),
-  }),
+  outputSchema: designSystemOutputSchema,  // Returns single system now
 })
-  .parallel([designOptionA, designOptionB])
-  .then(combineDesignOptions)
+  .then(designOptionA)  // Generate ONE intelligent design
   .commit();

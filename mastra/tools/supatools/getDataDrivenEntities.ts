@@ -5,6 +5,7 @@ import { z } from 'zod';
 const inputSchema = z.object({
   sourceId: z.string().uuid().describe('The source ID to discover entities for'),
   sinceDays: z.number().int().min(1).max(365).default(30),
+  workflowName: z.string().optional().describe('Workflow name to filter entities'),  // ADD THIS
 });
 
 const outputSchema = z.object({
@@ -63,6 +64,7 @@ export const getDataDrivenEntities = createSupaTool<z.infer<typeof outputSchema>
       p_tenant_id: tenantId,
       p_source_id: sourceId,
       p_since_days: sinceDays,
+      p_workflow_name: input.workflowName || null,  // ADD THIS
     });
     console.log(`[TIMING] getDataDrivenEntities.rpc: ${Date.now() - rpcStartMs}ms`);
 
