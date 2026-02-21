@@ -66,7 +66,7 @@ async function autoAdvancePhase(params: {
   let session = null;
   const { data: byThread } = await supabase
     .from('journey_sessions')
-    .select('id, mode, selected_entities, selected_outcome, selected_layout, selected_style_bundle_id, schema_ready, wireframe_confirmed')
+    .select('id, mode, selected_entities, selected_outcome, selected_layout, selected_style_bundle_id, schema_ready, preview_interface_id, preview_version_id')
     .eq('thread_id', journeyThreadId)
     .eq('tenant_id', tenantId)
     .maybeSingle();
@@ -76,7 +76,7 @@ async function autoAdvancePhase(params: {
   } else {
     const { data: byMastra } = await supabase
       .from('journey_sessions')
-      .select('id, mode, selected_entities, selected_outcome, selected_layout, selected_style_bundle_id, schema_ready, wireframe_confirmed, design_tokens, style_confirmed')
+      .select('id, mode, selected_entities, selected_outcome, selected_layout, selected_style_bundle_id, schema_ready, preview_interface_id, preview_version_id')
       .eq('mastra_thread_id', mastraThreadId)
       .eq('tenant_id', tenantId)
       .maybeSingle();
@@ -91,44 +91,49 @@ async function autoAdvancePhase(params: {
   const currentPhase = session.mode;
   let nextPhase: string | null = null;
 
-  // 2. Deterministic transition rules
+  // 2. Deterministic transition rules - CODE-DRIVEN per Refactor Guide Phase 4
+  // Rule: If selection exists → auto-advance. No LLM decisions, no confirmations.
+
   if (currentPhase === 'select_entity' && session.selected_entities) {
-    // SAFETY: Validate that selected_entities is an actual entity selection,
-    // not a sourceId that was incorrectly stored here.
-    // Real entity selections are comma-separated names like "Leads, ROI Metrics"
-    // or contain descriptive text. A bare UUID is NOT a valid entity selection.
+    // Validate selected_entities is not a bare UUID (sourceId accidentally stored)
     const entities = String(session.selected_entities).trim();
     const isBareUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(entities);
+
     if (isBareUuid) {
-      console.warn('[autoAdvancePhase] selected_entities contains a bare UUID (likely a sourceId, not an entity selection). Skipping advance:', entities);
-      // Don't advance — this is bad data
+      console.warn('[autoAdvancePhase] selected_entities is a bare UUID (sourceId), not advancing');
     } else {
       nextPhase = 'recommend';
     }
-  } else if (currentPhase === 'recommend' && session.selected_outcome && session.wireframe_confirmed === true) {
+
+  } else if (currentPhase === 'recommend' && session.selected_outcome) {
+    // PHASE 4 FIX: Remove wireframe_confirmed requirement
+    // Auto-advance immediately when outcome selected (CODE-DRIVEN)
+    // User selection = "dashboard" or "product" → advance to style phase
     nextPhase = 'style';
-  } else if (
-    currentPhase === 'style' &&
-    session.design_tokens &&
-    session.style_confirmed === true
-  ) {
-    // Custom design system confirmed — ensure schema_ready is set
+    console.log('[autoAdvancePhase] Code-driven advance: outcome selected → style');
+
+  } else if (currentPhase === 'style' && session.selected_style_bundle_id) {
+    // PHASE 4 FIX: Single path, remove style_confirmed requirement
+    // Auto-advance when style bundle selected (CODE-DRIVEN)
+    // Auto-set schema_ready flag when advancing
+
     if (!session.schema_ready) {
       await supabase
         .from('journey_sessions')
         .update({ schema_ready: true, updated_at: new Date().toISOString() })
         .eq('id', session.id)
         .eq('tenant_id', tenantId);
+      console.log('[autoAdvancePhase] Auto-set schema_ready=true for style bundle:', session.selected_style_bundle_id);
     }
+
     nextPhase = 'build_preview';
-  } else if (
-    currentPhase === 'style' &&
-    session.selected_style_bundle_id &&
-    session.selected_style_bundle_id !== 'custom' &&
-    session.schema_ready === true
-  ) {
-    // Legacy preset path
-    nextPhase = 'build_preview';
+    console.log('[autoAdvancePhase] Code-driven advance: style selected → build_preview');
+
+  } else if (currentPhase === 'build_preview' && session.preview_interface_id && session.preview_version_id) {
+    // PHASE 4 FIX: Add missing transition to interactive_edit
+    // Auto-advance when preview artifacts exist (CODE-DRIVEN)
+    nextPhase = 'interactive_edit';
+    console.log('[autoAdvancePhase] Code-driven advance: preview generated → interactive_edit');
   }
 
   if (!nextPhase) {
@@ -136,10 +141,9 @@ async function autoAdvancePhase(params: {
       currentPhase,
       hasEntities: !!session.selected_entities,
       hasOutcome: !!session.selected_outcome,
-      hasLayout: !!session.selected_layout,
-      wireframeConfirmed: !!session.wireframe_confirmed,
       hasStyle: !!session.selected_style_bundle_id,
       schemaReady: session.schema_ready,
+      hasPreview: !!(session.preview_interface_id && session.preview_version_id),
     });
     return { advanced: false };
   }
@@ -880,52 +884,6 @@ export async function POST(req: Request) {
     // Extract raw messages early — used by wireframe confirmation and deterministic checks below
     const rawMessages = (params as any)?.messages;
 
-    // BUG 2 FIX: Detect and SET wireframe_confirmed BEFORE autoAdvancePhase runs
-    {
-      const preAdvancePhase = requestContext.get('phase') as string;
-      if (preAdvancePhase === 'recommend') {
-        const { data: wfSession } = await supabase
-          .from('journey_sessions')
-          .select('id, selected_outcome, wireframe_confirmed')
-          .eq('thread_id', cleanJourneyThreadId)
-          .eq('tenant_id', tenantId)
-          .maybeSingle();
-        if (wfSession?.selected_outcome && !wfSession.wireframe_confirmed) {
-          const userMsgs = Array.isArray(rawMessages)
-            ? rawMessages.filter((m: any) => m.role === 'user')
-            : [];
-          const lastMsg = userMsgs[userMsgs.length - 1];
-          let messageText = '';
-          if (lastMsg?.parts && Array.isArray(lastMsg.parts)) {
-            messageText = lastMsg.parts
-              .filter((p: any) => p.type === 'text')
-              .map((p: any) => p.text || '')
-              .join(' ')
-              .toLowerCase()
-              .trim();
-          } else if (typeof lastMsg?.content === 'string') {
-            messageText = lastMsg.content.toLowerCase().trim();
-          }
-          const confirmationPatterns = [
-            /^(yes|yeah|yep|yup|sure|ok|okay|correct|confirmed?|approve[d]?|looks?\s*good|looks?\s*right|looks?\s*great|looks?\s*fine|this\s*looks?\s*right|let'?s?\s*go|go\s*ahead|perfect|great|that'?s?\s*(right|correct|good|perfect|fine)|proceed|do\s*it|build\s*it|generate|lgtm|fine)/i,
-          ];
-          const isConfirmation = messageText && confirmationPatterns.some(p => p.test(messageText));
-          if (isConfirmation) {
-            console.log('[api/chat] ✅ EAGER wireframe confirmation:', messageText.substring(0, 40));
-            // ⚠️ CRITICAL: Set wireframe_confirmed = true BEFORE autoAdvancePhase
-            await supabase
-              .from('journey_sessions')
-              .update({
-                wireframe_confirmed: true,
-                updated_at: new Date().toISOString(),
-              })
-              .eq('id', wfSession.id)
-              .eq('tenant_id', tenantId);
-          }
-        }
-      }
-    }
-
     // ─── EAGER PHASE ADVANCE (BUG 1 FIX) ────────────────────────────────────────
     // Without this, style selection requests run the agent in phase="style"
     // because autoAdvancePhase only ran in onFinish (after stream completed).
@@ -1021,103 +979,10 @@ export async function POST(req: Request) {
       console.log('[api/chat] Deterministic bypass returned null, falling through to agent');
     }
 
-    // ─── DETERMINISTIC RECOMMEND OUTCOME DETECTION ───────────────────────
-    // If phase is recommend AND selected_outcome is not yet set, check the
-    // user's message for outcome selection. Write to DB if detected.
-    // The agent still runs — this just ensures the DB state is set.
-    if (finalPhase === 'recommend') {
-      // Re-read session to check current state
-      const { data: recommendSession } = await supabase
-        .from('journey_sessions')
-        .select('selected_outcome, wireframe_confirmed')
-        .eq('thread_id', cleanJourneyThreadId)
-        .eq('tenant_id', tenantId)
-        .maybeSingle();
-      if (recommendSession && !recommendSession.selected_outcome) {
-        const userMsgs = Array.isArray(rawMessages)
-          ? rawMessages.filter((m: any) => m.role === 'user')
-          : [];
-        const lastMsg = userMsgs[userMsgs.length - 1];
-        // AI SDK v5: extract text from parts[] array
-        let messageText = '';
-        if (lastMsg?.parts && Array.isArray(lastMsg.parts)) {
-          messageText = lastMsg.parts
-            .filter((p: any) => p.type === 'text')
-            .map((p: any) => p.text || '')
-            .join(' ');
-        } else if (typeof lastMsg?.content === 'string') {
-          messageText = lastMsg.content;
-        }
-        if (messageText) {
-          const result = await handleDeterministicRecommendOutcome({
-            supabase,
-            tenantId,
-            journeyThreadId: cleanJourneyThreadId,
-            userMessage: messageText,
-          });
-          if (result) {
-            // Update RequestContext so phase instructions see the outcome
-            requestContext.set('selectedOutcome', result.outcome);
-            console.log('[api/chat] 🚀 Deterministic recommend outcome set:', result.outcome);
-          }
-        }
-      }
-    }
-    // ─── DETERMINISTIC WIREFRAME CONFIRMATION (EAGER) ────────────────────
-    // Also check for wireframe confirmation BEFORE agent runs (not just in onFinish).
-    // This handles the case where user confirms wireframe on the same request.
-    if (finalPhase === 'recommend') {
-      const { data: wfSession } = await supabase
-        .from('journey_sessions')
-        .select('id, selected_outcome, wireframe_confirmed')
-        .eq('thread_id', cleanJourneyThreadId)
-        .eq('tenant_id', tenantId)
-        .maybeSingle();
-      if (wfSession?.selected_outcome && !wfSession.wireframe_confirmed) {
-        const userMsgs = Array.isArray(rawMessages)
-          ? rawMessages.filter((m: any) => m.role === 'user')
-          : [];
-        const lastMsg = userMsgs[userMsgs.length - 1];
-        let messageText = '';
-        if (lastMsg?.parts && Array.isArray(lastMsg.parts)) {
-          messageText = lastMsg.parts
-            .filter((p: any) => p.type === 'text')
-            .map((p: any) => p.text || '')
-            .join(' ')
-            .toLowerCase()
-            .trim();
-        } else if (typeof lastMsg?.content === 'string') {
-          messageText = lastMsg.content.toLowerCase().trim();
-        }
-        const confirmationPatterns = [
-          /^(yes|yeah|yep|yup|sure|ok|okay|correct|confirmed?|approve[d]?|looks?\s*good|looks?\s*right|looks?\s*great|looks?\s*fine|let'?s?\s*go|go\s*ahead|perfect|great|that'?s?\s*(right|correct|good|perfect|fine)|proceed|do\s*it|build\s*it|generate|lgtm|fine|this\s*is\s*(good|right|correct|fine|perfect))/i,
-        ];
-        const isConfirmation = messageText && confirmationPatterns.some(p => p.test(messageText));
-        if (isConfirmation) {
-          console.log('[api/chat] 🚀 Eager wireframe confirmation detected:', messageText.substring(0, 40));
-          await supabase
-            .from('journey_sessions')
-            .update({ wireframe_confirmed: true, updated_at: new Date().toISOString() })
-            .eq('id', wfSession.id)
-            .eq('tenant_id', tenantId);
-          // Run eager advance — might transition recommend → style right now
-          try {
-            const eagerResult = await autoAdvancePhase({
-              supabase,
-              tenantId,
-              journeyThreadId: cleanJourneyThreadId,
-              mastraThreadId: cleanMastraThreadId,
-            });
-            if (eagerResult?.advanced) {
-              requestContext.set('phase', eagerResult.to!);
-              console.log('[api/chat] ✅ Eager recommend→style advance:', eagerResult);
-            }
-          } catch (eagerErr: any) {
-            console.warn('[api/chat] Eager advance after wireframe confirm failed:', eagerErr?.message);
-          }
-        }
-      }
-    }
+    // ─── CLIENT-SIDE OUTCOME PERSISTENCE ──────────────────────────────────
+    // Outcome selection comes from client (InlineChoice onClick → sendAi extraData)
+    // This is already handled in the client-sent selections block below
+    // No deterministic parsing needed - client sends explicit selectedOutcome value
 
     // ─── DETERMINISTIC STYLE CONFIRMATION (EAGER) ────────────────────────
     // If phase is style AND design_tokens exist AND style_confirmed is not yet set,
@@ -1270,46 +1135,6 @@ export async function POST(req: Request) {
             }
             try {
               if (cleanJourneyThreadId && cleanJourneyThreadId !== 'default-thread') {
-                // Re-query journey session for wireframe confirmation detection
-                // (the `session` var in onFinish is Supabase Auth, not the journey session)
-                const { data: journeySessionForWf } = await supabase
-                  .from('journey_sessions')
-                  .select('id, mode, selected_outcome, wireframe_confirmed')
-                  .eq('tenant_id', tenantId)
-                  .eq('thread_id', cleanJourneyThreadId)
-                  .maybeSingle();
-
-                if (journeySessionForWf && journeySessionForWf.mode === 'recommend' && journeySessionForWf.selected_outcome && !journeySessionForWf.wireframe_confirmed) {
-                  const lastUserMessage = rawMessages[rawMessages.length - 1];
-                  // AI SDK v5: extract text from parts[] array, fallback to content string
-                  let userText = '';
-                  if (lastUserMessage?.parts && Array.isArray(lastUserMessage.parts)) {
-                    userText = lastUserMessage.parts
-                      .filter((p: any) => p.type === 'text')
-                      .map((p: any) => p.text || '')
-                      .join(' ')
-                      .toLowerCase()
-                      .trim();
-                  } else if (typeof lastUserMessage?.content === 'string') {
-                    userText = lastUserMessage.content.toLowerCase().trim();
-                  }
-                  const confirmationPatterns = [
-                    /^(yes|yeah|yep|yup|sure|ok|okay|correct|confirmed?|approve[d]?|looks?\s*good|looks?\s*right|looks?\s*great|looks?\s*fine|let'?s?\s*go|go\s*ahead|perfect|great|that'?s?\s*(right|correct|good|perfect|fine)|proceed|do\s*it|build\s*it|generate|lgtm|fine|this\s*is\s*(good|right|correct|fine|perfect))/i,
-                  ];
-                  const isConfirmation = confirmationPatterns.some(p => p.test(userText));
-
-                  if (isConfirmation) {
-                    console.log('[api/chat] Wireframe confirmation detected from user message:', userText);
-                    const { error: wfError } = await supabase
-                      .from('journey_sessions')
-                      .update({ wireframe_confirmed: true, updated_at: new Date().toISOString() })
-                      .eq('id', journeySessionForWf.id)
-                      .eq('tenant_id', tenantId);
-                    if (wfError) {
-                      console.error('[api/chat] Failed to set wireframe_confirmed:', wfError.message);
-                    }
-                  }
-                }
                 const result = await autoAdvancePhase({
                   supabase,
                   tenantId,
