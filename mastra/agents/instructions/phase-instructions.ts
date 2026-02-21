@@ -100,7 +100,7 @@ export function getPhaseInstructions(phase: FloweticPhase, ctx: PhaseInstruction
       "### STEP 1: Dashboard vs Product",
       selectedOutcome ? `✅ Outcome already selected: ${selectedOutcome}. Skip to STEP 2.` : "",
       !selectedOutcome ? "Present Dashboard (monitoring) vs Product (client-facing tool) as a quick 2-3 sentence choice." : "",
-      !selectedOutcome ? "Call recommendOutcome first if available. Keep it brief — 2-3 sentences per option with your recommendation." : "",
+      !selectedOutcome ? "MANDATORY FIRST STEP: Call the recommendOutcome tool to analyze event patterns. This persists the recommendation to the database automatically. Then present the choice to the user in 2-3 sentences based on the tool's reasoning." : "",
       "",
       "### STEP 2: Generate ONE Smart Wireframe Preview (MANDATORY after outcome selection)",
       "",
