@@ -370,6 +370,7 @@ Use BM25 search tools (getStyleRecommendations, getTypographyRecommendations, et
   },
   memory: createFloweticMemory({
     lastMessages: 8,  // Reduced from 30 to prevent in-context format priming
+    workingMemory: { enabled: false },  // ✅ Explicit disable
   }),
   workspace,  // ← ADD THIS LINE (after existing properties, before closing brace)
   tools: {

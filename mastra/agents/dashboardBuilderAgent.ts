@@ -1,7 +1,6 @@
 import { Agent } from "@mastra/core/agent";
 import { getModelById } from "../lib/models/modelSelector";
 import type { RequestContext } from "@mastra/core/request-context";
-import { z } from "zod";
 import { DesignTokenEnforcer } from "../processors/designTokenEnforcer";
 import { TokenLimiterProcessor } from "@mastra/core/processors";
 import {
@@ -127,16 +126,7 @@ Use todo tools to track multi-step work. Never expose todo items to users.`,
   },
   memory: createFloweticMemory({
     lastMessages: 10,
-    workingMemory: {
-      enabled: true,
-      schema: z.object({
-        interfaceId: z.string().optional().describe("Current interface/spec ID being edited"),
-        currentGoal: z.string().optional().describe("What the user wants to achieve"),
-        lastEditApplied: z.string().optional().describe("Description of the last edit applied"),
-        validationStatus: z.string().optional().describe("Current spec validation status"),
-        previewUrl: z.string().optional().describe("URL of the current preview"),
-      }),
-    },
+    workingMemory: { enabled: false },
   }),
   tools: {
     // Spec editing tools
