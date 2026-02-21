@@ -1604,7 +1604,7 @@ return (
                               // Internal reasoning should be collapsible, not cluttering chat
                               if (part.type === 'step-start') {
                                 // Check if this message has reasoning/tool content worth showing
-                                const hasToolActivity = msg.parts.some((p: any) =>
+                                const hasToolActivity = m.parts.some((p: any) =>
                                   p.type === 'reasoning' ||
                                   p.type === 'tool-updateWorkingMemory' ||
                                   (p.type?.startsWith('tool-') && p.type !== 'tool-suggestAction')
