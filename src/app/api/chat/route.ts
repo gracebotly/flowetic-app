@@ -1,6 +1,6 @@
 
 import { handleChatStream } from '@mastra/ai-sdk';
-import { createUIMessageStreamResponse } from 'ai';
+import { createUIMessageStreamResponse, createUIMessageStream, generateId } from 'ai';
 import {
   RequestContext,
   MASTRA_RESOURCE_ID_KEY,
@@ -76,7 +76,7 @@ async function autoAdvancePhase(params: {
   } else {
     const { data: byMastra } = await supabase
       .from('journey_sessions')
-      .select('id, mode, selected_entities, selected_outcome, selected_layout, selected_style_bundle_id, schema_ready, wireframe_confirmed')
+      .select('id, mode, selected_entities, selected_outcome, selected_layout, selected_style_bundle_id, schema_ready, wireframe_confirmed, design_tokens, style_confirmed')
       .eq('mastra_thread_id', mastraThreadId)
       .eq('tenant_id', tenantId)
       .maybeSingle();
@@ -109,9 +109,25 @@ async function autoAdvancePhase(params: {
     nextPhase = 'style';
   } else if (
     currentPhase === 'style' &&
+    session.design_tokens &&
+    session.style_confirmed === true
+  ) {
+    // Custom design system confirmed — ensure schema_ready is set
+    if (!session.schema_ready) {
+      await supabase
+        .from('journey_sessions')
+        .update({ schema_ready: true, updated_at: new Date().toISOString() })
+        .eq('id', session.id)
+        .eq('tenant_id', tenantId);
+    }
+    nextPhase = 'build_preview';
+  } else if (
+    currentPhase === 'style' &&
     session.selected_style_bundle_id &&
+    session.selected_style_bundle_id !== 'custom' &&
     session.schema_ready === true
   ) {
+    // Legacy preset path
     nextPhase = 'build_preview';
   }
 
@@ -277,35 +293,38 @@ async function handleDeterministicSelectEntity(params: {
       // Non-fatal — message still streams to client
       console.warn('[deterministic-select-entity] Failed to persist message:', persistErr);
     }
-    // 4. Build a UIMessageStream-compatible response
-    // AI SDK v5 useChat expects data stream protocol format
-    const encoder = new TextEncoder();
-    const stream = new ReadableStream({
-      start(controller) {
-        // AI SDK data stream protocol:
-        // "0:" prefix = text delta
-        // "e:" prefix = finish step
-        // "d:" prefix = finish message with metadata
-
-        // Send text content as a single chunk
-        const textPayload = JSON.stringify(responseText);
-        controller.enqueue(encoder.encode(`0:${textPayload}\n`));
-
-        // Send finish step
-        const stepFinish = JSON.stringify({
-          finishReason: 'stop',
-          usage: { promptTokens: 0, completionTokens: 0 },
-          isContinued: false,
+    // 4. FIX (Bug 1): Build proper AI SDK v5 UIMessageStream with SSE format
+    // The previous implementation used legacy "0:", "e:", "d:" prefixes which
+    // useChat doesn't recognize → no assistant message → "Starting session..." stuck.
+    // AI SDK v5 requires text-start/text-delta/text-end SSE chunks per official docs.
+    const stream = createUIMessageStream({
+      execute: async ({ writer }) => {
+        // Start text block
+        const textId = generateId();
+        await writer.write({
+          type: 'text-start',
+          id: textId,
         });
-        controller.enqueue(encoder.encode(`e:${stepFinish}\n`));
-
-        // Send finish message
-        const finishPayload = JSON.stringify({
-          finishReason: 'stop',
-          usage: { promptTokens: 0, completionTokens: 0 },
+        // Stream the response text word by word for progressive display
+        const words = responseText.split(' ');
+        for (let i = 0; i < words.length; i++) {
+          await writer.write({
+            type: 'text-delta',
+            id: textId,
+            delta: i === words.length - 1 ? words[i] : words[i] + ' ',
+          });
+        }
+        // End text block
+        await writer.write({
+          type: 'text-end',
+          id: textId,
         });
-        controller.enqueue(encoder.encode(`d:${finishPayload}\n`));
-        controller.close();
+        // Stream selected entities as data part for client UI
+        await writer.write({
+          type: 'data-selected-entities',
+          id: generateId(),
+          data: entities,
+        });
       },
     });
     console.log(`[deterministic-select-entity] ✅ Bypassed agent loop in ${Date.now() - startTime}ms`);
@@ -314,6 +333,79 @@ async function handleDeterministicSelectEntity(params: {
     console.error('[deterministic-select-entity] Unexpected error, falling back to agent:', err);
     return null;
   }
+}
+
+// ─── DETERMINISTIC RECOMMEND OUTCOME DETECTION ──────────────────────────────
+// The recommend phase has TWO selections that must be persisted:
+//   1. selected_outcome (dashboard | product) — from user's choice or __ACTION__ token
+//   2. wireframe_confirmed (boolean) — from user confirming the wireframe preview
+//
+// The agent PRESENTS the choice and generates the wireframe (text output).
+// CODE detects the selection and persists it. Same pattern as select_entity bypass.
+//
+// Detection sources (priority order):
+//   1. __ACTION__:select_outcome:dashboard / __ACTION__:select_outcome:product (from UI buttons)
+//   2. Natural language: "dashboard", "monitoring", "product", "client-facing", etc.
+//   3. Implicit confirmation: "yes", "go", "let's do it" → defaults to "dashboard"
+//
+// This runs BEFORE the agent on every recommend-phase request.
+// If it detects an outcome, it writes to DB immediately.
+// The agent still runs (to present wireframe / continue conversation).
+// autoAdvancePhase in onFinish handles recommend → style when BOTH are set.
+async function handleDeterministicRecommendOutcome(params: {
+  supabase: any;
+  tenantId: string;
+  journeyThreadId: string;
+  userMessage: string;
+}): Promise<{ outcome: string; confidence: number } | null> {
+  const { supabase, tenantId, journeyThreadId, userMessage } = params;
+  const msg = userMessage.toLowerCase().trim();
+  let outcome: string | null = null;
+  let confidence = 0.9;
+  // Priority 1: __ACTION__ tokens from UI button clicks (highest confidence)
+  const actionMatch = userMessage.match(/__ACTION__:select_outcome:(dashboard|product)/);
+  if (actionMatch) {
+    outcome = actionMatch[1];
+    confidence = 1.0;
+    console.log(`[deterministic-recommend] __ACTION__ token detected: outcome="${outcome}"`);
+  }
+  // Priority 2: Explicit keyword matching (natural language)
+  if (!outcome) {
+    if (msg.match(/\b(dashboard|monitoring|analytics|metrics|tracking|overview|internal)\b/)) {
+      outcome = 'dashboard';
+      confidence = 0.9;
+    } else if (msg.match(/\b(product|client.?facing|customer|portal|app|application|external)\b/)) {
+      outcome = 'product';
+      confidence = 0.9;
+    }
+  }
+  // Priority 3: Implicit confirmation (user says "yes" after agent presents choice)
+  // Only default to dashboard if message is clearly a confirmation, not a question
+  if (!outcome) {
+    if (msg.match(/^(yes|yeah|yep|yup|sure|ok|okay|go|let'?s?\s*(go|do)|sounds?\s*good|first\s*(one|option)|option\s*(1|a|one))\b/i)) {
+      outcome = 'dashboard';
+      confidence = 0.7;
+    } else if (msg.match(/\b(second\s*(one|option)|option\s*(2|b|two))\b/i)) {
+      outcome = 'product';
+      confidence = 0.7;
+    }
+  }
+  if (!outcome) return null;
+  console.log(`[deterministic-recommend] Detected outcome="${outcome}" confidence=${confidence} from: "${userMessage.substring(0, 80)}"`);
+  const { error } = await supabase
+    .from('journey_sessions')
+    .update({
+      selected_outcome: outcome,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('thread_id', journeyThreadId)
+    .eq('tenant_id', tenantId);
+  if (error) {
+    console.error('[deterministic-recommend] DB write failed:', error.message);
+    return null;
+  }
+  console.log(`[deterministic-recommend] ✅ Persisted selected_outcome="${outcome}" to DB`);
+  return { outcome, confidence };
 }
 
 export async function POST(req: Request) {
@@ -518,7 +610,7 @@ export async function POST(req: Request) {
 
         const { data: byThreadId } = await supabase
           .from('journey_sessions')
-          .select('id, mode, preview_interface_id, selected_style_bundle_id, selected_entities, selected_outcome, selected_layout, schema_ready, wireframe_confirmed')
+          .select('id, mode, preview_interface_id, selected_style_bundle_id, selected_entities, selected_outcome, selected_layout, schema_ready, wireframe_confirmed, design_tokens, style_confirmed')
           .eq('thread_id', cleanJourneyThreadId)
           .eq('tenant_id', tenantId)
           .maybeSingle();
@@ -529,7 +621,7 @@ export async function POST(req: Request) {
           // Fallback: query by mastra_thread_id (in case thread was created that way)
           const { data: byMastraId } = await supabase
             .from('journey_sessions')
-            .select('id, mode, preview_interface_id, selected_style_bundle_id, selected_entities, selected_outcome, selected_layout, schema_ready, wireframe_confirmed')
+            .select('id, mode, preview_interface_id, selected_style_bundle_id, selected_entities, selected_outcome, selected_layout, schema_ready, wireframe_confirmed, design_tokens, style_confirmed')
             .eq('mastra_thread_id', cleanMastraThreadId)
             .eq('tenant_id', tenantId)
             .maybeSingle();
@@ -643,7 +735,7 @@ export async function POST(req: Request) {
             // Previously NOTHING ever set schema_ready=true after style selection,
             // so autoAdvancePhase always found schema_ready=false and never advanced.
             if (
-              (selectionUpdates.selected_style_bundle_id || sessionRow.selected_style_bundle_id) &&
+              (selectionUpdates.selected_style_bundle_id || sessionRow.selected_style_bundle_id || sessionRow.design_tokens) &&
               (selectionUpdates.selected_entities || sessionRow.selected_entities) &&
               (selectionUpdates.selected_outcome || sessionRow.selected_outcome)
             ) {
@@ -705,6 +797,18 @@ export async function POST(req: Request) {
         // Load schema_ready from DB into RequestContext
         if (sessionRow?.schema_ready) {
           requestContext.set('schemaReady', String(sessionRow.schema_ready));
+        }
+        // Load design_tokens (custom design system) into RequestContext
+        if (sessionRow?.design_tokens) {
+          requestContext.set('designTokens', JSON.stringify(sessionRow.design_tokens));
+          requestContext.set('designSystemGenerated', 'true');
+          console.log('[api/chat] Loaded design_tokens from DB:', {
+            styleName: (sessionRow.design_tokens as any)?.style?.name,
+            primary: (sessionRow.design_tokens as any)?.colors?.primary,
+          });
+        }
+        if (sessionRow?.style_confirmed) {
+          requestContext.set('styleConfirmed', 'true');
         }
 
         // BUG FIX: Override client-provided selectedStyleBundleId with DB value.
@@ -858,21 +962,180 @@ export async function POST(req: Request) {
         } catch (advErr) {
           console.warn('[api/chat] autoAdvancePhase after deterministic bypass:', advErr);
         }
-        return new Response(deterministicStream, {
-          headers: {
-            'Content-Type': 'text/plain; charset=utf-8',
-            'X-Vercel-AI-Data-Stream': 'v1',
-          },
-        });
+        // FIX (Bug 1): Use createUIMessageStreamResponse for proper headers.
+        // The manual Response construction with 'X-Vercel-AI-Data-Stream' header was incorrect.
+        // AI SDK v5 requires specific header: 'x-vercel-ai-ui-message-stream: v1'
+        return createUIMessageStreamResponse({ stream: deterministicStream });
       }
       // If handleDeterministicSelectEntity returned null, fall through to normal agent
       console.log('[api/chat] Deterministic bypass returned null, falling through to agent');
     }
 
+    // Extract raw messages early — used by deterministic checks below AND by agent call
+    const rawMessages = (params as any)?.messages;
+
+    // ─── DETERMINISTIC RECOMMEND OUTCOME DETECTION ───────────────────────
+    // If phase is recommend AND selected_outcome is not yet set, check the
+    // user's message for outcome selection. Write to DB if detected.
+    // The agent still runs — this just ensures the DB state is set.
+    if (finalPhase === 'recommend') {
+      // Re-read session to check current state
+      const { data: recommendSession } = await supabase
+        .from('journey_sessions')
+        .select('selected_outcome, wireframe_confirmed')
+        .eq('thread_id', cleanJourneyThreadId)
+        .eq('tenant_id', tenantId)
+        .maybeSingle();
+      if (recommendSession && !recommendSession.selected_outcome) {
+        const userMsgs = Array.isArray(rawMessages)
+          ? rawMessages.filter((m: any) => m.role === 'user')
+          : [];
+        const lastMsg = userMsgs[userMsgs.length - 1];
+        // AI SDK v5: extract text from parts[] array
+        let messageText = '';
+        if (lastMsg?.parts && Array.isArray(lastMsg.parts)) {
+          messageText = lastMsg.parts
+            .filter((p: any) => p.type === 'text')
+            .map((p: any) => p.text || '')
+            .join(' ');
+        } else if (typeof lastMsg?.content === 'string') {
+          messageText = lastMsg.content;
+        }
+        if (messageText) {
+          const result = await handleDeterministicRecommendOutcome({
+            supabase,
+            tenantId,
+            journeyThreadId: cleanJourneyThreadId,
+            userMessage: messageText,
+          });
+          if (result) {
+            // Update RequestContext so phase instructions see the outcome
+            requestContext.set('selectedOutcome', result.outcome);
+            console.log('[api/chat] 🚀 Deterministic recommend outcome set:', result.outcome);
+          }
+        }
+      }
+    }
+    // ─── DETERMINISTIC WIREFRAME CONFIRMATION (EAGER) ────────────────────
+    // Also check for wireframe confirmation BEFORE agent runs (not just in onFinish).
+    // This handles the case where user confirms wireframe on the same request.
+    if (finalPhase === 'recommend') {
+      const { data: wfSession } = await supabase
+        .from('journey_sessions')
+        .select('id, selected_outcome, wireframe_confirmed')
+        .eq('thread_id', cleanJourneyThreadId)
+        .eq('tenant_id', tenantId)
+        .maybeSingle();
+      if (wfSession?.selected_outcome && !wfSession.wireframe_confirmed) {
+        const userMsgs = Array.isArray(rawMessages)
+          ? rawMessages.filter((m: any) => m.role === 'user')
+          : [];
+        const lastMsg = userMsgs[userMsgs.length - 1];
+        let messageText = '';
+        if (lastMsg?.parts && Array.isArray(lastMsg.parts)) {
+          messageText = lastMsg.parts
+            .filter((p: any) => p.type === 'text')
+            .map((p: any) => p.text || '')
+            .join(' ')
+            .toLowerCase()
+            .trim();
+        } else if (typeof lastMsg?.content === 'string') {
+          messageText = lastMsg.content.toLowerCase().trim();
+        }
+        const confirmationPatterns = [
+          /^(yes|yeah|yep|yup|sure|ok|okay|correct|confirmed?|approve[d]?|looks?\s*good|looks?\s*right|looks?\s*great|looks?\s*fine|let'?s?\s*go|go\s*ahead|perfect|great|that'?s?\s*(right|correct|good|perfect|fine)|proceed|do\s*it|build\s*it|generate|lgtm|fine|this\s*is\s*(good|right|correct|fine|perfect))/i,
+        ];
+        const isConfirmation = messageText && confirmationPatterns.some(p => p.test(messageText));
+        if (isConfirmation) {
+          console.log('[api/chat] 🚀 Eager wireframe confirmation detected:', messageText.substring(0, 40));
+          await supabase
+            .from('journey_sessions')
+            .update({ wireframe_confirmed: true, updated_at: new Date().toISOString() })
+            .eq('id', wfSession.id)
+            .eq('tenant_id', tenantId);
+          // Run eager advance — might transition recommend → style right now
+          try {
+            const eagerResult = await autoAdvancePhase({
+              supabase,
+              tenantId,
+              journeyThreadId: cleanJourneyThreadId,
+              mastraThreadId: cleanMastraThreadId,
+            });
+            if (eagerResult?.advanced) {
+              requestContext.set('phase', eagerResult.to!);
+              console.log('[api/chat] ✅ Eager recommend→style advance:', eagerResult);
+            }
+          } catch (eagerErr: any) {
+            console.warn('[api/chat] Eager advance after wireframe confirm failed:', eagerErr?.message);
+          }
+        }
+      }
+    }
+
+    // ─── DETERMINISTIC STYLE CONFIRMATION (EAGER) ────────────────────────
+    // If phase is style AND design_tokens exist AND style_confirmed is not yet set,
+    // detect confirmation from the user message and set style_confirmed=true.
+    // Then run autoAdvancePhase — might transition style→build_preview right now.
+    if (finalPhase === 'style') {
+      const { data: styleSession } = await supabase
+        .from('journey_sessions')
+        .select('id, design_tokens, style_confirmed, selected_entities, selected_outcome')
+        .eq('thread_id', cleanJourneyThreadId)
+        .eq('tenant_id', tenantId)
+        .maybeSingle();
+
+      if (styleSession?.design_tokens && !styleSession.style_confirmed) {
+        const userMsgs = Array.isArray(rawMessages) ? rawMessages.filter((m: any) => m.role === 'user') : [];
+        const lastMsg = userMsgs[userMsgs.length - 1];
+        let messageText = '';
+        if (lastMsg?.parts && Array.isArray(lastMsg.parts)) {
+          messageText = lastMsg.parts.filter((p: any) => p.type === 'text').map((p: any) => p.text || '').join(' ').toLowerCase().trim();
+        } else if (typeof lastMsg?.content === 'string') {
+          messageText = lastMsg.content.toLowerCase().trim();
+        }
+        const styleConfirmPatterns = [
+          /^(yes|yeah|yep|sure|ok|okay|love\s*it|looks?\s*(good|great|perfect|right|fine|amazing)|perfect|great|that'?s?\s*(it|perfect|great|good)|proceed|let'?s?\s*go|go\s*ahead|confirmed?|approve[d]?|lgtm|build\s*it|generate|do\s*it|this\s*is\s*(good|perfect|great|fine))/i,
+        ];
+        const isStyleConfirmation = messageText && styleConfirmPatterns.some(p => p.test(messageText));
+        if (isStyleConfirmation) {
+          console.log('[api/chat] 🎨 Eager style confirmation detected:', messageText.substring(0, 40));
+          await supabase
+            .from('journey_sessions')
+            .update({ style_confirmed: true, schema_ready: true, updated_at: new Date().toISOString() })
+            .eq('id', styleSession.id)
+            .eq('tenant_id', tenantId);
+          requestContext.set('styleConfirmed', 'true');
+          try {
+            const eagerStyleResult = await autoAdvancePhase({
+              supabase,
+              tenantId,
+              journeyThreadId: cleanJourneyThreadId,
+              mastraThreadId: cleanMastraThreadId,
+            });
+            if (eagerStyleResult?.advanced) {
+              requestContext.set('phase', eagerStyleResult.to!);
+              console.log('[api/chat] ✅ Eager style→build_preview advance:', eagerStyleResult);
+            }
+          } catch (eagerStyleErr: any) {
+            console.warn('[api/chat] Eager advance after style confirm failed:', eagerStyleErr?.message);
+          }
+        }
+
+        // Detect adjustment requests (darker/lighter/more X/hex codes)
+        const adjustmentPatterns = [
+          /\b(darker|lighter|more\s+\w+|less\s+\w+|change\s+the\s+color|different\s+(color|style|font)|#[0-9a-f]{3,6}|too\s+(dark|light|bright|bold|minimal))\b/i,
+        ];
+        const isAdjustmentRequest = messageText && adjustmentPatterns.some(p => p.test(messageText));
+        if (isAdjustmentRequest && !isStyleConfirmation) {
+          console.log('[api/chat] 🎨 Style adjustment request detected:', messageText.substring(0, 60));
+          requestContext.set('styleAdjustmentRequested', messageText);
+        }
+      }
+    }
+
     // 5. CALL MASTRA WITH VALIDATED CONTEXT
     // Deduplicate OpenAI itemIds in message history before sending to agent.
     // This prevents "Duplicate item found with id fc_..." crash from OpenAI Responses API.
-    const rawMessages = (params as any)?.messages;
     const dedupedMessages = Array.isArray(rawMessages)
       ? deduplicateProviderItemIds(rawMessages)
       : rawMessages;
@@ -881,14 +1144,14 @@ export async function POST(req: Request) {
       ...(dedupedMessages ? { messages: dedupedMessages } : {}),
       requestContext,
       mode: "generate",
-      // CRITICAL: Memory config tells Mastra which thread/resource to use
-      // for working memory reads/writes. Without this, updateWorkingMemory
-      // has no target and silently fails to persist.
-      // See: https://mastra.ai/docs/agents/agent-memory
-      memory: {
-        thread: cleanMastraThreadId,
-        resource: userId,
-      },
+      // DISABLED: Mastra working memory creates dual-state bugs.
+      // journey_sessions DB is the single source of truth for phase/outcome/entities.
+      // Keeping working memory disabled to prevent confusion — agent gets all context
+      // from journey_sessions + skill knowledge search instead.
+      // memory: {
+      //   thread: cleanMastraThreadId,
+      //   resource: userId,
+      // },
     };
 
     if (process.env.DEBUG_CHAT_ROUTE === 'true') {
@@ -904,6 +1167,7 @@ export async function POST(req: Request) {
     // while enforcing hard execution-layer gating (fixes AI SDK bug #8653).
     const streamStartMs = Date.now();
     let stepCount = 0;
+    const calledTools: string[] = []; // Fix 4: track all tool calls for onFinish checks
     const stream = await withTimeout(
       handleChatStream({
         mastra,
@@ -935,15 +1199,28 @@ export async function POST(req: Request) {
           inputProcessors: [
             new PhaseToolGatingProcessor(),
           ],
+          // FIX (Bug 3): Improve tool name extraction to prevent [unknown] in logs
           onStepFinish: ({ toolCalls, finishReason }: { toolCalls?: any[]; finishReason?: string }) => {
             stepCount++;
-            const toolNames = (toolCalls ?? []).map((tc: any) => tc.toolName ?? tc.args?.toolName ?? 'unknown');
+            const toolNames = (toolCalls ?? []).map((tc: any) => {
+              // Try multiple paths where tool name might be stored
+              return tc.toolName || tc.tool?.name || tc.name || tc.args?.toolName || 'unknown';
+            });
+            // Fix 4: accumulate for onFinish to detect which tools ran this stream
+            calledTools.push(...toolNames);
             console.log(`[TIMING] step-${stepCount}: ${Date.now() - streamStartMs}ms elapsed | tools: [${toolNames.join(', ')}] | finish: ${finishReason}`);
           },
           onFinish: async () => {
             // PHASE 4A: Deterministic phase advancement after stream completes.
             // autoAdvancePhase reads journey_sessions (populated by tools during the stream)
             // and advances the phase if selections are complete.
+            //
+            // Fix 4: Log explicitly when recommendOutcome ran this stream.
+            // recommendOutcome writes selected_outcome to DB — autoAdvancePhase below
+            // will detect it and advance recommend → style if wireframe_confirmed is set.
+            if (calledTools.includes('recommendOutcome')) {
+              console.log('[api/chat] recommendOutcome called this stream — checking for auto-advance to style phase');
+            }
             try {
               if (cleanJourneyThreadId && cleanJourneyThreadId !== 'default-thread') {
                 // Re-query journey session for wireframe confirmation detection
@@ -957,11 +1234,20 @@ export async function POST(req: Request) {
 
                 if (journeySessionForWf && journeySessionForWf.mode === 'recommend' && journeySessionForWf.selected_outcome && !journeySessionForWf.wireframe_confirmed) {
                   const lastUserMessage = rawMessages[rawMessages.length - 1];
-                  const userText = typeof lastUserMessage?.content === 'string'
-                    ? lastUserMessage.content.toLowerCase().trim()
-                    : '';
+                  // AI SDK v5: extract text from parts[] array, fallback to content string
+                  let userText = '';
+                  if (lastUserMessage?.parts && Array.isArray(lastUserMessage.parts)) {
+                    userText = lastUserMessage.parts
+                      .filter((p: any) => p.type === 'text')
+                      .map((p: any) => p.text || '')
+                      .join(' ')
+                      .toLowerCase()
+                      .trim();
+                  } else if (typeof lastUserMessage?.content === 'string') {
+                    userText = lastUserMessage.content.toLowerCase().trim();
+                  }
                   const confirmationPatterns = [
-                    /^(yes|yeah|yep|yup|sure|ok|okay|correct|confirmed|approve|approved|looks?\s*good|let'?s?\s*go|go\s*ahead|perfect|great|that'?s?\s*(right|correct|good|perfect)|proceed|do\s*it|build\s*it|generate|lgtm)/i,
+                    /^(yes|yeah|yep|yup|sure|ok|okay|correct|confirmed?|approve[d]?|looks?\s*good|looks?\s*right|looks?\s*great|looks?\s*fine|let'?s?\s*go|go\s*ahead|perfect|great|that'?s?\s*(right|correct|good|perfect|fine)|proceed|do\s*it|build\s*it|generate|lgtm|fine|this\s*is\s*(good|right|correct|fine|perfect))/i,
                   ];
                   const isConfirmation = confirmationPatterns.some(p => p.test(userText));
 

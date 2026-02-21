@@ -186,11 +186,13 @@ Valid phases: select_entity, recommend, style, build_preview, refine`,
           if (!selectedStyleBundleId) {
             const { data } = await supabase
               .from('journey_sessions')
-              .select('selected_style_bundle_id')
+              .select('selected_style_bundle_id, design_tokens')
               .eq('thread_id', journeyThreadId)
               .eq('tenant_id', tenantId)
               .maybeSingle();
-            if (!data?.selected_style_bundle_id) missingFields.push('selectedStyleBundleId');
+            if (!data?.selected_style_bundle_id && !data?.design_tokens) {
+              missingFields.push('design system (no custom tokens or preset)');
+            }
           }
 
           // CRITICAL: Check schema_ready from database

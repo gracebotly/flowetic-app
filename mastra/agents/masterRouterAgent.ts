@@ -18,7 +18,6 @@ import {
   delegateToDesignAdvisor,
 } from "../tools/delegation";
 import { advancePhase } from "../tools/journey/advancePhase";
-import { getStyleBundles } from "../tools/getStyleBundles";
 import { generatePreviewWorkflow } from "../workflows/generatePreview";
 import { connectionBackfillWorkflow } from "../workflows/connectionBackfill";
 import { deployDashboardWorkflow } from "../workflows/deployDashboard";
@@ -261,41 +260,15 @@ Use BM25 search tools (getStyleRecommendations, getTypographyRecommendations, et
       "- Instead say: 'I ran into a technical issue. Let me try a different approach.' or 'Something went wrong, let me retry.'",
       "- Offer the user simple options: retry, try later, or take a different path.",
       "",
-      "# WORKING MEMORY",
-      "You have access to <working_memory>, which persists across the conversation thread.",
-      "It is a JSON object. Treat it as the durable source of truth for agent context.",
+      "# CONTEXT MANAGEMENT",
       "",
-      "## How to update working memory",
-      "Call updateWorkingMemory with the key 'newMemory' and a flat JSON object:",
+      "Your context comes from:",
+      "1. journey_sessions database (phase, selected entities, outcome, style)",
+      "2. Skill knowledge search (searchSkillKnowledge tool)",
+      "3. User's conversation history",
       "",
-      "✅ CORRECT:",
-      "  updateWorkingMemory({ newMemory: { phase: 'recommend', workflowName: 'My Workflow' } })",
-      "  updateWorkingMemory({ newMemory: { selectedOutcome: 'dashboard' } })",
-      "  updateWorkingMemory({ newMemory: { selectedStyleBundleId: 'minimal', lastDecision: 'User picked minimal theme' } })",
-      "",
-      "❌ WRONG — these will silently fail:",
-      "  updateWorkingMemory({ content: { ... } })          // wrong key",
-      "  updateWorkingMemory({ working_memory: '...' })     // wrong key",
-      "  updateWorkingMemory({ workingMemory: { ... } })    // wrong key",
-      "  updateWorkingMemory({ current_phase: '...' })      // wrong key, not a top-level call",
-      "",
-      "## Valid field names (camelCase, flat, partial updates OK):",
-      "  phase              — current journey phase (e.g. 'recommend', 'style', 'build_preview')",
-      "  platformType       — connected platform (e.g. 'n8n', 'make', 'vapi')",
-      "  workflowName       — name of the connected workflow",
-      "  selectedEntities   — comma-separated entity names the user selected",
-      "  selectedOutcome    — 'dashboard' or 'product'",
-      "  selectedStyleBundleId — chosen style bundle ID",
-      "  lastDecision       — most recent user decision or action",
-      "  notes              — any additional context to remember",
-      "",
-      "## When to update:",
-      "- After the user selects an entity, outcome, or style bundle",
-      "- When the phase advances",
-      "- When any key context changes that you will need later",
-      "- You only need to send the fields that changed — existing fields are preserved",
-      "",
-      "If <working_memory> conflicts with the user's latest message, ask one clarifying question.",
+      "The journey_sessions database is the single source of truth.",
+      "Use getOutcomes/getDataDrivenEntities to read current state.",
       "",
       "# CURRENT CONTEXT",
       workflowName ? `User's workflow: "${workflowName}"` : "No workflow selected yet",
@@ -440,9 +413,6 @@ Use BM25 search tools (getStyleRecommendations, getTypographyRecommendations, et
     suggestAction,
     // Design system workflow
     runDesignSystemWorkflow,
-    // Style bundles - also on designAdvisorAgent but needed here because
-    // masterRouterAgent runs during style phase before delegation
-    getStyleBundles,
     // Interactive edit panel
     showInteractiveEditPanel,
     // On-demand skill knowledge search (replaces full skill injection)
