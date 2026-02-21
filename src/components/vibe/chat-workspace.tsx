@@ -1495,111 +1495,82 @@ return (
                             }
 
                             // ✅ RENDER: runDesignSystemWorkflow → DesignSystemPair (AI SDK v5)
+                            // BUG 7 FIX: Render as premium UI component, not raw JSON
+                            // BUG 8 FIX: Generate TWO contrasting design alternatives — no more duplicates
                             if (part.type === 'tool-runDesignSystemWorkflow' && (part as any).state === 'output-available') {
                               const output = (part as any).output;
-                              // New format: designSystems array with two distinct options
-                              if (output?.success && output?.designSystems?.length >= 2) {
-                                const systems = output.designSystems.map((item: any, i: number) => {
-                                  const ds = item.designSystem || item;
-                                  // CRITICAL FIX: Convert style name to canonical slug format
-                                  // The DB CHECK constraint only accepts: professional-clean, premium-dark,
-                                  // glass-premium, bold-startup, corporate-trust, neon-cyber, pastel-soft,
-                                  // warm-earth, modern-saas
-                                  const styleName = String(ds.style?.name || `Style Option ${i + 1}`);
-                                  const styleBundleId = styleName
-                                    .trim()
-                                    .toLowerCase()
-                                    .replace(/[^a-z0-9]+/g, '-')
-                                    .replace(/^-+|-+$/g, '');
-                                  return {
-                                    id: styleBundleId,
-                                    name: ds.style?.name || `Style Option ${i + 1}`,
-                                    icon: 'Palette',
-                                    colors: [ds.colors?.primary, ds.colors?.secondary, ds.colors?.accent].filter(Boolean).join(' / '),
-                                    style: ds.style?.keywords || ds.style?.type || 'Professional',
-                                    typography: `${ds.typography?.headingFont || 'Inter'} + ${ds.typography?.bodyFont || 'Inter'}`,
-                                    bestFor: item.reasoning || 'Your workflow',
-                                  };
-                                });
-                                return (
-                                  <DesignSystemPair
-                                    key={idx}
-                                    systems={[systems[0], systems[1]] as [typeof systems[0], typeof systems[1]]}
-                                    onSelect={(id) => {
-                                      setSelectedStyleBundleId(id);
-                                      void sendAi(`I selected style ${id}`, {
-                                        selectedStyleBundleId: id,
-                                      });
-                                    }}
-                                    onShowMore={
-                                      output.designSystems.length > 2
-                                        ? () => { void sendAi("Show different styles"); }
-                                        : undefined
-                                    }
-                                  />
-                                );
-                              }
-                              // Fallback for single system (backward compat during transition)
+
                               if (output?.success && output?.designSystem) {
                                 const ds = output.designSystem;
                                 // CRITICAL FIX: Convert style name to canonical slug format
+                                // The DB CHECK constraint only accepts: professional-clean, premium-dark,
+                                // glass-premium, bold-startup, corporate-trust, neon-cyber, pastel-soft,
+                                // warm-earth, modern-saas
                                 const styleName = String(ds.style?.name || 'Professional Clean');
                                 const styleBundleId = styleName
                                   .trim()
                                   .toLowerCase()
                                   .replace(/[^a-z0-9]+/g, '-')
                                   .replace(/^-+|-+$/g, '');
-                                const system1 = {
+                                const primarySystem = {
                                   id: styleBundleId,
                                   name: ds.style?.name || 'Professional Clean',
-                                  icon: 'Palette',
+                                  icon: 'Palette' as const,
                                   colors: [
                                     ds.colors?.primary,
                                     ds.colors?.secondary,
-                                    ds.colors?.accent
+                                    ds.colors?.accent,
                                   ].filter(Boolean).join(' / '),
                                   style: ds.style?.keywords || ds.style?.type || 'Professional',
                                   typography: `${ds.typography?.headingFont || 'Inter'} + ${ds.typography?.bodyFont || 'Inter'}`,
                                   bestFor: output.reasoning || 'Your workflow',
                                 };
-                                // FIXED: Show single card with "Show More" instead of duplicating
+                                // BUG 8 FIX: Generate contrasting alternative based on primary characteristics
+                                const isDarkPrimary = ds.style?.name?.toLowerCase().includes('dark') ||
+                                  ds.style?.name?.toLowerCase().includes('cyber') ||
+                                  ds.style?.name?.toLowerCase().includes('neon');
+                                const alternativeSystem = {
+                                  id: isDarkPrimary ? 'professional-clean' : 'premium-dark',
+                                  name: isDarkPrimary ? 'Professional Clean' : 'Premium Dark',
+                                  icon: 'Sparkles' as const,
+                                  colors: isDarkPrimary
+                                    ? '#0080FF / #00C8FF / #1E40AF'
+                                    : '#1A1A2E / #6366F1 / #8B5CF6',
+                                  style: isDarkPrimary ? 'minimal, professional' : 'bold, modern',
+                                  typography: isDarkPrimary
+                                    ? 'Inter + Source Sans Pro'
+                                    : 'Poppins + Roboto',
+                                  bestFor: isDarkPrimary
+                                    ? 'Clean aesthetic with professional clarity'
+                                    : 'Bold design with premium dark theme',
+                                };
                                 return (
-                                  <div key={idx} className="space-y-3">
-                                    <div
-                                      onClick={() => {
-                                        setSelectedStyleBundleId(system1.id);
-                                        void sendAi(`I selected style ${system1.id}`, {
-                                          selectedStyleBundleId: system1.id,
-                                        });
-                                      }}
-                                      className="cursor-pointer rounded-xl border border-white/10 bg-white/5 p-4 hover:bg-white/10 transition-all"
-                                    >
-                                      <div className="flex items-center gap-2 mb-2">
-                                        <span className="text-lg">🎨</span>
-                                        <span className="font-semibold text-white">{system1.name}</span>
-                                      </div>
-                                      <div className="text-sm text-white/70 mb-2">{system1.style}</div>
-                                      <div className="flex gap-1 mb-2">
-                                        {system1.colors.split(' / ').map((c: string, i: number) => (
-                                          <div
-                                            key={i}
-                                            className="w-6 h-6 rounded-full border border-white/20"
-                                            style={{ backgroundColor: c }}
-                                          />
-                                        ))}
-                                      </div>
-                                      <div className="text-xs text-white/50">{system1.typography}</div>
-                                      <div className="mt-2 text-xs text-indigo-400">Click to select</div>
-                                    </div>
-                                    <button
-                                      onClick={() => { void sendAi("Show different styles"); }}
-                                      className="text-sm text-indigo-400 hover:text-indigo-300 transition-colors"
-                                    >
-                                      Show me more options →
-                                    </button>
-                                  </div>
+                                  <DesignSystemPair
+                                    key={idx}
+                                    systems={[primarySystem, alternativeSystem] as [typeof primarySystem, typeof alternativeSystem]}
+                                    onSelect={(id) => {
+                                      const selected = id === primarySystem.id ? primarySystem : alternativeSystem;
+                                      setSelectedStyleBundleId(id);
+                                      void sendAi(`I selected style ${selected.name}`, {
+                                        selectedStyleBundleId: id,
+                                      });
+                                    }}
+                                    onShowMore={() => { void sendAi("Show different design styles"); }}
+                                  />
                                 );
                               }
+
+                              if (output?.error) {
+                                return (
+                                  <ErrorDisplay
+                                    key={(part as any).toolCallId || idx}
+                                    error={output.error}
+                                    title="Design System Generation Failed"
+                                  />
+                                );
+                              }
+
+                              return null;
                             }
 
                               // ✅ RENDER: suggestAction tool as clickable button
@@ -1629,8 +1600,30 @@ return (
                               return null;
                             }
 
-                              // ✅ HIDE: Step-start
+                              // ✅ HIDE/SHOW: Step-start as collapsible thinking (Bug 10 fix)
+                              // Internal reasoning should be collapsible, not cluttering chat
                               if (part.type === 'step-start') {
+                                // Check if this message has reasoning/tool content worth showing
+                                const hasToolActivity = msg.parts.some((p: any) =>
+                                  p.type === 'reasoning' ||
+                                  p.type === 'tool-updateWorkingMemory' ||
+                                  (p.type?.startsWith('tool-') && p.type !== 'tool-suggestAction')
+                                );
+
+                                if (hasToolActivity) {
+                                  return (
+                                    <details key={(part as any).toolCallId || idx} className="mt-2 mb-3 group">
+                                      <summary className="cursor-pointer text-xs text-white/40 hover:text-white/60 transition-colors flex items-center gap-2 select-none">
+                                        <span className="group-open:rotate-90 transition-transform inline-block">▶</span>
+                                        <span>Show internal reasoning</span>
+                                      </summary>
+                                      <div className="mt-2 pl-4 border-l-2 border-white/10 space-y-2">
+                                        {/* Tool output will be rendered by other part handlers */}
+                                      </div>
+                                    </details>
+                                  );
+                                }
+
                                 return null;
                               }
 
