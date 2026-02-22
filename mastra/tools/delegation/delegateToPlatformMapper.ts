@@ -69,7 +69,7 @@ DO NOT try to generate previews yourself — always delegate to this specialist.
         taskLower.includes('build') ||
         taskLower.includes('dashboard');
 
-      if (isPreviewRequest && currentPhase !== 'build_preview') {
+      if (isPreviewRequest && currentPhase !== 'build_preview' && currentPhase !== 'interactive_edit') {
         // Check what's actually missing from DB
         const tenantId = context?.requestContext?.get('tenantId') as string;
         const journeyThreadId = context?.requestContext?.get('journeyThreadId') as string;
@@ -111,14 +111,14 @@ DO NOT try to generate previews yourself — always delegate to this specialist.
         }
 
         // If we can't check DB but phase is wrong, still block
-        if (currentPhase !== 'build_preview') {
+        if (currentPhase !== 'build_preview' && currentPhase !== 'interactive_edit') {
           console.warn(
-            `[delegateToPlatformMapper] PHASE GUARD: Blocked - phase is "${currentPhase}", not "build_preview"`
+            `[delegateToPlatformMapper] PHASE GUARD: Blocked - phase is "${currentPhase}", not "build_preview" or "interactive_edit"`
           );
           return {
             success: false,
             response: "Let's finish the current step before generating a preview.",
-            error: `PHASE_GUARD: Phase is "${currentPhase}", must be "build_preview" for preview generation.`,
+            error: `PHASE_GUARD: Phase is "${currentPhase}", must be "build_preview" or "interactive_edit" for preview generation.`,
           };
         }
       }

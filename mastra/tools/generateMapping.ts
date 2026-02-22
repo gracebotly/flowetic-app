@@ -23,9 +23,9 @@ export const generateMapping = createTool({
     // Template requirements (simplified for MVP)
     const templateRequirements: Record<string, string[]> = {
       'workflow-dashboard': ['workflow_id', 'status', 'started_at', 'ended_at', 'duration_ms'],
-      'workflow-monitor': ['workflow_id', 'status', 'started_at', 'ended_at', 'duration_ms'],  // alias for same thing
+      'workflow-monitor': ['workflow_id', 'status', 'started_at', 'ended_at', 'duration_ms'],
       'voice-agent-dashboard': ['call_id', 'duration', 'status', 'transcript', 'cost'],
-      'voice-analytics': ['call_id', 'duration', 'status'],  // alias
+      'voice-analytics': ['call_id', 'duration', 'status'],
       'chat-dashboard': ['message_id', 'role', 'text', 'timestamp'],
       'multi-agent-dashboard': ['agent_id', 'task', 'status', 'output'],
       'general-analytics': ['timestamp', 'status'],
@@ -35,77 +35,208 @@ export const generateMapping = createTool({
     const required = templateRequirements[templateId] || templateRequirements['default'];
 
     // ================================================================
-    // SEMANTIC ALIAS MAP: Maps template-required fields to likely
-    // field names that appear in real platform data.
-    // This is why the old code failed — it only did naive substring
-    // matching, and "threadId" never matched "workflow_id".
+    // SEMANTIC ALIAS MAP: Maps template-required fields to actual
+    // field names that appear in normalized platform data.
     // ================================================================
     const semanticAliases: Record<string, string[]> = {
-      // workflow-dashboard fields
-      'workflow_id': ['threadid', 'thread_id', 'runid', 'run_id', 'executionid', 'execution_id', 'id', 'sourceid', 'source_id'],
-      'status': ['kind', 'state', 'status', 'result', 'outcome', 'execution_status'],
-      'started_at': ['started_at', 'startedAt', 'start_time', 'startTime', 'created_at', 'createdAt', 'timestamp', 'start'],
-      'ended_at': ['ended_at', 'endedAt', 'end_time', 'endTime', 'finished_at', 'finishedAt', 'completed_at', 'completedAt', 'stoppedAt', 'stopped_at', 'end'],
-      'duration_ms': ['duration_ms', 'durationms', 'duration', 'elapsed', 'elapsed_ms', 'runtime', 'runtime_ms', 'execution_time'],
-      // voice-agent-dashboard fields
-      'call_id': ['threadid', 'thread_id', 'callid', 'call_id', 'id', 'sessionid', 'session_id'],
-      'duration': ['duration', 'call_duration', 'length', 'elapsed', 'duration_seconds', 'call_duration_seconds', 'call_length'],
-      'transcript': ['text', 'content', 'message', 'transcript', 'body'],
-      'cost': ['cost', 'price', 'amount', 'charge', 'total_cost'],
-      // chat-dashboard fields
-      'message_id': ['id', 'threadid', 'thread_id', 'messageid', 'message_id'],
-      'role': ['kind', 'role', 'type', 'sender', 'author'],
-      'text': ['text', 'content', 'message', 'body'],
-      'timestamp': ['createdat', 'created_at', 'timestamp', 'time', 'date', 'event_time'],
-      // multi-agent-dashboard fields
-      'agent_id': ['agentid', 'agent_id', 'sourceid', 'source_id'],
-      'task': ['kind', 'task', 'type', 'action', 'job'],
-      'output': ['text', 'output', 'result', 'response', 'content'],
-      // default fields
-      'id': ['id', 'threadid', 'thread_id', 'runid', 'sourceid'],
-      'type': ['kind', 'type', 'event_type', 'category'],
+      // Workflow/Execution identifiers
+      'workflow_id': [
+        'workflow_id',
+        'workflowId',
+        'workflow_name',
+        'workflowName',
+        'flow_id',
+        'flowId',
+        'automation_id',
+        'process_id',
+      ],
+      'execution_id': [
+        'execution_id',
+        'executionId',
+        'run_id',
+        'runId',
+        'id',
+        'execution',
+      ],
+
+      // Status fields
+      'status': [
+        'status',
+        'state',
+        'execution_status',
+        'executionStatus',
+        'result',
+        'outcome',
+        'success',
+        'finished',
+      ],
+
+      // Timestamps
+      'started_at': [
+        'started_at',
+        'startedAt',
+        'start_time',
+        'startTime',
+        'created_at',
+        'createdAt',
+        'timestamp',
+      ],
+      'ended_at': [
+        'ended_at',
+        'endedAt',
+        'finished_at',
+        'finishedAt',
+        'stopped_at',
+        'stoppedAt',
+        'completed_at',
+        'completedAt',
+        'end_time',
+        'endTime',
+      ],
+
+      // Duration
+      'duration_ms': [
+        'duration_ms',
+        'durationMs',
+        'duration',
+        'elapsed_time',
+        'elapsedTime',
+        'execution_time',
+        'executionTime',
+        'runtime',
+        'run_time',
+      ],
+
+      // Error fields
+      'error_message': [
+        'error_message',
+        'errorMessage',
+        'error',
+        'error_text',
+        'failure_reason',
+        'failureReason',
+      ],
+
+      // Voice agent fields
+      'call_id': [
+        'call_id',
+        'callId',
+        'session_id',
+        'sessionId',
+        'conversation_id',
+      ],
+      'transcript': [
+        'transcript',
+        'conversation',
+        'messages',
+        'text',
+      ],
+      'cost': [
+        'cost',
+        'price',
+        'amount',
+        'total_cost',
+      ],
+
+      // Chat fields
+      'message_id': [
+        'message_id',
+        'messageId',
+        'id',
+        'msg_id',
+      ],
+      'role': [
+        'role',
+        'sender',
+        'author',
+        'user_type',
+      ],
+      'text': [
+        'text',
+        'content',
+        'message',
+        'body',
+      ],
+
+      // General
+      'timestamp': [
+        'timestamp',
+        'created_at',
+        'createdAt',
+        'time',
+        'date',
+      ],
+      'platform': [
+        'platform',
+        'source',
+        'provider',
+        'service',
+      ],
     };
 
-    const fieldNamesLower = fields.map(f => f.name.toLowerCase().replace(/_/g, ''));
-    const fieldNamesOriginal = fields.map(f => f.name);
-
+    // ================================================================
+    // MAPPING LOGIC: Match detected fields to required template fields
+    // ================================================================
     const mappings: Record<string, string> = {};
     const missingFields: string[] = [];
+    const fieldNames = new Set(fields.map(f => f.name.toLowerCase()));
 
-    required.forEach(reqField => {
-      const aliases = semanticAliases[reqField] || [reqField.toLowerCase().replace(/_/g, '')];
-      let foundIndex = -1;
+    // Try to map each required field
+    for (const requiredField of required) {
+      const aliases = semanticAliases[requiredField] || [requiredField];
+      let matched = false;
 
-      // 1. Try exact match (case-insensitive)
-      foundIndex = fieldNamesLower.findIndex(f => f === reqField.toLowerCase().replace(/_/g, ''));
+      // Check each alias (case-insensitive)
+      for (const alias of aliases) {
+        const aliasLower = alias.toLowerCase();
 
-      // 2. Try alias match
-      if (foundIndex === -1) {
-        for (const alias of aliases) {
-          const normalizedAlias = alias.toLowerCase().replace(/_/g, '');
-          foundIndex = fieldNamesLower.findIndex(f => f === normalizedAlias);
-          if (foundIndex !== -1) break;
+        // Exact match
+        if (fieldNames.has(aliasLower)) {
+          // Find the original case field name
+          const originalField = fields.find(f => f.name.toLowerCase() === aliasLower);
+          if (originalField) {
+            mappings[requiredField] = originalField.name;
+            matched = true;
+            break;
+          }
         }
+
+        // Substring match (last resort)
+        if (!matched) {
+          for (const fieldName of fieldNames) {
+            if (fieldName.includes(aliasLower) || aliasLower.includes(fieldName)) {
+              const originalField = fields.find(f => f.name.toLowerCase() === fieldName);
+              if (originalField) {
+                mappings[requiredField] = originalField.name;
+                matched = true;
+                break;
+              }
+            }
+          }
+        }
+
+        if (matched) break;
       }
 
-      // 3. Try contains match as last resort
-      if (foundIndex === -1) {
-        const normalized = reqField.toLowerCase().replace(/_/g, '');
-        foundIndex = fieldNamesLower.findIndex(f =>
-          f.includes(normalized) || normalized.includes(f)
-        );
+      if (!matched) {
+        missingFields.push(requiredField);
       }
+    }
 
-      if (foundIndex !== -1) {
-        mappings[reqField] = fieldNamesOriginal[foundIndex];
-      } else {
-        missingFields.push(reqField);
-      }
+    // Calculate confidence based on mapping success
+    const mappedCount = Object.keys(mappings).length;
+    const requiredCount = required.length;
+    const confidence = requiredCount > 0 ? mappedCount / requiredCount : 0;
+
+    console.log('[generateMapping] Mapping complete:', {
+      templateId,
+      platformType,
+      requiredFields: required,
+      detectedFields: fields.map(f => f.name),
+      mappings,
+      missingFields,
+      confidence,
     });
-
-    const confidence = required.length > 0
-      ? Object.keys(mappings).length / required.length
-      : 1;
 
     return {
       mappings,

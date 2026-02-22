@@ -55,7 +55,7 @@ export const analyzeSchema = createTool({
     // Detect platform from first event's state or labels
     let detectedPlatform: string | undefined;
 
-    events.forEach(event => {
+    events.forEach((event, eventCount) => {
       eventTypes.add(event.type);
 
       // ── 1. Analyze labels fields (existing behavior) ──
@@ -94,6 +94,14 @@ export const analyzeSchema = createTool({
             field.samples.push(value);
           }
         });
+      }
+
+      // Debug: Log which state fields were extracted
+      if (state && typeof state === 'object') {
+        const stateKeys = Object.keys(state as Record<string, unknown>);
+        if (stateKeys.length > 0 && eventCount < 3) { // Only log first 3 events
+          console.log(`[analyzeSchema] Extracted ${stateKeys.length} fields from state JSONB:`, stateKeys.slice(0, 10));
+        }
       }
 
       // ── 3. Standard columns (existing behavior) ──

@@ -73,11 +73,11 @@ const analyzeSchemaStep = createStep({
     const selectedOutcome = requestContext?.get('selectedOutcome') as string;
     const selectedStyleBundleId = requestContext?.get('selectedStyleBundleId') as string;
 
-    if (phase && phase !== 'build_preview') {
+    if (phase && phase !== 'build_preview' && phase !== 'interactive_edit') {
       console.error(`[analyzeSchemaStep] PHASE GUARD: phase="${phase}", blocking workflow execution`);
       throw new Error(
         `PHASE_GUARD: generatePreviewWorkflow cannot run in phase "${phase}". ` +
-        `Required: "build_preview" with selectedOutcome and selectedStyleBundleId set.`
+        `Required: "build_preview" or "interactive_edit" phase.`
       );
     }
 
@@ -103,7 +103,15 @@ const analyzeSchemaStep = createStep({
       },
       { requestContext }
     );
-    
+
+    console.log('[generatePreview] analyzeSchema result:', {
+      fieldsCount: result.fields?.length || 0,
+      eventTypesCount: result.eventTypes?.length || 0,
+      confidence: result.confidence,
+      sampleFields: result.fields?.slice(0, 8).map((f: { name: string; type: string }) => ({ name: f.name, type: f.type })) || [],
+      eventTypes: result.eventTypes || [],
+    });
+
     return result;
   },
 });
@@ -171,6 +179,13 @@ const generateMappingStep = createStep({
       },
       { requestContext }
     );
+    console.log('[generatePreview] generateMapping result:', {
+      mappingsCount: Object.keys(result.mappings || {}).length,
+      missingFieldsCount: result.missingFields?.length || 0,
+      confidence: result.confidence,
+      mappings: result.mappings,
+      missingFields: result.missingFields,
+    });
     return result;
   },
 });
