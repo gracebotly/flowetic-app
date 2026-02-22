@@ -2,6 +2,7 @@
 import { workspace } from '@/mastra/workspace';
 
 const CSV_DOMAINS = [
+  // Core design data (11 domains)
   'style',
   'color',
   'chart',
@@ -13,6 +14,12 @@ const CSV_DOMAINS = [
   'web-interface',
   'react-performance',
   'ui-reasoning',
+  // Stack-specific patterns (4 domains — directly relevant to our
+  // Next.js + React + Tailwind + shadcn/ui tech stack)
+  'stack:react',
+  'stack:nextjs',
+  'stack:html-tailwind',
+  'stack:shadcn',
 ] as const;
 
 /**
@@ -99,6 +106,13 @@ export async function ensureUIUXSearchInitialized(): Promise<void> {
       // BM25 index empty or not ready — proceed with full initialization
     }
     await initUIUXSearch();
-  })();
+  })().catch((err) => {
+    // BUG 12 FIX: Reset singleton on failure so next request retries
+    // Without this, a failed init permanently poisons the promise —
+    // all subsequent callers await a rejected promise and never retry.
+    console.error('[uiux] Initialization failed, resetting singleton for retry:', err);
+    initPromise = null;
+    throw err;
+  });
   return initPromise;
 }
