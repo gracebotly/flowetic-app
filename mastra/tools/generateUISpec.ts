@@ -6,77 +6,20 @@ import { z } from 'zod';
 // Used to resolve selectedStyleBundleId → design tokens
 // Design selection now handled by designSystemWorkflow + ui-ux-pro-max skill
 // ============================================================================
+/**
+ * STYLE_BUNDLE_TOKENS — DEPRECATED.
+ * Kept as empty record for backward compatibility with savePreviewVersion imports.
+ * All design tokens now come from designSystemWorkflow → CSV data.
+ * If no custom tokens exist, the system should trigger the design workflow,
+ * NOT fall back to hardcoded presets.
+ */
 export const STYLE_BUNDLE_TOKENS: Record<string, {
   colors: { primary: string; secondary: string; success: string; warning: string; error: string; background: string; text: string };
   fonts: { heading: string; body: string };
   spacing: { unit: number };
   radius: number;
   shadow: string;
-}> = {
-  'professional-clean': {
-    colors: { primary: '#2563EB', secondary: '#64748B', success: '#10B981', warning: '#F59E0B', error: '#EF4444', background: '#F8FAFC', text: '#0F172A' },
-    fonts: { heading: 'Inter, sans-serif', body: 'Inter, sans-serif' },
-    spacing: { unit: 10 },
-    radius: 8,
-    shadow: 'soft',
-  },
-  'premium-dark': {
-    colors: { primary: '#60A5FA', secondary: '#A78BFA', success: '#34D399', warning: '#FBBF24', error: '#F87171', background: '#0B1220', text: '#E5E7EB' },
-    fonts: { heading: 'Plus Jakarta Sans, sans-serif', body: 'Inter, sans-serif' },
-    spacing: { unit: 10 },
-    radius: 8,
-    shadow: 'glow',
-  },
-  'glass-premium': {
-    colors: { primary: '#818CF8', secondary: '#C084FC', success: '#6EE7B7', warning: '#FCD34D', error: '#FCA5A5', background: '#0F172A', text: '#F1F5F9' },
-    fonts: { heading: 'Outfit, sans-serif', body: 'DM Sans, sans-serif' },
-    spacing: { unit: 10 },
-    radius: 12,
-    shadow: 'glass',
-  },
-  'bold-startup': {
-    colors: { primary: '#F97316', secondary: '#06B6D4', success: '#22C55E', warning: '#EAB308', error: '#DC2626', background: '#FFFFFF', text: '#18181B' },
-    fonts: { heading: 'Space Grotesk, sans-serif', body: 'DM Sans, sans-serif' },
-    spacing: { unit: 8 },
-    radius: 12,
-    shadow: 'medium',
-  },
-  'corporate-trust': {
-    colors: { primary: '#1E40AF', secondary: '#475569', success: '#059669', warning: '#D97706', error: '#DC2626', background: '#F1F5F9', text: '#1E293B' },
-    fonts: { heading: 'Instrument Sans, sans-serif', body: 'Source Sans 3, sans-serif' },
-    spacing: { unit: 10 },
-    radius: 6,
-    shadow: 'subtle',
-  },
-  'neon-cyber': {
-    colors: { primary: '#22D3EE', secondary: '#A855F7', success: '#4ADE80', warning: '#FACC15', error: '#FB7185', background: '#030712', text: '#F9FAFB' },
-    fonts: { heading: 'JetBrains Mono, monospace', body: 'Inter, sans-serif' },
-    spacing: { unit: 8 },
-    radius: 4,
-    shadow: 'neon',
-  },
-  'pastel-soft': {
-    colors: { primary: '#93C5FD', secondary: '#C4B5FD', success: '#86EFAC', warning: '#FDE68A', error: '#FCA5A5', background: '#FFFBEB', text: '#1F2937' },
-    fonts: { heading: 'Nunito, sans-serif', body: 'Quicksand, sans-serif' },
-    spacing: { unit: 12 },
-    radius: 16,
-    shadow: 'soft',
-  },
-  'warm-earth': {
-    colors: { primary: '#D97706', secondary: '#92400E', success: '#65A30D', warning: '#CA8A04', error: '#DC2626', background: '#FFFBF0', text: '#292524' },
-    fonts: { heading: 'Libre Baskerville, serif', body: 'Lato, sans-serif' },
-    spacing: { unit: 10 },
-    radius: 8,
-    shadow: 'warm',
-  },
-  'modern-saas': {
-    colors: { primary: '#7C3AED', secondary: '#14B8A6', success: '#10B981', warning: '#F59E0B', error: '#EF4444', background: '#FFFFFF', text: '#111827' },
-    fonts: { heading: 'Inter, sans-serif', body: 'Inter, sans-serif' },
-    spacing: { unit: 8 },
-    radius: 10,
-    shadow: 'soft',
-  },
-};
+}> = {};
 
 // ============================================================================
 // Template component blueprints — deterministic base per template type
@@ -388,49 +331,9 @@ function getTemplateBlueprints(templateId: string, mappings: Record<string, stri
   }
 }
 
-// ============================================================================
-// Style bundle ID resolver — layered: exact key → display name → slug → fuzzy
-// Replaces broken single-keyword BM25 that matched "Modern SaaS" → "neon-cyber"
-// ============================================================================
-const STYLE_DISPLAY_NAMES: Record<string, string> = {
-  'professional-clean': 'Professional Clean',
-  'premium-dark': 'Premium Dark',
-  'glass-premium': 'Glass Premium',
-  'bold-startup': 'Bold Startup',
-  'corporate-trust': 'Corporate Trust',
-  'neon-cyber': 'Neon Cyber',
-  'pastel-soft': 'Pastel Soft',
-  'warm-earth': 'Warm Earth',
-  'modern-saas': 'Modern SaaS',
-};
-
 export function resolveStyleBundleId(input: string): string {
-  const trimmed = input.trim();
-  const lower = trimmed.toLowerCase();
-  const validKeys = Object.keys(STYLE_BUNDLE_TOKENS);
-
-  // Layer 1: Exact key match (e.g., "neon-cyber")
-  if (STYLE_BUNDLE_TOKENS[trimmed]) return trimmed;
-  if (STYLE_BUNDLE_TOKENS[lower]) return lower;
-
-  // Layer 2: Exact display name match (case-insensitive)
-  for (const [key, displayName] of Object.entries(STYLE_DISPLAY_NAMES)) {
-    if (displayName.toLowerCase() === lower) {
-      console.log(`[resolveStyleBundleId] Display name match: "${input}" → "${key}"`);
-      return key;
-    }
-  }
-
-  // Layer 3: Slug conversion ("Modern SaaS" → "modern-saas")
-  const slugified = lower.replace(/\s+/g, '-');
-  if (STYLE_BUNDLE_TOKENS[slugified]) {
-    console.log(`[resolveStyleBundleId] Slug match: "${input}" → "${slugified}"`);
-    return slugified;
-  }
-
-  // No match found — default to professional-clean
-  console.warn(`[resolveStyleBundleId] Unknown: "${input}" → defaulting to professional-clean`);
-  return 'professional-clean';
+  console.warn(`[resolveStyleBundleId] DEPRECATED: "${input}" — presets removed. Use custom design tokens.`);
+  return 'custom';
 }
 
 // ============================================================================
@@ -488,21 +391,45 @@ export const generateUISpec = createTool({
           heading: styleTokens.fonts.heading,
         });
       } catch {
-        console.warn('[generateUISpec] Failed to parse custom tokens — falling back to preset');
-        // fall through to preset path
-        const rawId = inputData.selectedStyleBundleId ||
-          (context?.requestContext?.get('selectedStyleBundleId') as string) ||
-          'professional-clean';
-        styleBundleId = resolveStyleBundleId(rawId);
-        styleTokens = STYLE_BUNDLE_TOKENS[styleBundleId];
+        console.warn('[generateUISpec] Failed to parse custom tokens — using defaults');
+        styleBundleId = 'custom';
+        styleTokens = {
+          colors: {
+            primary: '#2563EB',
+            secondary: '#64748B',
+            success: '#10B981',
+            warning: '#F59E0B',
+            error: '#EF4444',
+            background: '#F8FAFC',
+            text: '#0F172A',
+          },
+          fonts: { heading: 'Inter, sans-serif', body: 'Inter, sans-serif' },
+          spacing: { unit: 8 },
+          radius: 8,
+          shadow: 'soft',
+        };
       }
     } else {
-      // ── PRIORITY 2: Preset fallback ───────────────────────────────────────
-      const rawId = inputData.selectedStyleBundleId ||
-        (context?.requestContext?.get('selectedStyleBundleId') as string) ||
-        'professional-clean';
-      styleBundleId = resolveStyleBundleId(rawId);
-      styleTokens = STYLE_BUNDLE_TOKENS[styleBundleId];
+      // ── NO CUSTOM TOKENS: Use sensible defaults ──────────────────────────
+      // Presets have been removed. If no custom tokens exist, the design system
+      // workflow should have been triggered first. Use minimal defaults.
+      console.warn('[generateUISpec] No custom design tokens found. Run designSystemWorkflow first.');
+      styleBundleId = 'custom';
+      styleTokens = {
+        colors: {
+          primary: '#2563EB',
+          secondary: '#64748B',
+          success: '#10B981',
+          warning: '#F59E0B',
+          error: '#EF4444',
+          background: '#F8FAFC',
+          text: '#0F172A',
+        },
+        fonts: { heading: 'Inter, sans-serif', body: 'Inter, sans-serif' },
+        spacing: { unit: 8 },
+        radius: 8,
+        shadow: 'soft',
+      };
     }
 
     // Build deterministic component array from template blueprints
