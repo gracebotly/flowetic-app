@@ -39,6 +39,7 @@ import { MessageInput } from "@/components/vibe/message-input";
 import { PhaseIndicator } from "@/components/vibe/phase-indicator";
 import { InlineChoice } from "@/components/vibe/inline-choice";
 import { DesignSystemPair } from "@/components/vibe/design-system-pair";
+import { DesignSystemCard } from './DesignSystemCard';
 import { ReasoningBlock } from "@/components/vibe/ReasoningBlock";
 import { ErrorDisplay } from "@/components/vibe/ErrorDisplay";
 import { ModelSelector, type ModelId } from "./model-selector";
@@ -213,22 +214,100 @@ export function ChatWorkspace({
         journeyThreadId: threadIdRef.current,
       }),
     }),
-    onFinish: ({ message }) => {
-      // AI SDK v5: Find the LAST advancePhase tool part (most recent phase wins)
-      if (!message.parts) return;
+    onFinish: async ({ message }) => {
+      // ──────────────────────────────────────────────────────────────
+      // PHASE SYNC: Read authoritative phase from server after each response
+      // ──────────────────────────────────────────────────────────────
 
-      const lastPhaseUpdate = [...(message.parts as any[])]
-        .reverse()
-        .find((part) =>
-          part?.type === 'tool-advancePhase' &&
-          part?.state === 'output-available' &&
-          part?.output?.success &&
-          !!part?.output?.currentPhase
-        );
+      const serverPhase = (message as any).metadata?.serverPhase;
+      if (serverPhase && serverPhase !== journeyModeRef.current) {
+        console.log('[onFinish] Phase sync from metadata:', { from: journeyModeRef.current, to: serverPhase });
+        setJourneyMode(serverPhase as JourneyMode);
+      }
 
-      if (lastPhaseUpdate) {
-        console.log('[onFinish] Phase update (v5):', lastPhaseUpdate.output.currentPhase);
-        setJourneyMode(lastPhaseUpdate.output.currentPhase);
+      if (message.parts) {
+        const lastPhaseUpdate = [...(message.parts as any[])]
+          .reverse()
+          .find((part) =>
+            part?.type === 'tool-advancePhase' &&
+            part?.state === 'output-available' &&
+            part?.output?.success
+          );
+
+        if (lastPhaseUpdate) {
+          const newPhase = (lastPhaseUpdate as any).output.currentPhase || (lastPhaseUpdate as any).output.newPhase;
+          if (newPhase && newPhase !== journeyModeRef.current) {
+            console.log('[onFinish] Phase sync from advancePhase tool:', { from: journeyModeRef.current, to: newPhase });
+            setJourneyMode(newPhase as JourneyMode);
+          }
+        }
+      }
+
+      if (message.parts) {
+        const lastPreviewSave = [...(message.parts as any[])]
+          .reverse()
+          .find((part) =>
+            part?.type === 'tool-savePreviewVersion' &&
+            part?.state === 'output-available' &&
+            (part as any).output?.success
+          );
+
+        if (lastPreviewSave) {
+          const output = (lastPreviewSave as any).output;
+          if (output?.previewUrl) {
+            console.log('[onFinish] Preview saved → advancing to interactive_edit');
+            setJourneyMode('interactive_edit');
+
+            const url = String(output.previewUrl);
+            const UUID_RE = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+            const match = url.match(new RegExp(`/preview/(${UUID_RE})/(${UUID_RE})`, 'i'));
+            if (match) {
+              setVibeContext((prev) => prev ? {
+                ...prev,
+                previewUrl: match[0],
+                interfaceId: match[1],
+                previewVersionId: match[2],
+              } : prev);
+            }
+          }
+        }
+      }
+
+      if (!serverPhase) {
+        try {
+          const tid = threadIdRef.current;
+          const tenantId = authContextRef.current?.tenantId;
+          if (tid && tenantId) {
+            // Small delay to let server onFinish complete
+            await new Promise(r => setTimeout(r, 500));
+            const res = await fetch(
+              `/api/journey-sessions/phase?tenantId=${encodeURIComponent(tenantId)}&threadId=${encodeURIComponent(tid)}`
+            );
+            if (res.ok) {
+              const json = await res.json();
+              if (json.phase && json.phase !== journeyModeRef.current) {
+                console.log('[onFinish] Phase sync from DB poll:', { from: journeyModeRef.current, to: json.phase });
+                setJourneyMode(json.phase as JourneyMode);
+
+                if (json.phase === 'interactive_edit' && json.previewUrl) {
+                  const url = String(json.previewUrl);
+                  const UUID_RE = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+                  const match = url.match(new RegExp(`/preview/(${UUID_RE})/(${UUID_RE})`, 'i'));
+                  if (match) {
+                    setVibeContext((prev) => prev ? {
+                      ...prev,
+                      previewUrl: match[0],
+                      interfaceId: match[1],
+                      previewVersionId: match[2],
+                    } : prev);
+                  }
+                }
+              }
+            }
+          }
+        } catch (pollErr) {
+          console.warn('[onFinish] Phase poll failed (non-fatal):', pollErr);
+        }
       }
     },
   });
@@ -437,10 +516,11 @@ export function ChatWorkspace({
       displayName: vibeContext?.displayName,
       entityKind: vibeContext?.entityKind,
       skillMD: vibeContext?.skillMD,
-      // Journey state
-      phase: journeyMode,
-      selectedOutcome,
-      selectedStyleBundleId,
+      // Journey state — USE REFS to avoid stale closures
+      // See: https://ai-sdk.dev/docs/troubleshooting/use-chat-stale-body-data
+      phase: journeyModeRef.current,
+      selectedOutcome: selectedOutcomeRef.current,
+      selectedStyleBundleId: selectedStyleBundleIdRef.current,
       densityPreset,
       paletteOverrideId,
       ...extraData,
@@ -661,6 +741,13 @@ export function ChatWorkspace({
   const [selectedOutcome, setSelectedOutcome] = useState<"dashboard" | "product" | null>(null);
   const [selectedStyleBundleId, setSelectedStyleBundleId] = useState<string | null>(null);
   const [densityPreset, setDensityPreset] = useState<"compact" | "comfortable" | "spacious">("comfortable");
+
+  const journeyModeRef = useRef(journeyMode);
+  useEffect(() => { journeyModeRef.current = journeyMode; }, [journeyMode]);
+  const selectedOutcomeRef = useRef(selectedOutcome);
+  useEffect(() => { selectedOutcomeRef.current = selectedOutcome; }, [selectedOutcome]);
+  const selectedStyleBundleIdRef = useRef(selectedStyleBundleId);
+  useEffect(() => { selectedStyleBundleIdRef.current = selectedStyleBundleId; }, [selectedStyleBundleId]);
   const [paletteOverrideId, setPaletteOverrideId] = useState<string | null>(null);
 
   // Interactive editor state
@@ -1444,9 +1531,11 @@ return (
                                     const category = categoryMap[id] || (id.includes("product") ? "product" : "dashboard");
 
                                     setSelectedOutcome(category);
-                                    setJourneyMode("style");
-                                    // FIX: Pass category explicitly to avoid stale closure (AI SDK docs)
-                                    // https://ai-sdk.dev/docs/troubleshooting/use-chat-stale-body-data
+                                    // DO NOT eagerly set journeyMode here.
+                                    // The server's autoAdvancePhase determines the correct next phase
+                                    // (it may be 'recommend' still if wireframe is needed, or 'style').
+                                    // Phase will sync via onFinish DB poll.
+                                    // setJourneyMode("style"); // REMOVED — causes desync
                                     await sendAi(`I selected ${id}`, {
                                       selectedOutcome: category,
                                     });
@@ -1494,24 +1583,15 @@ return (
                               }
                             }
 
-                            // ✅ RENDER: runDesignSystemWorkflow → DesignSystemPair (AI SDK v5)
-                            // BUG 7 FIX: Render as premium UI component, not raw JSON
-                            // BUG 8 FIX: Generate TWO contrasting design alternatives — no more duplicates
+                            // ✅ RENDER: runDesignSystemWorkflow → DesignSystemCard (AI SDK v5)
+                            // Render only the generated custom design system.
                             if (part.type === 'tool-runDesignSystemWorkflow' && (part as any).state === 'output-available') {
                               const output = (part as any).output;
 
                               if (output?.success && output?.designSystem) {
                                 const ds = output.designSystem;
-                                // CRITICAL FIX: Convert style name to canonical slug format
-                                // The DB CHECK constraint only accepts: professional-clean, premium-dark,
-                                // glass-premium, bold-startup, corporate-trust, neon-cyber, pastel-soft,
-                                // warm-earth, modern-saas
-                                const styleName = String(ds.style?.name || 'Professional Clean');
-                                const styleBundleId = styleName
-                                  .trim()
-                                  .toLowerCase()
-                                  .replace(/[^a-z0-9]+/g, '-')
-                                  .replace(/^-+|-+$/g, '');
+                                const styleName = String(ds.style?.name || 'Professional Clean').trim();
+                                const styleBundleId = styleName || 'Professional Clean';
                                 const primarySystem = {
                                   id: styleBundleId,
                                   name: ds.style?.name || 'Professional Clean',
@@ -1525,37 +1605,19 @@ return (
                                   typography: `${ds.typography?.headingFont || 'Inter'} + ${ds.typography?.bodyFont || 'Inter'}`,
                                   bestFor: output.reasoning || 'Your workflow',
                                 };
-                                // BUG 8 FIX: Generate contrasting alternative based on primary characteristics
-                                const isDarkPrimary = ds.style?.name?.toLowerCase().includes('dark') ||
-                                  ds.style?.name?.toLowerCase().includes('cyber') ||
-                                  ds.style?.name?.toLowerCase().includes('neon');
-                                const alternativeSystem = {
-                                  id: isDarkPrimary ? 'professional-clean' : 'premium-dark',
-                                  name: isDarkPrimary ? 'Professional Clean' : 'Premium Dark',
-                                  icon: 'Sparkles' as const,
-                                  colors: isDarkPrimary
-                                    ? '#0080FF / #00C8FF / #1E40AF'
-                                    : '#1A1A2E / #6366F1 / #8B5CF6',
-                                  style: isDarkPrimary ? 'minimal, professional' : 'bold, modern',
-                                  typography: isDarkPrimary
-                                    ? 'Inter + Source Sans Pro'
-                                    : 'Poppins + Roboto',
-                                  bestFor: isDarkPrimary
-                                    ? 'Clean aesthetic with professional clarity'
-                                    : 'Bold design with premium dark theme',
-                                };
                                 return (
-                                  <DesignSystemPair
+                                  <DesignSystemCard
                                     key={idx}
-                                    systems={[primarySystem, alternativeSystem] as [typeof primarySystem, typeof alternativeSystem]}
-                                    onSelect={(id) => {
-                                      const selected = id === primarySystem.id ? primarySystem : alternativeSystem;
-                                      setSelectedStyleBundleId(id);
-                                      void sendAi(`I selected style ${selected.name}`, {
-                                        selectedStyleBundleId: id,
+                                    system={primarySystem}
+                                    onSelect={() => {
+                                      setSelectedStyleBundleId(primarySystem.id);
+                                      void sendAi(`I selected style ${primarySystem.name}`, {
+                                        selectedStyleBundleId: primarySystem.id,
                                       });
                                     }}
-                                    onShowMore={() => { void sendAi("Show different design styles"); }}
+                                    onRegenerate={() => {
+                                      void sendAi("I don't like this design. Generate a completely different style for my workflow.");
+                                    }}
                                   />
                                 );
                               }

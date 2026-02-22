@@ -49,14 +49,17 @@ export const n8nNormalizer: PlatformNormalizer = {
     const executionId = String(
       pluck(raw, 'labels.execution_id', raw.execution_id ?? raw.id) ?? ''
     );
+    // FIX: stoppedAt exists on ALL completed n8n executions. Never use it for status.
+    // Fallback chain: labels.status → raw.status → 'success' (default for completed runs)
     const status = String(
-      pluck(raw, 'labels.status', raw.status) ?? (raw.stoppedAt ? 'error' : 'success')
+      pluck(raw, 'labels.status', raw.status) ?? 'success'
     );
 
     const startedAt = String(raw.startedAt ?? raw.timestamp ?? raw.createdAt ?? '');
     const endedAt = String(raw.stoppedAt ?? raw.finishedAt ?? raw.endedAt ?? '');
     const durationMs = computeDuration(startedAt, endedAt);
-    const errorMessage = raw.stoppedAt
+    // Only extract error message when status is actually 'error'
+    const errorMessage = (status === 'error')
       ? String(pluck(raw, 'data.resultData.error.message') ?? '')
       : undefined;
 
