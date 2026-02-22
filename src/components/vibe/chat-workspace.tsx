@@ -1600,30 +1600,8 @@ return (
                               return null;
                             }
 
-                              // ✅ HIDE/SHOW: Step-start as collapsible thinking (Bug 10 fix)
-                              // Internal reasoning should be collapsible, not cluttering chat
+                              // ✅ HIDE: Step-start (reasoning is handled by ReasoningBlock above)
                               if (part.type === 'step-start') {
-                                // Check if this message has reasoning/tool content worth showing
-                                const hasToolActivity = m.parts.some((p: any) =>
-                                  p.type === 'reasoning' ||
-                                  p.type === 'tool-updateWorkingMemory' ||
-                                  (p.type?.startsWith('tool-') && p.type !== 'tool-suggestAction')
-                                );
-
-                                if (hasToolActivity) {
-                                  return (
-                                    <details key={(part as any).toolCallId || idx} className="mt-2 mb-3 group">
-                                      <summary className="cursor-pointer text-xs text-white/40 hover:text-white/60 transition-colors flex items-center gap-2 select-none">
-                                        <span className="group-open:rotate-90 transition-transform inline-block">▶</span>
-                                        <span>Show internal reasoning</span>
-                                      </summary>
-                                      <div className="mt-2 pl-4 border-l-2 border-white/10 space-y-2">
-                                        {/* Tool output will be rendered by other part handlers */}
-                                      </div>
-                                    </details>
-                                  );
-                                }
-
                                 return null;
                               }
 

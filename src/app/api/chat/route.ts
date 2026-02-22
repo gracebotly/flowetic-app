@@ -853,6 +853,105 @@ export async function POST(req: Request) {
           }
         }
 
+        // ─── DESIGN TOKEN OVERRIDE: Resolve preset style when user changed selection ───
+        // If user selected a named preset (e.g., "premium-dark") but DB still has old
+        // custom tokens, the preset needs to be resolved into actual tokens.
+        if (sessionRow?.selected_style_bundle_id === 'custom' && sessionRow?.design_tokens) {
+          const userMsgs = Array.isArray((params as any)?.messages)
+            ? (params as any).messages.filter((m: any) => m.role === 'user')
+            : [];
+          const lastUserMsg = userMsgs[userMsgs.length - 1];
+          let userText = '';
+          if (lastUserMsg?.parts && Array.isArray(lastUserMsg.parts)) {
+            userText = lastUserMsg.parts
+              .filter((p: any) => p.type === 'text')
+              .map((p: any) => p.text || '')
+              .join(' ')
+              .toLowerCase()
+              .trim();
+          } else if (typeof lastUserMsg?.content === 'string') {
+            userText = lastUserMsg.content.toLowerCase().trim();
+          }
+          const styleChangePatterns: Record<string, Record<string, string>> = {
+            'premium-dark': {
+              primary: '#A78BFA',
+              secondary: '#6366F1',
+              success: '#34D399',
+              warning: '#FBBF24',
+              error: '#F87171',
+              background: '#0F172A',
+              text: '#F1F5F9',
+              accent: '#818CF8',
+            },
+            'dark': {
+              primary: '#60A5FA',
+              secondary: '#94A3B8',
+              success: '#34D399',
+              warning: '#FBBF24',
+              error: '#F87171',
+              background: '#111827',
+              text: '#F9FAFB',
+              accent: '#818CF8',
+            },
+            'minimalist': {
+              primary: '#1F2937',
+              secondary: '#6B7280',
+              success: '#059669',
+              warning: '#D97706',
+              error: '#DC2626',
+              background: '#FFFFFF',
+              text: '#111827',
+              accent: '#4F46E5',
+            },
+            'corporate': {
+              primary: '#1E40AF',
+              secondary: '#475569',
+              success: '#15803D',
+              warning: '#B45309',
+              error: '#B91C1C',
+              background: '#F8FAFC',
+              text: '#0F172A',
+              accent: '#2563EB',
+            },
+          };
+          let detectedStyle: string | null = null;
+          for (const styleName of Object.keys(styleChangePatterns)) {
+            if (userText.includes(styleName.replace('-', ' ')) || userText.includes(styleName)) {
+              detectedStyle = styleName;
+              break;
+            }
+          }
+          if (detectedStyle && styleChangePatterns[detectedStyle]) {
+            const newColors = styleChangePatterns[detectedStyle];
+            const currentColors = (sessionRow.design_tokens as any)?.colors || {};
+            if (currentColors.background !== newColors.background || currentColors.primary !== newColors.primary) {
+              console.log(`[api/chat] 🎨 Style override detected: "${detectedStyle}" — updating design tokens`);
+              const updatedTokens = {
+                ...(sessionRow.design_tokens as any),
+                style: {
+                  ...((sessionRow.design_tokens as any)?.style || {}),
+                  name: detectedStyle.split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+                },
+                colors: {
+                  ...currentColors,
+                  ...newColors,
+                },
+              };
+              const { error: updateErr } = await supabase
+                .from('journey_sessions')
+                .update({ design_tokens: updatedTokens, updated_at: new Date().toISOString() })
+                .eq('id', sessionRow.id)
+                .eq('tenant_id', tenantId);
+              if (updateErr) {
+                console.error('[api/chat] Failed to update design tokens:', updateErr.message);
+              } else {
+                requestContext.set('designTokens', JSON.stringify(updatedTokens));
+                console.log('[api/chat] ✅ Design tokens updated for style:', detectedStyle);
+              }
+            }
+          }
+        }
+
         // BUG FIX: Ensure interface exists for this journey session
         // This prevents "MISSING" interfaceId in downstream tools
         if (sessionRow && !sessionRow.preview_interface_id) {
