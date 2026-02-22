@@ -66,6 +66,15 @@ const KNOWN_AGENT_TOOLS = new Set([
   'mastra_workspace_list_files',
   'mastra_workspace_file_stat',
   'mastra_workspace_search',
+  // Skill tools — gated by phase to prevent premature activation.
+  // Without this, skill-activate and skill-search pass through ungated
+  // (available in ALL phases), causing the agent to activate heavy skills
+  // like data-dashboard-intelligence during recommend phase → tool loops → timeout.
+  // FIX: Only allow skill tools in phases that actually need on-demand skill loading.
+  'skill-activate',
+  'skill-search',
+  // Workspace grep (also auto-injected, same pattern as above)
+  'mastra_workspace_grep',
 ]);
 
 /**
@@ -91,6 +100,7 @@ export class PhaseToolGatingProcessor implements Processor {
 
   processInputStep({
     stepNumber,
+    steps,
     tools,
     requestContext,
   }: ProcessInputStepArgs): ProcessInputStepResult {
@@ -187,7 +197,85 @@ export class PhaseToolGatingProcessor implements Processor {
     // Mastra-internal tools like updateWorkingMemory stay in the registry.
     return {
       activeTools: activeToolNames,
-      toolChoice: activeToolNames.length > 0 ? ("auto" as const) : ("none" as const),
+      toolChoice: activeToolNames.length > 0
+        ? this.getPhaseToolChoice(currentPhase, stepNumber, steps)
+        : ("none" as const),
     };
+  }
+
+  /**
+   * Phase-aware toolChoice enforcement.
+   *
+   * Instead of always returning "auto", we force specific tool-calling
+   * behavior based on which phase we're in and what step we're on.
+   *
+   * Rationale per phase:
+   * - select_entity step 0: Agent MUST call getEventStats or getDataDrivenEntities
+   *   to discover what data exists. Without "required", it hallucinates entities.
+   * - style step 0: Agent MUST call getStyleRecommendations or searchSkillKnowledge
+   *   to load BM25 design knowledge. Without "required", it invents styles.
+   * - build_preview step 0: Agent MUST call validatePreviewReadiness to check if
+   *   all prerequisites are met before generating preview.
+   * - recommend: Purely conversational (outcome selection is deterministic in route.ts).
+   *   "auto" is correct here — no tool calls are required.
+   * - interactive_edit: User-driven refinements. "auto" lets agent decide whether
+   *   to call applySpecPatch based on user intent.
+   * - deploy: Short phase, "auto" is fine.
+   *
+   * Safety valve: After (maxSteps - 1), force "none" to guarantee a text
+   * response instead of an infinite tool-call loop.
+   */
+  private getPhaseToolChoice(
+    phase: string,
+    stepNumber: number,
+    steps?: { toolCalls?: unknown[] }[],
+  ): "auto" | "required" | "none" {
+    // Phase-specific maxSteps (mirrors route.ts values)
+    const PHASE_MAX_STEPS: Record<string, number> = {
+      select_entity: 3,
+      recommend: 4,
+      style: 5,
+      build_preview: 8,
+      interactive_edit: 10,
+      deploy: 3,
+    };
+    const maxSteps = PHASE_MAX_STEPS[phase] || 5;
+    // SAFETY VALVE: Force text completion on the last allowed step.
+    // This prevents infinite tool-call loops where the agent keeps
+    // calling tools without ever producing a user-facing response.
+    if (stepNumber >= maxSteps - 1) {
+      console.log(
+        `[PhaseToolGating] toolChoice=none (safety valve: step ${stepNumber} >= maxSteps-1=${maxSteps - 1} for phase=${phase})`
+      );
+      return "none";
+    }
+    // Phases where the LLM MUST call a tool on step 0.
+    // These are phases where skipping tool calls produces hallucinated output.
+    const TOOL_REQUIRED_FIRST_STEP: Set<string> = new Set([
+      "select_entity",  // Must call getEventStats/getDataDrivenEntities
+      "style",          // Must call getStyleRecommendations/searchSkillKnowledge
+      "build_preview",  // Must call validatePreviewReadiness
+    ]);
+    // Force tool call on first step for tool-required phases
+    if (stepNumber === 0 && TOOL_REQUIRED_FIRST_STEP.has(phase)) {
+      console.log(
+        `[PhaseToolGating] toolChoice=required (phase=${phase}, step=0, forcing initial tool call)`
+      );
+      return "required";
+    }
+    // After a tool call just completed, let the model synthesize results.
+    // Check the most recent step — if it had tool calls, the model now has
+    // tool results in context and should be free to either call more tools
+    // or produce text.
+    const lastStep = steps?.[steps.length - 1];
+    const lastStepHadToolCalls = lastStep?.toolCalls &&
+      Array.isArray(lastStep.toolCalls) &&
+      lastStep.toolCalls.length > 0;
+    if (lastStepHadToolCalls) {
+      // Model just got tool results — let it decide what to do next
+      return "auto";
+    }
+    // Default: let the model decide
+    return "auto";
   }
 }
