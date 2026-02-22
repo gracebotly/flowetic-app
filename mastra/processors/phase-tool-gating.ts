@@ -52,8 +52,6 @@ const KNOWN_AGENT_TOOLS = new Set([
   'getTypographyRecommendations',
   'getUXGuidelines',
   'getProductRecommendations',
-  'getColorRecommendations',   // BUG 4 FIX: was missing, caused gating warning + design disconnect
-  'getIconRecommendations',    // BUG 4 FIX: was missing, caused gating warning + design disconnect
   // Editor
   'showInteractiveEditPanel',
   // Phase advancement

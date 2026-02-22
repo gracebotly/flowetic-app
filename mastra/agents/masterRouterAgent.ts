@@ -31,8 +31,6 @@ import {
   getTypographyRecommendations,
   getUXGuidelines,
   getProductRecommendations,
-  getColorRecommendations,
-  getIconRecommendations,
 } from "../tools/uiux";
 import { getOutcomes } from "../tools/outcomes";
 import {
@@ -408,8 +406,6 @@ Use BM25 search tools (getStyleRecommendations, getTypographyRecommendations, et
     getTypographyRecommendations,
     getUXGuidelines,
     getProductRecommendations,
-    getColorRecommendations,   // BUG 4 FIX: was missing — caused design system disconnection
-    getIconRecommendations,    // BUG 4 FIX: was missing — gating processor couldn't find these
     // Outcome & Style Tools
     getOutcomes,
     // NEW: Add Supatools
