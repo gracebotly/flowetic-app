@@ -718,6 +718,15 @@ export async function POST(req: Request) {
             }
           }
 
+          // BUG 3 FIX: Also persist sourceId so getEventStats can resolve UUIDs.
+          // The agent receives entity display names from the client but getEventStats
+          // needs the source UUID. By storing source_id in the session, route.ts
+          // loads it into RequestContext on every request, and getEventStats already
+          // falls back to context.requestContext.get('sourceId').
+          if (clientData.sourceId && !sessionRow?.source_id) {
+            selectionUpdates.source_id = clientData.sourceId;
+          }
+
           // Outcome: client sends selectedOutcome after clicking outcome card
           const clientOutcome = clientData.selectedOutcome;
           if (clientOutcome && !sessionRow.selected_outcome) {
@@ -806,6 +815,10 @@ export async function POST(req: Request) {
         if (sessionRow?.selected_entities) {
           requestContext.set('selectedEntities', sessionRow.selected_entities);
           console.log('[api/chat] Loaded selectedEntities from DB:', sessionRow.selected_entities);
+        }
+        if (sessionRow?.source_id) {
+          requestContext.set('sourceId', sessionRow.source_id);
+          console.log('[api/chat] Loaded sourceId from DB:', sessionRow.source_id);
         }
         // Load selected outcome from DB into RequestContext
         if (sessionRow?.selected_outcome) {
