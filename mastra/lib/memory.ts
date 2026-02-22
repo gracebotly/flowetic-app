@@ -30,22 +30,11 @@ function envFlag(name: string, defaultValue: boolean) {
 export function createFloweticMemory(opts: CreateFloweticMemoryOpts = {}) {
   const storage = getMastraStorage();
   const lastMessages = opts.lastMessages ?? 30;
-  // Schema-based working memory: merge semantics means the agent only sends
-  // fields it wants to update, dramatically reducing malformed JSON from weak models.
-  const defaultWorkingMemorySchema = z.object({
-    phase: z.string().optional().describe("Current journey phase"),
-    platformType: z.string().optional().describe("Connected platform type (e.g. n8n, make, vapi)"),
-    workflowName: z.string().optional().describe("Name of the connected workflow"),
-    selectedEntities: z.string().optional().describe("Comma-separated entity names user selected"),
-    selectedOutcome: z.string().optional().describe("dashboard or product"),
-    selectedStyleBundleId: z.string().optional().describe("Chosen style bundle ID"),
-    lastDecision: z.string().optional().describe("Most recent user decision or action"),
-    notes: z.string().optional().describe("Any additional context the agent wants to remember"),
-  });
-
+  // ❌ WORKING MEMORY DISABLED BY DEFAULT (Feb 2026)
+  // journey_sessions DB is the ONLY source of truth for phase/outcome/entities.
+  // Working memory was creating dual-state bugs.
   const workingMemory = opts.workingMemory ?? {
-    enabled: true,
-    schema: defaultWorkingMemorySchema,
+    enabled: false,
   };
   
   // Enable semantic recall by default for autonomous behavior

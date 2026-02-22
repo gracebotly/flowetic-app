@@ -10,8 +10,13 @@ import { workspace } from '@/mastra/workspace';
  * system prompt. The agent calls this tool when it needs specific
  * knowledge about n8n patterns, business outcome frameworks, etc.
  *
- * The workspace must have autoIndexPaths: ['/skills'] configured
- * so skill SKILL.md files are indexed on init().
+ * The workspace must have bm25: true and autoIndexPaths: ['/skills']
+ * configured so skill SKILL.md files are indexed on init().
+ *
+ * NOTE: There is NO mastra_workspace_grep tool in Mastra.
+ * Official search tools: mastra_workspace_search (BM25/vector/hybrid)
+ * and mastra_workspace_index. See:
+ * https://mastra.ai/reference/workspace/workspace-class#search-tools
  */
 export const searchSkillKnowledge = createTool({
   id: 'searchSkillKnowledge',

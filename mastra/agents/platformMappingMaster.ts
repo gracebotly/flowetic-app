@@ -4,7 +4,6 @@ import { Memory } from "@mastra/memory";
 import { getModelById } from "../lib/models/modelSelector";
 import { getMastraStorage } from "../lib/storage";
 import type { RequestContext } from "@mastra/core/request-context";
-import { z } from "zod";
 import { DesignTokenEnforcer } from "../processors/designTokenEnforcer";
 import { TokenLimiterProcessor } from "@mastra/core/processors";
 
@@ -112,17 +111,7 @@ export const platformMappingMaster: Agent = new Agent({
   },
   memory: createFloweticMemory({
     lastMessages: 10,
-    workingMemory: {
-      enabled: true,
-      schema: z.object({
-        platformType: z.string().optional().describe("Platform type being mapped"),
-        schemaReady: z.boolean().optional().describe("Whether schema analysis is complete"),
-        chosenTemplateId: z.string().optional().describe("Selected template ID for mapping"),
-        mappingConfidence: z.string().optional().describe("Confidence level of current mapping"),
-        missingFields: z.string().optional().describe("Comma-separated list of missing required fields"),
-        lastDecision: z.string().optional().describe("Most recent mapping decision"),
-      }),
-    },
+    workingMemory: { enabled: false },
   }),
   tools: {
     analyzeSchema,

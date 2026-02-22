@@ -1,7 +1,6 @@
 import { Agent } from "@mastra/core/agent";
 import { getModelById } from "../lib/models/modelSelector";
 import type { RequestContext } from "@mastra/core/request-context";
-import { z } from "zod";
 import { DesignTokenEnforcer } from "../processors/designTokenEnforcer";
 import { TokenLimiterProcessor } from "@mastra/core/processors";
 import {
@@ -65,6 +64,17 @@ The generateUISpec tool applies correct design tokens from STYLE_BUNDLE_TOKENS.
 - Never show raw spec JSON unless the user explicitly asks
 - Always validate before saving
 
+## CRITICAL: SPEC GENERATION ENFORCEMENT
+savePreviewVersion tool has validation that REJECTS specs not created via generateUISpec.
+If you try to save a spec you created yourself, you will get this error:
+"This spec was not generated through generateUISpec tool. Call generateUISpec first."
+If you try to save a spec with translucent/opaque colors, you will get:
+"This spec contains translucent or near-white colors that were not from the style bundle."
+The ONLY way to create a valid spec is:
+1. Call generateUISpec (it applies locked design tokens)
+2. Call savePreviewVersion with the spec from generateUISpec
+DO NOT attempt to create spec_json in your response text.
+
 ## DESIGN TOKEN ENFORCEMENT (NON-NEGOTIABLE)
 - NEVER generate spec_json directly in conversation
 - NEVER invent colors, fonts, or design tokens
@@ -116,16 +126,7 @@ Use todo tools to track multi-step work. Never expose todo items to users.`,
   },
   memory: createFloweticMemory({
     lastMessages: 10,
-    workingMemory: {
-      enabled: true,
-      schema: z.object({
-        interfaceId: z.string().optional().describe("Current interface/spec ID being edited"),
-        currentGoal: z.string().optional().describe("What the user wants to achieve"),
-        lastEditApplied: z.string().optional().describe("Description of the last edit applied"),
-        validationStatus: z.string().optional().describe("Current spec validation status"),
-        previewUrl: z.string().optional().describe("URL of the current preview"),
-      }),
-    },
+    workingMemory: { enabled: false },
   }),
   tools: {
     // Spec editing tools

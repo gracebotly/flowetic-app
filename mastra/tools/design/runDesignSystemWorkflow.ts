@@ -128,9 +128,9 @@ Be creative — this should feel crafted for THIS specific workflow, not generic
       }
 
       const data = result.result as any;
-      // Support both single and array output from workflow
-      const designSystem: any = data.designSystem ?? data.designSystems?.[0]?.designSystem ?? data.designSystems?.[0];
-      const reasoning: string = data.reasoning ?? data.designSystems?.[0]?.reasoning ?? "";
+      // BUG 4 FIX: Workflow now returns single design system
+      const designSystem: any = data.designSystem;
+      const reasoning: string = data.reasoning ?? "";
 
       if (!designSystem) {
         return { success: false, error: "Workflow returned no design system" };

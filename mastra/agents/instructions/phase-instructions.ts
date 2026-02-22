@@ -417,9 +417,15 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
     // See also: AI SDK Issue #8653 — activeTools filtering doesn't prevent
     // tool execution from conversation memory, making allowlist removal
     // insufficient alone (tool-level validation in advancePhase.ts is primary defense).
+    // BUG 9 FIX: suggestAction REMOVED from recommend phase.
+    // The "Generate Dashboard Preview" button was appearing after wireframe
+    // because suggestAction was in the allowlist. Preview generation should
+    // ONLY happen in build_preview phase. Removing this prevents premature
+    // preview button display.
+    // Phase transitions are deterministic via autoAdvancePhase in onFinish.
     // Utility
     'navigateTo',
-    'suggestAction',
+    // 'suggestAction', ← REMOVED (Bug 9 fix)
     'todoAdd',
     'todoList',
     'todoUpdate',
