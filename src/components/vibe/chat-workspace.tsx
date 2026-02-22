@@ -278,6 +278,8 @@ export function ChatWorkspace({
           const tid = threadIdRef.current;
           const tenantId = authContextRef.current?.tenantId;
           if (tid && tenantId) {
+            // Small delay to let server onFinish complete
+            await new Promise(r => setTimeout(r, 500));
             const res = await fetch(
               `/api/journey-sessions/phase?tenantId=${encodeURIComponent(tenantId)}&threadId=${encodeURIComponent(tid)}`
             );
