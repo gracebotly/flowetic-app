@@ -18,6 +18,7 @@ import {
   delegateToDesignAdvisor,
 } from "../tools/delegation";
 import { advancePhase } from "../tools/journey/advancePhase";
+import { confirmWireframe } from "@/mastra/tools/journey/confirmWireframe";
 import { generatePreviewWorkflow } from "../workflows/generatePreview";
 import { connectionBackfillWorkflow } from "../workflows/connectionBackfill";
 import { deployDashboardWorkflow } from "../workflows/deployDashboard";
@@ -382,6 +383,7 @@ Use BM25 search tools (getStyleRecommendations, getTypographyRecommendations, et
   tools: {
     // Phase advancement
     advancePhase,
+    confirmWireframe,
     // Sub-agent delegation (replaces agents: {} config)
     delegateToPlatformMapper,
     delegateToDashboardBuilder,

@@ -406,6 +406,8 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
     'getEventStats',
     'getOutcomes',
     'searchSkillKnowledge',
+    // Wireframe confirmation fallback — if eager regex misses natural language approval
+    'confirmWireframe',
     // Navigation only — no utility tools
     'navigateTo',
     // REMOVED: todoAdd, todoList, todoUpdate, todoComplete
