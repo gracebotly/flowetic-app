@@ -446,6 +446,8 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
     'getChartRecommendations',
     'getUXGuidelines',
     'getProductRecommendations',
+    'getColorRecommendations',
+    'getIconRecommendations',
     'searchSkillKnowledge',
     // getStyleBundles REMOVED — preset system deprecated in favour of custom tokens
     // NOTE: setSchemaReady intentionally omitted — /api/chat auto-sets schema_ready=true
@@ -477,6 +479,15 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
     'validatePreviewReadiness',
     'getEventStats',
     'searchSkillKnowledge',
+    // Design tools (for style adjustments during preview — user may say
+    // "make this more premium" or "change to a dark theme" during build)
+    'getStyleRecommendations',
+    'getColorRecommendations',
+    'getTypographyRecommendations',
+    'getChartRecommendations',
+    'getUXGuidelines',
+    'getProductRecommendations',
+    'getIconRecommendations',
     // Sources CRUD (moved here from select_entity — agent may need to
     // create/update sources during build phase for data connectivity)
     'createSource',
@@ -508,6 +519,15 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
     'showInteractiveEditPanel',
     'delegateToDashboardBuilder',
     'searchSkillKnowledge',
+    // Design tools (for style adjustments during editing — user may request
+    // color changes, font swaps, or chart type modifications)
+    'getStyleRecommendations',
+    'getColorRecommendations',
+    'getTypographyRecommendations',
+    'getChartRecommendations',
+    'getUXGuidelines',
+    'getProductRecommendations',
+    'getIconRecommendations',
     // Can re-generate if needed
     'delegateToPlatformMapper',
     'validatePreviewReadiness',
