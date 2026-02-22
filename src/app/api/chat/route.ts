@@ -916,7 +916,9 @@ export async function POST(req: Request) {
           };
           let detectedStyle: string | null = null;
           for (const styleName of Object.keys(styleChangePatterns)) {
-            if (userText.includes(styleName.replace('-', ' ')) || userText.includes(styleName)) {
+            // Match both hyphenated and space-separated variants (case-insensitive)
+            const spaceVariant = styleName.replace(/-/g, ' ');
+            if (userText.includes(spaceVariant) || userText.includes(styleName)) {
               detectedStyle = styleName;
               break;
             }
@@ -946,7 +948,12 @@ export async function POST(req: Request) {
                 console.error('[api/chat] Failed to update design tokens:', updateErr.message);
               } else {
                 requestContext.set('designTokens', JSON.stringify(updatedTokens));
-                console.log('[api/chat] ✅ Design tokens updated for style:', detectedStyle);
+                requestContext.set('selectedStyleBundleId', 'custom');
+                console.log('[api/chat] ✅ Design tokens updated for style:', detectedStyle, {
+                  primary: updatedTokens.colors?.primary,
+                  background: updatedTokens.colors?.background,
+                  rcOverwritten: true,
+                });
               }
             }
           }

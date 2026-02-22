@@ -1,23 +1,9 @@
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
-
-/**
- * Canonical style bundle display names.
- * The workflow MUST choose from this list for designSystem.style.name.
- * These map to the DB CHECK constraint values when slugified.
- */
-const CANONICAL_STYLE_NAMES = [
-  'Professional Clean',
-  'Premium Dark',
-  'Glass Premium',
-  'Bold Startup',
-  'Corporate Trust',
-  'Neon Cyber',
-  'Pastel Soft',
-  'Warm Earth',
-  'Modern SaaS',
-] as const;
-
+import { loadUIUXCSV } from "../tools/uiux/loadUIUXCSV";
+import { rankRowsByQuery } from "../tools/uiux/_rank";
+import { buildDesignTokens } from "../tools/uiux/mapCSVToTokens";
+// ─── Schemas ───────────────────────────────────────────────────────────
 const designSystemInputSchema = z.object({
   workflowName: z.string(),
   platformType: z.string(),
@@ -26,7 +12,6 @@ const designSystemInputSchema = z.object({
   tenantId: z.string().uuid(),
   userId: z.string().uuid(),
 });
-
 const designSystemOutputSchema = z.object({
   designSystem: z.object({
     style: z.object({
@@ -39,6 +24,9 @@ const designSystemOutputSchema = z.object({
       primary: z.string(),
       secondary: z.string(),
       accent: z.string(),
+      success: z.string().optional(),
+      warning: z.string().optional(),
+      error: z.string().optional(),
       background: z.string(),
       text: z.string().optional(),
     }),
@@ -47,204 +35,264 @@ const designSystemOutputSchema = z.object({
       bodyFont: z.string(),
       scale: z.string().optional(),
     }),
+    fonts: z.object({
+      heading: z.string(),
+      body: z.string(),
+      googleFontsUrl: z.string().optional(),
+      cssImport: z.string().optional(),
+    }).optional(),
     charts: z.array(z.object({
       type: z.string(),
       bestFor: z.string(),
     })).optional(),
     uxGuidelines: z.array(z.string()).optional(),
+    spacing: z.object({ unit: z.number() }).optional(),
+    radius: z.number().optional(),
+    shadow: z.string().optional(),
   }),
   reasoning: z.string(),
   skillActivated: z.boolean(),
 });
-
-/**
- * Helper function to generate a design system with the ui-ux-pro-max skill
- * Reusable for both primary and alternative design options
- */
-async function generateDesignSystem(
-  inputData: z.infer<typeof designSystemInputSchema>,
-  mastra: any,
-  requestContext: any,
-  variation: "primary" | "alternative"
-): Promise<z.infer<typeof designSystemOutputSchema>> {
-  const agent = mastra.getAgent("designAdvisorAgent");
-
-  if (!agent) {
-    throw new Error("designAdvisorAgent not found in Mastra instance");
-  }
-
-  const variationPrompt = variation === "alternative"
-    ? "This should contrast with a typical recommendation — if the default would be light and minimal, go bold and expressive, or vice versa. Provide a distinct alternative aesthetic."
-    : "This should be your best recommendation for this workflow context.";
-
-  const prompt = [
-    `Generate the ${variation} design option for a ${inputData.platformType} dashboard.`,
-    variationPrompt,
-    "",
-    `## Context`,
-    `- Workflow: "${inputData.workflowName}"`,
-    inputData.selectedOutcome ? `- Outcome type: ${inputData.selectedOutcome}` : "",
-    inputData.selectedEntities ? `- Tracking: ${inputData.selectedEntities}` : "",
-    "",
-    `## Required Actions`,
-    `Use your ui-ux-pro-max skill to search the design database:`,
-    `1. Call getStyleRecommendations for style direction`,
-    `2. Call getChartRecommendations for visualization types`,
-    `3. Call getTypographyRecommendations for font pairings`,
-    `4. Call getUXGuidelines for best practices`,
-    "",
-    `## CRITICAL: Style Name Constraint`,
-    `You MUST choose designSystem.style.name from this EXACT list (copy verbatim):`,
-    ...CANONICAL_STYLE_NAMES.map(name => `- "${name}"`),
-    `Do NOT invent new style names like "Data-Dense BI/Analytics" or "Bold Expressive".`,
-    `Pick the closest match from the list above.`,
-    `Example mappings:`,
-    `- Data/analytics dashboard → "Modern SaaS"`,
-    `- Premium/luxury feel → "Premium Dark" or "Glass Premium"`,
-    `- Startup/bold → "Bold Startup"`,
-    `- Corporate/enterprise → "Corporate Trust" or "Professional Clean"`,
-    `- Friendly/approachable → "Pastel Soft"`,
-    `- Tech/cyber → "Neon Cyber"`,
-    `- Natural/organic → "Warm Earth"`,
-    ``,
-    `## Output Format`,
-    `Return a JSON object with this structure:`,
-    `{`,
-    `  "designSystem": {`,
-    `    "style": { "name": "...", "type": "...", "keywords": "...", "effects": "..." },`,
-    `    "colors": { "primary": "#...", "secondary": "#...", "accent": "#...", "background": "#...", "text": "#..." },`,
-    `    "typography": { "headingFont": "...", "bodyFont": "...", "scale": "..." },`,
-    `    "charts": [{ "type": "...", "bestFor": "..." }],`,
-    `    "uxGuidelines": ["...", "..."]`,
-    `  },`,
-    `  "reasoning": "Why these choices fit the workflow context"`,
-    `}`,
-  ].filter(Boolean).join("\n");
-
-  const result = await agent.generate(prompt, {
-    maxSteps: 10,
-    toolChoice: "auto",
-    requestContext,
-  });
-
-  console.log(`[designSystemWorkflow:${variation}] Agent response length: ${result.text?.length ?? 0}`);
-  console.log(`[designSystemWorkflow:${variation}] Agent response preview: ${result.text?.substring(0, 200)}`);
-
-  // Parse the agent's response
-  try {
-    const text = result.text || "";
-
-    // Strategy 1: Look for a JSON code block
-    const codeBlockMatch = text.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
-    // Strategy 2: Find the largest valid JSON object
-    const jsonMatch = codeBlockMatch?.[1] || text.match(/\{[\s\S]*\}/)?.[0];
-
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch);
-      const ds = parsed.designSystem || parsed;
-
-      // Validate we got real data, not just empty strings
-      if (ds?.colors?.primary && ds?.style?.name) {
-        console.log(`[designSystemWorkflow:${variation}] Parsed design system: ${ds.style.name}, primary: ${ds.colors.primary}`);
+// ─── Step 1: Gather Design Data (DETERMINISTIC — no LLM) ──────────────
+const gatherDesignData = createStep({
+  id: "gather-design-data",
+  inputSchema: designSystemInputSchema,
+  outputSchema: z.object({
+    styleResults: z.array(z.record(z.string())),
+    colorResults: z.array(z.record(z.string())),
+    typographyResults: z.array(z.record(z.string())),
+    chartResults: z.array(z.record(z.string())),
+    uxResults: z.array(z.record(z.string())),
+    productResults: z.array(z.record(z.string())),
+    workflowName: z.string(),
+    platformType: z.string(),
+    selectedOutcome: z.string().optional(),
+    selectedEntities: z.string().optional(),
+    tenantId: z.string().uuid(),
+    userId: z.string().uuid(),
+  }),
+  execute: async ({ inputData }) => {
+    const query = [
+      inputData.workflowName,
+      inputData.platformType,
+      inputData.selectedOutcome,
+    ].filter(Boolean).join(" ");
+    console.log(`[designSystemWorkflow:gather] BM25 query: "${query}"`);
+    // Load all CSVs
+    const [styleRows, colorRows, typographyRows, chartRows, uxRows, productRows] =
+      await Promise.all([
+        loadUIUXCSV("style"),
+        loadUIUXCSV("color"),
+        loadUIUXCSV("typography"),
+        loadUIUXCSV("chart"),
+        loadUIUXCSV("ux"),
+        loadUIUXCSV("product"),
+      ]);
+    // BM25 rank all domains in parallel
+    const [styleResults, colorResults, typographyResults, chartResults, uxResults, productResults] =
+      await Promise.all([
+        rankRowsByQuery({ rows: styleRows, query, limit: 3, domain: 'style' }),
+        rankRowsByQuery({ rows: colorRows, query, limit: 3, domain: 'color' }),
+        rankRowsByQuery({ rows: typographyRows, query, limit: 3, domain: 'typography' }),
+        rankRowsByQuery({ rows: chartRows, query, limit: 3, domain: 'chart' }),
+        rankRowsByQuery({ rows: uxRows, query, limit: 5, domain: 'ux' }),
+        rankRowsByQuery({ rows: productRows, query, limit: 2, domain: 'product' }),
+      ]);
+    console.log(`[designSystemWorkflow:gather] Results: style=${styleResults.length}, color=${colorResults.length}, typography=${typographyResults.length}, chart=${chartResults.length}, ux=${uxResults.length}, product=${productResults.length}`);
+    return {
+      styleResults,
+      colorResults,
+      typographyResults,
+      chartResults,
+      uxResults,
+      productResults,
+      workflowName: inputData.workflowName,
+      platformType: inputData.platformType,
+      selectedOutcome: inputData.selectedOutcome,
+      selectedEntities: inputData.selectedEntities,
+      tenantId: inputData.tenantId,
+      userId: inputData.userId,
+    };
+  },
+});
+// ─── Step 2: Synthesize (LLM selects from CSV data — no tool calls) ──
+const synthesizeDesignSystem = createStep({
+  id: "synthesize-design-system",
+  inputSchema: z.object({
+    styleResults: z.array(z.record(z.string())),
+    colorResults: z.array(z.record(z.string())),
+    typographyResults: z.array(z.record(z.string())),
+    chartResults: z.array(z.record(z.string())),
+    uxResults: z.array(z.record(z.string())),
+    productResults: z.array(z.record(z.string())),
+    workflowName: z.string(),
+    platformType: z.string(),
+    selectedOutcome: z.string().optional(),
+    selectedEntities: z.string().optional(),
+    tenantId: z.string().uuid(),
+    userId: z.string().uuid(),
+  }),
+  outputSchema: designSystemOutputSchema,
+  execute: async ({ inputData, mastra }) => {
+    const {
+      styleResults, colorResults, typographyResults, chartResults,
+      uxResults, productResults, workflowName, platformType,
+    } = inputData;
+    // Build deterministic tokens from top CSV results first
+    const topColor = colorResults[0] || {};
+    const topTypography = typographyResults[0] || {};
+    const topStyle = styleResults[0] || {};
+    const deterministicTokens = buildDesignTokens({
+      colorRow: topColor,
+      typographyRow: topTypography,
+      styleRow: topStyle,
+    });
+    // Use LLM ONLY for synthesis: pick best combination and give it a custom name.
+    // toolChoice: "none" and maxSteps: 1 = no tool calls possible.
+    const agent = mastra?.getAgent("designAdvisorAgent");
+    if (!agent) {
+      console.warn("[designSystemWorkflow:synthesize] No agent — using deterministic tokens only");
+      return {
+        designSystem: {
+          style: deterministicTokens.style,
+          colors: deterministicTokens.colors,
+          typography: {
+            headingFont: deterministicTokens.fonts.heading,
+            bodyFont: deterministicTokens.fonts.body,
+            scale: "1.25",
+          },
+          fonts: deterministicTokens.fonts,
+          charts: chartResults.slice(0, 3).map(r => ({
+            type: r["Chart Type"] || r.type || "Bar Chart",
+            bestFor: r["Best For"] || r.bestFor || "Comparisons",
+          })),
+          uxGuidelines: uxResults.slice(0, 5).map(r =>
+            r["Guideline"] || r["Description"] || r.guideline || "Follow best practices"
+          ),
+          spacing: deterministicTokens.spacing,
+          radius: deterministicTokens.radius,
+          shadow: deterministicTokens.shadow,
+        },
+        reasoning: `Deterministic selection from BM25 results for "${workflowName}" (${platformType}).`,
+        skillActivated: true,
+      };
+    }
+    const prompt = [
+      `You are selecting the BEST design system for a "${workflowName}" dashboard (${platformType}).`,
+      ``,
+      `## AVAILABLE DATA FROM CSV SEARCH (use ONLY these values)`,
+      ``,
+      `### Styles (${styleResults.length} matches):`,
+      ...styleResults.map((r, i) => `${i + 1}. ${r["Style Category"] || "Unknown"} — Type: ${r["Type"] || "?"}, Keywords: ${r["Keywords"] || "?"}, Colors: ${r["Primary Colors"] || "?"}`),
+      ``,
+      `### Color Palettes (${colorResults.length} matches):`,
+      ...colorResults.map((r, i) => `${i + 1}. ${r["palette_name"] || "Unknown"} — Primary: ${r["primary"]}, Secondary: ${r["secondary"]}, Accent: ${r["accent"]}, Mood: ${r["mood"]}`),
+      ``,
+      `### Typography (${typographyResults.length} matches):`,
+      ...typographyResults.map((r, i) => `${i + 1}. ${r["Font Pairing Name"] || "Unknown"} — Heading: ${r["Heading Font"]}, Body: ${r["Body Font"]}, Mood: ${r["Mood/Style Keywords"]}, URL: ${r["Google Fonts URL"] || "none"}`),
+      ``,
+      `### Charts (${chartResults.length} matches):`,
+      ...chartResults.map((r, i) => `${i + 1}. ${r["Chart Type"] || "Unknown"} — Best For: ${r["Best For"] || "?"}`),
+      ``,
+      `## YOUR TASK`,
+      `1. Pick the BEST color palette from the options above (use exact hex values).`,
+      `2. Pick the BEST typography pairing from the options above (use exact font names).`,
+      `3. Give this design system a UNIQUE, CREATIVE name that reflects the workflow context.`,
+      `   Examples: "Midnight Legal Suite", "Warm Lead Tracker", "Neon Voice Command Center"`,
+      `   Do NOT use generic names like "Modern SaaS" or "Professional Clean".`,
+      `4. Select 2-3 chart types from above.`,
+      ``,
+      `## OUTPUT (JSON only, no markdown)`,
+      `Return ONLY a JSON object with this structure:`,
+      `{`,
+      `  "selectedColorIndex": 0,`,
+      `  "selectedTypographyIndex": 0,`,
+      `  "customStyleName": "Your Creative Name Here",`,
+      `  "selectedCharts": [{ "type": "...", "bestFor": "..." }],`,
+      `  "reasoning": "Why these choices work for this workflow"`,
+      `}`,
+    ].join("\n");
+    try {
+      const result = await agent.generate(prompt, {
+        maxSteps: 1,
+        toolChoice: "none",
+      });
+      const text = result.text || "";
+      const jsonMatch = text.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/)?.[1] || text.match(/\{[\s\S]*\}/)?.[0];
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch);
+        const colorIdx = Math.min(parsed.selectedColorIndex ?? 0, colorResults.length - 1);
+        const typoIdx = Math.min(parsed.selectedTypographyIndex ?? 0, typographyResults.length - 1);
+        const selectedColor = colorResults[Math.max(0, colorIdx)] || topColor;
+        const selectedTypo = typographyResults[Math.max(0, typoIdx)] || topTypography;
+        const tokens = buildDesignTokens({
+          colorRow: selectedColor,
+          typographyRow: selectedTypo,
+          styleRow: topStyle,
+          customName: parsed.customStyleName || deterministicTokens.style.name,
+        });
+        console.log(`[designSystemWorkflow:synthesize] LLM selected: "${tokens.style.name}", primary: ${tokens.colors.primary}`);
         return {
-          designSystem: ds,
-          reasoning: parsed.reasoning || "Design system generated from tool results.",
+          designSystem: {
+            style: tokens.style,
+            colors: tokens.colors,
+            typography: {
+              headingFont: tokens.fonts.heading,
+              bodyFont: tokens.fonts.body,
+              scale: "1.25",
+            },
+            fonts: tokens.fonts,
+            charts: parsed.selectedCharts || chartResults.slice(0, 3).map(r => ({
+              type: r["Chart Type"] || "Bar Chart",
+              bestFor: r["Best For"] || "Comparisons",
+            })),
+            uxGuidelines: uxResults.slice(0, 5).map(r =>
+              r["Guideline"] || r["Description"] || r.guideline || "Follow best practices"
+            ),
+            spacing: tokens.spacing,
+            radius: tokens.radius,
+            shadow: tokens.shadow,
+          },
+          reasoning: parsed.reasoning || `Selected from CSV data for "${workflowName}".`,
           skillActivated: true,
         };
       }
-      console.warn(`[designSystemWorkflow:${variation}] Parsed JSON but missing required fields`);
+    } catch (err) {
+      console.warn("[designSystemWorkflow:synthesize] LLM synthesis failed, using deterministic:", err);
     }
-  } catch (e) {
-    console.warn(`[designSystemWorkflow:${variation}] Failed to parse JSON:`, (e as Error).message);
-  }
-
-  // Fallback with variation-specific defaults
-  if (variation === "alternative") {
+    // Fallback: use deterministic tokens from top results
     return {
       designSystem: {
-        style: { name: "Bold Startup", type: "Vibrant", keywords: "bold, colorful, expressive" },
-        colors: {
-          primary: "#7C3AED",
-          secondary: "#14B8A6",
-          accent: "#F59E0B",
-          background: "#FFFFFF",
-          text: "#111827"
+        style: deterministicTokens.style,
+        colors: deterministicTokens.colors,
+        typography: {
+          headingFont: deterministicTokens.fonts.heading,
+          bodyFont: deterministicTokens.fonts.body,
+          scale: "1.25",
         },
-        typography: { headingFont: "Plus Jakarta Sans", bodyFont: "Inter", scale: "1.25" },
-        charts: [{ type: "Area Chart", bestFor: "Trends over time" }],
-        uxGuidelines: ["Use color to create visual hierarchy", "Bold typography for headings"],
+        fonts: deterministicTokens.fonts,
+        charts: chartResults.slice(0, 3).map(r => ({
+          type: r["Chart Type"] || r.type || "Bar Chart",
+          bestFor: r["Best For"] || r.bestFor || "Comparisons",
+        })),
+        uxGuidelines: uxResults.slice(0, 5).map(r =>
+          r["Guideline"] || r["Description"] || r.guideline || "Follow best practices"
+        ),
+        spacing: deterministicTokens.spacing,
+        radius: deterministicTokens.radius,
+        shadow: deterministicTokens.shadow,
       },
-      reasoning: result.text || "Contrasting alternative for a bolder look.",
+      reasoning: `Deterministic fallback from BM25 results for "${workflowName}".`,
       skillActivated: true,
     };
-  }
-
-  // Primary fallback
-  return {
-    designSystem: {
-      style: { name: "Professional Clean", type: "Minimalist", keywords: "modern, clean, professional" },
-      colors: {
-        primary: "#1a1a2e",
-        secondary: "#16213e",
-        accent: "#0f3460",
-        background: "#f8f9fa",
-        text: "#1a1a2e"
-      },
-      typography: { headingFont: "Inter", bodyFont: "Inter", scale: "1.25" },
-      charts: [{ type: "Bar Chart", bestFor: "Comparisons" }],
-      uxGuidelines: ["Use consistent spacing", "Maintain visual hierarchy"],
-    },
-    reasoning: result.text || "Default design system applied.",
-    skillActivated: true,
-  };
-}
-
-// Step A: Generate first design option (the "recommended" style)
-const designOptionA = createStep({
-  id: "design-option-a",
-  inputSchema: designSystemInputSchema,
-  outputSchema: designSystemOutputSchema,
-  execute: async ({ inputData, mastra, requestContext }) => {
-    return await generateDesignSystem(inputData, mastra, requestContext, "primary");
   },
 });
-
-// Step B: Generate second design option (a contrasting alternative)
-const designOptionB = createStep({
-  id: "design-option-b",
-  inputSchema: designSystemInputSchema,
-  outputSchema: designSystemOutputSchema,
-  execute: async ({ inputData, mastra, requestContext }) => {
-    return await generateDesignSystem(inputData, mastra, requestContext, "alternative");
-  },
-});
-
-// Combine parallel results into a pair
-const combineDesignOptions = createStep({
-  id: "combine-design-options",
-  inputSchema: z.object({
-    "design-option-a": designSystemOutputSchema,
-    "design-option-b": designSystemOutputSchema,
-  }),
-  outputSchema: z.object({
-    designSystems: z.array(designSystemOutputSchema).length(2),
-  }),
-  execute: async ({ inputData }) => {
-    return {
-      designSystems: [
-        inputData["design-option-a"],
-        inputData["design-option-b"],
-      ],
-    };
-  },
-});
-
-// BUG 4 FIX: Remove parallel execution to avoid OpenAI duplicate ID errors
-// Premium plan: ONE intelligent design system, not 2 generic options
+// ─── Workflow ──────────────────────────────────────────────────────────
 export const designSystemWorkflow = createWorkflow({
   id: "designSystemWorkflow",
   inputSchema: designSystemInputSchema,
-  outputSchema: designSystemOutputSchema,  // Returns single system now
+  outputSchema: designSystemOutputSchema,
 })
-  .then(designOptionA)  // Generate ONE intelligent design
+  .then(gatherDesignData)
+  .then(synthesizeDesignSystem)
   .commit();

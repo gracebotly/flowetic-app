@@ -136,7 +136,44 @@ Be creative — this should feel crafted for THIS specific workflow, not generic
         return { success: false, error: "Workflow returned no design system" };
       }
 
-      // Persist design_tokens to journey_sessions immediately
+      // ── Normalize design tokens before persistence ──────────────────────
+      // The workflow outputs typography.headingFont/bodyFont but consumers
+      // read fonts.heading/fonts.body. Map between schemas here.
+      const normalizedTokens = {
+        ...designSystem,
+        // Ensure fonts object exists with correct keys
+        fonts: {
+          heading: designSystem.fonts?.heading
+            || (designSystem.typography?.headingFont
+              ? designSystem.typography.headingFont + (designSystem.typography.headingFont.includes(',') ? '' : ', sans-serif')
+              : 'Inter, sans-serif'),
+          body: designSystem.fonts?.body
+            || (designSystem.typography?.bodyFont
+              ? designSystem.typography.bodyFont + (designSystem.typography.bodyFont.includes(',') ? '' : ', sans-serif')
+              : 'Inter, sans-serif'),
+          googleFontsUrl: designSystem.fonts?.googleFontsUrl || undefined,
+          cssImport: designSystem.fonts?.cssImport || undefined,
+        },
+        // Ensure semantic colors exist
+        colors: {
+          ...designSystem.colors,
+          success: designSystem.colors?.success || '#10B981',
+          warning: designSystem.colors?.warning || '#F59E0B',
+          error: designSystem.colors?.error || '#EF4444',
+          text: designSystem.colors?.text || '#0F172A',
+        },
+        // Ensure spacing/radius/shadow exist
+        spacing: designSystem.spacing || { unit: 8 },
+        radius: designSystem.radius ?? 8,
+        shadow: designSystem.shadow || 'soft',
+      };
+      console.log('[runDesignSystemWorkflow] Normalized tokens:', {
+        styleName: normalizedTokens.style?.name,
+        primary: normalizedTokens.colors?.primary,
+        heading: normalizedTokens.fonts?.heading,
+        googleFontsUrl: normalizedTokens.fonts?.googleFontsUrl?.substring(0, 60),
+      });
+      // Persist normalized tokens to journey_sessions
       let persisted = false;
       if (journeyThreadId && supabaseToken && tenantId) {
         try {
@@ -144,7 +181,7 @@ Be creative — this should feel crafted for THIS specific workflow, not generic
           const { error: persistErr } = await supabase
             .from('journey_sessions')
             .update({
-              design_tokens: designSystem,
+              design_tokens: normalizedTokens,
               selected_style_bundle_id: 'custom',
               updated_at: new Date().toISOString(),
             })
@@ -155,9 +192,15 @@ Be creative — this should feel crafted for THIS specific workflow, not generic
             console.error('[runDesignSystemWorkflow] Failed to persist design_tokens:', persistErr.message);
           } else {
             persisted = true;
-            console.log('[runDesignSystemWorkflow] ✅ Persisted design_tokens to journey_sessions:', {
-              styleName: designSystem.style?.name,
-              primary: designSystem.colors?.primary,
+            // Also update RequestContext for this request cycle
+            if (context?.requestContext) {
+              context.requestContext.set('designTokens', JSON.stringify(normalizedTokens));
+              context.requestContext.set('designSystemGenerated', 'true');
+            }
+            console.log('[runDesignSystemWorkflow] ✅ Persisted normalized design_tokens:', {
+              styleName: normalizedTokens.style?.name,
+              primary: normalizedTokens.colors?.primary,
+              heading: normalizedTokens.fonts?.heading,
             });
           }
         } catch (persistErr) {
@@ -165,7 +208,7 @@ Be creative — this should feel crafted for THIS specific workflow, not generic
         }
       }
 
-      return { success: true, designSystem, reasoning, persisted };
+      return { success: true, designSystem: normalizedTokens, reasoning, persisted };
 
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
