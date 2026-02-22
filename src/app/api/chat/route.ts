@@ -1330,7 +1330,7 @@ export async function POST(req: Request) {
             const phase = requestContext.get('phase') as string || 'select_entity';
             const phaseMaxSteps: Record<string, number> = {
               select_entity: 3,
-              recommend: 4,
+              recommend: 3,  // Was 4 — reduced to prevent 300s timeout. Recommend only needs: step0=getEventStats+getOutcomes, step1=synthesize, step2=safety-valve-text
               style: 5,
               build_preview: 8,
               interactive_edit: 10,

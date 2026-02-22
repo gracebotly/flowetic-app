@@ -235,7 +235,7 @@ export class PhaseToolGatingProcessor implements Processor {
     // Phase-specific maxSteps (mirrors route.ts values)
     const PHASE_MAX_STEPS: Record<string, number> = {
       select_entity: 3,
-      recommend: 4,
+      recommend: 3,  // Was 4 — matches route.ts. Recommend needs at most 3 steps.
       style: 5,
       build_preview: 8,
       interactive_edit: 10,
