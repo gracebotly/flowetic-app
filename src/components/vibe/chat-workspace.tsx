@@ -39,6 +39,7 @@ import { MessageInput } from "@/components/vibe/message-input";
 import { PhaseIndicator } from "@/components/vibe/phase-indicator";
 import { InlineChoice } from "@/components/vibe/inline-choice";
 import { DesignSystemPair } from "@/components/vibe/design-system-pair";
+import { DesignSystemCard } from './DesignSystemCard';
 import { ReasoningBlock } from "@/components/vibe/ReasoningBlock";
 import { ErrorDisplay } from "@/components/vibe/ErrorDisplay";
 import { ModelSelector, type ModelId } from "./model-selector";
@@ -1494,24 +1495,15 @@ return (
                               }
                             }
 
-                            // ✅ RENDER: runDesignSystemWorkflow → DesignSystemPair (AI SDK v5)
-                            // BUG 7 FIX: Render as premium UI component, not raw JSON
-                            // BUG 8 FIX: Generate TWO contrasting design alternatives — no more duplicates
+                            // ✅ RENDER: runDesignSystemWorkflow → DesignSystemCard (AI SDK v5)
+                            // Render only the generated custom design system.
                             if (part.type === 'tool-runDesignSystemWorkflow' && (part as any).state === 'output-available') {
                               const output = (part as any).output;
 
                               if (output?.success && output?.designSystem) {
                                 const ds = output.designSystem;
-                                // CRITICAL FIX: Convert style name to canonical slug format
-                                // The DB CHECK constraint only accepts: professional-clean, premium-dark,
-                                // glass-premium, bold-startup, corporate-trust, neon-cyber, pastel-soft,
-                                // warm-earth, modern-saas
-                                const styleName = String(ds.style?.name || 'Professional Clean');
-                                const styleBundleId = styleName
-                                  .trim()
-                                  .toLowerCase()
-                                  .replace(/[^a-z0-9]+/g, '-')
-                                  .replace(/^-+|-+$/g, '');
+                                const styleName = String(ds.style?.name || 'Professional Clean').trim();
+                                const styleBundleId = styleName || 'Professional Clean';
                                 const primarySystem = {
                                   id: styleBundleId,
                                   name: ds.style?.name || 'Professional Clean',
@@ -1525,37 +1517,19 @@ return (
                                   typography: `${ds.typography?.headingFont || 'Inter'} + ${ds.typography?.bodyFont || 'Inter'}`,
                                   bestFor: output.reasoning || 'Your workflow',
                                 };
-                                // BUG 8 FIX: Generate contrasting alternative based on primary characteristics
-                                const isDarkPrimary = ds.style?.name?.toLowerCase().includes('dark') ||
-                                  ds.style?.name?.toLowerCase().includes('cyber') ||
-                                  ds.style?.name?.toLowerCase().includes('neon');
-                                const alternativeSystem = {
-                                  id: isDarkPrimary ? 'professional-clean' : 'premium-dark',
-                                  name: isDarkPrimary ? 'Professional Clean' : 'Premium Dark',
-                                  icon: 'Sparkles' as const,
-                                  colors: isDarkPrimary
-                                    ? '#0080FF / #00C8FF / #1E40AF'
-                                    : '#1A1A2E / #6366F1 / #8B5CF6',
-                                  style: isDarkPrimary ? 'minimal, professional' : 'bold, modern',
-                                  typography: isDarkPrimary
-                                    ? 'Inter + Source Sans Pro'
-                                    : 'Poppins + Roboto',
-                                  bestFor: isDarkPrimary
-                                    ? 'Clean aesthetic with professional clarity'
-                                    : 'Bold design with premium dark theme',
-                                };
                                 return (
-                                  <DesignSystemPair
+                                  <DesignSystemCard
                                     key={idx}
-                                    systems={[primarySystem, alternativeSystem] as [typeof primarySystem, typeof alternativeSystem]}
-                                    onSelect={(id) => {
-                                      const selected = id === primarySystem.id ? primarySystem : alternativeSystem;
-                                      setSelectedStyleBundleId(id);
-                                      void sendAi(`I selected style ${selected.name}`, {
-                                        selectedStyleBundleId: id,
+                                    system={primarySystem}
+                                    onSelect={() => {
+                                      setSelectedStyleBundleId(primarySystem.id);
+                                      void sendAi(`I selected style ${primarySystem.name}`, {
+                                        selectedStyleBundleId: primarySystem.id,
                                       });
                                     }}
-                                    onShowMore={() => { void sendAi("Show different design styles"); }}
+                                    onRegenerate={() => {
+                                      void sendAi("I don't like this design. Generate a completely different style for my workflow.");
+                                    }}
                                   />
                                 );
                               }

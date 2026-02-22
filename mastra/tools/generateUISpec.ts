@@ -390,46 +390,25 @@ export const generateUISpec = createTool({
           primary: styleTokens.colors.primary,
           heading: styleTokens.fonts.heading,
         });
-      } catch {
-        console.warn('[generateUISpec] Failed to parse custom tokens — using defaults');
-        styleBundleId = 'custom';
-        styleTokens = {
-          colors: {
-            primary: '#2563EB',
-            secondary: '#64748B',
-            success: '#10B981',
-            warning: '#F59E0B',
-            error: '#EF4444',
-            background: '#F8FAFC',
-            text: '#0F172A',
-          },
-          fonts: { heading: 'Inter, sans-serif', body: 'Inter, sans-serif' },
-          spacing: { unit: 8 },
-          radius: 8,
-          shadow: 'soft',
-        };
+      } catch (parseErr) {
+        console.error('[generateUISpec] Failed to parse custom tokens:', parseErr);
+        throw new Error(
+          'DESIGN_TOKENS_PARSE_FAILED: Custom design tokens exist in RequestContext but could not be parsed. ' +
+          'This indicates a bug in runDesignSystemWorkflow token persistence. ' +
+          'Raw value: ' + String(customTokensJson).slice(0, 200)
+        );
       }
     } else {
-      // ── NO CUSTOM TOKENS: Use sensible defaults ──────────────────────────
-      // Presets have been removed. If no custom tokens exist, the design system
-      // workflow should have been triggered first. Use minimal defaults.
-      console.warn('[generateUISpec] No custom design tokens found. Run designSystemWorkflow first.');
-      styleBundleId = 'custom';
-      styleTokens = {
-        colors: {
-          primary: '#2563EB',
-          secondary: '#64748B',
-          success: '#10B981',
-          warning: '#F59E0B',
-          error: '#EF4444',
-          background: '#F8FAFC',
-          text: '#0F172A',
-        },
-        fonts: { heading: 'Inter, sans-serif', body: 'Inter, sans-serif' },
-        spacing: { unit: 8 },
-        radius: 8,
-        shadow: 'soft',
-      };
+      // NO CUSTOM TOKENS: This is an error, not a fallback scenario.
+      // The designSystemWorkflow MUST run before generateUISpec.
+      // Silently falling back to generic colors is what creates "made up" dashboards
+      // that ignore the user's workflow context. Fail loudly so the agent retries.
+      console.error('[generateUISpec] ❌ No custom design tokens in RequestContext. designSystemWorkflow must run first.');
+      throw new Error(
+        'DESIGN_TOKENS_MISSING: No custom design tokens found in RequestContext. ' +
+        'The designSystemWorkflow must run and persist tokens before calling generateUISpec. ' +
+        'This is a $100 premium service — every dashboard gets a unique, AI-generated design system.'
+      );
     }
 
     // Build deterministic component array from template blueprints
@@ -456,13 +435,22 @@ export const generateUISpec = createTool({
       components,
     };
 
-    // Design tokens resolved from the selected style bundle
+    // Design tokens resolved from the custom design system workflow
+    // Include full style metadata so the preview page can display the style name
+    const parsedCustom = customTokensJson ? JSON.parse(customTokensJson) : {};
     const design_tokens = {
       colors: styleTokens.colors,
       fonts: styleTokens.fonts,
       spacing: styleTokens.spacing,
       radius: styleTokens.radius,
       shadow: styleTokens.shadow,
+      // Propagate style metadata from designSystemWorkflow (name, type, keywords, effects)
+      ...(parsedCustom.style ? { style: parsedCustom.style } : {}),
+      ...(parsedCustom.styleName ? { styleName: parsedCustom.styleName } : {}),
+      // Propagate chart recommendations if present
+      ...(parsedCustom.charts ? { charts: parsedCustom.charts } : {}),
+      // Propagate UX guidelines if present
+      ...(parsedCustom.uxGuidelines ? { uxGuidelines: parsedCustom.uxGuidelines } : {}),
     };
 
     console.log(

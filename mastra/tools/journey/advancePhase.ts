@@ -1,7 +1,6 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { createAuthenticatedClient } from '../../lib/supabase';
-import { resolveStyleBundleId } from '../../lib/resolveStyleBundleId';
 
 /**
  * EDGE CASE TOOL - Manually advance journey phase
@@ -108,7 +107,8 @@ Valid phases: select_entity, recommend, style, build_preview, refine`,
         // BUG 7 FIX: Resolve display name → canonical slug BEFORE storing.
         // Without this, raw display names like "Modern SaaS" get stored,
         // which later fuzzy-match to wrong themes (e.g. "neon-cyber").
-        resolvedStyleSlug = resolveStyleBundleId(selectedValue);
+        // Custom design system names stored as-is. No preset slug resolution needed.
+        resolvedStyleSlug = String(selectedValue).trim() || null;
         if (resolvedStyleSlug) {
           context?.requestContext?.set('selectedStyleBundleId', resolvedStyleSlug);
         } else {

@@ -10,7 +10,6 @@ import { createClient } from '@/lib/supabase/server';
 import { getMastraSingleton } from '@/mastra/singleton';
 import { ensureMastraThreadId } from '@/mastra/lib/ensureMastraThread';
 import { safeUuid } from "@/mastra/lib/safeUuid";
-import { resolveStyleBundleId } from '@/mastra/lib/resolveStyleBundleId';
 import { PhaseToolGatingProcessor } from '@/mastra/processors/phase-tool-gating';
 
 export const maxDuration = 300; // Fluid Compute + Hobby = 300s max
@@ -777,17 +776,17 @@ export async function POST(req: Request) {
           // "professional-clean", NOT display names like "Minimalism & Swiss Style".
           const clientStyle = clientData.selectedStyleBundleId;
           if (clientStyle && !sessionRow.selected_style_bundle_id) {
-            const resolvedSlug = resolveStyleBundleId(String(clientStyle));
-            if (resolvedSlug) {
+            // Custom design system names are stored as-is. No slug resolution needed.
+            // The DB constraint (20260222000002) allows any non-empty string.
+            const resolvedSlug = String(clientStyle).trim();
+            if (resolvedSlug.length > 0) {
               selectionUpdates.selected_style_bundle_id = resolvedSlug;
-              console.log('[api/chat] Resolved style bundle:', {
-                input: clientStyle,
-                resolved: resolvedSlug,
-              });
+              console.log('[api/chat] Style bundle selected:', resolvedSlug);
             } else {
-              console.warn('[api/chat] Could not resolve style bundle to valid slug:', clientStyle);
+              console.warn('[api/chat] Empty style bundle ID, skipping');
             }
           }
+
 
           if (Object.keys(selectionUpdates).length > 0) {
             selectionUpdates.updated_at = new Date().toISOString();
@@ -892,111 +891,11 @@ export async function POST(req: Request) {
           }
         }
 
-        // ─── DESIGN TOKEN OVERRIDE: Resolve preset style when user changed selection ───
-        // If user selected a named preset (e.g., "premium-dark") but DB still has old
-        // custom tokens, the preset needs to be resolved into actual tokens.
-        if (sessionRow?.selected_style_bundle_id === 'custom' && sessionRow?.design_tokens) {
-          const userMsgs = Array.isArray((params as any)?.messages)
-            ? (params as any).messages.filter((m: any) => m.role === 'user')
-            : [];
-          const lastUserMsg = userMsgs[userMsgs.length - 1];
-          let userText = '';
-          if (lastUserMsg?.parts && Array.isArray(lastUserMsg.parts)) {
-            userText = lastUserMsg.parts
-              .filter((p: any) => p.type === 'text')
-              .map((p: any) => p.text || '')
-              .join(' ')
-              .toLowerCase()
-              .trim();
-          } else if (typeof lastUserMsg?.content === 'string') {
-            userText = lastUserMsg.content.toLowerCase().trim();
-          }
-          const styleChangePatterns: Record<string, Record<string, string>> = {
-            'premium-dark': {
-              primary: '#A78BFA',
-              secondary: '#6366F1',
-              success: '#34D399',
-              warning: '#FBBF24',
-              error: '#F87171',
-              background: '#0F172A',
-              text: '#F1F5F9',
-              accent: '#818CF8',
-            },
-            'dark': {
-              primary: '#60A5FA',
-              secondary: '#94A3B8',
-              success: '#34D399',
-              warning: '#FBBF24',
-              error: '#F87171',
-              background: '#111827',
-              text: '#F9FAFB',
-              accent: '#818CF8',
-            },
-            'minimalist': {
-              primary: '#1F2937',
-              secondary: '#6B7280',
-              success: '#059669',
-              warning: '#D97706',
-              error: '#DC2626',
-              background: '#FFFFFF',
-              text: '#111827',
-              accent: '#4F46E5',
-            },
-            'corporate': {
-              primary: '#1E40AF',
-              secondary: '#475569',
-              success: '#15803D',
-              warning: '#B45309',
-              error: '#B91C1C',
-              background: '#F8FAFC',
-              text: '#0F172A',
-              accent: '#2563EB',
-            },
-          };
-          let detectedStyle: string | null = null;
-          for (const styleName of Object.keys(styleChangePatterns)) {
-            // Match both hyphenated and space-separated variants (case-insensitive)
-            const spaceVariant = styleName.replace(/-/g, ' ');
-            if (userText.includes(spaceVariant) || userText.includes(styleName)) {
-              detectedStyle = styleName;
-              break;
-            }
-          }
-          if (detectedStyle && styleChangePatterns[detectedStyle]) {
-            const newColors = styleChangePatterns[detectedStyle];
-            const currentColors = (sessionRow.design_tokens as any)?.colors || {};
-            if (currentColors.background !== newColors.background || currentColors.primary !== newColors.primary) {
-              console.log(`[api/chat] 🎨 Style override detected: "${detectedStyle}" — updating design tokens`);
-              const updatedTokens = {
-                ...(sessionRow.design_tokens as any),
-                style: {
-                  ...((sessionRow.design_tokens as any)?.style || {}),
-                  name: detectedStyle.split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
-                },
-                colors: {
-                  ...currentColors,
-                  ...newColors,
-                },
-              };
-              const { error: updateErr } = await supabase
-                .from('journey_sessions')
-                .update({ design_tokens: updatedTokens, updated_at: new Date().toISOString() })
-                .eq('id', sessionRow.id)
-                .eq('tenant_id', tenantId);
-              if (updateErr) {
-                console.error('[api/chat] Failed to update design tokens:', updateErr.message);
-              } else {
-                requestContext.set('designTokens', JSON.stringify(updatedTokens));
-                requestContext.set('selectedStyleBundleId', 'custom');
-                console.log('[api/chat] ✅ Design tokens updated for style:', detectedStyle, {
-                  primary: updatedTokens.colors?.primary,
-                  background: updatedTokens.colors?.background,
-                  rcOverwritten: true,
-                });
-              }
-            }
-          }
-        }
+        // Design tokens come exclusively from designSystemWorkflow.
+        // User style change requests are handled conversationally by the agent,
+        // which calls runDesignSystemWorkflow or delegateToDesignAdvisor to
+        // generate a NEW custom design system. No hardcoded overrides.
+
 
         // BUG FIX: Ensure interface exists for this journey session
         // This prevents "MISSING" interfaceId in downstream tools
