@@ -1305,12 +1305,7 @@ export async function POST(req: Request) {
             };
             return phaseMaxSteps[phase] || 5;
           })(),
-          // toolChoice is now managed per-phase per-step by PhaseToolGatingProcessor.
-          // See: mastra/processors/phase-tool-gating.ts → getPhaseToolChoice()
-          // Phase tool gating is handled by PhaseToolGatingProcessor (inputProcessor).
-          // It receives Mastra-wrapped tools and filters per phase — preserving
-          // RequestContext while enforcing hard execution-layer gating.
-          // See: mastra/processors/phase-tool-gating.ts
+          // toolChoice managed per-phase per-step by PhaseToolGatingProcessor
           inputProcessors: [
             new PhaseToolGatingProcessor(),
           ],
