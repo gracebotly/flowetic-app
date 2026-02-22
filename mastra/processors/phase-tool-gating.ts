@@ -66,6 +66,15 @@ const KNOWN_AGENT_TOOLS = new Set([
   'mastra_workspace_list_files',
   'mastra_workspace_file_stat',
   'mastra_workspace_search',
+  // Skill tools — gated by phase to prevent premature activation.
+  // Without this, skill-activate and skill-search pass through ungated
+  // (available in ALL phases), causing the agent to activate heavy skills
+  // like data-dashboard-intelligence during recommend phase → tool loops → timeout.
+  // FIX: Only allow skill tools in phases that actually need on-demand skill loading.
+  'skill-activate',
+  'skill-search',
+  // Workspace grep (also auto-injected, same pattern as above)
+  'mastra_workspace_grep',
 ]);
 
 /**

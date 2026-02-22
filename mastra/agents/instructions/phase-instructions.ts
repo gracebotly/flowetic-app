@@ -408,6 +408,10 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
     'getEventStats',
     'getOutcomes',
     'searchSkillKnowledge',
+    // skill-activate and skill-search intentionally OMITTED from recommend.
+    // These are gated in phase-tool-gating.ts. In recommend phase, the agent
+    // only needs to help the user choose Dashboard vs Product — no skill
+    // activation needed. Skills load in style/build_preview/interactive_edit.
     // BUG 4 FIX: advancePhase REMOVED from recommend phase.
     // Phase transitions are deterministic via autoAdvancePhase in onFinish.
     // autoAdvancePhase handles recommend → style when BOTH selected_outcome
@@ -449,6 +453,8 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
     'getColorRecommendations',
     'getIconRecommendations',
     'searchSkillKnowledge',
+    'skill-activate',
+    'skill-search',
     // getStyleBundles REMOVED — preset system deprecated in favour of custom tokens
     // NOTE: setSchemaReady intentionally omitted — /api/chat auto-sets schema_ready=true
     // when all selections (entities, outcome, style) are present. setSchemaReady is
@@ -479,6 +485,8 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
     'validatePreviewReadiness',
     'getEventStats',
     'searchSkillKnowledge',
+    'skill-activate',
+    'skill-search',
     // Design tools (for style adjustments during preview — user may say
     // "make this more premium" or "change to a dark theme" during build)
     'getStyleRecommendations',
@@ -519,6 +527,8 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
     'showInteractiveEditPanel',
     'delegateToDashboardBuilder',
     'searchSkillKnowledge',
+    'skill-activate',
+    'skill-search',
     // Design tools (for style adjustments during editing — user may request
     // color changes, font swaps, or chart type modifications)
     'getStyleRecommendations',

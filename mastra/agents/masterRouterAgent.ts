@@ -145,7 +145,11 @@ Use BM25 search tools (getStyleRecommendations, getTypographyRecommendations, et
       : "";
 
     // Load Data Dashboard Intelligence for phases that need component/mapping intelligence
-    const dashboardIntelPhases = ["recommend", "build_preview", "interactive_edit"];
+    // FIX: Remove "recommend" — dashboard component intelligence is not needed
+    // until build_preview. Loading 11K chars of component-mapping instructions
+    // in recommend phase wastes context and primes the agent to think about
+    // dashboard components before the user has even chosen Dashboard vs Product.
+    const dashboardIntelPhases = ["build_preview", "interactive_edit"];
     const shouldLoadDashboardIntel = dashboardIntelPhases.includes(phase || "");
     const dashboardIntelContent = shouldLoadDashboardIntel
       ? await getCachedSkillAsync("data-dashboard-intelligence")
