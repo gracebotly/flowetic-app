@@ -187,7 +187,9 @@ async function fetchN8nEvents(
         if (!Array.isArray(executions)) continue;
 
         for (const exec of executions) {
-          const isError = exec.stoppedAt || exec.status === "error";
+          // FIX: stoppedAt exists on ALL completed n8n executions (success AND error).
+          // Only exec.status reliably indicates failure. Never use stoppedAt for status.
+          const isError = exec.status === "error" || exec.status === "crashed";
           allEvents.push({
             // Raw event shape that normalizeEvents expects
             type: "workflow_execution",

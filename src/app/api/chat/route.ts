@@ -86,7 +86,7 @@ async function autoAdvancePhase(params: {
   let session = null;
   const { data: byThread } = await supabase
     .from('journey_sessions')
-    .select('id, mode, selected_entities, selected_outcome, selected_layout, selected_style_bundle_id, schema_ready, preview_interface_id, preview_version_id')
+    .select('id, mode, selected_entities, selected_outcome, selected_layout, selected_style_bundle_id, schema_ready, preview_interface_id, preview_version_id, wireframe_confirmed, style_confirmed')
     .eq('thread_id', journeyThreadId)
     .eq('tenant_id', tenantId)
     .maybeSingle();
@@ -96,7 +96,7 @@ async function autoAdvancePhase(params: {
   } else {
     const { data: byMastra } = await supabase
       .from('journey_sessions')
-      .select('id, mode, selected_entities, selected_outcome, selected_layout, selected_style_bundle_id, schema_ready, preview_interface_id, preview_version_id')
+      .select('id, mode, selected_entities, selected_outcome, selected_layout, selected_style_bundle_id, schema_ready, preview_interface_id, preview_version_id, wireframe_confirmed, style_confirmed')
       .eq('mastra_thread_id', mastraThreadId)
       .eq('tenant_id', tenantId)
       .maybeSingle();
@@ -125,17 +125,21 @@ async function autoAdvancePhase(params: {
       nextPhase = 'recommend';
     }
 
-  } else if (currentPhase === 'recommend' && session.selected_outcome) {
-    // PHASE 4 FIX: Remove wireframe_confirmed requirement
-    // Auto-advance immediately when outcome selected (CODE-DRIVEN)
-    // User selection = "dashboard" or "product" → advance to style phase
+  } else if (currentPhase === 'recommend' && session.selected_outcome && session.wireframe_confirmed) {
+    // Advance to style ONLY when both outcome is selected AND wireframe is confirmed.
+    // The wireframe step in recommend phase is mandatory — the agent must present a
+    // wireframe preview and the user must confirm it before moving to style.
+    // wireframe_confirmed is set by: (1) eager detection in route.ts when user says
+    // "looks good"/"yes" etc, or (2) client sends wireframeConfirmed=true via clientData.
     nextPhase = 'style';
-    console.log('[autoAdvancePhase] Code-driven advance: outcome selected → style');
+    console.log('[autoAdvancePhase] Code-driven advance: outcome + wireframe confirmed → style');
 
-  } else if (currentPhase === 'style' && session.selected_style_bundle_id) {
-    // PHASE 4 FIX: Single path, remove style_confirmed requirement
-    // Auto-advance when style bundle selected (CODE-DRIVEN)
-    // Auto-set schema_ready flag when advancing
+  } else if (currentPhase === 'style' && session.selected_style_bundle_id && session.style_confirmed) {
+    // Advance to build_preview ONLY when style bundle is selected AND user confirmed.
+    // The style phase is where the agent presents the custom design system and the user
+    // reviews/iterates. style_confirmed is set by: (1) eager detection in route.ts
+    // when user says "looks good"/"yes" etc, or (2) client sends styleConfirmed=true.
+    // Auto-set schema_ready flag when advancing.
 
     if (!session.schema_ready) {
       await supabase
@@ -147,7 +151,7 @@ async function autoAdvancePhase(params: {
     }
 
     nextPhase = 'build_preview';
-    console.log('[autoAdvancePhase] Code-driven advance: style selected → build_preview');
+    console.log('[autoAdvancePhase] Code-driven advance: style confirmed → build_preview');
 
   } else if (currentPhase === 'build_preview' && session.preview_interface_id && session.preview_version_id) {
     // PHASE 4 FIX: Add missing transition to interactive_edit
@@ -161,7 +165,9 @@ async function autoAdvancePhase(params: {
       currentPhase,
       hasEntities: !!session.selected_entities,
       hasOutcome: !!session.selected_outcome,
+      wireframeConfirmed: !!session.wireframe_confirmed,
       hasStyle: !!session.selected_style_bundle_id,
+      styleConfirmed: !!session.style_confirmed,
       schemaReady: session.schema_ready,
       hasPreview: !!(session.preview_interface_id && session.preview_version_id),
     });

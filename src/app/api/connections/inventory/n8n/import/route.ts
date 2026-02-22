@@ -165,8 +165,9 @@ export async function POST(req: Request) {
         const executions = execData.data || execData || [];
 
         executionStats.total = executions.length;
-        executionStats.success = executions.filter((e: any) => e.finished && !e.stoppedAt).length;
-        executionStats.failed = executions.filter((e: any) => e.stoppedAt || e.status === 'error').length;
+        // FIX: stoppedAt exists on ALL completed n8n executions. Use exec.status only.
+        executionStats.success = executions.filter((e: any) => e.status === 'success').length;
+        executionStats.failed = executions.filter((e: any) => e.status === 'error' || e.status === 'crashed').length;
 
         if (executions.length > 0) {
           executionStats.lastRun = executions[0].startedAt || executions[0].createdAt;
@@ -174,7 +175,7 @@ export async function POST(req: Request) {
 
         recentExecutions = executions.slice(0, 5).map((e: any) => ({
           id: String(e.id),
-          status: e.stoppedAt || e.status === 'error' ? 'error' : 'success',
+          status: e.status === 'error' || e.status === 'crashed' ? 'error' : 'success',
           startedAt: e.startedAt || e.createdAt,
           duration: e.stoppedAt && e.startedAt
             ? new Date(e.stoppedAt).getTime() - new Date(e.startedAt).getTime()
@@ -189,12 +190,12 @@ export async function POST(req: Request) {
             source_id: sourceId,
             type: 'workflow_execution',
             name: `n8n:${wf.name || wfId}:execution`,
-            value: exec.stoppedAt ? 0 : 1, // 1 = success, 0 = failure
+            value: (exec.status === 'error' || exec.status === 'crashed') ? 0 : 1, // 1 = success, 0 = failure
             labels: {
               workflow_id: wfId,
               workflow_name: wf.name,
               execution_id: exec.id,
-              status: exec.stoppedAt ? 'error' : 'success',
+              status: (exec.status === 'error' || exec.status === 'crashed') ? 'error' : 'success',
             },
             timestamp: exec.startedAt || exec.createdAt || now,
             created_at: now,
