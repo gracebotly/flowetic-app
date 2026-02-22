@@ -402,43 +402,23 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
   ],
 
   recommend: [
-    // NOTE: recommendOutcome REMOVED — outcome selection is now deterministic.
-    // Code in route.ts detects "dashboard" / "product" from user message and
-    // writes selected_outcome to DB. Agent only presents the choice conversationally.
+    // Core recommend tools — agent needs these to present outcome choices
     'getEventStats',
     'getOutcomes',
     'searchSkillKnowledge',
-    // skill-activate and skill-search intentionally OMITTED from recommend.
-    // These are gated in phase-tool-gating.ts. In recommend phase, the agent
-    // only needs to help the user choose Dashboard vs Product — no skill
-    // activation needed. Skills load in style/build_preview/interactive_edit.
-    // BUG 4 FIX: advancePhase REMOVED from recommend phase.
-    // Phase transitions are deterministic via autoAdvancePhase in onFinish.
-    // autoAdvancePhase handles recommend → style when BOTH selected_outcome
-    // AND wireframe_confirmed are true. The agent must NOT manually advance
-    // phases during recommend — this was the root cause of Bug 4 where the
-    // agent bypassed the wireframe confirmation gate.
-    // See also: AI SDK Issue #8653 — activeTools filtering doesn't prevent
-    // tool execution from conversation memory, making allowlist removal
-    // insufficient alone (tool-level validation in advancePhase.ts is primary defense).
-    // BUG 9 FIX: suggestAction REMOVED from recommend phase.
-    // The "Generate Dashboard Preview" button was appearing after wireframe
-    // because suggestAction was in the allowlist. Preview generation should
-    // ONLY happen in build_preview phase. Removing this prevents premature
-    // preview button display.
-    // Phase transitions are deterministic via autoAdvancePhase in onFinish.
-    // Utility
+    // Navigation only — no utility tools
     'navigateTo',
-    // 'suggestAction', ← REMOVED (Bug 9 fix)
-    'todoAdd',
-    'todoList',
-    'todoUpdate',
-    'todoComplete',
-    // Workspace tools (read-only filesystem + BM25 skill search)
-    'mastra_workspace_read_file',
-    'mastra_workspace_list_files',
-    'mastra_workspace_file_stat',
-    'mastra_workspace_search',
+    // REMOVED: todoAdd, todoList, todoUpdate, todoComplete
+    //   → Agent was burning steps on irrelevant todo housekeeping after
+    //     getOutcomes returned, causing 300s Vercel timeout. Todo tools
+    //     serve no purpose in recommend phase (no tasks to track yet).
+    // REMOVED: mastra_workspace_read_file, mastra_workspace_list_files,
+    //   mastra_workspace_file_stat, mastra_workspace_search
+    //   → Agent was calling workspace tools after getting confused by
+    //     getEventStats validation failure. Workspace read is not needed
+    //     in recommend — the agent only needs to present Dashboard vs Product.
+    // REMOVED: suggestAction (Bug 9 fix — still removed)
+    // REMOVED: advancePhase (Bug 4 fix — still removed)
   ],
 
   style: [

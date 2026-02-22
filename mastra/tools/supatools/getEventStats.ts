@@ -5,7 +5,9 @@ import { createAuthenticatedClient } from '../../lib/supabase';
 import { z } from 'zod';
 
 const inputSchema = z.object({
-  sourceId: z.string().uuid().optional(),
+  sourceId: z.string().optional().describe(
+    'Source UUID. If the agent sends a non-UUID (e.g. entity name), the tool will fall back to RequestContext sourceId.'
+  ),
   sinceDays: z.number().int().min(1).max(365).default(30),
 });
 
@@ -51,8 +53,27 @@ export const getEventStats = createSupaTool<z.infer<typeof outputSchema>>({
     }
 
     
-// ✅ FIX: Fall back to RequestContext sourceId if not provided
-    const sourceId = input.sourceId || (context.requestContext?.get('sourceId') as string | undefined);
+    // ✅ FIX: Fall back to RequestContext sourceId if agent sends non-UUID or nothing
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    let sourceId = input.sourceId;
+
+    // Case 1: Agent sent nothing → use RequestContext
+    // Case 2: Agent sent non-UUID string (entity name) → override with RequestContext
+    if (!sourceId || !UUID_RE.test(sourceId)) {
+      const ctxSourceId = context.requestContext?.get('sourceId') as string | undefined;
+      if (ctxSourceId && UUID_RE.test(ctxSourceId)) {
+        console.log(
+          `[getEventStats] Agent sent non-UUID sourceId "${sourceId ?? '(empty)'}", falling back to RequestContext: ${ctxSourceId}`
+        );
+        sourceId = ctxSourceId;
+      } else if (sourceId && !UUID_RE.test(sourceId)) {
+        // Agent sent garbage AND no valid RequestContext — skip source filter entirely
+        console.warn(
+          `[getEventStats] Agent sent non-UUID "${sourceId}" and no valid sourceId in RequestContext. Querying without source filter.`
+        );
+        sourceId = undefined;
+      }
+    }
 
     const { sinceDays } = input;
 

@@ -23,31 +23,51 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   return Promise.race([promise.finally(() => clearTimeout(t)), timeout]);
 }
 
-// ─── DEDUPLICATE OPENAI ITEM IDs ────────────────────────────────────────────
-// OpenAI Responses API rejects requests containing duplicate itemIds.
-// Mastra memory replays full conversation history, including providerMetadata
-// with itemIds. When the LLM makes repeated tool calls in one stream, the same
-// fc_ itemId can appear in multiple assistant message parts.
-// This filter keeps only the first occurrence of each itemId.
-// See: https://community.openai.com/t/1373703, https://github.com/vercel/ai/issues/7883
-function deduplicateProviderItemIds(messages: any[]): any[] {
-  const seenItemIds = new Set<string>();
+// ─── STRIP OPENAI PROVIDER METADATA FROM HISTORY ────────────────────────────
+// OpenAI Responses API rejects requests containing itemIds it has already seen
+// from its own previous responses. When chat history replays assistant messages
+// that contain callProviderMetadata.openai.itemId (from tool calls like
+// delegateToPlatformMapper) or providerMetadata.openai.itemId (from text parts),
+// OpenAI treats them as duplicate items and returns a 400 error.
+//
+// The fix: strip ALL providerMetadata and callProviderMetadata from ALL
+// historical assistant message parts. These are provider-internal tracking
+// fields that must not be replayed. The content (text, tool results) is kept
+// intact — only the metadata wrappers are removed.
+//
+// Root cause: delegateToPlatformMapper invokes platformMappingMaster.generate()
+// which returns an OpenAI fc_ function call ID. This ID gets stored in the
+// tool-result part's callProviderMetadata. On the next request, replaying it
+// collides with OpenAI's internal state from the previous response.
+//
+// See: https://community.openai.com/t/1373703
+// See: https://github.com/vercel/ai/issues/7883
+function stripProviderMetadataFromHistory(messages: any[]): any[] {
   return messages.map((msg: any) => {
-    if (msg.role !== 'assistant' || !Array.isArray(msg.parts)) return msg;
-    const filteredParts = msg.parts.filter((part: any) => {
-      // Check both providerMetadata and callProviderMetadata for itemId
-      const itemId =
-        part?.providerMetadata?.openai?.itemId ??
-        part?.callProviderMetadata?.openai?.itemId;
-      if (!itemId) return true; // No itemId → keep the part
-      if (seenItemIds.has(itemId)) {
-        console.log(`[deduplicateProviderItemIds] Dropping duplicate itemId: ${itemId.substring(0, 20)}...`);
-        return false; // Duplicate → drop
+    if (msg.role !== 'assistant' || !Array.isArray(msg.parts)) {
+      // Also strip from non-assistant messages if present (belt and suspenders)
+      if (msg.providerMetadata) {
+        const { providerMetadata, ...rest } = msg;
+        return rest;
       }
-      seenItemIds.add(itemId);
-      return true; // First occurrence → keep
+      return msg;
+    }
+
+    const cleanedParts = msg.parts.map((part: any) => {
+      // Create a shallow copy and remove metadata fields
+      const cleaned = { ...part };
+      if (cleaned.callProviderMetadata) {
+        delete cleaned.callProviderMetadata;
+      }
+      if (cleaned.providerMetadata) {
+        delete cleaned.providerMetadata;
+      }
+      return cleaned;
     });
-    return { ...msg, parts: filteredParts };
+
+    // Also strip message-level providerMetadata
+    const { providerMetadata, ...msgRest } = msg;
+    return { ...msgRest, parts: cleanedParts };
   });
 }
 
@@ -718,6 +738,15 @@ export async function POST(req: Request) {
             }
           }
 
+          // BUG 3 FIX: Also persist sourceId so getEventStats can resolve UUIDs.
+          // The agent receives entity display names from the client but getEventStats
+          // needs the source UUID. By storing source_id in the session, route.ts
+          // loads it into RequestContext on every request, and getEventStats already
+          // falls back to context.requestContext.get('sourceId').
+          if (clientData.sourceId && !sessionRow?.source_id) {
+            selectionUpdates.source_id = clientData.sourceId;
+          }
+
           // Outcome: client sends selectedOutcome after clicking outcome card
           const clientOutcome = clientData.selectedOutcome;
           if (clientOutcome && !sessionRow.selected_outcome) {
@@ -806,6 +835,10 @@ export async function POST(req: Request) {
         if (sessionRow?.selected_entities) {
           requestContext.set('selectedEntities', sessionRow.selected_entities);
           console.log('[api/chat] Loaded selectedEntities from DB:', sessionRow.selected_entities);
+        }
+        if (sessionRow?.source_id) {
+          requestContext.set('sourceId', sessionRow.source_id);
+          console.log('[api/chat] Loaded sourceId from DB:', sessionRow.source_id);
         }
         // Load selected outcome from DB into RequestContext
         if (sessionRow?.selected_outcome) {
@@ -1251,7 +1284,7 @@ export async function POST(req: Request) {
     // Deduplicate OpenAI itemIds in message history before sending to agent.
     // This prevents "Duplicate item found with id fc_..." crash from OpenAI Responses API.
     const dedupedMessages = Array.isArray(rawMessages)
-      ? deduplicateProviderItemIds(rawMessages)
+      ? stripProviderMetadataFromHistory(rawMessages)
       : rawMessages;
     const enhancedParams = {
       ...params,
@@ -1297,7 +1330,7 @@ export async function POST(req: Request) {
             const phase = requestContext.get('phase') as string || 'select_entity';
             const phaseMaxSteps: Record<string, number> = {
               select_entity: 3,
-              recommend: 4,
+              recommend: 3,  // Was 4 — reduced to prevent 300s timeout. Recommend only needs: step0=getEventStats+getOutcomes, step1=synthesize, step2=safety-valve-text
               style: 5,
               build_preview: 8,
               interactive_edit: 10,

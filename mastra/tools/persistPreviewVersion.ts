@@ -137,6 +137,27 @@ export const persistPreviewVersion = createTool({
           });
         }
       }
+      // BUG 6 FIX: Set active_version_id on the interface record.
+      // Without this, interfaces.active_version_id stays null even though a valid
+      // version exists. This blocks publish flow and any API checking active_version_id.
+      if (finalInterfaceId && rpcResult.version_id) {
+        const { error: ifaceUpdateErr } = await supabase
+          .from('interfaces')
+          .update({
+            active_version_id: rpcResult.version_id,
+            status: 'draft', // Keep as draft until explicit publish
+          })
+          .eq('id', finalInterfaceId)
+          .eq('tenant_id', tenantId);
+        if (ifaceUpdateErr) {
+          console.warn('[persistPreviewVersion] Failed to set active_version_id:', ifaceUpdateErr.message);
+        } else {
+          console.log('[persistPreviewVersion] ✅ Set active_version_id on interface:', {
+            interfaceId: finalInterfaceId,
+            activeVersionId: rpcResult.version_id,
+          });
+        }
+      }
       // NOTE: Event backfill removed — the auto_link_event_interface trigger
       // (migration 20260215130000) handles interface_id assignment at INSERT time.
       // Verified: 0/67 events have interface_id IS NULL (2025-02-20).
@@ -228,6 +249,26 @@ export const persistPreviewVersion = createTool({
           journeyThreadId: journeyThreadIdFallback,
           previewInterfaceId: finalInterfaceId,
           previewVersionId: version.id,
+        });
+      }
+    }
+
+    // BUG 6 FIX (fallback path): Set active_version_id on the interface record.
+    if (finalInterfaceId && version?.id) {
+      const { error: ifaceUpdateErr } = await supabase
+        .from('interfaces')
+        .update({
+          active_version_id: version.id,
+          status: 'draft',
+        })
+        .eq('id', finalInterfaceId)
+        .eq('tenant_id', tenantId);
+      if (ifaceUpdateErr) {
+        console.warn('[persistPreviewVersion] Failed to set active_version_id (fallback):', ifaceUpdateErr.message);
+      } else {
+        console.log('[persistPreviewVersion] ✅ Set active_version_id on interface (fallback):', {
+          interfaceId: finalInterfaceId,
+          activeVersionId: version.id,
         });
       }
     }
