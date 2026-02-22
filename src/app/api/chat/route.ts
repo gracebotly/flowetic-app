@@ -979,6 +979,8 @@ export async function POST(req: Request) {
 
     // PHASE VERIFICATION: Log final phase value before agent execution
     const finalPhase = requestContext.get('phase') as string;
+    // Store for streaming to client as message metadata
+    const serverResolvedPhase = finalPhase;
     console.log('[api/chat] Final RequestContext phase before agent:', {
       phase: finalPhase,
       tenantId: tenantId.substring(0, 8) + '...',
@@ -1039,7 +1041,12 @@ export async function POST(req: Request) {
         // FIX (Bug 1): Use createUIMessageStreamResponse for proper headers.
         // The manual Response construction with 'X-Vercel-AI-Data-Stream' header was incorrect.
         // AI SDK v5 requires specific header: 'x-vercel-ai-ui-message-stream: v1'
-        return createUIMessageStreamResponse({ stream: deterministicStream });
+        return createUIMessageStreamResponse({
+          stream: deterministicStream,
+          messageMetadata: () => ({
+            serverPhase: serverResolvedPhase,
+          }),
+        });
       }
       // If handleDeterministicSelectEntity returned null, fall through to normal agent
       console.log('[api/chat] Deterministic bypass returned null, falling through to agent');
@@ -1292,7 +1299,12 @@ export async function POST(req: Request) {
       "api_chat_stream"
     );
 
-    return createUIMessageStreamResponse({ stream });
+    return createUIMessageStreamResponse({
+      stream,
+      messageMetadata: () => ({
+        serverPhase: serverResolvedPhase,
+      }),
+    });
     
   } catch (error: any) {
     console.error('[api/chat] Unexpected error:', error);

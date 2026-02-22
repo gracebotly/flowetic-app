@@ -214,22 +214,98 @@ export function ChatWorkspace({
         journeyThreadId: threadIdRef.current,
       }),
     }),
-    onFinish: ({ message }) => {
-      // AI SDK v5: Find the LAST advancePhase tool part (most recent phase wins)
-      if (!message.parts) return;
+    onFinish: async ({ message }) => {
+      // ──────────────────────────────────────────────────────────────
+      // PHASE SYNC: Read authoritative phase from server after each response
+      // ──────────────────────────────────────────────────────────────
 
-      const lastPhaseUpdate = [...(message.parts as any[])]
-        .reverse()
-        .find((part) =>
-          part?.type === 'tool-advancePhase' &&
-          part?.state === 'output-available' &&
-          part?.output?.success &&
-          !!part?.output?.currentPhase
-        );
+      const serverPhase = (message as any).metadata?.serverPhase;
+      if (serverPhase && serverPhase !== journeyModeRef.current) {
+        console.log('[onFinish] Phase sync from metadata:', { from: journeyModeRef.current, to: serverPhase });
+        setJourneyMode(serverPhase as JourneyMode);
+      }
 
-      if (lastPhaseUpdate) {
-        console.log('[onFinish] Phase update (v5):', lastPhaseUpdate.output.currentPhase);
-        setJourneyMode(lastPhaseUpdate.output.currentPhase);
+      if (message.parts) {
+        const lastPhaseUpdate = [...(message.parts as any[])]
+          .reverse()
+          .find((part) =>
+            part?.type === 'tool-advancePhase' &&
+            part?.state === 'output-available' &&
+            part?.output?.success
+          );
+
+        if (lastPhaseUpdate) {
+          const newPhase = (lastPhaseUpdate as any).output.currentPhase || (lastPhaseUpdate as any).output.newPhase;
+          if (newPhase && newPhase !== journeyModeRef.current) {
+            console.log('[onFinish] Phase sync from advancePhase tool:', { from: journeyModeRef.current, to: newPhase });
+            setJourneyMode(newPhase as JourneyMode);
+          }
+        }
+      }
+
+      if (message.parts) {
+        const lastPreviewSave = [...(message.parts as any[])]
+          .reverse()
+          .find((part) =>
+            part?.type === 'tool-savePreviewVersion' &&
+            part?.state === 'output-available' &&
+            (part as any).output?.success
+          );
+
+        if (lastPreviewSave) {
+          const output = (lastPreviewSave as any).output;
+          if (output?.previewUrl) {
+            console.log('[onFinish] Preview saved → advancing to interactive_edit');
+            setJourneyMode('interactive_edit');
+
+            const url = String(output.previewUrl);
+            const UUID_RE = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+            const match = url.match(new RegExp(`/preview/(${UUID_RE})/(${UUID_RE})`, 'i'));
+            if (match) {
+              setVibeContext((prev) => prev ? {
+                ...prev,
+                previewUrl: match[0],
+                interfaceId: match[1],
+                previewVersionId: match[2],
+              } : prev);
+            }
+          }
+        }
+      }
+
+      if (!serverPhase) {
+        try {
+          const tid = threadIdRef.current;
+          const tenantId = authContextRef.current?.tenantId;
+          if (tid && tenantId) {
+            const res = await fetch(
+              `/api/journey-sessions/phase?tenantId=${encodeURIComponent(tenantId)}&threadId=${encodeURIComponent(tid)}`
+            );
+            if (res.ok) {
+              const json = await res.json();
+              if (json.phase && json.phase !== journeyModeRef.current) {
+                console.log('[onFinish] Phase sync from DB poll:', { from: journeyModeRef.current, to: json.phase });
+                setJourneyMode(json.phase as JourneyMode);
+
+                if (json.phase === 'interactive_edit' && json.previewUrl) {
+                  const url = String(json.previewUrl);
+                  const UUID_RE = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+                  const match = url.match(new RegExp(`/preview/(${UUID_RE})/(${UUID_RE})`, 'i'));
+                  if (match) {
+                    setVibeContext((prev) => prev ? {
+                      ...prev,
+                      previewUrl: match[0],
+                      interfaceId: match[1],
+                      previewVersionId: match[2],
+                    } : prev);
+                  }
+                }
+              }
+            }
+          }
+        } catch (pollErr) {
+          console.warn('[onFinish] Phase poll failed (non-fatal):', pollErr);
+        }
       }
     },
   });
@@ -438,10 +514,11 @@ export function ChatWorkspace({
       displayName: vibeContext?.displayName,
       entityKind: vibeContext?.entityKind,
       skillMD: vibeContext?.skillMD,
-      // Journey state
-      phase: journeyMode,
-      selectedOutcome,
-      selectedStyleBundleId,
+      // Journey state — USE REFS to avoid stale closures
+      // See: https://ai-sdk.dev/docs/troubleshooting/use-chat-stale-body-data
+      phase: journeyModeRef.current,
+      selectedOutcome: selectedOutcomeRef.current,
+      selectedStyleBundleId: selectedStyleBundleIdRef.current,
       densityPreset,
       paletteOverrideId,
       ...extraData,
@@ -662,6 +739,13 @@ export function ChatWorkspace({
   const [selectedOutcome, setSelectedOutcome] = useState<"dashboard" | "product" | null>(null);
   const [selectedStyleBundleId, setSelectedStyleBundleId] = useState<string | null>(null);
   const [densityPreset, setDensityPreset] = useState<"compact" | "comfortable" | "spacious">("comfortable");
+
+  const journeyModeRef = useRef(journeyMode);
+  useEffect(() => { journeyModeRef.current = journeyMode; }, [journeyMode]);
+  const selectedOutcomeRef = useRef(selectedOutcome);
+  useEffect(() => { selectedOutcomeRef.current = selectedOutcome; }, [selectedOutcome]);
+  const selectedStyleBundleIdRef = useRef(selectedStyleBundleId);
+  useEffect(() => { selectedStyleBundleIdRef.current = selectedStyleBundleId; }, [selectedStyleBundleId]);
   const [paletteOverrideId, setPaletteOverrideId] = useState<string | null>(null);
 
   // Interactive editor state
@@ -1445,9 +1529,11 @@ return (
                                     const category = categoryMap[id] || (id.includes("product") ? "product" : "dashboard");
 
                                     setSelectedOutcome(category);
-                                    setJourneyMode("style");
-                                    // FIX: Pass category explicitly to avoid stale closure (AI SDK docs)
-                                    // https://ai-sdk.dev/docs/troubleshooting/use-chat-stale-body-data
+                                    // DO NOT eagerly set journeyMode here.
+                                    // The server's autoAdvancePhase determines the correct next phase
+                                    // (it may be 'recommend' still if wireframe is needed, or 'style').
+                                    // Phase will sync via onFinish DB poll.
+                                    // setJourneyMode("style"); // REMOVED — causes desync
                                     await sendAi(`I selected ${id}`, {
                                       selectedOutcome: category,
                                     });
