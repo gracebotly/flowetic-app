@@ -11,6 +11,9 @@ const designSystemInputSchema = z.object({
   selectedEntities: z.string().optional(),
   tenantId: z.string().uuid(),
   userId: z.string().uuid(),
+  // Variety parameters — enable regeneration with different results
+  userFeedback: z.string().optional().describe("User's style preference or rejection reason, appended to BM25 query for better matching"),
+  excludeStyleNames: z.array(z.string()).optional().describe("Style names to exclude from results (e.g. previously rejected styles)"),
 });
 const designSystemOutputSchema = z.object({
   designSystem: z.object({
@@ -70,14 +73,24 @@ const gatherDesignData = createStep({
     selectedEntities: z.string().optional(),
     tenantId: z.string().uuid(),
     userId: z.string().uuid(),
+    userFeedback: z.string().optional(),
+    excludeStyleNames: z.array(z.string()).optional(),
   }),
   execute: async ({ inputData }) => {
-    const query = [
+    // Build BM25 query: base context + user feedback for variety
+    const queryParts = [
       inputData.workflowName,
       inputData.platformType,
       inputData.selectedOutcome,
-    ].filter(Boolean).join(" ");
-    console.log(`[designSystemWorkflow:gather] BM25 query: "${query}"`);
+    ];
+    // Append user feedback to BM25 query for regeneration variety.
+    // Keywords like "darker", "premium", "minimal" shift BM25 ranking
+    // to surface different styles/colors than the initial generation.
+    if (inputData.userFeedback) {
+      queryParts.push(inputData.userFeedback);
+    }
+    const query = queryParts.filter(Boolean).join(" ");
+    console.log(`[designSystemWorkflow:gather] BM25 query: "${query}"${inputData.excludeStyleNames?.length ? ` (excluding: ${inputData.excludeStyleNames.join(', ')})` : ''}`);
     // Load all CSVs
     const [styleRows, colorRows, typographyRows, chartRows, uxRows, productRows] =
       await Promise.all([
@@ -88,16 +101,26 @@ const gatherDesignData = createStep({
         loadUIUXCSV("ux"),
         loadUIUXCSV("product"),
       ]);
+    // Request extra results when excluding, so we still have enough after filtering
+    const extraLimit = inputData.excludeStyleNames?.length || 0;
     // BM25 rank all domains in parallel
-    const [styleResults, colorResults, typographyResults, chartResults, uxResults, productResults] =
+    const [rawStyleResults, rawColorResults, typographyResults, chartResults, uxResults, productResults] =
       await Promise.all([
-        rankRowsByQuery({ rows: styleRows, query, limit: 3, domain: 'style' }),
-        rankRowsByQuery({ rows: colorRows, query, limit: 3, domain: 'color' }),
+        rankRowsByQuery({ rows: styleRows, query, limit: 3 + extraLimit, domain: 'style' }),
+        rankRowsByQuery({ rows: colorRows, query, limit: 3 + extraLimit, domain: 'color' }),
         rankRowsByQuery({ rows: typographyRows, query, limit: 3, domain: 'typography' }),
         rankRowsByQuery({ rows: chartRows, query, limit: 3, domain: 'chart' }),
         rankRowsByQuery({ rows: uxRows, query, limit: 5, domain: 'ux' }),
         rankRowsByQuery({ rows: productRows, query, limit: 2, domain: 'product' }),
       ]);
+    // Filter out excluded styles/colors by name to ensure regeneration produces different results
+    const excludeSet = new Set((inputData.excludeStyleNames || []).map((n: string) => n.toLowerCase()));
+    const styleResults = excludeSet.size > 0
+      ? rawStyleResults.filter((r: Record<string, string>) => !excludeSet.has((r["Style Category"] || r["style_category"] || "").toLowerCase())).slice(0, 3)
+      : rawStyleResults.slice(0, 3);
+    const colorResults = excludeSet.size > 0
+      ? rawColorResults.filter((r: Record<string, string>) => !excludeSet.has((r["palette_name"] || r["Palette Name"] || "").toLowerCase())).slice(0, 3)
+      : rawColorResults.slice(0, 3);
     console.log(`[designSystemWorkflow:gather] Results: style=${styleResults.length}, color=${colorResults.length}, typography=${typographyResults.length}, chart=${chartResults.length}, ux=${uxResults.length}, product=${productResults.length}`);
     return {
       styleResults,
@@ -112,6 +135,8 @@ const gatherDesignData = createStep({
       selectedEntities: inputData.selectedEntities,
       tenantId: inputData.tenantId,
       userId: inputData.userId,
+      userFeedback: inputData.userFeedback,
+      excludeStyleNames: inputData.excludeStyleNames,
     };
   },
 });
@@ -131,6 +156,8 @@ const synthesizeDesignSystem = createStep({
     selectedEntities: z.string().optional(),
     tenantId: z.string().uuid(),
     userId: z.string().uuid(),
+    userFeedback: z.string().optional(),
+    excludeStyleNames: z.array(z.string()).optional(),
   }),
   outputSchema: designSystemOutputSchema,
   execute: async ({ inputData, mastra }) => {
@@ -177,8 +204,27 @@ const synthesizeDesignSystem = createStep({
         skillActivated: true,
       };
     }
+    // Build context-aware prompt with variety hints
+    const userFeedbackSection = inputData.userFeedback
+      ? [
+          ``,
+          `## USER PREFERENCE (IMPORTANT — prioritize this)`,
+          `The user said: "${inputData.userFeedback}"`,
+          `Select options that match this preference. If they asked for "darker", pick dark palettes. If "minimal", pick clean styles.`,
+        ]
+      : [];
+    const exclusionSection = inputData.excludeStyleNames?.length
+      ? [
+          ``,
+          `## EXCLUDED (already rejected by user — do NOT pick these)`,
+          ...inputData.excludeStyleNames.map(n => `- "${n}"`),
+          `Pick something DIFFERENT from the excluded items.`,
+        ]
+      : [];
     const prompt = [
       `You are selecting the BEST design system for a "${workflowName}" dashboard (${platformType}).`,
+      ...userFeedbackSection,
+      ...exclusionSection,
       ``,
       `## AVAILABLE DATA FROM CSV SEARCH (use ONLY these values)`,
       ``,

@@ -283,10 +283,27 @@ const generateUISpecStep = createStep({
         mappings: mappings,
         platformType,
         selectedStyleBundleId,
+        chartRecommendations: (() => {
+          const dtJson = requestContext.get('designTokens') as string;
+          if (dtJson) {
+            try { return JSON.parse(dtJson).charts; } catch { return undefined; }
+          }
+          return undefined;
+        })(),
+        entityName: (() => {
+          const entitiesJson = requestContext.get('selectedEntities') as string;
+          if (entitiesJson) {
+            try {
+              const parsed = JSON.parse(entitiesJson);
+              return parsed?.[0]?.display_name || parsed?.[0]?.name;
+            } catch { return undefined; }
+          }
+          return undefined;
+        })(),
       },
       { requestContext }
     );
-    
+
     return result;
   },
 });

@@ -4,7 +4,7 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { persistPreviewVersion } from "../persistPreviewVersion";
 import { extractTenantContext } from "../../lib/tenant-verification";
-import { STYLE_BUNDLE_TOKENS, resolveStyleBundleId } from "../generateUISpec";
+import { STYLE_BUNDLE_TOKENS } from "../generateUISpec";
 import { InterfaceContextSchema } from "../../lib/REQUEST_CONTEXT_CONTRACT";
 
 /**
@@ -119,19 +119,9 @@ export const savePreviewVersion = createTool({
         };
       }
     } else {
-      // Preset fallback — apply canonical tokens (legacy sessions only)
-      const resolvedStyleBundleId = resolveStyleBundleId(spec_json.styleBundleId || 'professional-clean');
-      const canonical = STYLE_BUNDLE_TOKENS[resolvedStyleBundleId];
-      if (canonical) {
-        design_tokens = {
-          colors: canonical.colors,
-          fonts: canonical.fonts,
-          spacing: canonical.spacing,
-          radius: canonical.radius,
-          shadow: canonical.shadow,
-        };
-        console.log(`[savePreviewVersion] Preset path: "${resolvedStyleBundleId}" tokens`);
-      }
+      // NO PRESET FALLBACK. STYLE_BUNDLE_TOKENS is empty.
+      // Custom tokens are required. If missing primary, that's a bug upstream.
+      console.error('[savePreviewVersion] ❌ No custom tokens and no presets. This should not happen.');
     }
     // ============================================================================
 

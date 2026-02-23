@@ -438,6 +438,206 @@ async function handleDeterministicRecommendOutcome(params: {
   return { outcome, confidence };
 }
 
+// ─── DETERMINISTIC STYLE GENERATION BYPASS ───────────────────────────────────
+// Fixes Failure 1 (agent doesn't auto-generate on style entry) and
+// Failure 5 (agent writes prose instead of calling tools).
+//
+// Pattern: identical to handleDeterministicSelectEntity.
+// On the FIRST style-phase message when no design_tokens exist in DB,
+// bypass the agent entirely and call designSystemWorkflow directly.
+// Stream a formatted design system presentation to the user.
+//
+// Subsequent style messages (refinement, rejection) go through the normal
+// agent loop, which can call runDesignSystemWorkflow or delegateToDesignAdvisor
+// with variety parameters.
+async function handleDeterministicStyleGeneration(params: {
+  mastra: any;
+  supabase: any;
+  tenantId: string;
+  userId: string;
+  journeyThreadId: string;
+  mastraThreadId: string;
+  workflowName: string;
+  platformType: string;
+  selectedOutcome: string;
+  selectedEntities: string;
+  requestContext: RequestContext;
+}): Promise<ReadableStream | null> {
+  const {
+    mastra, supabase, tenantId, userId, journeyThreadId,
+    workflowName, platformType, selectedOutcome, selectedEntities,
+    requestContext,
+  } = params;
+
+  const startTime = Date.now();
+  try {
+    const workflow = mastra.getWorkflow("designSystemWorkflow");
+    if (!workflow) {
+      console.log('[deterministic-style] Workflow not found, falling back to agent');
+      return null;
+    }
+
+    const run = await workflow.createRun();
+    const result = await run.start({
+      inputData: {
+        workflowName: workflowName || 'Dashboard',
+        platformType: platformType || 'other',
+        selectedOutcome: selectedOutcome || 'dashboard',
+        selectedEntities: selectedEntities || '',
+        tenantId,
+        userId,
+      },
+      requestContext,
+    });
+
+    const elapsed = Date.now() - startTime;
+    console.log(`[deterministic-style] Workflow completed in ${elapsed}ms, status: ${result.status}`);
+
+    if (result.status !== "success" || !result.result) {
+      console.log('[deterministic-style] Workflow failed, falling back to agent');
+      return null;
+    }
+
+    const data = result.result as any;
+    const designSystem = data.designSystem;
+    if (!designSystem) {
+      console.log('[deterministic-style] No design system returned, falling back to agent');
+      return null;
+    }
+
+    // Normalize tokens (same logic as runDesignSystemWorkflow.ts)
+    const normalizedTokens = {
+      ...designSystem,
+      fonts: {
+        heading: designSystem.fonts?.heading
+          || (designSystem.typography?.headingFont
+            ? designSystem.typography.headingFont + (designSystem.typography.headingFont.includes(',') ? '' : ', sans-serif')
+            : 'Inter, sans-serif'),
+        body: designSystem.fonts?.body
+          || (designSystem.typography?.bodyFont
+            ? designSystem.typography.bodyFont + (designSystem.typography.bodyFont.includes(',') ? '' : ', sans-serif')
+            : 'Inter, sans-serif'),
+        googleFontsUrl: designSystem.fonts?.googleFontsUrl || undefined,
+        cssImport: designSystem.fonts?.cssImport || undefined,
+      },
+      colors: {
+        ...designSystem.colors,
+        success: designSystem.colors?.success || '#10B981',
+        warning: designSystem.colors?.warning || '#F59E0B',
+        error: designSystem.colors?.error || '#EF4444',
+        text: designSystem.colors?.text || '#0F172A',
+      },
+      spacing: designSystem.spacing || { unit: 8 },
+      radius: designSystem.radius ?? 8,
+      shadow: designSystem.shadow || 'soft',
+    };
+
+    // Persist to DB
+    const { error: persistErr } = await supabase
+      .from('journey_sessions')
+      .update({
+        design_tokens: normalizedTokens,
+        selected_style_bundle_id: 'custom',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('thread_id', journeyThreadId)
+      .eq('tenant_id', tenantId);
+
+    if (persistErr) {
+      console.error('[deterministic-style] Failed to persist design_tokens:', persistErr.message);
+    } else {
+      console.log('[deterministic-style] ✅ Persisted design_tokens:', {
+        styleName: normalizedTokens.style?.name,
+        primary: normalizedTokens.colors?.primary,
+        heading: normalizedTokens.fonts?.heading,
+      });
+    }
+
+    // Update RequestContext for this request cycle
+    requestContext.set('designTokens', JSON.stringify(normalizedTokens));
+    requestContext.set('designSystemGenerated', 'true');
+
+    // Format the design system as a user-friendly presentation
+    const styleName = normalizedTokens.style?.name || 'Custom Design';
+    const primary = normalizedTokens.colors?.primary || '#000';
+    const secondary = normalizedTokens.colors?.secondary || '#666';
+    const accent = normalizedTokens.colors?.accent || '#007AFF';
+    const background = normalizedTokens.colors?.background || '#FFFFFF';
+    const heading = normalizedTokens.fonts?.heading?.split(',')[0]?.trim() || 'Inter';
+    const body = normalizedTokens.fonts?.body?.split(',')[0]?.trim() || 'Inter';
+    const reasoning = data.reasoning || '';
+
+    const charts = (normalizedTokens.charts || [])
+      .slice(0, 3)
+      .map((c: any) => `- **${c.type}** — ${c.bestFor}`)
+      .join('\n');
+
+    const responseText = [
+      `I've crafted a custom design system for your ${workflowName || 'dashboard'}:`,
+      '',
+      `**${styleName}**`,
+      '',
+      `**Colors**`,
+      `- Primary: ${primary}`,
+      `- Secondary: ${secondary}`,
+      `- Accent: ${accent}`,
+      `- Background: ${background}`,
+      '',
+      `**Typography**`,
+      `- Headings: ${heading}`,
+      `- Body: ${body}`,
+      '',
+      charts ? `**Recommended Charts**\n${charts}` : '',
+      '',
+      reasoning ? `*${reasoning}*` : '',
+      '',
+      'Does this style fit your brand? I can generate alternatives if you\'d prefer something different — just tell me what direction you\'re thinking (e.g., "darker", "more minimal", "bolder colors").',
+    ].filter(Boolean).join('\n');
+
+    // Persist the assistant message for reload
+    try {
+      await supabase.from('journey_messages').insert({
+        tenant_id: tenantId,
+        thread_id: journeyThreadId,
+        role: 'assistant',
+        content: responseText,
+        created_at: new Date().toISOString(),
+      });
+    } catch (msgErr) {
+      console.warn('[deterministic-style] Failed to persist message:', msgErr);
+    }
+
+    // Build UIMessageStream (same pattern as handleDeterministicSelectEntity)
+    const stream = createUIMessageStream({
+      execute: async ({ writer }) => {
+        const textId = generateId();
+        await writer.write({ type: 'text-start', id: textId });
+        const words = responseText.split(' ');
+        for (let i = 0; i < words.length; i++) {
+          await writer.write({
+            type: 'text-delta',
+            id: textId,
+            delta: i === words.length - 1 ? words[i] : words[i] + ' ',
+          });
+        }
+        await writer.write({ type: 'text-end', id: textId });
+        // Stream design tokens as data part for client UI (DesignSystemPair cards)
+        await writer.write({
+          type: 'data-design-system',
+          id: generateId(),
+          data: normalizedTokens,
+        } as any);
+      },
+    });
+
+    console.log(`[deterministic-style] ✅ Bypassed agent loop in ${Date.now() - startTime}ms`);
+    return stream;
+  } catch (err) {
+    console.error('[deterministic-style] Unexpected error, falling back to agent:', err);
+    return null;
+  }
+}
+
 export async function POST(req: Request) {
   const requestStartMs = Date.now();
   try {
@@ -1164,12 +1364,23 @@ export async function POST(req: Request) {
           /\blove\s*(it|this|the\s*(style|design|colors?|look))\b/i,
           // "that/this" + "is/looks" + optional filler + positive adjective
           /\b(that|this)\s+(is|looks)\s+.*?(good|right|great|fine|perfect|correct|accurate|nice)\b/i,
-          // Action phrases
-          /\b(let'?s?\s*(go|do\s*it|proceed|move\s*on)|go\s*ahead|do\s*it|build\s*it|generate|ship\s*it)\b/i,
-          // "works for me", "i like it", "sounds good"
+          // Action phrases - ONLY when NOT preceded by negation or requesting changes
+          /\b(let'?s?\s*go|go\s*ahead|ship\s*it)\b/i,
+          // "works for me", "i like it", "sounds good" - ONLY positive sentiment
           /\b(works?\s*(for\s*me)?|i\s*like\s*it|that'?ll?\s*do|sounds?\s*good|i'?m\s*(good|happy|satisfied))\b/i,
         ];
-        const isStyleConfirmation = messageText && styleConfirmPatterns.some(p => p.test(messageText));
+
+        // CRITICAL: Check for negation/rejection words that override any confirmation pattern
+        const negationPatterns = [
+          /\b(don'?t|do\s*not|doesn'?t|does\s*not|no|nope|nah|never)\b/i,
+          /\b(different|change|adjust|tweak|modify|redo|regenerate|try\s+again)\b/i,
+          /\b(hate|dislike|ugly|bad|wrong|terrible|awful)\b/i,
+        ];
+
+        const hasNegation = messageText && negationPatterns.some(p => p.test(messageText));
+        const isStyleConfirmation = messageText &&
+          !hasNegation &&
+          styleConfirmPatterns.some(p => p.test(messageText));
         if (isStyleConfirmation) {
           console.log('[api/chat] 🎨 Eager style confirmation detected:', messageText.substring(0, 40));
           await supabase
@@ -1193,16 +1404,92 @@ export async function POST(req: Request) {
             console.warn('[api/chat] Eager advance after style confirm failed:', eagerStyleErr?.message);
           }
         }
-
         // Detect adjustment requests (darker/lighter/more X/hex codes)
         const adjustmentPatterns = [
           /\b(darker|lighter|more\s+\w+|less\s+\w+|change\s+the\s+color|different\s+(color|style|font)|#[0-9a-f]{3,6}|too\s+(dark|light|bright|bold|minimal))\b/i,
+          /\b(don'?t\s+like|hate|dislike|not\s+(right|good|great|what\s+i)|try\s+(again|something)|generate\s+(a\s+)?(new|different|another)|start\s+over|scrap\s+(it|this)|nah|nope)\b/i,
         ];
         const isAdjustmentRequest = messageText && adjustmentPatterns.some(p => p.test(messageText));
         if (isAdjustmentRequest && !isStyleConfirmation) {
           console.log('[api/chat] 🎨 Style adjustment request detected:', messageText.substring(0, 60));
           requestContext.set('styleAdjustmentRequested', messageText);
+
+          // BUG 6 FIX: Reset style_confirmed when user requests adjustments.
+          // Without this, a stale style_confirmed=true from a previous eager
+          // confirmation persists across adjustment cycles, causing autoAdvancePhase
+          // to advance to build_preview with the OLD tokens still in DB.
+          if (styleSession) {
+            await supabase
+              .from('journey_sessions')
+              .update({
+                style_confirmed: false,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', styleSession.id)
+              .eq('tenant_id', tenantId);
+            requestContext.set('styleConfirmed', 'false');
+            console.log('[api/chat] 🔄 Reset style_confirmed=false after adjustment request');
+          }
         }
+      }
+    }
+
+    // ─── DETERMINISTIC STYLE GENERATION BYPASS ─────────────────────────
+    // If phase is style AND no design_tokens exist in DB, auto-generate
+    // the design system via workflow, bypassing the agent loop entirely.
+    // This fixes Failure 1 (agent writes prose instead of calling tools)
+    // by making the FIRST style-phase response deterministic.
+    // Subsequent style messages (refinement) go through the normal agent.
+    if (finalPhase === 'style') {
+      const { data: styleCheckSession } = await supabase
+        .from('journey_sessions')
+        .select('design_tokens')
+        .eq('thread_id', cleanJourneyThreadId)
+        .eq('tenant_id', tenantId)
+        .maybeSingle();
+
+      if (!styleCheckSession?.design_tokens) {
+        const deterministicStyleStream = await handleDeterministicStyleGeneration({
+          mastra,
+          supabase,
+          tenantId,
+          userId,
+          journeyThreadId: cleanJourneyThreadId,
+          mastraThreadId: cleanMastraThreadId,
+          workflowName: requestContext.get('workflowName') as string || '',
+          platformType: requestContext.get('platformType') as string || 'other',
+          selectedOutcome: requestContext.get('selectedOutcome') as string || 'dashboard',
+          selectedEntities: requestContext.get('selectedEntities') as string || '',
+          requestContext,
+        });
+
+        if (deterministicStyleStream) {
+          console.log('[api/chat] 🎨 Using deterministic style generation bypass');
+
+          // Run autoAdvancePhase — won't advance yet (style_confirmed is false)
+          // but ensures DB state is consistent
+          try {
+            if (cleanJourneyThreadId && cleanJourneyThreadId !== 'default-thread') {
+              const advResult = await autoAdvancePhase({
+                supabase,
+                tenantId,
+                journeyThreadId: cleanJourneyThreadId,
+                mastraThreadId: cleanMastraThreadId,
+              });
+              if (advResult.advanced) {
+                console.log('[api/chat] Deterministic style bypass + auto-advance:', advResult);
+              }
+            }
+          } catch (advErr) {
+            console.warn('[api/chat] autoAdvancePhase after deterministic style bypass:', advErr);
+          }
+
+          return createUIMessageStreamResponse({
+            stream: deterministicStyleStream,
+          });
+        }
+        // If handleDeterministicStyleGeneration returned null, fall through to agent
+        console.log('[api/chat] Deterministic style bypass returned null, falling through to agent');
       }
     }
 

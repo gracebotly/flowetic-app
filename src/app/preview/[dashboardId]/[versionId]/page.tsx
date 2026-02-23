@@ -543,6 +543,12 @@ export default async function PreviewPage({ params }: PreviewPageProps) {
   const bodyFont = (version.design_tokens?.fonts?.body as string | undefined)?.split(',')[0]?.trim();
   const fontsToLoad = [...new Set([headingFont, bodyFont].filter(Boolean))] as string[];
 
+  const dashboardTitle = enrichedSpec?.metadata?.title || enrichedSpec?.title || null;
+  const styleName = (version.design_tokens as any)?.style?.name || enrichedSpec?.metadata?.styleName || null;
+  const headingFontForTitle = (version.design_tokens?.fonts?.heading as string | undefined)?.split(',')[0]?.trim();
+  const titleTextColor = (version.design_tokens?.colors?.text as string) || '#111827';
+  const subtitleColor = (version.design_tokens?.colors?.secondary as string) || '#64748B';
+
   return (
     <div className="min-h-screen bg-white">
       {fontsToLoad.length > 0 && (
@@ -550,6 +556,24 @@ export default async function PreviewPage({ params }: PreviewPageProps) {
           rel="stylesheet"
           href={`https://fonts.googleapis.com/css2?${fontsToLoad.map(f => `family=${encodeURIComponent(f)}:wght@400;500;600;700`).join('&')}&display=swap`}
         />
+      )}
+      {dashboardTitle && (
+        <div className="px-6 pt-6 pb-2">
+          <h1
+            className="text-2xl font-bold"
+            style={{
+              fontFamily: headingFontForTitle ? `${headingFontForTitle}, sans-serif` : undefined,
+              color: titleTextColor,
+            }}
+          >
+            {dashboardTitle}
+          </h1>
+          {styleName && (
+            <p className="text-sm mt-1" style={{ color: subtitleColor }}>
+              Style: {styleName}
+            </p>
+          )}
+        </div>
       )}
       <ResponsiveDashboardRenderer
         spec={enrichedSpec}
