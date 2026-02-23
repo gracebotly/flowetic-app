@@ -69,7 +69,24 @@ DO NOT try to generate previews yourself — always delegate to this specialist.
         taskLower.includes('build') ||
         taskLower.includes('dashboard');
 
+      // HARD PHASE BLOCK: Phase must be build_preview or interactive_edit.
+      // This runs BEFORE the DB check. Even if DB has all required fields,
+      // we block preview generation from wrong phases. This prevents the
+      // scenario where eager advance sets all fields but the agent is still
+      // running in style phase and calls delegateToPlatformMapper.
       if (isPreviewRequest && currentPhase !== 'build_preview' && currentPhase !== 'interactive_edit') {
+        console.warn(
+          `[delegateToPlatformMapper] HARD PHASE GUARD: Blocked - phase is "${currentPhase}", not "build_preview" or "interactive_edit". Task: "${input.task.substring(0, 80)}"`
+        );
+        return {
+          success: false,
+          response: `I need to finish the ${currentPhase} phase before generating a preview. Let's complete the current step first.`,
+          error: `PHASE_GUARD: Phase is "${currentPhase}", must be "build_preview" or "interactive_edit" for preview generation.`,
+        };
+      }
+
+      // Secondary check: verify DB has all required fields (for build_preview/interactive_edit phases)
+      if (isPreviewRequest) {
         // Check what's actually missing from DB
         const tenantId = context?.requestContext?.get('tenantId') as string;
         const journeyThreadId = context?.requestContext?.get('journeyThreadId') as string;
@@ -110,17 +127,6 @@ DO NOT try to generate previews yourself — always delegate to this specialist.
           }
         }
 
-        // If we can't check DB but phase is wrong, still block
-        if (currentPhase !== 'build_preview' && currentPhase !== 'interactive_edit') {
-          console.warn(
-            `[delegateToPlatformMapper] PHASE GUARD: Blocked - phase is "${currentPhase}", not "build_preview" or "interactive_edit"`
-          );
-          return {
-            success: false,
-            response: "Let's finish the current step before generating a preview.",
-            error: `PHASE_GUARD: Phase is "${currentPhase}", must be "build_preview" or "interactive_edit" for preview generation.`,
-          };
-        }
       }
 
       // Also pass journeyThreadId if available (the client journey thread for journey_sessions lookups)
