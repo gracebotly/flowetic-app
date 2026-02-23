@@ -71,6 +71,13 @@ function pickField(
  * Strips platform prefixes, template numbers, execution suffixes.
  * Applies vocabulary normalization per data-dashboard-intelligence SKILL.md.
  * Humanizes slug-style names (kebab-case → Title Case).
+ *
+ * Examples:
+ *   "n8n:Template 2: Website Chatbot Analytics Aggregator:execution"
+ *   → "Website Chatbot Analytics Aggregator"
+ *
+ *   "workflow-dashboard" → "Workflow Dashboard"
+ *   "n8n" → "Workflow" (platform name → universal term)
  */
 function cleanEntityName(raw: string): string {
   let cleaned = raw
@@ -87,6 +94,20 @@ function cleanEntityName(raw: string): string {
     .replace(/^Template\s*\d+:\s*/i, '')
     .trim();
 
+  // Platform-only names → universal term (never show raw platform slugs)
+  const platformMap: Record<string, string> = {
+    'n8n': 'Workflow',
+    'make': 'Scenario',
+    'vapi': 'Call',
+    'retell': 'Call',
+    'mastra': 'Workflow',
+    'crewai': 'Agent Task',
+    'activepieces': 'Workflow',
+  };
+  if (platformMap[cleaned.toLowerCase()]) {
+    return platformMap[cleaned.toLowerCase()];
+  }
+
   // Humanize slug-style names: "workflow-dashboard" → "Workflow Dashboard"
   if (cleaned.includes('-') && !cleaned.includes(' ')) {
     cleaned = cleaned
@@ -95,8 +116,7 @@ function cleanEntityName(raw: string): string {
       .join(' ');
   }
 
-  // Vocabulary normalization per SKILL.md
-  // Only replace whole words to avoid mangling names like "Executioner"
+  // Vocabulary normalization per SKILL.md — whole-word only
   cleaned = cleaned
     .replace(/\bexecution\b/gi, 'Run')
     .replace(/\bexecutions\b/gi, 'Runs')
@@ -111,23 +131,32 @@ function cleanEntityName(raw: string): string {
 }
 
 /**
- * Simple pluralization for dashboard titles.
- * Handles common English patterns.
+ * Smart pluralization for dashboard titles.
+ * Returns the entity name as-is for titles where plural would sound wrong,
+ * and applies basic English pluralization otherwise.
  */
 function pluralizeEntity(word: string): string {
   if (!word) return 'Items';
+  // Short abbreviations or single words ≤4 chars — don't pluralize, use contextual noun
+  if (word.length <= 4 && !/\s/.test(word)) return word + ' Runs';
   const lower = word.toLowerCase();
-  if (lower.endsWith('s') || lower.endsWith('sh') || lower.endsWith('ch')) return word + 'es';
-  if (lower.endsWith('y') && !/[aeiou]y$/i.test(word)) return word.slice(0, -1) + 'ies';
+  // Already ends with s (like "Analytics") — don't double-pluralize
   if (lower.endsWith('s')) return word;
+  if (lower.endsWith('y') && !/[aeiou]y$/i.test(word)) return word.slice(0, -1) + 'ies';
+  if (lower.endsWith('sh') || lower.endsWith('ch') || lower.endsWith('x') || lower.endsWith('z')) return word + 'es';
   return word + 's';
 }
 
 /**
  * Map a design system chart recommendation type to a renderer component type.
+ * Handles compound types like "Pie Chart or Donut" and "Bar Chart (Horizontal or Vertical)"
+ * by checking for partial keyword matches when exact match fails.
  */
 function mapChartRecToComponentType(recType: string): string {
-  const map: Record<string, string> = {
+  const normalized = recType.toLowerCase().trim();
+
+  // Exact match first (fastest path)
+  const exactMap: Record<string, string> = {
     'funnel chart': 'BarChart',
     'roi metric card': 'MetricCard',
     'stacked bar chart': 'BarChart',
@@ -147,12 +176,6 @@ function mapChartRecToComponentType(recType: string): string {
     'table': 'DataTable',
     'heatmap': 'BarChart',
     'scatter chart': 'TimeseriesChart',
-    'line': 'TimeseriesChart',
-    'bar': 'BarChart',
-    'pie': 'PieChart',
-    'donut': 'DonutChart',
-    'area': 'TimeseriesChart',
-    'stacked bar': 'BarChart',
     'grouped bar chart': 'BarChart',
     'horizontal bar chart': 'BarChart',
     'radar chart': 'BarChart',
@@ -162,7 +185,33 @@ function mapChartRecToComponentType(recType: string): string {
     'combo chart': 'TimeseriesChart',
     'sparkline': 'TimeseriesChart',
   };
-  return map[recType.toLowerCase()] || 'BarChart';
+
+  if (exactMap[normalized]) return exactMap[normalized];
+
+  // Partial keyword match for compound types like "Pie Chart or Donut",
+  // "Bar Chart (Horizontal or Vertical)", etc.
+  // Order matters: check more specific keywords first.
+  const keywordMap: Array<[string, string]> = [
+    ['pie', 'PieChart'],
+    ['donut', 'DonutChart'],
+    ['line', 'TimeseriesChart'],
+    ['timeseries', 'TimeseriesChart'],
+    ['time series', 'TimeseriesChart'],
+    ['area', 'TimeseriesChart'],
+    ['scatter', 'TimeseriesChart'],
+    ['bar', 'BarChart'],
+    ['funnel', 'BarChart'],
+    ['table', 'DataTable'],
+    ['gauge', 'MetricCard'],
+    ['kpi', 'MetricCard'],
+    ['metric', 'MetricCard'],
+  ];
+
+  for (const [keyword, componentType] of keywordMap) {
+    if (normalized.includes(keyword)) return componentType;
+  }
+
+  return 'BarChart';
 }
 
 /**
@@ -243,8 +292,16 @@ function buildComponentsFromDesignTokens(
       id: chartId,
       type: componentType,
       propsBuilder: (m) => {
-        // Build a clean title from the recommendation's bestFor or chart type
-        const shortBestFor = rec.bestFor.length < 55 ? rec.bestFor : '';
+        // Only use bestFor as title if it's specific to this workflow (not a generic CSV data-type).
+        // Generic labels like "Trend Over Time", "Compare Categories", "Part-to-Whole"
+        // are CSV data-type descriptions, NOT good dashboard titles.
+        const genericBestForPatterns = [
+          'trend over time', 'compare categories', 'part-to-whole', 'general visualization',
+          'general', 'comparisons', 'distribution', 'composition', 'relationship',
+          'ranking', 'proportion', 'change over time', 'correlation',
+        ];
+        const isGenericBestFor = genericBestForPatterns.some(p => rec.bestFor.toLowerCase().includes(p));
+        const shortBestFor = (!isGenericBestFor && rec.bestFor.length < 55) ? rec.bestFor : '';
 
         switch (componentType) {
           case 'TimeseriesChart':
@@ -426,14 +483,29 @@ export const generateUISpec = createTool({
 
     // Try entity name from RequestContext
     if (!entityName) {
-      const selectedEntitiesJson = context?.requestContext?.get('selectedEntities') as string;
-      if (selectedEntitiesJson) {
+      const selectedEntitiesRaw = context?.requestContext?.get('selectedEntities') as string;
+      if (selectedEntitiesRaw) {
         try {
-          const entities = JSON.parse(selectedEntitiesJson);
-          entityName = entities?.[0]?.display_name || entities?.[0]?.name;
-        } catch { /* ignore */ }
+          const parsed = JSON.parse(selectedEntitiesRaw);
+          if (Array.isArray(parsed)) {
+            entityName = parsed[0]?.display_name || parsed[0]?.name;
+          } else if (typeof parsed === 'object' && parsed !== null) {
+            entityName = (parsed as { display_name?: string; name?: string }).display_name ||
+              (parsed as { display_name?: string; name?: string }).name;
+          }
+        } catch {
+          entityName = selectedEntitiesRaw.split(',')[0].trim() || undefined;
+        }
       }
     }
+
+    // Log entity name resolution for debugging
+    console.log('[generateUISpec] Entity name resolution:', {
+      fromInput: inputData.entityName || null,
+      fromRequestContext: context?.requestContext?.get('selectedEntities') ? 'present' : 'absent',
+      resolved: entityName || null,
+      willFallbackTo: entityName ? 'entityName' : platformType ? 'platformType' : 'templateId',
+    });
 
     // ── HARD FAIL: No chart recommendations = no dashboard ───────────────
     // The designSystemWorkflow MUST produce chart recommendations.

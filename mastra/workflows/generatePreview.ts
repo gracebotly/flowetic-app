@@ -291,14 +291,29 @@ const generateUISpecStep = createStep({
           return undefined;
         })(),
         entityName: (() => {
-          const entitiesJson = requestContext.get('selectedEntities') as string;
-          if (entitiesJson) {
-            try {
-              const parsed = JSON.parse(entitiesJson);
-              return parsed?.[0]?.display_name || parsed?.[0]?.name;
-            } catch { return undefined; }
+          const entitiesRaw = requestContext.get('selectedEntities') as string;
+          if (!entitiesRaw) return undefined;
+
+          // selectedEntities can be:
+          // 1. A JSON array: [{"name":"n8n:Template 2:...","display_name":"..."}]
+          // 2. A plain string: "n8n:Template 2: Website Chatbot Analytics Aggregator:execution"
+          // 3. Comma-separated: "entity1,entity2"
+          // The DB stores it as a plain string (text column, not jsonb).
+          try {
+            const parsed = JSON.parse(entitiesRaw);
+            if (Array.isArray(parsed)) {
+              return parsed[0]?.display_name || parsed[0]?.name;
+            }
+            if (typeof parsed === 'object' && parsed !== null) {
+              return parsed.display_name || parsed.name;
+            }
+          } catch {
+            // Not JSON — treat as raw entity string (most common case)
           }
-          return undefined;
+
+          // Plain string: use first comma-separated value, pass through cleanEntityName later
+          const firstEntity = entitiesRaw.split(',')[0].trim();
+          return firstEntity || undefined;
         })(),
       },
       { requestContext }
