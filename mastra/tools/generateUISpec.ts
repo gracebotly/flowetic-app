@@ -68,17 +68,59 @@ function pickField(
 
 /**
  * Sanitize entity/workflow name for use in dashboard titles.
- * Strips platform prefixes, template numbers, and execution suffixes.
+ * Strips platform prefixes, template numbers, execution suffixes.
+ * Applies vocabulary normalization per data-dashboard-intelligence SKILL.md.
+ * Humanizes slug-style names (kebab-case → Title Case).
  */
 function cleanEntityName(raw: string): string {
-  return raw
+  let cleaned = raw
     .replace(/^n8n:/i, '')
     .replace(/^make:/i, '')
     .replace(/^vapi:/i, '')
     .replace(/^retell:/i, '')
+    .replace(/^activepieces:/i, '')
+    .replace(/^mastra:/i, '')
+    .replace(/^crewai:/i, '')
     .replace(/:execution$/i, '')
+    .replace(/:operation$/i, '')
+    .replace(/:call$/i, '')
     .replace(/^Template\s*\d+:\s*/i, '')
-    .trim() || 'Dashboard';
+    .trim();
+
+  // Humanize slug-style names: "workflow-dashboard" → "Workflow Dashboard"
+  if (cleaned.includes('-') && !cleaned.includes(' ')) {
+    cleaned = cleaned
+      .split('-')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  }
+
+  // Vocabulary normalization per SKILL.md
+  // Only replace whole words to avoid mangling names like "Executioner"
+  cleaned = cleaned
+    .replace(/\bexecution\b/gi, 'Run')
+    .replace(/\bexecutions\b/gi, 'Runs')
+    .replace(/\bscenario\b/gi, 'Workflow')
+    .replace(/\bscenarios\b/gi, 'Workflows')
+    .replace(/\boperation\b/gi, 'Run')
+    .replace(/\boperations\b/gi, 'Runs')
+    .replace(/\bassistant\b/gi, 'Agent')
+    .replace(/\bassistants\b/gi, 'Agents');
+
+  return cleaned || 'Dashboard';
+}
+
+/**
+ * Simple pluralization for dashboard titles.
+ * Handles common English patterns.
+ */
+function pluralizeEntity(word: string): string {
+  if (!word) return 'Items';
+  const lower = word.toLowerCase();
+  if (lower.endsWith('s') || lower.endsWith('sh') || lower.endsWith('ch')) return word + 'es';
+  if (lower.endsWith('y') && !/[aeiou]y$/i.test(word)) return word.slice(0, -1) + 'ies';
+  if (lower.endsWith('s')) return word;
+  return word + 's';
 }
 
 /**
@@ -105,6 +147,20 @@ function mapChartRecToComponentType(recType: string): string {
     'table': 'DataTable',
     'heatmap': 'BarChart',
     'scatter chart': 'TimeseriesChart',
+    'line': 'TimeseriesChart',
+    'bar': 'BarChart',
+    'pie': 'PieChart',
+    'donut': 'DonutChart',
+    'area': 'TimeseriesChart',
+    'stacked bar': 'BarChart',
+    'grouped bar chart': 'BarChart',
+    'horizontal bar chart': 'BarChart',
+    'radar chart': 'BarChart',
+    'bubble chart': 'TimeseriesChart',
+    'treemap': 'BarChart',
+    'waterfall chart': 'BarChart',
+    'combo chart': 'TimeseriesChart',
+    'sparkline': 'TimeseriesChart',
   };
   return map[recType.toLowerCase()] || 'BarChart';
 }
@@ -131,7 +187,7 @@ function buildComponentsFromDesignTokens(
     id: 'primary-kpi',
     type: 'MetricCard',
     propsBuilder: (m) => ({
-      title: `Total ${entity} Runs`,
+      title: `Total ${pluralizeEntity(entity)}`,
       valueField: pickField(m, ['execution_id', 'run_id', 'id'], 'id'),
       aggregation: 'count',
       icon: 'activity',
@@ -193,7 +249,7 @@ function buildComponentsFromDesignTokens(
         switch (componentType) {
           case 'TimeseriesChart':
             return {
-              title: shortBestFor || `${entity} Over Time`,
+              title: shortBestFor || `${pluralizeEntity(entity)} Over Time`,
               xField: 'timestamp',
               yField: pickField(m, ['id', 'execution_id', 'run_id'], 'id'),
               aggregation: 'count',
@@ -201,19 +257,19 @@ function buildComponentsFromDesignTokens(
             };
           case 'BarChart':
             return {
-              title: shortBestFor || `${entity} Breakdown`,
+              title: shortBestFor || `${pluralizeEntity(entity)} by Status`,
               field: pickField(m, ['status', 'type', 'name', 'category'], 'status'),
               aggregation: 'count',
             };
           case 'PieChart':
           case 'DonutChart':
             return {
-              title: shortBestFor || `${entity} Distribution`,
+              title: shortBestFor || `${pluralizeEntity(entity)} by Category`,
               field: pickField(m, ['status', 'type', 'category', 'name'], 'status'),
             };
           case 'DataTable':
             return {
-              title: `Recent ${entity} Activity`,
+              title: `Recent ${pluralizeEntity(entity)}`,
               columns: allFields.length > 0
                 ? allFields.slice(0, 6).map(f => ({
                     key: f,
@@ -229,13 +285,13 @@ function buildComponentsFromDesignTokens(
             };
           case 'MetricCard':
             return {
-              title: shortBestFor || `${entity} Metric`,
+              title: shortBestFor || `${entity} Count`,
               valueField: pickField(m, ['value', 'cost', 'amount', 'score', 'id'], 'id'),
               aggregation: 'count',
               icon: 'bar-chart-2',
             };
           default:
-            return { title: shortBestFor || `${entity} Chart`, field: 'status' };
+            return { title: shortBestFor || `${pluralizeEntity(entity)} Overview`, field: 'status' };
         }
       },
       layout: { col, row, w: width, h: 4 },
@@ -250,7 +306,7 @@ function buildComponentsFromDesignTokens(
       id: 'activity-table',
       type: 'DataTable',
       propsBuilder: (m) => ({
-        title: `Recent ${entity} Activity`,
+        title: `Recent ${pluralizeEntity(entity)}`,
         columns: allFields.length > 0
           ? allFields.slice(0, 6).map(f => ({
               key: f,
@@ -392,7 +448,10 @@ export const generateUISpec = createTool({
     }
 
     // Build components from design system — every dashboard is unique
-    const blueprints = buildComponentsFromDesignTokens(mappings, chartRecs, entityName || templateId);
+    // Fallback chain: entityName (from selectedEntities) → platformType → templateId
+    // NEVER pass templateId raw (e.g. "workflow-dashboard") — it's a slug, not a label
+    const resolvedEntityName = entityName || platformType || templateId;
+    const blueprints = buildComponentsFromDesignTokens(mappings, chartRecs, resolvedEntityName);
     const fieldNames = Object.keys(mappings);
 
     const components = blueprints.map(bp => ({
@@ -403,7 +462,7 @@ export const generateUISpec = createTool({
     }));
 
     const parsedCustomForMeta = customTokensJson ? JSON.parse(customTokensJson) : {};
-    const entity = entityName ? cleanEntityName(entityName) : platformType;
+    const entity = cleanEntityName(resolvedEntityName);
 
     const spec_json = {
       version: '1.0',

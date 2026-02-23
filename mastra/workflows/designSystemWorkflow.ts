@@ -217,8 +217,8 @@ const synthesizeDesignSystem = createStep({
           },
           fonts: deterministicTokens.fonts,
           charts: chartResults.slice(0, 3).map(r => ({
-            type: r["Best Chart Type"] || r["Chart Type"] || "Bar Chart",
-            bestFor: r["Data Type"] || r["Keywords"] || "General visualization",
+            type: r["Best Chart Type"] || r["Chart Type"] || r.type || "Bar Chart",
+            bestFor: r["Data Type"] || r["Best For"] || r.bestFor || "Comparisons",
           })),
           uxGuidelines: uxResults.slice(0, 5).map(r =>
             r["Guideline"] || r["Description"] || r.guideline || "Follow best practices"
@@ -272,10 +272,9 @@ const synthesizeDesignSystem = createStep({
       ``,
       `### Chart Types (${chartResults.length} matches):`,
       ...chartResults.map((r, i) => {
-        const chartType = r["Best Chart Type"] || r["Chart Type"] || "Bar Chart";
-        const dataType = r["Data Type"] || r["Keywords"] || "General";
-        const colorGuidance = r["Color Guidance"] || "";
-        return `${i + 1}. ${chartType} — Data: ${dataType}${colorGuidance ? `, Color: ${colorGuidance.substring(0, 80)}` : ""}`;
+        const chartType = r["Best Chart Type"] || r["Chart Type"] || r["chart_type"] || r["Type"] || r["name"] || r["Name"] || "Unknown";
+        const bestFor = r["Data Type"] || r["Best For"] || r["best_for"] || r["Description"] || r["description"] || r["Use Case"] || "General";
+        return `${i + 1}. ${chartType} — Best for: ${bestFor}`;
       }),
       ``,
       `## YOUR TASK`,
@@ -327,8 +326,8 @@ const synthesizeDesignSystem = createStep({
             },
             fonts: tokens.fonts,
             charts: parsed.selectedCharts || chartResults.slice(0, 3).map(r => ({
-              type: r["Best Chart Type"] || r["Chart Type"] || "Bar Chart",
-              bestFor: r["Data Type"] || r["Keywords"] || "General visualization",
+              type: r["Best Chart Type"] || r["Chart Type"] || r["chart_type"] || r["Type"] || r["name"] || r["Name"] || "Bar Chart",
+              bestFor: r["Data Type"] || r["Best For"] || r["best_for"] || r["Description"] || r["description"] || r["Use Case"] || r["use_case"] || "General visualization",
             })),
             uxGuidelines: uxResults.slice(0, 5).map(r =>
               r["Guideline"] || r["Description"] || r.guideline || "Follow best practices"
@@ -356,8 +355,8 @@ const synthesizeDesignSystem = createStep({
         },
         fonts: deterministicTokens.fonts,
         charts: chartResults.slice(0, 3).map(r => ({
-          type: r["Best Chart Type"] || r["Chart Type"] || "Bar Chart",
-          bestFor: r["Data Type"] || r["Keywords"] || "General visualization",
+          type: r["Best Chart Type"] || r["Chart Type"] || r["chart_type"] || r["Type"] || r["name"] || r["Name"] || r.type || "Bar Chart",
+          bestFor: r["Data Type"] || r["Best For"] || r["best_for"] || r["Description"] || r["description"] || r["Use Case"] || r["use_case"] || r.bestFor || "General visualization",
         })),
         uxGuidelines: uxResults.slice(0, 5).map(r =>
           r["Guideline"] || r["Description"] || r.guideline || "Follow best practices"
