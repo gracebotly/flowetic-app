@@ -57,6 +57,8 @@ to proceed with it or request adjustments.`,
     platformType: z.string().describe("Platform type (e.g., n8n, make, vapi)"),
     selectedOutcome: z.string().optional().describe("Dashboard or Product"),
     selectedEntities: z.string().optional().describe("Comma-separated entity names"),
+    userFeedback: z.string().optional().describe("User's style preference or rejection reason (e.g. 'darker', 'more premium', 'navy blue'). Pass this to get DIFFERENT results than the initial generation."),
+    excludeStyleNames: z.array(z.string()).optional().describe("Style names to exclude from results (e.g. names of previously rejected designs)"),
   }),
 
   outputSchema: z.object({
@@ -119,6 +121,9 @@ Be creative — this should feel crafted for THIS specific workflow, not generic
           selectedEntities: inputData.selectedEntities || "",
           tenantId,
           userId,
+          // Variety parameters: shift BM25 ranking and exclude previously rejected styles
+          userFeedback: inputData.userFeedback || undefined,
+          excludeStyleNames: inputData.excludeStyleNames || undefined,
         },
         requestContext: context?.requestContext,
       });
