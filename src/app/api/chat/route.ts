@@ -1164,12 +1164,23 @@ export async function POST(req: Request) {
           /\blove\s*(it|this|the\s*(style|design|colors?|look))\b/i,
           // "that/this" + "is/looks" + optional filler + positive adjective
           /\b(that|this)\s+(is|looks)\s+.*?(good|right|great|fine|perfect|correct|accurate|nice)\b/i,
-          // Action phrases
-          /\b(let'?s?\s*(go|do\s*it|proceed|move\s*on)|go\s*ahead|do\s*it|build\s*it|generate|ship\s*it)\b/i,
-          // "works for me", "i like it", "sounds good"
+          // Action phrases - ONLY when NOT preceded by negation or requesting changes
+          /\b(let'?s?\s*go|go\s*ahead|ship\s*it)\b/i,
+          // "works for me", "i like it", "sounds good" - ONLY positive sentiment
           /\b(works?\s*(for\s*me)?|i\s*like\s*it|that'?ll?\s*do|sounds?\s*good|i'?m\s*(good|happy|satisfied))\b/i,
         ];
-        const isStyleConfirmation = messageText && styleConfirmPatterns.some(p => p.test(messageText));
+
+        // CRITICAL: Check for negation/rejection words that override any confirmation pattern
+        const negationPatterns = [
+          /\b(don'?t|do\s*not|doesn'?t|does\s*not|no|nope|nah|never)\b/i,
+          /\b(different|change|adjust|tweak|modify|redo|regenerate|try\s+again)\b/i,
+          /\b(hate|dislike|ugly|bad|wrong|terrible|awful)\b/i,
+        ];
+
+        const hasNegation = messageText && negationPatterns.some(p => p.test(messageText));
+        const isStyleConfirmation = messageText &&
+          !hasNegation &&
+          styleConfirmPatterns.some(p => p.test(messageText));
         if (isStyleConfirmation) {
           console.log('[api/chat] 🎨 Eager style confirmation detected:', messageText.substring(0, 40));
           await supabase
