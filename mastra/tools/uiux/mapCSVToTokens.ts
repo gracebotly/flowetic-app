@@ -65,26 +65,86 @@ export function deriveSemanticColors(background: string): {
   };
 }
 /**
+ * Lighten a hex color by a factor (0-1). Factor 0.2 = 20% lighter.
+ */
+function lightenHex(hex: string, factor: number): string {
+  const clean = hex.replace('#', '');
+  if (clean.length !== 6) return hex;
+  const r = Math.min(255, Math.round(parseInt(clean.substring(0, 2), 16) + (255 - parseInt(clean.substring(0, 2), 16)) * factor));
+  const g = Math.min(255, Math.round(parseInt(clean.substring(2, 4), 16) + (255 - parseInt(clean.substring(2, 4), 16)) * factor));
+  const b = Math.min(255, Math.round(parseInt(clean.substring(4, 6), 16) + (255 - parseInt(clean.substring(4, 6), 16)) * factor));
+  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`.toUpperCase();
+}
+
+/**
+ * Shift hue of a hex color by degrees (0-360).
+ */
+function shiftHueHex(hex: string, degrees: number): string {
+  const clean = hex.replace('#', '');
+  if (clean.length !== 6) return hex;
+  let r = parseInt(clean.substring(0, 2), 16) / 255;
+  let g = parseInt(clean.substring(2, 4), 16) / 255;
+  let b = parseInt(clean.substring(4, 6), 16) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  let h = 0, s = 0;
+  const l = (max + min) / 2;
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+    else if (max === g) h = ((b - r) / d + 2) / 6;
+    else h = ((r - g) / d + 4) / 6;
+  }
+  h = ((h * 360 + degrees) % 360) / 360;
+  if (h < 0) h += 1;
+  const hue2rgb = (p: number, q: number, t: number) => {
+    if (t < 0) t += 1; if (t > 1) t -= 1;
+    if (t < 1/6) return p + (q - p) * 6 * t;
+    if (t < 1/2) return q;
+    if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+    return p;
+  };
+  if (s === 0) { r = g = b = l; } else {
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    const p = 2 * l - q;
+    r = hue2rgb(p, q, h + 1/3);
+    g = hue2rgb(p, q, h);
+    b = hue2rgb(p, q, h - 1/3);
+  }
+  const toHex = (c: number) => Math.round(c * 255).toString(16).padStart(2, '0');
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`.toUpperCase();
+}
+
+/**
  * Map color CSV row_data (from getColorRecommendations) to ColorTokens.
- *
- * CSV columns: paletteName, primary, secondary, accent, mood, useCases
- * Token schema: primary, secondary, accent, success, warning, error, background, text
- *
- * Missing fields are derived:
- * - background: inferred from mood keywords (dark terms → dark bg)
- * - text: inverse of background luminance
- * - success/warning/error: context-aware defaults
  */
 export function mapColorCSVToTokens(colorRow: Record<string, string>): ColorTokens {
-  const primary = colorRow.primary || colorRow['Primary'] || '#3B82F6';
-  const secondary = colorRow.secondary || colorRow['Secondary'] || primary;
-  const accent = colorRow.accent || colorRow['Accent'] || primary;
-  const mood = (colorRow.mood || colorRow['Mood'] || '').toLowerCase();
+  // CSV headers from colors.csv: "Primary (Hex)", "Secondary (Hex)", "CTA (Hex)", "Background (Hex)", "Text (Hex)"
+  // Also handle lowercase keys from getColorRecommendations output and other tools
+  const primary = colorRow['Primary (Hex)'] || colorRow.primary || colorRow['Primary'] || '#3B82F6';
+
+  let secondary = colorRow['Secondary (Hex)'] || colorRow.secondary || colorRow['Secondary'] || '';
+  let accent = colorRow['CTA (Hex)'] || colorRow.accent || colorRow['Accent'] || '';
+
+  // BUG 4 FIX: If secondary/accent are empty OR identical to primary, derive distinct colors
+  if (!secondary || secondary === primary) {
+    secondary = lightenHex(primary, 0.25); // 25% lighter
+  }
+  if (!accent || accent === primary) {
+    accent = shiftHueHex(primary, 30); // Shift hue by 30 degrees
+  }
+  // Edge case: if secondary ended up same as accent after derivation, shift accent more
+  if (secondary === accent) {
+    accent = shiftHueHex(primary, 60);
+  }
+
+  const mood = (colorRow['Notes'] || colorRow.mood || colorRow['Mood'] || '').toLowerCase();
+
   // Derive background from mood keywords
   const darkMoods = ['dark', 'night', 'midnight', 'cyber', 'neon', 'deep', 'bold', 'dramatic', 'moody'];
   const isDarkMood = darkMoods.some(d => mood.includes(d));
-  const background = colorRow.background || colorRow['Background'] || (isDarkMood ? '#0F172A' : '#F8FAFC');
-  const text = colorRow.text || colorRow['Text'] || (isDarkBackground(background) ? '#F1F5F9' : '#0F172A');
+  const background = colorRow['Background (Hex)'] || colorRow.background || colorRow['Background'] || (isDarkMood ? '#0F172A' : '#F8FAFC');
+  const text = colorRow['Text (Hex)'] || colorRow.text || colorRow['Text'] || (isDarkBackground(background) ? '#F1F5F9' : '#0F172A');
   const semantics = deriveSemanticColors(background);
   return {
     primary,

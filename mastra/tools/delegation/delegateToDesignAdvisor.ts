@@ -2,6 +2,8 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { designAdvisorAgent } from "../../agents/designAdvisorAgent";
+import { createAuthenticatedClient } from "../../lib/supabase";
+import { buildDesignTokens } from "../uiux/mapCSVToTokens";
 
 export const delegateToDesignAdvisor = createTool({
   id: "delegateToDesignAdvisor",
@@ -77,6 +79,73 @@ The advisor MUST call these tools before providing recommendations - never from 
           thread: threadId,
         },
       });
+
+      // ─── Persist design tokens from advisor tool results ──────────────
+      // Without this, style regeneration via design advisor is cosmetic-only.
+      // The agent calls getColorRecommendations, getStyleRecommendations, etc.
+      // but the results were never written to journey_sessions.design_tokens.
+      // Pattern copied from runDesignSystemWorkflow.ts which persists correctly.
+      const tenantId = context?.requestContext?.get('tenantId') as string;
+      const supabaseToken = context?.requestContext?.get('supabaseAccessToken') as string;
+
+      if (journeyThreadId && tenantId && supabaseToken) {
+        try {
+          // Extract tool call results from the agent response
+          const toolResults = (result as any).toolResults || (result as any).steps?.flatMap((s: any) => s.toolResults || []) || [];
+
+          const colorResult = toolResults.find((t: any) => t.toolName === 'getColorRecommendations');
+          const styleResult = toolResults.find((t: any) => t.toolName === 'getStyleRecommendations');
+          const typoResult = toolResults.find((t: any) => t.toolName === 'getTypographyRecommendations');
+
+          // Only persist if we got at least color data back
+          const colorRecs = colorResult?.result?.recommendations || colorResult?.result?.output?.recommendations;
+          if (colorRecs && colorRecs.length > 0) {
+            const topColor = colorRecs[0];
+            const topStyle = (styleResult?.result?.recommendations || styleResult?.result?.output?.recommendations || [])[0] || {};
+            const topTypo = (typoResult?.result?.recommendations || typoResult?.result?.output?.recommendations || [])[0] || {};
+
+            const normalizedTokens = buildDesignTokens({
+              colorRow: topColor,
+              typographyRow: topTypo,
+              styleRow: topStyle,
+            });
+
+            const supabase = createAuthenticatedClient(supabaseToken);
+            const { error: persistErr } = await supabase
+              .from('journey_sessions')
+              .update({
+                design_tokens: normalizedTokens,
+                selected_style_bundle_id: 'custom',
+                style_confirmed: false, // Reset confirmation — user needs to approve new style
+                updated_at: new Date().toISOString(),
+              })
+              .eq('thread_id', journeyThreadId)
+              .eq('tenant_id', tenantId);
+
+            if (persistErr) {
+              console.error('[delegateToDesignAdvisor] Failed to persist design_tokens:', persistErr.message);
+            } else {
+              // Update RequestContext for downstream tools in this request cycle
+              if (context?.requestContext) {
+                context.requestContext.set('designTokens', JSON.stringify(normalizedTokens));
+                context.requestContext.set('designSystemGenerated', 'true');
+              }
+              console.log('[delegateToDesignAdvisor] ✅ Persisted new design_tokens:', {
+                styleName: normalizedTokens.style?.name,
+                primary: normalizedTokens.colors?.primary,
+                secondary: normalizedTokens.colors?.secondary,
+                accent: normalizedTokens.colors?.accent,
+                heading: normalizedTokens.fonts?.heading,
+              });
+            }
+          } else {
+            console.warn('[delegateToDesignAdvisor] No color recommendations found in tool results. Skipping token persistence.');
+          }
+        } catch (persistErr) {
+          // Non-fatal: the text response still goes to the user
+          console.warn('[delegateToDesignAdvisor] Non-fatal persist error:', persistErr);
+        }
+      }
 
       return {
         success: true,

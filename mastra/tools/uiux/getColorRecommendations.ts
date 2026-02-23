@@ -46,12 +46,12 @@ Returns: palette name, primary/secondary/accent colors (hex), mood, use cases.`,
 
     return {
       recommendations: ranked.map((row) => ({
-        paletteName: row["palette_name"] || "",
-        primary: row["primary"] || "",
-        secondary: row["secondary"] || "",
-        accent: row["accent"] || "",
-        mood: row["mood"] || "",
-        useCases: row["use_cases"] || "",
+        paletteName: row["Product Type"] || row["palette_name"] || "",
+        primary: row["Primary (Hex)"] || row["primary"] || row["Primary"] || "",
+        secondary: row["Secondary (Hex)"] || row["secondary"] || row["Secondary"] || "",
+        accent: row["CTA (Hex)"] || row["accent"] || row["Accent"] || "",
+        mood: row["Notes"] || row["mood"] || row["Mood"] || "",
+        useCases: row["Product Type"] || row["use_cases"] || "",
       })),
       count: ranked.length,
     };
