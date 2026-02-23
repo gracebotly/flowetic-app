@@ -148,10 +148,66 @@ export const analyzeSchema = createTool({
       }
     }
 
-    return {
+    const result = {
       fields,
       eventTypes: Array.from(eventTypes),
       confidence,
     };
+
+    // ── Backfill interface_schemas with analysis results ──────────────────
+    // The interface_schemas table often has empty event_types, fields, and
+    // sample_events because data ingested via webhook/API bypasses the
+    // backfill workflow. Write the analysis results back so the spec
+    // generator and preview page have data context.
+    try {
+      const { data: schemaRow } = await supabase
+        .from('interface_schemas')
+        .select('id')
+        .eq('source_id', sourceId)
+        .eq('tenant_id', tenantId)
+        .maybeSingle();
+
+      if (schemaRow?.id) {
+        const sampleEvents = events.slice(0, 5).map((evt: Record<string, any>) => ({
+          id: evt.id,
+          type: evt.type,
+          name: evt.name,
+          status: evt.status,
+          timestamp: evt.timestamp || evt.created_at,
+        }));
+
+        const { error: updateErr } = await supabase
+          .from('interface_schemas')
+          .update({
+            event_types: result.eventTypes,
+            schema_summary: {
+              fields: result.fields,
+              eventTypes: result.eventTypes,
+              eventCounts: { total: events.length },
+              confidence: result.confidence,
+            },
+            sample_events: sampleEvents,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', schemaRow.id)
+          .eq('tenant_id', tenantId);
+
+        if (updateErr) {
+          console.warn('[analyzeSchema] Failed to backfill interface_schemas:', updateErr.message);
+        } else {
+          console.log('[analyzeSchema] ✅ Backfilled interface_schemas:', {
+            schemaId: schemaRow.id,
+            eventTypes: result.eventTypes.length,
+            fields: result.fields.length,
+            sampleEvents: sampleEvents.length,
+          });
+        }
+      }
+    } catch (backfillErr) {
+      // Non-fatal: analysis results are still returned to the workflow
+      console.warn('[analyzeSchema] Non-fatal backfill error:', backfillErr);
+    }
+
+    return result;
   },
 });

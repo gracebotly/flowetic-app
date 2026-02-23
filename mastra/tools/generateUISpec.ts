@@ -314,9 +314,211 @@ function buildDefaultComponents(mappings: Record<string, string>): ComponentBlue
 }
 
 // ============================================================================
+// Design-token-driven component builder
+// Replaces hardcoded templates when design_tokens.charts is available.
+// Each dashboard is unique because the designSystemWorkflow recommends different
+// charts based on the user's workflow type, entity, and style preferences.
+// ============================================================================
+function buildDesignTokenDrivenComponents(
+  mappings: Record<string, string>,
+  chartRecs: Array<{ type: string; bestFor: string }>,
+  entityName: string,
+): ComponentBlueprint[] {
+  const components: ComponentBlueprint[] = [];
+  const allFields = Object.values(mappings);
+  let row = 0;
+
+  // Map chart recommendation types to component types
+  const chartTypeMap: Record<string, string> = {
+    'funnel chart': 'BarChart',
+    'roi metric card': 'MetricCard',
+    'stacked bar chart': 'BarChart',
+    'kpi cards': 'MetricCard',
+    'data tables': 'DataTable',
+    'line chart': 'TimeseriesChart',
+    'timeseries chart': 'TimeseriesChart',
+    'bar chart': 'BarChart',
+    'pie chart': 'PieChart',
+    'donut chart': 'DonutChart',
+    'area chart': 'TimeseriesChart',
+    'scatter chart': 'TimeseriesChart',
+    'heatmap': 'BarChart',
+    'gauge': 'MetricCard',
+    'metric card': 'MetricCard',
+    'table': 'DataTable',
+  };
+
+  // Sanitize entity name for titles
+  const cleanEntity = entityName
+    .replace(/^n8n:/, '')
+    .replace(/:execution$/, '')
+    .replace(/^Template \d+:\s*/, '')
+    .trim();
+
+  // ALWAYS start with 3 KPI metric cards (essential for any dashboard)
+  components.push({
+    id: 'primary-metric',
+    type: 'MetricCard',
+    propsBuilder: (m) => ({
+      title: `Total ${cleanEntity} Runs`,
+      valueField: pickField(m, ['execution_id', 'run_id', 'id'], 'id'),
+      aggregation: 'count',
+      icon: 'activity',
+    }),
+    layout: { col: 0, row, w: 4, h: 2 },
+  });
+
+  components.push({
+    id: 'success-metric',
+    type: 'MetricCard',
+    propsBuilder: (m) => ({
+      title: `${cleanEntity} Success Rate`,
+      valueField: pickField(m, ['status', 'result', 'outcome'], 'status'),
+      aggregation: 'percentage',
+      condition: { equals: 'success' },
+      icon: 'check-circle',
+    }),
+    layout: { col: 4, row, w: 4, h: 2 },
+  });
+
+  components.push({
+    id: 'duration-metric',
+    type: 'MetricCard',
+    propsBuilder: (m) => ({
+      title: `Avg ${cleanEntity} Duration`,
+      valueField: pickField(m, ['duration', 'duration_ms', 'execution_time', 'elapsed'], 'duration_ms'),
+      aggregation: 'avg',
+      unit: 'ms',
+      icon: 'clock',
+    }),
+    layout: { col: 8, row, w: 4, h: 2 },
+  });
+  row += 2;
+
+  // Now add components from chart recommendations
+  for (let i = 0; i < chartRecs.length; i++) {
+    const rec = chartRecs[i];
+    const normalizedType = rec.type.toLowerCase();
+    const componentType = chartTypeMap[normalizedType] || 'BarChart';
+
+    // Skip if we already have enough MetricCards from the base set
+    if (componentType === 'MetricCard' && components.filter(c => c.type === 'MetricCard').length >= 4) {
+      continue;
+    }
+
+    const chartId = `chart-${i}-${componentType.toLowerCase()}`;
+
+    // Determine layout based on component type
+    const isWide = componentType === 'DataTable' || componentType === 'TimeseriesChart';
+    const width = isWide ? 12 : (i === 0 ? 8 : 4);
+    const col = isWide ? 0 : (i === 0 ? 0 : 8);
+
+    components.push({
+      id: chartId,
+      type: componentType,
+      propsBuilder: (m) => {
+        switch (componentType) {
+          case 'TimeseriesChart':
+            return {
+              title: `${cleanEntity} ${rec.bestFor.length < 50 ? rec.bestFor : 'Over Time'}`,
+              xField: 'timestamp',
+              yField: pickField(m, ['id', 'execution_id', 'run_id'], 'id'),
+              aggregation: 'count',
+              interval: 'hour',
+            };
+          case 'BarChart':
+            return {
+              title: rec.bestFor.length < 60 ? rec.bestFor : `${cleanEntity} Breakdown`,
+              field: pickField(m, ['status', 'type', 'name', 'category'], 'status'),
+              aggregation: 'count',
+            };
+          case 'PieChart':
+          case 'DonutChart':
+            return {
+              title: `${cleanEntity} Distribution`,
+              field: pickField(m, ['status', 'type', 'category', 'name'], 'status'),
+            };
+          case 'DataTable':
+            return {
+              title: `Recent ${cleanEntity} Activity`,
+              columns: allFields.length > 0
+                ? allFields.slice(0, 5).map(f => ({
+                    key: f,
+                    label: f.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()),
+                  }))
+                : [
+                    { key: 'id', label: 'ID' },
+                    { key: 'status', label: 'Status' },
+                    { key: 'timestamp', label: 'Time' },
+                  ],
+              pageSize: 10,
+            };
+          case 'MetricCard':
+            return {
+              title: rec.bestFor.length < 40 ? rec.bestFor : `${cleanEntity} Metric`,
+              valueField: pickField(m, ['value', 'cost', 'amount', 'id'], 'id'),
+              aggregation: 'count',
+              icon: 'bar-chart-2',
+            };
+          default:
+            return {
+              title: rec.bestFor || `${cleanEntity} Chart`,
+              field: pickField(m, ['status', 'type'], 'status'),
+            };
+        }
+      },
+      layout: { col, row, w: width, h: 4 },
+    });
+
+    // Advance row if wide component or after two side-by-side
+    if (isWide || (i > 0 && i % 2 === 0)) {
+      row += 4;
+    }
+  }
+
+  // Always end with a data table if none exists from recommendations
+  const hasTable = components.some(c => c.type === 'DataTable');
+  if (!hasTable) {
+    components.push({
+      id: 'recent-activity-table',
+      type: 'DataTable',
+      propsBuilder: (m) => ({
+        title: `Recent ${cleanEntity} Activity`,
+        columns: allFields.length > 0
+          ? allFields.slice(0, 5).map(f => ({
+              key: f,
+              label: f.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()),
+            }))
+          : [
+              { key: 'id', label: 'ID' },
+              { key: 'name', label: 'Name' },
+              { key: 'status', label: 'Status' },
+              { key: 'timestamp', label: 'Time' },
+            ],
+        pageSize: 10,
+      }),
+      layout: { col: 0, row: row + 4, w: 12, h: 4 },
+    });
+  }
+
+  console.log(`[buildDesignTokenDrivenComponents] Built ${components.length} components from ${chartRecs.length} chart recs for entity "${cleanEntity}"`);
+  return components;
+}
+
+// ============================================================================
 // Template ID → Blueprint resolver
 // ============================================================================
-function getTemplateBlueprints(templateId: string, mappings: Record<string, string>): ComponentBlueprint[] {
+function getTemplateBlueprints(
+  templateId: string,
+  mappings: Record<string, string>,
+  chartRecommendations?: Array<{ type: string; bestFor: string }>,
+  entityName?: string,
+): ComponentBlueprint[] {
+  // If we have chart recommendations from the design system, build a CUSTOM layout
+  if (chartRecommendations && chartRecommendations.length > 0 && entityName) {
+    return buildDesignTokenDrivenComponents(mappings, chartRecommendations, entityName);
+  }
+  // Fallback to hardcoded templates ONLY if no chart recommendations exist
   switch (templateId) {
     case 'voice-agent-dashboard':
       return buildVoiceAgentComponents(mappings);
@@ -349,6 +551,11 @@ export const generateUISpec = createTool({
     mappings: z.record(z.string()),
     platformType: z.string(),
     selectedStyleBundleId: z.string().optional(),
+    chartRecommendations: z.array(z.object({
+      type: z.string(),
+      bestFor: z.string(),
+    })).optional().describe('Chart recommendations from design_tokens.charts — drives custom component layout instead of hardcoded templates'),
+    entityName: z.string().optional().describe('Primary entity name for personalized dashboard titles'),
   }),
   outputSchema: z.object({
     spec_json: z.record(z.any()),
@@ -411,8 +618,38 @@ export const generateUISpec = createTool({
       );
     }
 
+    // Extract chart recommendations from design tokens (RequestContext) or input
+    let chartRecs = inputData.chartRecommendations;
+    let entityName = inputData.entityName;
+
+    if (!chartRecs && customTokensJson) {
+      try {
+        const parsed = JSON.parse(customTokensJson);
+        chartRecs = parsed.charts;
+      } catch { /* ignore — already parsed above */ }
+    }
+
+    // Try to get entity name from RequestContext if not provided
+    if (!entityName) {
+      const selectedEntities = context?.requestContext?.get('selectedEntities') as string;
+      if (selectedEntities) {
+        // selectedEntities can be comma-separated names like "Leads, ROI Metrics"
+        // or a JSON array of objects. Try both formats.
+        try {
+          const parsed = JSON.parse(selectedEntities);
+          entityName = Array.isArray(parsed)
+            ? (parsed[0]?.display_name || parsed[0]?.name)
+            : undefined;
+        } catch {
+          // It's a plain string (comma-separated names) — use first entity
+          entityName = selectedEntities.split(',')[0]?.trim();
+        }
+      }
+    }
+
     // Build deterministic component array from template blueprints
-    const blueprints = getTemplateBlueprints(templateId, mappings);
+    // If chart recommendations exist, builds a CUSTOM layout instead of hardcoded templates
+    const blueprints = getTemplateBlueprints(templateId, mappings, chartRecs, entityName);
     const fieldNames = Object.keys(mappings);
 
     const components = blueprints.map(bp => ({
@@ -421,6 +658,9 @@ export const generateUISpec = createTool({
       props: bp.propsBuilder(mappings, fieldNames),
       layout: bp.layout,
     }));
+
+    // Build metadata from design tokens for the preview page
+    const parsedForMeta = customTokensJson ? JSON.parse(customTokensJson) : {};
 
     const spec_json = {
       version: '1.0',
@@ -433,6 +673,18 @@ export const generateUISpec = createTool({
         gap: styleTokens.spacing.unit / 2,
       },
       components,
+      metadata: {
+        title: entityName
+          ? `${entityName} Dashboard`
+          : `${platformType.charAt(0).toUpperCase() + platformType.slice(1)} Dashboard`,
+        designTokens: {
+          colors: styleTokens.colors,
+          fonts: styleTokens.fonts,
+        },
+        styleName: parsedForMeta.style?.name || parsedForMeta.styleName || undefined,
+        generatedAt: new Date().toISOString(),
+        chartRecommendations: chartRecs || undefined,
+      },
     };
 
     // Design tokens resolved from the custom design system workflow

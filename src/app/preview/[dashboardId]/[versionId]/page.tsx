@@ -543,6 +543,11 @@ export default async function PreviewPage({ params }: PreviewPageProps) {
   const bodyFont = (version.design_tokens?.fonts?.body as string | undefined)?.split(',')[0]?.trim();
   const fontsToLoad = [...new Set([headingFont, bodyFont].filter(Boolean))] as string[];
 
+  // Extract dashboard title from spec metadata (populated by generateUISpec)
+  const dashboardTitle = enrichedSpec?.metadata?.title
+    || enrichedSpec?.title
+    || 'Dashboard Preview';
+
   return (
     <div className="min-h-screen bg-white">
       {fontsToLoad.length > 0 && (
@@ -550,6 +555,24 @@ export default async function PreviewPage({ params }: PreviewPageProps) {
           rel="stylesheet"
           href={`https://fonts.googleapis.com/css2?${fontsToLoad.map(f => `family=${encodeURIComponent(f)}:wght@400;500;600;700`).join('&')}&display=swap`}
         />
+      )}
+      {dashboardTitle && (
+        <div className="px-6 pt-6 pb-2">
+          <h1
+            className="text-2xl font-bold"
+            style={{
+              fontFamily: (version.design_tokens?.fonts?.heading as string) || undefined,
+              color: (version.design_tokens?.colors?.text as string) || '#111827',
+            }}
+          >
+            {dashboardTitle}
+          </h1>
+          {version.design_tokens?.style?.name && (
+            <p className="text-sm mt-1" style={{ color: (version.design_tokens?.colors?.secondary as string) || '#64748B' }}>
+              Style: {version.design_tokens.style.name as string}
+            </p>
+          )}
+        </div>
       )}
       <ResponsiveDashboardRenderer
         spec={enrichedSpec}
