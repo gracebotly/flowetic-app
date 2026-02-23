@@ -58,6 +58,7 @@ const KNOWN_AGENT_TOOLS = new Set([
   'showInteractiveEditPanel',
   // Phase advancement
   'advancePhase',
+  'confirmWireframe',
   // On-demand skill knowledge search
   'searchSkillKnowledge',
   // Workspace-injected tools (auto-added by Mastra when workspace is assigned).
@@ -235,7 +236,7 @@ export class PhaseToolGatingProcessor implements Processor {
     // Phase-specific maxSteps (mirrors route.ts values)
     const PHASE_MAX_STEPS: Record<string, number> = {
       select_entity: 3,
-      recommend: 3,  // Was 4 — matches route.ts. Recommend needs at most 3 steps.
+      recommend: 6,  // Increased: agent needs steps for getOutcomes + present wireframe + handle confirmation response
       style: 5,
       build_preview: 8,
       interactive_edit: 10,

@@ -18,6 +18,7 @@ import {
   delegateToDesignAdvisor,
 } from "../tools/delegation";
 import { advancePhase } from "../tools/journey/advancePhase";
+import { confirmWireframe } from "@/mastra/tools/journey/confirmWireframe";
 import { generatePreviewWorkflow } from "../workflows/generatePreview";
 import { connectionBackfillWorkflow } from "../workflows/connectionBackfill";
 import { deployDashboardWorkflow } from "../workflows/deployDashboard";
@@ -231,8 +232,7 @@ Use BM25 search tools (getStyleRecommendations, getTypographyRecommendations, et
       "",
       "### YOUR TOOLS:",
       "- validatePreviewReadiness: Check if enough data exists before preview",
-      "- connectionBackfillWorkflow: Fetch historical workflow execution data",
-      "- generatePreviewWorkflow: Create dashboard preview (only if validation passes)",
+      "- delegateToPlatformMapper: Delegate to the platform specialist for data sync and preview generation. This specialist handles backfill and preview workflows internally.",
       "",
       "Remember: You're a consultant, not a form-filler. Complete tasks autonomously and explain your reasoning.",
 "IMPORTANT: Never output raw __ACTION__ tokens in text. Instead, use the suggestAction tool to present clickable buttons to users. Example: suggestAction({ label: 'Generate Dashboard Preview', actionId: 'generate-preview' })",
@@ -382,6 +382,7 @@ Use BM25 search tools (getStyleRecommendations, getTypographyRecommendations, et
   tools: {
     // Phase advancement
     advancePhase,
+    confirmWireframe,
     // Sub-agent delegation (replaces agents: {} config)
     delegateToPlatformMapper,
     delegateToDashboardBuilder,

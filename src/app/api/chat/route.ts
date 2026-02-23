@@ -1112,7 +1112,16 @@ export async function POST(req: Request) {
           userText = lastMsg.content.toLowerCase().trim();
         }
         const confirmationPatterns = [
-          /^(yes|yeah|yep|yup|sure|ok|okay|correct|confirmed?|approve[d]?|looks?\s*good|looks?\s*right|looks?\s*great|looks?\s*fine|let'?s?\s*go|go\s*ahead|perfect|great|that'?s?\s*(right|correct|good|perfect|fine)|proceed|do\s*it|build\s*it|generate|lgtm|fine|this\s*is\s*(good|right|correct|fine|perfect))/i,
+          // Single-word confirmations (anchored — these ARE the full message)
+          /^(yes|yeah|yep|yup|sure|ok|okay|correct|confirmed?|approve[d]?|perfect|great|fine|lgtm|proceed)\s*[.!]?$/i,
+          // "looks" + optional filler words + positive adjective (no anchor — can appear anywhere)
+          /\blooks?\s+.*?(good|right|great|fine|perfect|correct|accurate|nice|awesome|amazing)\b/i,
+          // "that/this" + "is/looks" + optional filler + positive adjective
+          /\b(that|this)\s+(is|looks)\s+.*?(good|right|great|fine|perfect|correct|accurate|nice)\b/i,
+          // Action phrases (no anchor — can appear mid-sentence)
+          /\b(let'?s?\s*(go|do\s*it|proceed|move\s*on)|go\s*ahead|do\s*it|build\s*it|generate|ship\s*it)\b/i,
+          // "works for me", "i like it", "that'll do", "sounds good"
+          /\b(works?\s*(for\s*me)?|i\s*like\s*it|that'?ll?\s*do|sounds?\s*good|i'?m\s*(good|happy|satisfied))\b/i,
         ];
         const isConfirmation = confirmationPatterns.some(p => p.test(userText));
         if (isConfirmation) {
@@ -1148,7 +1157,17 @@ export async function POST(req: Request) {
           messageText = lastMsg.content.toLowerCase().trim();
         }
         const styleConfirmPatterns = [
-          /^(yes|yeah|yep|sure|ok|okay|love\s*it|looks?\s*(good|great|perfect|right|fine|amazing)|perfect|great|that'?s?\s*(it|perfect|great|good)|proceed|let'?s?\s*go|go\s*ahead|confirmed?|approve[d]?|lgtm|build\s*it|generate|do\s*it|this\s*is\s*(good|perfect|great|fine))/i,
+          // Single-word confirmations (anchored — these ARE the full message)
+          /^(yes|yeah|yep|yup|sure|ok|okay|correct|confirmed?|approve[d]?|perfect|great|fine|lgtm|proceed)\s*[.!]?$/i,
+          // "looks" / "love" + optional filler + positive adjective
+          /\blooks?\s+.*?(good|right|great|fine|perfect|correct|accurate|nice|awesome|amazing)\b/i,
+          /\blove\s*(it|this|the\s*(style|design|colors?|look))\b/i,
+          // "that/this" + "is/looks" + optional filler + positive adjective
+          /\b(that|this)\s+(is|looks)\s+.*?(good|right|great|fine|perfect|correct|accurate|nice)\b/i,
+          // Action phrases
+          /\b(let'?s?\s*(go|do\s*it|proceed|move\s*on)|go\s*ahead|do\s*it|build\s*it|generate|ship\s*it)\b/i,
+          // "works for me", "i like it", "sounds good"
+          /\b(works?\s*(for\s*me)?|i\s*like\s*it|that'?ll?\s*do|sounds?\s*good|i'?m\s*(good|happy|satisfied))\b/i,
         ];
         const isStyleConfirmation = messageText && styleConfirmPatterns.some(p => p.test(messageText));
         if (isStyleConfirmation) {
@@ -1237,7 +1256,7 @@ export async function POST(req: Request) {
             const phase = requestContext.get('phase') as string || 'select_entity';
             const phaseMaxSteps: Record<string, number> = {
               select_entity: 3,
-              recommend: 3,  // Was 4 — reduced to prevent 300s timeout. Recommend only needs: step0=getEventStats+getOutcomes, step1=synthesize, step2=safety-valve-text
+              recommend: 6,  // Increased from 3: agent needs steps for getOutcomes + present wireframe + handle user confirmation. Old value caused safety valve to kill agent before wireframe confirmation could be processed.
               style: 5,
               build_preview: 8,
               interactive_edit: 10,
@@ -1307,4 +1326,3 @@ export async function POST(req: Request) {
     );
   }
 }
-
