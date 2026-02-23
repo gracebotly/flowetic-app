@@ -543,10 +543,11 @@ export default async function PreviewPage({ params }: PreviewPageProps) {
   const bodyFont = (version.design_tokens?.fonts?.body as string | undefined)?.split(',')[0]?.trim();
   const fontsToLoad = [...new Set([headingFont, bodyFont].filter(Boolean))] as string[];
 
-  // Extract dashboard title from spec metadata (populated by generateUISpec)
-  const dashboardTitle = enrichedSpec?.metadata?.title
-    || enrichedSpec?.title
-    || 'Dashboard Preview';
+  const dashboardTitle = enrichedSpec?.metadata?.title || enrichedSpec?.title || null;
+  const styleName = (version.design_tokens as any)?.style?.name || enrichedSpec?.metadata?.styleName || null;
+  const headingFontForTitle = (version.design_tokens?.fonts?.heading as string | undefined)?.split(',')[0]?.trim();
+  const titleTextColor = (version.design_tokens?.colors?.text as string) || '#111827';
+  const subtitleColor = (version.design_tokens?.colors?.secondary as string) || '#64748B';
 
   return (
     <div className="min-h-screen bg-white">
@@ -561,15 +562,15 @@ export default async function PreviewPage({ params }: PreviewPageProps) {
           <h1
             className="text-2xl font-bold"
             style={{
-              fontFamily: (version.design_tokens?.fonts?.heading as string) || undefined,
-              color: (version.design_tokens?.colors?.text as string) || '#111827',
+              fontFamily: headingFontForTitle ? `${headingFontForTitle}, sans-serif` : undefined,
+              color: titleTextColor,
             }}
           >
             {dashboardTitle}
           </h1>
-          {version.design_tokens?.style?.name && (
-            <p className="text-sm mt-1" style={{ color: (version.design_tokens?.colors?.secondary as string) || '#64748B' }}>
-              Style: {version.design_tokens.style.name as string}
+          {styleName && (
+            <p className="text-sm mt-1" style={{ color: subtitleColor }}>
+              Style: {styleName}
             </p>
           )}
         </div>

@@ -60,307 +60,78 @@ function pickField(
   return fallback;
 }
 
-function buildVoiceAgentComponents(mappings: Record<string, string>): ComponentBlueprint[] {
-  return [
-    {
-      id: 'total-calls', type: 'MetricCard',
-      propsBuilder: (m) => ({ title: 'Total Calls', valueField: pickField(m, ['call_id', 'id', 'call'], 'id'), aggregation: 'count', icon: 'phone' }),
-      layout: { col: 0, row: 0, w: 3, h: 2 },
-    },
-    {
-      id: 'avg-duration', type: 'MetricCard',
-      propsBuilder: (m) => ({ title: 'Avg Duration', valueField: pickField(m, ['duration', 'call_duration', 'length'], 'duration'), aggregation: 'avg', unit: 'seconds', icon: 'clock' }),
-      layout: { col: 3, row: 0, w: 3, h: 2 },
-    },
-    {
-      id: 'success-rate', type: 'MetricCard',
-      propsBuilder: (m) => ({ title: 'Success Rate', valueField: pickField(m, ['status', 'outcome', 'result'], 'status'), aggregation: 'percentage', condition: { equals: 'success' }, icon: 'check-circle' }),
-      layout: { col: 6, row: 0, w: 3, h: 2 },
-    },
-    {
-      id: 'total-cost', type: 'MetricCard',
-      propsBuilder: (m) => ({ title: 'Total Cost', valueField: pickField(m, ['cost', 'price', 'amount'], 'cost'), aggregation: 'sum', unit: 'USD', icon: 'dollar-sign' }),
-      layout: { col: 9, row: 0, w: 3, h: 2 },
-    },
-    {
-      id: 'calls-timeline', type: 'TimeseriesChart',
-      propsBuilder: (m) => ({ title: 'Calls Over Time', xField: 'timestamp', yField: pickField(m, ['call_id', 'id'], 'id'), aggregation: 'count', interval: 'hour' }),
-      layout: { col: 0, row: 2, w: 8, h: 4 },
-    },
-    {
-      id: 'status-breakdown', type: 'PieChart',
-      propsBuilder: (m) => ({ title: 'Call Status', field: pickField(m, ['status', 'outcome'], 'status') }),
-      layout: { col: 8, row: 2, w: 4, h: 4 },
-    },
-    {
-      id: 'recent-calls', type: 'DataTable',
-      propsBuilder: (m) => ({
-        title: 'Recent Calls',
-        columns: [
-          { key: pickField(m, ['call_id', 'id'], 'id'), label: 'Call ID' },
-          { key: pickField(m, ['duration', 'call_duration'], 'duration'), label: 'Duration' },
-          { key: pickField(m, ['status', 'outcome'], 'status'), label: 'Status' },
-          { key: 'timestamp', label: 'Time' },
-        ],
-        pageSize: 10,
-      }),
-      layout: { col: 0, row: 6, w: 12, h: 4 },
-    },
-  ];
-}
+// ============================================================================
+// Design-Token-Driven Component Builder
+// REPLACES all hardcoded template functions. Every dashboard is unique.
+// If no chart recommendations exist, this throws — no silent fallback.
+// ============================================================================
 
-function buildWorkflowDashboardComponents(mappings: Record<string, string>): ComponentBlueprint[] {
-  return [
-    {
-      id: 'total-executions', type: 'MetricCard',
-      propsBuilder: (m) => ({ title: 'Total Executions', valueField: pickField(m, ['execution_id', 'run_id', 'id'], 'id'), aggregation: 'count', icon: 'activity' }),
-      layout: { col: 0, row: 0, w: 3, h: 2 },
-    },
-    {
-      id: 'success-rate', type: 'MetricCard',
-      propsBuilder: (m) => ({ title: 'Success Rate', valueField: pickField(m, ['status', 'result', 'outcome'], 'status'), aggregation: 'percentage', condition: { equals: 'success' }, icon: 'check-circle' }),
-      layout: { col: 3, row: 0, w: 3, h: 2 },
-    },
-    {
-      id: 'avg-duration', type: 'MetricCard',
-      propsBuilder: (m) => ({ title: 'Avg Duration', valueField: pickField(m, ['duration', 'execution_time', 'elapsed'], 'duration'), aggregation: 'avg', unit: 'seconds', icon: 'clock' }),
-      layout: { col: 6, row: 0, w: 3, h: 2 },
-    },
-    {
-      id: 'total-processed', type: 'MetricCard',
-      propsBuilder: (m) => ({ title: 'Items Processed', valueField: pickField(m, ['items_count', 'records', 'processed'], 'id'), aggregation: 'sum', icon: 'layers' }),
-      layout: { col: 9, row: 0, w: 3, h: 2 },
-    },
-    {
-      id: 'executions-timeline', type: 'TimeseriesChart',
-      propsBuilder: (m) => ({ title: 'Executions Over Time', xField: 'timestamp', yField: pickField(m, ['execution_id', 'run_id', 'id'], 'id'), aggregation: 'count', interval: 'hour' }),
-      layout: { col: 0, row: 2, w: 8, h: 4 },
-    },
-    {
-      id: 'status-breakdown', type: 'BarChart',
-      propsBuilder: (m) => ({ title: 'Status Breakdown', field: pickField(m, ['status', 'result'], 'status'), aggregation: 'count' }),
-      layout: { col: 8, row: 2, w: 4, h: 4 },
-    },
-    {
-      id: 'recent-executions', type: 'DataTable',
-      propsBuilder: (m) => ({
-        title: 'Recent Executions',
-        columns: [
-          { key: pickField(m, ['execution_id', 'run_id', 'id'], 'id'), label: 'Run ID' },
-          { key: pickField(m, ['workflow_name', 'name'], 'name'), label: 'Workflow' },
-          { key: pickField(m, ['status', 'result'], 'status'), label: 'Status' },
-          { key: pickField(m, ['duration', 'execution_time'], 'duration'), label: 'Duration' },
-          { key: 'timestamp', label: 'Time' },
-        ],
-        pageSize: 10,
-      }),
-      layout: { col: 0, row: 6, w: 12, h: 4 },
-    },
-  ];
-}
-
-function buildMultiAgentComponents(mappings: Record<string, string>): ComponentBlueprint[] {
-  return [
-    {
-      id: 'total-tasks', type: 'MetricCard',
-      propsBuilder: (m) => ({ title: 'Total Tasks', valueField: pickField(m, ['task_id', 'id'], 'id'), aggregation: 'count', icon: 'list-checks' }),
-      layout: { col: 0, row: 0, w: 3, h: 2 },
-    },
-    {
-      id: 'agents-active', type: 'MetricCard',
-      propsBuilder: (m) => ({ title: 'Active Agents', valueField: pickField(m, ['agent_id', 'agent', 'agent_name'], 'agent_id'), aggregation: 'count_distinct', icon: 'users' }),
-      layout: { col: 3, row: 0, w: 3, h: 2 },
-    },
-    {
-      id: 'completion-rate', type: 'MetricCard',
-      propsBuilder: (m) => ({ title: 'Completion Rate', valueField: pickField(m, ['status', 'result'], 'status'), aggregation: 'percentage', condition: { equals: 'completed' }, icon: 'check-circle' }),
-      layout: { col: 6, row: 0, w: 3, h: 2 },
-    },
-    {
-      id: 'avg-task-time', type: 'MetricCard',
-      propsBuilder: (m) => ({ title: 'Avg Task Time', valueField: pickField(m, ['duration', 'elapsed'], 'duration'), aggregation: 'avg', unit: 'seconds', icon: 'clock' }),
-      layout: { col: 9, row: 0, w: 3, h: 2 },
-    },
-    {
-      id: 'tasks-timeline', type: 'TimeseriesChart',
-      propsBuilder: (m) => ({ title: 'Tasks Over Time', xField: 'timestamp', yField: pickField(m, ['task_id', 'id'], 'id'), aggregation: 'count', interval: 'hour' }),
-      layout: { col: 0, row: 2, w: 8, h: 4 },
-    },
-    {
-      id: 'agent-distribution', type: 'PieChart',
-      propsBuilder: (m) => ({ title: 'Tasks by Agent', field: pickField(m, ['agent_id', 'agent_name', 'agent'], 'agent_id') }),
-      layout: { col: 8, row: 2, w: 4, h: 4 },
-    },
-    {
-      id: 'recent-tasks', type: 'DataTable',
-      propsBuilder: (m) => ({
-        title: 'Recent Tasks',
-        columns: [
-          { key: pickField(m, ['task_id', 'id'], 'id'), label: 'Task' },
-          { key: pickField(m, ['agent_name', 'agent'], 'agent'), label: 'Agent' },
-          { key: pickField(m, ['status', 'result'], 'status'), label: 'Status' },
-          { key: 'timestamp', label: 'Time' },
-        ],
-        pageSize: 10,
-      }),
-      layout: { col: 0, row: 6, w: 12, h: 4 },
-    },
-  ];
-}
-
-function buildChatDashboardComponents(mappings: Record<string, string>): ComponentBlueprint[] {
-  return [
-    {
-      id: 'total-conversations', type: 'MetricCard',
-      propsBuilder: (m) => ({ title: 'Total Conversations', valueField: pickField(m, ['conversation_id', 'session_id', 'id'], 'id'), aggregation: 'count', icon: 'message-circle' }),
-      layout: { col: 0, row: 0, w: 3, h: 2 },
-    },
-    {
-      id: 'total-messages', type: 'MetricCard',
-      propsBuilder: (m) => ({ title: 'Total Messages', valueField: pickField(m, ['message_id', 'id'], 'id'), aggregation: 'count', icon: 'messages-square' }),
-      layout: { col: 3, row: 0, w: 3, h: 2 },
-    },
-    {
-      id: 'avg-messages-per-session', type: 'MetricCard',
-      propsBuilder: (m) => ({ title: 'Avg Msgs/Session', valueField: pickField(m, ['message_id', 'id'], 'id'), aggregation: 'avg_per_group', groupBy: pickField(m, ['conversation_id', 'session_id'], 'session_id'), icon: 'bar-chart-2' }),
-      layout: { col: 6, row: 0, w: 3, h: 2 },
-    },
-    {
-      id: 'satisfaction', type: 'MetricCard',
-      propsBuilder: (m) => ({ title: 'Satisfaction', valueField: pickField(m, ['rating', 'satisfaction', 'score'], 'rating'), aggregation: 'avg', icon: 'star' }),
-      layout: { col: 9, row: 0, w: 3, h: 2 },
-    },
-    {
-      id: 'messages-timeline', type: 'TimeseriesChart',
-      propsBuilder: (m) => ({ title: 'Messages Over Time', xField: 'timestamp', yField: pickField(m, ['message_id', 'id'], 'id'), aggregation: 'count', interval: 'hour' }),
-      layout: { col: 0, row: 2, w: 8, h: 4 },
-    },
-    {
-      id: 'intent-breakdown', type: 'PieChart',
-      propsBuilder: (m) => ({ title: 'Intent Distribution', field: pickField(m, ['intent', 'category', 'topic'], 'intent') }),
-      layout: { col: 8, row: 2, w: 4, h: 4 },
-    },
-    {
-      id: 'recent-conversations', type: 'DataTable',
-      propsBuilder: (m) => ({
-        title: 'Recent Conversations',
-        columns: [
-          { key: pickField(m, ['conversation_id', 'session_id', 'id'], 'id'), label: 'Session' },
-          { key: pickField(m, ['user_message', 'message'], 'message'), label: 'Last Message' },
-          { key: pickField(m, ['status', 'state'], 'status'), label: 'Status' },
-          { key: 'timestamp', label: 'Time' },
-        ],
-        pageSize: 10,
-      }),
-      layout: { col: 0, row: 6, w: 12, h: 4 },
-    },
-  ];
+/**
+ * Sanitize entity/workflow name for use in dashboard titles.
+ * Strips platform prefixes, template numbers, and execution suffixes.
+ */
+function cleanEntityName(raw: string): string {
+  return raw
+    .replace(/^n8n:/i, '')
+    .replace(/^make:/i, '')
+    .replace(/^vapi:/i, '')
+    .replace(/^retell:/i, '')
+    .replace(/:execution$/i, '')
+    .replace(/^Template\s*\d+:\s*/i, '')
+    .trim() || 'Dashboard';
 }
 
 /**
- * Default/fallback template — uses available mappings to build a sensible dashboard
- * even when we don't know the exact platform type. This replaces the old 1-MetricCard else block.
+ * Map a design system chart recommendation type to a renderer component type.
  */
-function buildDefaultComponents(mappings: Record<string, string>): ComponentBlueprint[] {
-  const allFields = Object.values(mappings);
-  return [
-    {
-      id: 'total-events', type: 'MetricCard',
-      propsBuilder: (m) => ({ title: 'Total Events', valueField: pickField(m, ['id', 'event_id'], 'id'), aggregation: 'count', icon: 'activity' }),
-      layout: { col: 0, row: 0, w: 3, h: 2 },
-    },
-    {
-      id: 'unique-types', type: 'MetricCard',
-      propsBuilder: (m) => ({ title: 'Event Types', valueField: pickField(m, ['type', 'event_type', 'category'], 'type'), aggregation: 'count_distinct', icon: 'tag' }),
-      layout: { col: 3, row: 0, w: 3, h: 2 },
-    },
-    {
-      id: 'success-rate', type: 'MetricCard',
-      propsBuilder: (m) => ({ title: 'Success Rate', valueField: pickField(m, ['status', 'result', 'outcome'], 'status'), aggregation: 'percentage', condition: { equals: 'success' }, icon: 'check-circle' }),
-      layout: { col: 6, row: 0, w: 3, h: 2 },
-    },
-    {
-      id: 'latest-activity', type: 'MetricCard',
-      propsBuilder: (m) => ({ title: 'Latest Activity', valueField: 'timestamp', aggregation: 'latest', icon: 'clock' }),
-      layout: { col: 9, row: 0, w: 3, h: 2 },
-    },
-    {
-      id: 'events-timeline', type: 'TimeseriesChart',
-      propsBuilder: (m) => ({ title: 'Events Over Time', xField: 'timestamp', yField: pickField(m, ['id', 'event_id'], 'id'), aggregation: 'count', interval: 'hour' }),
-      layout: { col: 0, row: 2, w: 8, h: 4 },
-    },
-    {
-      id: 'type-breakdown', type: 'BarChart',
-      propsBuilder: (m) => ({ title: 'Event Types', field: pickField(m, ['type', 'event_type', 'category', 'status'], 'type'), aggregation: 'count' }),
-      layout: { col: 8, row: 2, w: 4, h: 4 },
-    },
-    {
-      id: 'recent-events', type: 'DataTable',
-      propsBuilder: (m) => ({
-        title: 'Recent Events',
-        columns: allFields.length > 0
-          ? allFields.slice(0, 5).map(f => ({ key: f, label: f.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) }))
-          : [
-              { key: 'id', label: 'ID' },
-              { key: 'type', label: 'Type' },
-              { key: 'status', label: 'Status' },
-              { key: 'timestamp', label: 'Time' },
-            ],
-        pageSize: 10,
-      }),
-      layout: { col: 0, row: 6, w: 12, h: 4 },
-    },
-  ];
+function mapChartRecToComponentType(recType: string): string {
+  const map: Record<string, string> = {
+    'funnel chart': 'BarChart',
+    'roi metric card': 'MetricCard',
+    'stacked bar chart': 'BarChart',
+    'kpi cards': 'MetricCard',
+    'kpi card': 'MetricCard',
+    'data tables': 'DataTable',
+    'data table': 'DataTable',
+    'line chart': 'TimeseriesChart',
+    'timeseries chart': 'TimeseriesChart',
+    'time series chart': 'TimeseriesChart',
+    'bar chart': 'BarChart',
+    'pie chart': 'PieChart',
+    'donut chart': 'DonutChart',
+    'area chart': 'TimeseriesChart',
+    'gauge': 'MetricCard',
+    'metric card': 'MetricCard',
+    'table': 'DataTable',
+    'heatmap': 'BarChart',
+    'scatter chart': 'TimeseriesChart',
+  };
+  return map[recType.toLowerCase()] || 'BarChart';
 }
 
-// ============================================================================
-// Design-token-driven component builder
-// Replaces hardcoded templates when design_tokens.charts is available.
-// Each dashboard is unique because the designSystemWorkflow recommends different
-// charts based on the user's workflow type, entity, and style preferences.
-// ============================================================================
-function buildDesignTokenDrivenComponents(
+/**
+ * Build dashboard components driven by the design system's chart recommendations.
+ *
+ * This is the ONLY component builder. There are no fallback templates.
+ * The designSystemWorkflow MUST have run and produced chart recommendations.
+ * If it didn't, this function throws.
+ */
+function buildComponentsFromDesignTokens(
   mappings: Record<string, string>,
   chartRecs: Array<{ type: string; bestFor: string }>,
   entityName: string,
 ): ComponentBlueprint[] {
   const components: ComponentBlueprint[] = [];
   const allFields = Object.values(mappings);
+  const entity = cleanEntityName(entityName);
   let row = 0;
 
-  // Map chart recommendation types to component types
-  const chartTypeMap: Record<string, string> = {
-    'funnel chart': 'BarChart',
-    'roi metric card': 'MetricCard',
-    'stacked bar chart': 'BarChart',
-    'kpi cards': 'MetricCard',
-    'data tables': 'DataTable',
-    'line chart': 'TimeseriesChart',
-    'timeseries chart': 'TimeseriesChart',
-    'bar chart': 'BarChart',
-    'pie chart': 'PieChart',
-    'donut chart': 'DonutChart',
-    'area chart': 'TimeseriesChart',
-    'scatter chart': 'TimeseriesChart',
-    'heatmap': 'BarChart',
-    'gauge': 'MetricCard',
-    'metric card': 'MetricCard',
-    'table': 'DataTable',
-  };
-
-  // Sanitize entity name for titles
-  const cleanEntity = entityName
-    .replace(/^n8n:/, '')
-    .replace(/:execution$/, '')
-    .replace(/^Template \d+:\s*/, '')
-    .trim();
-
-  // ALWAYS start with 3 KPI metric cards (essential for any dashboard)
+  // ── ROW 0: Three KPI cards (always present, entity-named) ──────────────
   components.push({
-    id: 'primary-metric',
+    id: 'primary-kpi',
     type: 'MetricCard',
     propsBuilder: (m) => ({
-      title: `Total ${cleanEntity} Runs`,
+      title: `Total ${entity} Runs`,
       valueField: pickField(m, ['execution_id', 'run_id', 'id'], 'id'),
       aggregation: 'count',
       icon: 'activity',
@@ -369,10 +140,10 @@ function buildDesignTokenDrivenComponents(
   });
 
   components.push({
-    id: 'success-metric',
+    id: 'success-kpi',
     type: 'MetricCard',
     propsBuilder: (m) => ({
-      title: `${cleanEntity} Success Rate`,
+      title: `${entity} Success Rate`,
       valueField: pickField(m, ['status', 'result', 'outcome'], 'status'),
       aggregation: 'percentage',
       condition: { equals: 'success' },
@@ -382,10 +153,10 @@ function buildDesignTokenDrivenComponents(
   });
 
   components.push({
-    id: 'duration-metric',
+    id: 'duration-kpi',
     type: 'MetricCard',
     propsBuilder: (m) => ({
-      title: `Avg ${cleanEntity} Duration`,
+      title: `Avg ${entity} Duration`,
       valueField: pickField(m, ['duration', 'duration_ms', 'execution_time', 'elapsed'], 'duration_ms'),
       aggregation: 'avg',
       unit: 'ms',
@@ -393,34 +164,36 @@ function buildDesignTokenDrivenComponents(
     }),
     layout: { col: 8, row, w: 4, h: 2 },
   });
+
   row += 2;
 
-  // Now add components from chart recommendations
+  // ── ROWS 2+: Components from chart recommendations ─────────────────────
+  let metricCount = 3; // already placed 3 KPIs above
+
   for (let i = 0; i < chartRecs.length; i++) {
     const rec = chartRecs[i];
-    const normalizedType = rec.type.toLowerCase();
-    const componentType = chartTypeMap[normalizedType] || 'BarChart';
+    const componentType = mapChartRecToComponentType(rec.type);
 
-    // Skip if we already have enough MetricCards from the base set
-    if (componentType === 'MetricCard' && components.filter(c => c.type === 'MetricCard').length >= 4) {
-      continue;
-    }
+    // Cap MetricCards at 4 total
+    if (componentType === 'MetricCard' && metricCount >= 4) continue;
+    if (componentType === 'MetricCard') metricCount++;
 
-    const chartId = `chart-${i}-${componentType.toLowerCase()}`;
-
-    // Determine layout based on component type
-    const isWide = componentType === 'DataTable' || componentType === 'TimeseriesChart';
-    const width = isWide ? 12 : (i === 0 ? 8 : 4);
-    const col = isWide ? 0 : (i === 0 ? 0 : 8);
+    const chartId = `rec-${i}-${componentType.toLowerCase()}`;
+    const isFullWidth = componentType === 'DataTable' || componentType === 'TimeseriesChart';
+    const width = isFullWidth ? 12 : 8;
+    const col = 0;
 
     components.push({
       id: chartId,
       type: componentType,
       propsBuilder: (m) => {
+        // Build a clean title from the recommendation's bestFor or chart type
+        const shortBestFor = rec.bestFor.length < 55 ? rec.bestFor : '';
+
         switch (componentType) {
           case 'TimeseriesChart':
             return {
-              title: `${cleanEntity} ${rec.bestFor.length < 50 ? rec.bestFor : 'Over Time'}`,
+              title: shortBestFor || `${entity} Over Time`,
               xField: 'timestamp',
               yField: pickField(m, ['id', 'execution_id', 'run_id'], 'id'),
               aggregation: 'count',
@@ -428,26 +201,27 @@ function buildDesignTokenDrivenComponents(
             };
           case 'BarChart':
             return {
-              title: rec.bestFor.length < 60 ? rec.bestFor : `${cleanEntity} Breakdown`,
+              title: shortBestFor || `${entity} Breakdown`,
               field: pickField(m, ['status', 'type', 'name', 'category'], 'status'),
               aggregation: 'count',
             };
           case 'PieChart':
           case 'DonutChart':
             return {
-              title: `${cleanEntity} Distribution`,
+              title: shortBestFor || `${entity} Distribution`,
               field: pickField(m, ['status', 'type', 'category', 'name'], 'status'),
             };
           case 'DataTable':
             return {
-              title: `Recent ${cleanEntity} Activity`,
+              title: `Recent ${entity} Activity`,
               columns: allFields.length > 0
-                ? allFields.slice(0, 5).map(f => ({
+                ? allFields.slice(0, 6).map(f => ({
                     key: f,
                     label: f.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()),
                   }))
                 : [
                     { key: 'id', label: 'ID' },
+                    { key: 'name', label: 'Name' },
                     { key: 'status', label: 'Status' },
                     { key: 'timestamp', label: 'Time' },
                   ],
@@ -455,37 +229,30 @@ function buildDesignTokenDrivenComponents(
             };
           case 'MetricCard':
             return {
-              title: rec.bestFor.length < 40 ? rec.bestFor : `${cleanEntity} Metric`,
-              valueField: pickField(m, ['value', 'cost', 'amount', 'id'], 'id'),
+              title: shortBestFor || `${entity} Metric`,
+              valueField: pickField(m, ['value', 'cost', 'amount', 'score', 'id'], 'id'),
               aggregation: 'count',
               icon: 'bar-chart-2',
             };
           default:
-            return {
-              title: rec.bestFor || `${cleanEntity} Chart`,
-              field: pickField(m, ['status', 'type'], 'status'),
-            };
+            return { title: shortBestFor || `${entity} Chart`, field: 'status' };
         }
       },
       layout: { col, row, w: width, h: 4 },
     });
 
-    // Advance row if wide component or after two side-by-side
-    if (isWide || (i > 0 && i % 2 === 0)) {
-      row += 4;
-    }
+    row += 4;
   }
 
-  // Always end with a data table if none exists from recommendations
-  const hasTable = components.some(c => c.type === 'DataTable');
-  if (!hasTable) {
+  // ── FINAL ROW: Data table if none from recommendations ─────────────────
+  if (!components.some(c => c.type === 'DataTable')) {
     components.push({
-      id: 'recent-activity-table',
+      id: 'activity-table',
       type: 'DataTable',
       propsBuilder: (m) => ({
-        title: `Recent ${cleanEntity} Activity`,
+        title: `Recent ${entity} Activity`,
         columns: allFields.length > 0
-          ? allFields.slice(0, 5).map(f => ({
+          ? allFields.slice(0, 6).map(f => ({
               key: f,
               label: f.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()),
             }))
@@ -497,45 +264,16 @@ function buildDesignTokenDrivenComponents(
             ],
         pageSize: 10,
       }),
-      layout: { col: 0, row: row + 4, w: 12, h: 4 },
+      layout: { col: 0, row, w: 12, h: 4 },
     });
   }
 
-  console.log(`[buildDesignTokenDrivenComponents] Built ${components.length} components from ${chartRecs.length} chart recs for entity "${cleanEntity}"`);
+  console.log(
+    `[buildComponentsFromDesignTokens] Built ${components.length} UNIQUE components ` +
+    `from ${chartRecs.length} chart recommendations for "${entity}"`
+  );
+
   return components;
-}
-
-// ============================================================================
-// Template ID → Blueprint resolver
-// ============================================================================
-function getTemplateBlueprints(
-  templateId: string,
-  mappings: Record<string, string>,
-  chartRecommendations?: Array<{ type: string; bestFor: string }>,
-  entityName?: string,
-): ComponentBlueprint[] {
-  // If we have chart recommendations from the design system, build a CUSTOM layout
-  if (chartRecommendations && chartRecommendations.length > 0 && entityName) {
-    return buildDesignTokenDrivenComponents(mappings, chartRecommendations, entityName);
-  }
-  // Fallback to hardcoded templates ONLY if no chart recommendations exist
-  switch (templateId) {
-    case 'voice-agent-dashboard':
-      return buildVoiceAgentComponents(mappings);
-    case 'workflow-dashboard':
-      return buildWorkflowDashboardComponents(mappings);
-    case 'multi-agent-dashboard':
-      return buildMultiAgentComponents(mappings);
-    case 'chat-dashboard':
-      return buildChatDashboardComponents(mappings);
-    default:
-      return buildDefaultComponents(mappings);
-  }
-}
-
-export function resolveStyleBundleId(input: string): string {
-  console.warn(`[resolveStyleBundleId] DEPRECATED: "${input}" — presets removed. Use custom design tokens.`);
-  return 'custom';
 }
 
 // ============================================================================
@@ -554,8 +292,8 @@ export const generateUISpec = createTool({
     chartRecommendations: z.array(z.object({
       type: z.string(),
       bestFor: z.string(),
-    })).optional().describe('Chart recommendations from design_tokens.charts — drives custom component layout instead of hardcoded templates'),
-    entityName: z.string().optional().describe('Primary entity name for personalized dashboard titles'),
+    })).optional(),
+    entityName: z.string().optional(),
   }),
   outputSchema: z.object({
     spec_json: z.record(z.any()),
@@ -618,38 +356,43 @@ export const generateUISpec = createTool({
       );
     }
 
-    // Extract chart recommendations from design tokens (RequestContext) or input
+    // ── Extract chart recommendations from design tokens or input ────────
     let chartRecs = inputData.chartRecommendations;
     let entityName = inputData.entityName;
 
+    // Try design tokens in RequestContext if not passed directly
     if (!chartRecs && customTokensJson) {
       try {
         const parsed = JSON.parse(customTokensJson);
         chartRecs = parsed.charts;
-      } catch { /* ignore — already parsed above */ }
+      } catch { /* ignore parse errors */ }
     }
 
-    // Try to get entity name from RequestContext if not provided
+    // Try entity name from RequestContext
     if (!entityName) {
-      const selectedEntities = context?.requestContext?.get('selectedEntities') as string;
-      if (selectedEntities) {
-        // selectedEntities can be comma-separated names like "Leads, ROI Metrics"
-        // or a JSON array of objects. Try both formats.
+      const selectedEntitiesJson = context?.requestContext?.get('selectedEntities') as string;
+      if (selectedEntitiesJson) {
         try {
-          const parsed = JSON.parse(selectedEntities);
-          entityName = Array.isArray(parsed)
-            ? (parsed[0]?.display_name || parsed[0]?.name)
-            : undefined;
-        } catch {
-          // It's a plain string (comma-separated names) — use first entity
-          entityName = selectedEntities.split(',')[0]?.trim();
-        }
+          const entities = JSON.parse(selectedEntitiesJson);
+          entityName = entities?.[0]?.display_name || entities?.[0]?.name;
+        } catch { /* ignore */ }
       }
     }
 
-    // Build deterministic component array from template blueprints
-    // If chart recommendations exist, builds a CUSTOM layout instead of hardcoded templates
-    const blueprints = getTemplateBlueprints(templateId, mappings, chartRecs, entityName);
+    // ── HARD FAIL: No chart recommendations = no dashboard ───────────────
+    // The designSystemWorkflow MUST produce chart recommendations.
+    // There are NO fallback templates. This is a premium service.
+    if (!chartRecs || chartRecs.length === 0) {
+      console.error('[generateUISpec] ❌ No chart recommendations. designSystemWorkflow must provide charts[].');
+      throw new Error(
+        'CHART_RECOMMENDATIONS_MISSING: No chart recommendations found in design tokens. ' +
+        'The designSystemWorkflow must run and include a charts[] array with chart type recommendations. ' +
+        'There are no fallback templates — every dashboard is custom-built from the design system.'
+      );
+    }
+
+    // Build components from design system — every dashboard is unique
+    const blueprints = buildComponentsFromDesignTokens(mappings, chartRecs, entityName || templateId);
     const fieldNames = Object.keys(mappings);
 
     const components = blueprints.map(bp => ({
@@ -659,8 +402,8 @@ export const generateUISpec = createTool({
       layout: bp.layout,
     }));
 
-    // Build metadata from design tokens for the preview page
-    const parsedForMeta = customTokensJson ? JSON.parse(customTokensJson) : {};
+    const parsedCustomForMeta = customTokensJson ? JSON.parse(customTokensJson) : {};
+    const entity = entityName ? cleanEntityName(entityName) : platformType;
 
     const spec_json = {
       version: '1.0',
@@ -674,16 +417,14 @@ export const generateUISpec = createTool({
       },
       components,
       metadata: {
-        title: entityName
-          ? `${entityName} Dashboard`
-          : `${platformType.charAt(0).toUpperCase() + platformType.slice(1)} Dashboard`,
+        title: `${entity} Dashboard`,
         designTokens: {
           colors: styleTokens.colors,
           fonts: styleTokens.fonts,
         },
-        styleName: parsedForMeta.style?.name || parsedForMeta.styleName || undefined,
+        styleName: parsedCustomForMeta.style?.name || parsedCustomForMeta.styleName || undefined,
         generatedAt: new Date().toISOString(),
-        chartRecommendations: chartRecs || undefined,
+        chartRecommendationsUsed: chartRecs,
       },
     };
 

@@ -277,38 +277,29 @@ const generateUISpecStep = createStep({
     const platformType = (requestContext.get("platformType") || 'make') as SelectTemplatePlatformType;
     const selectedStyleBundleId = (requestContext.get("selectedStyleBundleId") || 'professional-clean') as string;
 
-    // Extract chart recommendations from design tokens in RequestContext
-    let chartRecommendations: Array<{ type: string; bestFor: string }> | undefined;
-    const dtJson = requestContext.get('designTokens') as string;
-    if (dtJson) {
-      try { chartRecommendations = JSON.parse(dtJson).charts; } catch { /* ignore */ }
-    }
-
-    // Extract entity name from RequestContext for personalized titles
-    let entityName: string | undefined;
-    const selectedEntities = requestContext.get('selectedEntities') as string;
-    if (selectedEntities) {
-      try {
-        const parsed = JSON.parse(selectedEntities);
-        entityName = Array.isArray(parsed)
-          ? (parsed[0]?.display_name || parsed[0]?.name)
-          : undefined;
-      } catch {
-        // Plain string (comma-separated names) — use first entity
-        entityName = selectedEntities.split(',')[0]?.trim();
-      }
-    }
-
     const result = await callTool(generateUISpec,
       {
         templateId,
         mappings: mappings,
         platformType,
         selectedStyleBundleId,
-        // Forward chart recommendations from design tokens → drives custom component layout
-        chartRecommendations,
-        // Forward entity name for personalized dashboard titles
-        entityName,
+        chartRecommendations: (() => {
+          const dtJson = requestContext.get('designTokens') as string;
+          if (dtJson) {
+            try { return JSON.parse(dtJson).charts; } catch { return undefined; }
+          }
+          return undefined;
+        })(),
+        entityName: (() => {
+          const entitiesJson = requestContext.get('selectedEntities') as string;
+          if (entitiesJson) {
+            try {
+              const parsed = JSON.parse(entitiesJson);
+              return parsed?.[0]?.display_name || parsed?.[0]?.name;
+            } catch { return undefined; }
+          }
+          return undefined;
+        })(),
       },
       { requestContext }
     );
