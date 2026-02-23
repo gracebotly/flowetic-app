@@ -205,6 +205,14 @@ export function getPhaseInstructions(phase: FloweticPhase, ctx: PhaseInstruction
       "confirmation (from the previous phase), simply acknowledge you're ready for their",
       "feedback on the design. Do NOT regenerate or re-present the design system.",
       "",
+      "## STYLE CONFIRMATION DETECTION",
+      "When the user confirms the style (e.g., 'this fits my brand', 'looks good', 'love it',",
+      "'yes', 'let's go', 'use this'), the system automatically advances to build_preview.",
+      "You do NOT need to call any tool to generate the preview. The system handles it.",
+      "If you receive a confirmation message, simply acknowledge it briefly.",
+      "Do NOT call suggestAction — you don't have access to it in this phase.",
+      "Do NOT tell the user to click a button. The preview generates automatically.",
+      "",
       "## WHEN USER WANTS CHANGES (CRITICAL — USE TOOLS)",
       "",
       "If the user asks for a different style, call `delegateToDesignAdvisor` with their feedback:",
@@ -436,7 +444,6 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
     // See: https://community.openai.com/t/duplicate-item-found-with-id-msg-when-submitting-tool-output-400-invalid-request-error/1373703
     // Utility
     'navigateTo',
-    'suggestAction',
     'todoAdd',
     'todoList',
     'todoUpdate',
@@ -479,7 +486,6 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
     // NOTE: advancePhase intentionally omitted — autoAdvancePhase handles transitions.
     // Utility
     'navigateTo',
-    'suggestAction',
     'todoAdd',
     'todoList',
     'todoUpdate',

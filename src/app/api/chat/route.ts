@@ -638,6 +638,127 @@ async function handleDeterministicStyleGeneration(params: {
   }
 }
 
+// ─── DETERMINISTIC BUILD_PREVIEW BYPASS ──────────────────────────────────────
+// When style is confirmed and phase advances to build_preview, bypass the
+// agent entirely and call delegateToPlatformMapper workflow directly.
+// This prevents the agent from calling suggestAction("Generate Preview") buttons
+// and ensures the preview generates immediately on style confirmation.
+async function handleDeterministicBuildPreview(params: {
+  mastra: any;
+  supabase: any;
+  tenantId: string;
+  userId: string;
+  journeyThreadId: string;
+  mastraThreadId: string;
+  requestContext: RequestContext;
+}): Promise<ReadableStream | null> {
+  const {
+    mastra, supabase, tenantId, userId, journeyThreadId,
+    mastraThreadId, requestContext,
+  } = params;
+
+  const startTime = Date.now();
+  try {
+    // Get the platformMappingMaster agent to delegate to
+    const platformMapper = mastra.getAgent('platformMappingMaster');
+    if (!platformMapper) {
+      console.log('[deterministic-build-preview] platformMappingMaster agent not found');
+      return null;
+    }
+
+    // Get session data for context
+    const { data: session } = await supabase
+      .from('journey_sessions')
+      .select('selected_entities, selected_outcome, design_tokens')
+      .eq('thread_id', journeyThreadId)
+      .eq('tenant_id', tenantId)
+      .maybeSingle();
+
+    const designStyleName = session?.design_tokens?.style?.name || 'Custom';
+
+    // Build a simple ReadableStream that tells the user we're generating
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          // Send initial text
+          const initText = `Great choice! I love the "${designStyleName}" design. Let me generate your dashboard preview now...\n\n`;
+          controller.enqueue(encoder.encode(`0:${JSON.stringify(initText)}\n`));
+
+          // Call the generatePreview workflow directly
+          const workflow = mastra.getWorkflow('generatePreviewWorkflow');
+          if (!workflow) {
+            const errText = "I ran into a technical issue finding the preview workflow. Let me try a different approach.\n";
+            controller.enqueue(encoder.encode(`0:${JSON.stringify(errText)}\n`));
+            controller.close();
+            return;
+          }
+
+          const run = await workflow.createRun();
+          const result = await run.start({
+            inputData: {
+              tenantId,
+              userId,
+              journeyThreadId,
+            },
+            requestContext,
+          });
+
+          const elapsed = Date.now() - startTime;
+          console.log(`[deterministic-build-preview] Workflow completed in ${elapsed}ms, status: ${result.status}`);
+
+          if (result.status === 'success' && result.result) {
+            const previewData = result.result as any;
+            const previewUrl = previewData?.previewUrl || previewData?.url;
+
+            if (previewUrl) {
+              const successText = `Your dashboard preview is ready! 🎉\n\nYou can see it in the preview panel on the right. Feel free to ask me to make any changes — I can adjust colors, charts, layout, or anything else.\n`;
+              controller.enqueue(encoder.encode(`0:${JSON.stringify(successText)}\n`));
+
+              // Emit preview URL as data part for the client to pick up
+              const previewPart = JSON.stringify({
+                type: 'data-preview-ready',
+                previewUrl,
+                interfaceId: previewData?.interfaceId,
+                versionId: previewData?.versionId,
+              });
+              controller.enqueue(encoder.encode(`8:${previewPart}\n`));
+            } else {
+              const noUrlText = "I generated the dashboard but couldn't find the preview URL. Let me check what happened...\n";
+              controller.enqueue(encoder.encode(`0:${JSON.stringify(noUrlText)}\n`));
+            }
+          } else {
+            const failText = "I ran into a technical issue generating the preview. Let me try again — just say 'generate preview'.\n";
+            controller.enqueue(encoder.encode(`0:${JSON.stringify(failText)}\n`));
+          }
+
+          // Run autoAdvance to move to interactive_edit if preview was created
+          try {
+            await autoAdvancePhase({
+              supabase,
+              tenantId,
+              journeyThreadId,
+              mastraThreadId,
+            });
+          } catch { /* non-fatal */ }
+
+          controller.close();
+        } catch (err: any) {
+          console.error('[deterministic-build-preview] Stream error:', err);
+          const errText = "I ran into a technical issue. Let me try a different approach.\n";
+          controller.enqueue(encoder.encode(`0:${JSON.stringify(errText)}\n`));
+          controller.close();
+        }
+      },
+    });
+
+    return stream;
+  } catch (err: any) {
+    console.error('[deterministic-build-preview] Error:', err?.message);
+    return null;
+  }
+}
+
 export async function POST(req: Request) {
   const requestStartMs = Date.now();
   try {
@@ -662,6 +783,8 @@ export async function POST(req: Request) {
     const clientProvidedTenantId =
       clientData?.tenantId ??
       null;
+    // Check for forceBuildPreview flag from suggestAction button click
+    const forceBuildPreview = clientData?.forceBuildPreview === true;
 
     if (!clientProvidedTenantId || typeof clientProvidedTenantId !== 'string') {
       // AI SDK v5 transport sends internal tool-call resubmissions that don't include
@@ -1368,6 +1491,14 @@ export async function POST(req: Request) {
           /\b(let'?s?\s*go|go\s*ahead|ship\s*it)\b/i,
           // "works for me", "i like it", "sounds good" - ONLY positive sentiment
           /\b(works?\s*(for\s*me)?|i\s*like\s*it|that'?ll?\s*do|sounds?\s*good|i'?m\s*(good|happy|satisfied))\b/i,
+          // "fits my brand", "matches my brand", "suits my brand", "perfect for my brand"
+          /\b(fits?|matches?|suits?|perfect\s+for)\s+(my\s+)?(brand|style|look|vibe|aesthetic)\b/i,
+          // "this is it", "that's it", "that's the one"
+          /\b(this|that)'?s?\s+(is\s+)?(it|the\s+one)\b/i,
+          // "keep it", "keep this", "use this", "go with this"
+          /\b(keep|use|go\s+with)\s+(it|this|that)\b/i,
+          // "approved", "accepted", "confirmed"
+          /\b(approved?|accepted?|confirmed?|selected?)\b/i,
         ];
 
         // CRITICAL: Check for negation/rejection words that override any confirmation pattern
@@ -1400,6 +1531,33 @@ export async function POST(req: Request) {
               requestContext.set('phase', eagerStyleResult.to!);
               console.log('[api/chat] ✅ Eager style→build_preview advance:', eagerStyleResult);
             }
+
+            // ─── DETERMINISTIC BUILD_PREVIEW BYPASS ─────────────────────────
+            // When style is confirmed and we advance to build_preview,
+            // immediately trigger preview generation without waiting for agent.
+            // This eliminates the suggestAction button problem entirely.
+            if (eagerStyleResult?.to === 'build_preview') {
+              try {
+                console.log('[api/chat] 🚀 Triggering deterministic build_preview bypass');
+                const previewStream = await handleDeterministicBuildPreview({
+                  mastra,
+                  supabase,
+                  tenantId,
+                  userId,
+                  journeyThreadId: cleanJourneyThreadId,
+                  mastraThreadId: cleanMastraThreadId,
+                  requestContext,
+                });
+                if (previewStream) {
+                  console.log('[api/chat] ✅ Deterministic build_preview stream ready');
+                  return createUIMessageStreamResponse({
+                    stream: previewStream,
+                  });
+                }
+              } catch (previewErr: any) {
+                console.warn('[api/chat] Deterministic build_preview failed, falling through to agent:', previewErr?.message);
+              }
+            }
           } catch (eagerStyleErr: any) {
             console.warn('[api/chat] Eager advance after style confirm failed:', eagerStyleErr?.message);
           }
@@ -1431,6 +1589,43 @@ export async function POST(req: Request) {
             console.log('[api/chat] 🔄 Reset style_confirmed=false after adjustment request');
           }
         }
+      }
+    }
+
+    // ─── FORCE BUILD_PREVIEW BYPASS ───────────────────────────────────
+    // If the client sent forceBuildPreview=true (from clicking Generate Preview button),
+    // immediately trigger preview generation regardless of phase state.
+    if (forceBuildPreview && (finalPhase === 'build_preview' || finalPhase === 'style')) {
+      // First ensure style_confirmed=true if we're still in style
+      if (finalPhase === 'style') {
+        await supabase
+          .from('journey_sessions')
+          .update({
+            style_confirmed: true,
+            schema_ready: true,
+            mode: 'build_preview',
+            updated_at: new Date().toISOString()
+          })
+          .eq('thread_id', cleanJourneyThreadId)
+          .eq('tenant_id', tenantId);
+        requestContext.set('phase', 'build_preview');
+        requestContext.set('styleConfirmed', 'true');
+      }
+
+      const forcePreviewStream = await handleDeterministicBuildPreview({
+        mastra,
+        supabase,
+        tenantId,
+        userId,
+        journeyThreadId: cleanJourneyThreadId,
+        mastraThreadId: cleanMastraThreadId,
+        requestContext,
+      });
+      if (forcePreviewStream) {
+        console.log('[api/chat] 🚀 Force build_preview bypass from button click');
+        return createUIMessageStreamResponse({
+          stream: forcePreviewStream,
+        });
       }
     }
 

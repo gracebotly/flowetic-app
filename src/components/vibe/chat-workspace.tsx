@@ -637,7 +637,10 @@ export function ChatWorkspace({
     switch (actionId) {
       case 'generate-preview':
       case 'generate-dashboard-preview':
-        await sendAi('Generate Dashboard Preview');
+        // Send with explicit build signal so the backend knows to bypass agent
+        await sendAi('Generate Dashboard Preview', {
+          forceBuildPreview: true,
+        });
         break;
       case 'select-style':
         await sendAi('Show different styles');
