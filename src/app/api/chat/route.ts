@@ -70,6 +70,24 @@ function stripProviderMetadataFromHistory(messages: any[]): any[] {
   });
 }
 
+/**
+ * Extract the text content from the last user message.
+ * Works with both AI SDK v5 parts format and legacy string content.
+ */
+function extractLastUserMessageText(rawMessages: any[]): string {
+  const userMsgs = Array.isArray(rawMessages) ? rawMessages.filter((m: any) => m.role === 'user') : [];
+  const lastMsg = userMsgs[userMsgs.length - 1];
+  if (!lastMsg) return '';
+  if (lastMsg?.parts && Array.isArray(lastMsg.parts)) {
+    return lastMsg.parts.filter((p: any) => p.type === 'text').map((p: any) => p.text || '').join(' ').trim();
+  }
+  if (typeof lastMsg?.content === 'string') {
+    return lastMsg.content.trim();
+  }
+  return '';
+}
+
+
 // ─── DETERMINISTIC PHASE ADVANCEMENT ────────────────────────────────────────
 // Phase 4A from refactor guide: code-driven phase transitions, NOT LLM-driven.
 // Runs AFTER each agent stream completes. Reads DB state, advances if ready.
@@ -329,6 +347,16 @@ async function handleDeterministicSelectEntity(params: {
     // AI SDK v5 requires text-start/text-delta/text-end SSE chunks per official docs.
     const stream = createUIMessageStream({
       execute: async ({ writer }) => {
+        try {
+          await writer.write({
+            type: 'reasoning',
+            id: generateId(),
+            text: 'Discovering your entities and preparing recommendations based on your connected data source...',
+          } as any);
+        } catch {
+          await writer.write({ type: 'step-start', id: generateId() } as any);
+        }
+
         // Start text block
         const textId = generateId();
         await writer.write({
@@ -593,6 +621,17 @@ async function handleDeterministicStyleGeneration(params: {
 
     const stream = createUIMessageStream({
       execute: async ({ writer }) => {
+        // Emit reasoning-like progress for loading UX
+        try {
+          await writer.write({
+            type: 'reasoning',
+            id: generateId(),
+            text: `🎨 Generating custom design system for "${workflowName}"...\nSearching color palettes, typography, and style patterns...\nSynthesizing unique design tokens from UI/UX knowledge base...`,
+          } as any);
+        } catch {
+          await writer.write({ type: 'step-start', id: generateId() } as any);
+        }
+
         const textId = generateId();
         await writer.write({ type: 'text-start', id: textId });
         const words = responseText.split(' ');
@@ -759,6 +798,16 @@ async function handleDeterministicBuildPreview(params: {
 
     const stream = createUIMessageStream({
       execute: async ({ writer }) => {
+        try {
+          await writer.write({
+            type: 'reasoning',
+            id: generateId(),
+            text: '⚙️ Building dashboard preview...\nAnalyzing schema → Selecting template → Generating component mapping → Building UI spec → Validating...',
+          } as any);
+        } catch {
+          await writer.write({ type: 'step-start', id: generateId() } as any);
+        }
+
         const textId = generateId();
         await writer.write({ type: 'text-start', id: textId });
         const words = responseText.split(' ');
@@ -778,6 +827,36 @@ async function handleDeterministicBuildPreview(params: {
   } catch (err: any) {
     console.error('[deterministic-build-preview] Unexpected error:', err?.message || err);
     return null;
+  }
+}
+
+
+/**
+ * Build provider-specific options to enable reasoning/thinking output.
+ * Without these, models think internally but don't expose readable reasoning text.
+ */
+function buildReasoningProviderOptions(modelId: string): Record<string, any> | null {
+  switch (modelId) {
+    case 'gemini-3-pro-preview':
+      return {
+        google: {
+          thinkingConfig: {
+            thinkingLevel: 'low',
+            includeThoughts: true,
+          },
+        },
+      };
+    case 'claude-sonnet-4-5':
+      return {
+        anthropic: {
+          thinking: {
+            type: 'enabled',
+            budgetTokens: 2048,
+          },
+        },
+      };
+    default:
+      return null;
   }
 }
 
@@ -1480,147 +1559,337 @@ export async function POST(req: Request) {
       }
     }
 
-    // ─── DETERMINISTIC STYLE CONFIRMATION (EAGER) ────────────────────────
-    // If phase is style AND design_tokens exist AND style_confirmed is not yet set,
-    // detect confirmation from the user message and set style_confirmed=true.
-    // Then run autoAdvancePhase — might transition style→build_preview right now.
+    // ─── INTENT-BASED STYLE ROUTING ──────────────────────────────────────
+    // Replaces regex-based confirmation/adjustment detection with LLM classification.
+    // LLM classifies intent → CODE routes deterministically.
+    // LLM handles: natural language understanding (what it's good at)
+    // CODE handles: decisions and state transitions (what it's good at)
     if (finalPhase === 'style') {
       const { data: styleSession } = await supabase
         .from('journey_sessions')
-        .select('id, design_tokens, style_confirmed, selected_entities, selected_outcome')
+        .select('id, design_tokens, style_confirmed, selected_entities, selected_outcome, selected_style_bundle_id')
         .eq('thread_id', cleanJourneyThreadId)
         .eq('tenant_id', tenantId)
         .maybeSingle();
 
       if (styleSession?.design_tokens && !styleSession.style_confirmed) {
-        const userMsgs = Array.isArray(rawMessages) ? rawMessages.filter((m: any) => m.role === 'user') : [];
-        const lastMsg = userMsgs[userMsgs.length - 1];
-        let messageText = '';
-        if (lastMsg?.parts && Array.isArray(lastMsg.parts)) {
-          messageText = lastMsg.parts.filter((p: any) => p.type === 'text').map((p: any) => p.text || '').join(' ').toLowerCase().trim();
-        } else if (typeof lastMsg?.content === 'string') {
-          messageText = lastMsg.content.toLowerCase().trim();
+        // Extract user message text
+        const messageText = extractLastUserMessageText(rawMessages);
+
+        if (messageText) {
+          const { classifyStyleIntent } = await import('@/lib/intent-classifier');
+
+          // Extract style name from design_tokens for context
+          const styleName = styleSession.design_tokens?.name
+            || styleSession.design_tokens?.styleName
+            || styleSession.selected_style_bundle_id
+            || null;
+
+          const classification = await classifyStyleIntent(messageText, styleName, mastra);
+
+          // ── CODE DECIDES based on classification ──────────────────────
+
+          if (
+            (classification.intent === 'confirm' || classification.intent === 'advance')
+            && classification.confidence >= 0.6
+          ) {
+            // ── CONFIRM / ADVANCE: Set style_confirmed, advance phase, auto-build ──
+            console.log(`[api/chat] 🎨 Intent classifier: ${classification.intent} (${classification.confidence}) → confirming style`);
+
+            await supabase
+              .from('journey_sessions')
+              .update({ style_confirmed: true, schema_ready: true, updated_at: new Date().toISOString() })
+              .eq('id', styleSession.id)
+              .eq('tenant_id', tenantId);
+            requestContext.set('styleConfirmed', 'true');
+
+            let advancedToBuildPreview = false;
+            try {
+              const advResult = await autoAdvancePhase({
+                supabase,
+                tenantId,
+                journeyThreadId: cleanJourneyThreadId,
+                mastraThreadId: cleanMastraThreadId,
+              });
+              if (advResult?.advanced) {
+                requestContext.set('phase', advResult.to!);
+                console.log('[api/chat] ✅ Intent→style confirmed→build_preview advance:', advResult);
+                if (advResult.to === 'build_preview') {
+                  advancedToBuildPreview = true;
+                }
+              }
+            } catch (advErr: any) {
+              console.warn('[api/chat] autoAdvancePhase after intent confirm failed:', advErr?.message);
+            }
+
+            // Auto-generate dashboard if we advanced to build_preview
+            if (advancedToBuildPreview) {
+              console.log('[api/chat] 🚀 Auto-generating dashboard after intent-based style confirmation');
+              try {
+                const buildPreviewStream = await handleDeterministicBuildPreview({
+                  mastra,
+                  supabase,
+                  tenantId,
+                  userId,
+                  journeyThreadId: cleanJourneyThreadId,
+                  mastraThreadId: cleanMastraThreadId,
+                  requestContext,
+                });
+                if (buildPreviewStream) {
+                  return createUIMessageStreamResponse({
+                    stream: buildPreviewStream,
+                  });
+                }
+              } catch (buildErr: any) {
+                console.warn('[api/chat] Auto build_preview after intent confirm failed:', buildErr?.message);
+              }
+            }
+
+          } else if (classification.intent === 'refine' && classification.confidence >= 0.6) {
+            // ── REFINE: Reset style_confirmed, set adjustment context ──
+            console.log(`[api/chat] 🎨 Intent classifier: refine (${classification.confidence}) → adjustment mode`);
+
+            await supabase
+              .from('journey_sessions')
+              .update({ style_confirmed: false, updated_at: new Date().toISOString() })
+              .eq('id', styleSession.id)
+              .eq('tenant_id', tenantId);
+            requestContext.set('styleConfirmed', 'false');
+            requestContext.set('styleAdjustmentRequested', messageText);
+            console.log('[api/chat] 🔄 Reset style_confirmed=false after intent-based refinement detection');
+
+            // Fall through to agent loop — agent will call delegateToDesignAdvisor
+            // with the user's feedback. This is the creative part — LLM handles it.
+          }
+
+          // 'question', 'other', or low-confidence: fall through to agent loop
+          // The agent handles conversational responses (what it's good at)
         }
-        const styleConfirmPatterns = [
-          // Single-word confirmations (anchored — these ARE the full message)
-          /^(yes|yeah|yep|yup|sure|ok|okay|correct|confirmed?|approve[d]?|perfect|great|fine|lgtm|proceed)\s*[.!]?$/i,
-          // "looks" / "love" + optional filler + positive adjective
-          /\blooks?\s+.*?(good|right|great|fine|perfect|correct|accurate|nice|awesome|amazing)\b/i,
-          /\blove\s*(it|this|the\s*(style|design|colors?|look))\b/i,
-          // "that/this" + "is/looks" + optional filler + positive adjective
-          /\b(that|this)\s+(is|looks)\s+.*?(good|right|great|fine|perfect|correct|accurate|nice)\b/i,
-          // Action phrases - ONLY when NOT preceded by negation or requesting changes
-          /\b(let'?s?\s*go|go\s*ahead|ship\s*it)\b/i,
-          // "works for me", "i like it", "sounds good" - ONLY positive sentiment
-          /\b(works?\s*(for\s*me)?|i\s*like\s*it|that'?ll?\s*do|sounds?\s*good|i'?m\s*(good|happy|satisfied))\b/i,
-          // ──── NEW: Selection/acceptance patterns ────
-          // "I'll take/use/go with [the/this/that] [new/second] [style/one/design]"
-          /\b(i'?ll|i\s*will|i\s*want\s*to|let'?s|we'?ll)\s+(take|use|go\s*with|pick|choose|select|keep)\b/i,
-          // "use this one", "go with that", "this one", "the new one", "the second one"
-          /\b(use|take|pick|choose|select|go\s*with|keep)\s+(this|that|the)\s+(one|style|design|option|look|theme)\b/i,
-          // "this one" / "that one" / "the new one" / "the second one" as standalone
-          /^(this|that|the\s+(new|second|first|other|last))\s+(one|style|design)\.?\s*$/i,
-          // "I like the new style" / "I prefer this" / "I want this one"
-          /\b(i\s*(like|prefer|want|love|dig))\s+(the|this|that)\b/i,
-          // "lock it in", "confirmed", "approved", "done", "ready"
-          /\b(lock\s*(it|this)?\s*in|confirmed?|approved?|done|ready|finalize[d]?)\b/i,
-          // "build it", "generate the dashboard", "move on", "next" — implies style is accepted
-          /\b(build\s*(it|the\s*dashboard|my\s*dashboard)|generate\s*(the|my)?\s*(dashboard|preview)|move\s*on|next\s*(step|phase)?)\b/i,
-        ];
+      }
+    }
+    // ─── END INTENT-BASED STYLE ROUTING ──────────────────────────────────
 
-        // CRITICAL: Check for negation/rejection words that override any confirmation pattern
-        const negationPatterns = [
-          /\b(don'?t|do\s*not|doesn'?t|does\s*not|no\s+(?!new)|nope|nah|never)\b/i,
-          /\b(different|change|adjust|tweak|modify|redo|regenerate|try\s+again|start\s+over)\b/i,
-          /\b(hate|dislike|ugly|bad|wrong|terrible|awful|not\s+(?:right|good|great|what))\b/i,
-        ];
+    // ─── INTENT-BASED SELECT_ENTITY ROUTING ────────────────────────────────
+    // Detect entity selections from natural language instead of relying on
+    // the agent to parse "I want leads and ROI" into tool calls.
+    if (finalPhase === 'select_entity') {
+      const messageText = extractLastUserMessageText(rawMessages);
 
-        const hasNegation = messageText && negationPatterns.some(p => p.test(messageText));
-        const isStyleConfirmation = messageText &&
-          !hasNegation &&
-          styleConfirmPatterns.some(p => p.test(messageText));
-        if (isStyleConfirmation) {
-          console.log('[api/chat] 🎨 Eager style confirmation detected:', messageText.substring(0, 40));
+      if (messageText) {
+        const { classifySelectEntityIntent } = await import('@/lib/intent-classifier');
+
+        // Get available entities from working memory or session context
+        const availableEntities: string[] | null = null; // Agent populates these via tool calls
+
+        const classification = await classifySelectEntityIntent(messageText, availableEntities, mastra);
+
+        if (classification.intent === 'select' && classification.confidence >= 0.7) {
+          console.log(`[api/chat] 📋 Intent classifier: select_entity select (${classification.confidence})`);
+          // Set context so agent knows user is selecting — agent still handles
+          // the actual entity extraction and tool calls since entities are complex objects.
+          // The classifier just prevents the agent from asking redundant questions.
+          requestContext.set('userIntentIsSelection', 'true');
+          requestContext.set('userSelectionText', messageText);
+        } else if (classification.intent === 'confused' && classification.confidence >= 0.7) {
+          console.log(`[api/chat] 📋 Intent classifier: select_entity confused (${classification.confidence})`);
+          requestContext.set('userNeedsGuidance', 'true');
+        }
+        // 'question' and 'other' fall through to agent loop naturally
+      }
+    }
+    // ─── END INTENT-BASED SELECT_ENTITY ROUTING ────────────────────────────
+
+    // ─── INTENT-BASED RECOMMEND ROUTING ────────────────────────────────────
+    // Detect outcome selection (Dashboard vs Product) and wireframe confirmation
+    // from natural language. This prevents the agent from re-asking after user
+    // already stated their choice.
+    if (finalPhase === 'recommend') {
+      const { data: recSession } = await supabase
+        .from('journey_sessions')
+        .select('id, selected_outcome, wireframe_confirmed')
+        .eq('thread_id', cleanJourneyThreadId)
+        .eq('tenant_id', tenantId)
+        .maybeSingle();
+
+      const messageText = extractLastUserMessageText(rawMessages);
+
+      if (messageText && recSession) {
+        const { classifyRecommendIntent } = await import('@/lib/intent-classifier');
+        const hasOutcome = !!recSession.selected_outcome;
+        const wireframeShown = hasOutcome; // Wireframe shows after outcome selection
+
+        const classification = await classifyRecommendIntent(messageText, hasOutcome, wireframeShown, mastra);
+
+        // ── Outcome selection (before wireframe) ──
+        if (!hasOutcome && (classification.intent === 'select_dashboard' || classification.intent === 'select_product') && classification.confidence >= 0.7) {
+          const outcome = classification.intent === 'select_dashboard' ? 'dashboard' : 'product';
+          console.log(`[api/chat] 🎯 Intent classifier: recommend ${classification.intent} (${classification.confidence}) → setting outcome="${outcome}"`);
+
           await supabase
             .from('journey_sessions')
-            .update({ style_confirmed: true, schema_ready: true, updated_at: new Date().toISOString() })
-            .eq('id', styleSession.id)
+            .update({ selected_outcome: outcome, updated_at: new Date().toISOString() })
+            .eq('id', recSession.id)
             .eq('tenant_id', tenantId);
-          requestContext.set('styleConfirmed', 'true');
+          requestContext.set('selectedOutcome', outcome);
+          requestContext.set('outcomeJustSelected', 'true');
+          // Fall through to agent — agent will generate wireframe
+        }
 
-          let advancedToBuildPreview = false;
+        // ── Wireframe confirmation (after outcome is set) ──
+        if (hasOutcome && !recSession.wireframe_confirmed && classification.intent === 'confirm' && classification.confidence >= 0.7) {
+          console.log(`[api/chat] 🎯 Intent classifier: recommend confirm wireframe (${classification.confidence})`);
+
+          await supabase
+            .from('journey_sessions')
+            .update({ wireframe_confirmed: true, updated_at: new Date().toISOString() })
+            .eq('id', recSession.id)
+            .eq('tenant_id', tenantId);
+          requestContext.set('wireframeConfirmed', 'true');
+
+          // Auto-advance to style
           try {
-            const eagerStyleResult = await autoAdvancePhase({
+            const advResult = await autoAdvancePhase({
               supabase,
               tenantId,
               journeyThreadId: cleanJourneyThreadId,
               mastraThreadId: cleanMastraThreadId,
             });
-            if (eagerStyleResult?.advanced) {
-              requestContext.set('phase', eagerStyleResult.to!);
-              console.log('[api/chat] ✅ Eager style→build_preview advance:', eagerStyleResult);
-              if (eagerStyleResult.to === 'build_preview') {
-                advancedToBuildPreview = true;
-              }
+            if (advResult?.advanced) {
+              requestContext.set('phase', advResult.to!);
+              console.log(`[api/chat] ✅ Intent→wireframe confirmed→${advResult.to} advance`);
             }
-          } catch (eagerStyleErr: any) {
-            console.warn('[api/chat] Eager advance after style confirm failed:', eagerStyleErr?.message);
-          }
-
-          // ── AUTO-GENERATE DASHBOARD (Refactor Guide Phase 4) ──────────────
-          // If we just advanced to build_preview, immediately trigger the
-          // preview workflow. The user should NOT have to ask.
-          if (advancedToBuildPreview) {
-            console.log('[api/chat] 🚀 Auto-generating dashboard after style confirmation');
-            try {
-              const buildPreviewStream = await handleDeterministicBuildPreview({
-                mastra,
-                supabase,
-                tenantId,
-                userId,
-                journeyThreadId: cleanJourneyThreadId,
-                mastraThreadId: cleanMastraThreadId,
-                requestContext,
-              });
-              if (buildPreviewStream) {
-                return createUIMessageStreamResponse({
-                  stream: buildPreviewStream,
-                });
-              }
-            } catch (buildErr: any) {
-              console.warn('[api/chat] Auto build_preview failed, falling through to agent:', buildErr?.message);
-            }
+          } catch (advErr: any) {
+            console.warn('[api/chat] autoAdvancePhase after wireframe confirm failed:', advErr?.message);
           }
         }
-        // Detect adjustment requests (darker/lighter/more X/hex codes)
-        const adjustmentPatterns = [
-          /\b(darker|lighter|more\s+\w+|less\s+\w+|change\s+the\s+color|different\s+(color|style|font)|#[0-9a-f]{3,6}|too\s+(dark|light|bright|bold|minimal))\b/i,
-          /\b(don'?t\s+like|hate|dislike|not\s+(right|good|great|what\s+i)|try\s+(again|something)|generate\s+(a\s+)?(new|different|another)|start\s+over|scrap\s+(it|this)|nah|nope)\b/i,
-        ];
-        const isAdjustmentRequest = messageText && adjustmentPatterns.some(p => p.test(messageText));
-        if (isAdjustmentRequest && !isStyleConfirmation) {
-          console.log('[api/chat] 🎨 Style adjustment request detected:', messageText.substring(0, 60));
-          requestContext.set('styleAdjustmentRequested', messageText);
 
-          // BUG 6 FIX: Reset style_confirmed when user requests adjustments.
-          // Without this, a stale style_confirmed=true from a previous eager
-          // confirmation persists across adjustment cycles, causing autoAdvancePhase
-          // to advance to build_preview with the OLD tokens still in DB.
-          if (styleSession) {
-            await supabase
-              .from('journey_sessions')
-              .update({
-                style_confirmed: false,
-                updated_at: new Date().toISOString(),
-              })
-              .eq('id', styleSession.id)
-              .eq('tenant_id', tenantId);
-            requestContext.set('styleConfirmed', 'false');
-            console.log('[api/chat] 🔄 Reset style_confirmed=false after adjustment request');
-          }
+        // ── Wireframe refinement ──
+        if (hasOutcome && classification.intent === 'refine' && classification.confidence >= 0.7) {
+          console.log(`[api/chat] 🎯 Intent classifier: recommend refine wireframe (${classification.confidence})`);
+          requestContext.set('wireframeAdjustmentRequested', messageText);
+          // Fall through to agent — agent regenerates wireframe
         }
       }
     }
+    // ─── END INTENT-BASED RECOMMEND ROUTING ────────────────────────────────
+
+    // ─── INTENT-BASED BUILD_PREVIEW ROUTING ────────────────────────────────
+    // Detect explicit "generate" requests. Most build_preview actions are
+    // already handled deterministically by handleDeterministicBuildPreview.
+    // This catches manual trigger requests.
+    if (finalPhase === 'build_preview') {
+      const messageText = extractLastUserMessageText(rawMessages);
+
+      if (messageText) {
+        const { classifyBuildPreviewIntent } = await import('@/lib/intent-classifier');
+
+        const { data: previewSession } = await supabase
+          .from('journey_sessions')
+          .select('id')
+          .eq('thread_id', cleanJourneyThreadId)
+          .eq('tenant_id', tenantId)
+          .maybeSingle();
+
+        // Check if a preview version exists
+        const { count: previewCount } = await supabase
+          .from('interface_versions')
+          .select('id', { count: 'exact', head: true })
+          .eq('tenant_id', tenantId);
+
+        const hasPreview = (previewCount ?? 0) > 0;
+        const classification = await classifyBuildPreviewIntent(messageText, hasPreview, mastra);
+
+        if (classification.intent === 'generate' && classification.confidence >= 0.7) {
+          console.log(`[api/chat] 🔨 Intent classifier: build_preview generate (${classification.confidence})`);
+          // Trigger deterministic build preview pipeline
+          try {
+            const buildPreviewStream = await handleDeterministicBuildPreview({
+              mastra,
+              supabase,
+              tenantId,
+              userId,
+              journeyThreadId: cleanJourneyThreadId,
+              mastraThreadId: cleanMastraThreadId,
+              requestContext,
+            });
+            if (buildPreviewStream) {
+              return createUIMessageStreamResponse({
+                stream: buildPreviewStream,
+              });
+            }
+          } catch (buildErr: any) {
+            console.warn('[api/chat] Intent-triggered build_preview failed:', buildErr?.message);
+            // Fall through to agent
+          }
+        }
+        // 'question' and 'other' fall through to agent loop
+      }
+    }
+    // ─── END INTENT-BASED BUILD_PREVIEW ROUTING ────────────────────────────
+
+    // ─── INTENT-BASED INTERACTIVE_EDIT ROUTING ─────────────────────────────
+    // Detect deploy intent from natural language ("ship it", "done", "deploy")
+    // so the agent doesn't need to parse conversational deploy confirmations.
+    // Edit requests fall through to agent since they require tool calls.
+    if (finalPhase === 'interactive_edit') {
+      const messageText = extractLastUserMessageText(rawMessages);
+
+      if (messageText) {
+        const { classifyInteractiveEditIntent } = await import('@/lib/intent-classifier');
+        const classification = await classifyInteractiveEditIntent(messageText, mastra);
+
+        if (classification.intent === 'deploy' && classification.confidence >= 0.8) {
+          // Higher threshold for deploy — we want to be sure
+          console.log(`[api/chat] 🚀 Intent classifier: interactive_edit deploy (${classification.confidence})`);
+
+          // Auto-advance to deploy phase
+          try {
+            const advResult = await autoAdvancePhase({
+              supabase,
+              tenantId,
+              journeyThreadId: cleanJourneyThreadId,
+              mastraThreadId: cleanMastraThreadId,
+            });
+            if (advResult?.advanced) {
+              requestContext.set('phase', advResult.to!);
+              console.log(`[api/chat] ✅ Intent→deploy intent→${advResult.to} advance`);
+            }
+          } catch (advErr: any) {
+            console.warn('[api/chat] autoAdvancePhase after deploy intent failed:', advErr?.message);
+          }
+          // Fall through to agent — agent confirms deployment in the deploy phase
+        } else if (classification.intent === 'edit' && classification.confidence >= 0.7) {
+          console.log(`[api/chat] ✏️ Intent classifier: interactive_edit edit (${classification.confidence})`);
+          requestContext.set('editRequested', messageText);
+          // Fall through to agent — agent calls delegateToDashboardBuilder
+        }
+        // 'question' and 'other' fall through to agent loop
+      }
+    }
+    // ─── END INTENT-BASED INTERACTIVE_EDIT ROUTING ─────────────────────────
+
+    // ─── INTENT-BASED DEPLOY ROUTING ───────────────────────────────────────
+    // Detect deploy confirmation or cancellation from natural language.
+    if (finalPhase === 'deploy') {
+      const messageText = extractLastUserMessageText(rawMessages);
+
+      if (messageText) {
+        const { classifyDeployIntent } = await import('@/lib/intent-classifier');
+        const classification = await classifyDeployIntent(messageText, mastra);
+
+        if (classification.intent === 'confirm' && classification.confidence >= 0.8) {
+          console.log(`[api/chat] 🚀 Intent classifier: deploy confirm (${classification.confidence})`);
+          requestContext.set('deployConfirmed', 'true');
+          // Fall through to agent — agent executes deployDashboardWorkflow
+        } else if (classification.intent === 'cancel' && classification.confidence >= 0.7) {
+          console.log(`[api/chat] ↩️ Intent classifier: deploy cancel (${classification.confidence})`);
+          requestContext.set('deployCancel', 'true');
+          // Agent should acknowledge and offer to go back to interactive_edit
+        }
+        // 'question' and 'other' fall through to agent loop
+      }
+    }
+    // ─── END INTENT-BASED DEPLOY ROUTING ───────────────────────────────────
 
     // ─── FORCE BUILD_PREVIEW BYPASS ───────────────────────────────────
     // If the client sent forceBuildPreview=true (from clicking Generate Preview button),
@@ -1787,6 +2056,8 @@ export async function POST(req: Request) {
     // It receives Mastra-wrapped tools and filters per phase — preserving RequestContext
     // while enforcing hard execution-layer gating (fixes AI SDK bug #8653).
     const streamStartMs = Date.now();
+    const selectedModel = String(clientData?.selectedModel || '');
+    const providerOptionsForReasoning = buildReasoningProviderOptions(selectedModel);
     let stepCount = 0;
     const calledTools: string[] = []; // Fix 4: track all tool calls for onFinish checks
     const stream = await withTimeout(
@@ -1800,6 +2071,7 @@ export async function POST(req: Request) {
         sendSources: false,
         defaultOptions: {
           toolCallConcurrency: 1,
+          ...(providerOptionsForReasoning ? { providerOptions: providerOptionsForReasoning } : {}),
           maxSteps: (() => {
             const phase = requestContext.get('phase') as string || 'select_entity';
             const phaseMaxSteps: Record<string, number> = {
