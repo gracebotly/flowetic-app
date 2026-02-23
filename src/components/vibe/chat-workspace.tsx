@@ -637,7 +637,10 @@ export function ChatWorkspace({
     switch (actionId) {
       case 'generate-preview':
       case 'generate-dashboard-preview':
-        await sendAi('Generate Dashboard Preview');
+        // Send with explicit build signal so the backend knows to bypass agent
+        await sendAi('Generate Dashboard Preview', {
+          forceBuildPreview: true,
+        });
         break;
       case 'select-style':
         await sendAi('Show different styles');
@@ -1551,6 +1554,45 @@ return (
                               );
                             }
 
+                            // ✅ RENDER: Single design system card (from deterministic style bypass)
+                            if (part.type === 'data-design-system-card' || part.type === 'data-design-system') {
+                              const dsData = (part as any).data || {};
+                              const styleName = dsData.style?.name || 'Custom Design';
+                              const colors = dsData.colors || {};
+                              const charts = dsData.charts || [];
+
+                              const system = {
+                                id: styleName,
+                                name: styleName,
+                                icon: 'Palette' as const,
+                                colors: [
+                                  colors.primary,
+                                  colors.secondary,
+                                  colors.accent,
+                                ].filter(Boolean).join(' / '),
+                                style: dsData.style?.keywords || dsData.style?.type || 'Professional',
+                                typography: `${dsData.typography?.headingFont || dsData.fonts?.heading?.split(',')[0] || 'Inter'} + ${dsData.typography?.bodyFont || dsData.fonts?.body?.split(',')[0] || 'Inter'}`,
+                                bestFor: dsData.reasoning || 'Your workflow',
+                                charts: charts,
+                              };
+
+                              return (
+                                <DesignSystemCard
+                                  key={idx}
+                                  system={system}
+                                  onSelect={() => {
+                                    setSelectedStyleBundleId(system.id);
+                                    void sendAi(`I selected style ${system.name}`, {
+                                      selectedStyleBundleId: system.id,
+                                    });
+                                  }}
+                                  onRegenerate={() => {
+                                    void sendAi("I don't like this design. Generate a completely different style for my workflow.");
+                                  }}
+                                />
+                              );
+                            }
+
                             // ✅ RENDER: Custom design system pairs
                             if (part.type === 'data-design-system-pair') {
                               const systems = (part as any).data?.systems || (part as any).systems || [];
@@ -1604,6 +1646,7 @@ return (
                                   style: ds.style?.keywords || ds.style?.type || 'Professional',
                                   typography: `${ds.typography?.headingFont || 'Inter'} + ${ds.typography?.bodyFont || 'Inter'}`,
                                   bestFor: output.reasoning || 'Your workflow',
+                                  charts: Array.isArray(ds.charts) ? ds.charts : [],
                                 };
                                 return (
                                   <DesignSystemCard
@@ -1633,6 +1676,52 @@ return (
                               }
 
                               return null;
+                            }
+
+                            // ✅ RENDER: Design system from delegateToDesignAdvisor (regeneration)
+                            if (
+                              (part.type === 'tool-invocation' &&
+                                (part as any).toolName === 'delegateToDesignAdvisor' &&
+                                (part as any).state === 'result') ||
+                              (part.type === 'tool-delegateToDesignAdvisor' &&
+                                (part as any).state === 'output-available')
+                            ) {
+                              const result = (part as any).result || (part as any).output || {};
+                              const ds = result.designSystem || {};
+                              if (ds.style?.name || ds.colors?.primary) {
+                                const system = {
+                                  id: ds.style?.name || 'Custom Design',
+                                  name: ds.style?.name || 'Custom Design',
+                                  icon: 'Palette' as const,
+                                  colors: [
+                                    ds.colors?.primary,
+                                    ds.colors?.secondary,
+                                    ds.colors?.accent,
+                                  ].filter(Boolean).join(' / '),
+                                  style: ds.style?.keywords || ds.style?.type || 'Professional',
+                                  typography: `${ds.fonts?.heading?.split(',')[0] || 'Inter'} + ${ds.fonts?.body?.split(',')[0] || 'Inter'}`,
+                                  bestFor: result.response?.split('\n')[0] || 'Your workflow',
+                                  charts: (ds.charts || []).map((c: any) => ({
+                                    type: String(c?.type || ''),
+                                    bestFor: String(c?.bestFor || ''),
+                                  })),
+                                };
+                                return (
+                                  <DesignSystemCard
+                                    key={idx}
+                                    system={system}
+                                    onSelect={() => {
+                                      setSelectedStyleBundleId(system.id);
+                                      void sendAi(`I'll take the ${system.name} style`, {
+                                        selectedStyleBundleId: system.id,
+                                      });
+                                    }}
+                                    onRegenerate={() => {
+                                      void sendAi('Generate a completely different style for my workflow.');
+                                    }}
+                                  />
+                                );
+                              }
                             }
 
                               // ✅ RENDER: suggestAction tool as clickable button

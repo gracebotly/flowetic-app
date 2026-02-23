@@ -221,6 +221,12 @@ const synthesizeDesignSystem = createStep({
           `Pick something DIFFERENT from the excluded items.`,
         ]
       : [];
+    // Debug: Log actual chart CSV column names so we can fix mappings
+    if (chartResults.length > 0) {
+      console.log('[designSystemWorkflow:synthesize] Chart CSV columns:', Object.keys(chartResults[0]));
+      console.log('[designSystemWorkflow:synthesize] First chart row:', JSON.stringify(chartResults[0]).substring(0, 200));
+    }
+
     const prompt = [
       `You are selecting the BEST design system for a "${workflowName}" dashboard (${platformType}).`,
       ...userFeedbackSection,
@@ -237,8 +243,12 @@ const synthesizeDesignSystem = createStep({
       `### Typography (${typographyResults.length} matches):`,
       ...typographyResults.map((r, i) => `${i + 1}. ${r["Font Pairing Name"] || "Unknown"} — Heading: ${r["Heading Font"]}, Body: ${r["Body Font"]}, Mood: ${r["Mood/Style Keywords"]}, URL: ${r["Google Fonts URL"] || "none"}`),
       ``,
-      `### Charts (${chartResults.length} matches):`,
-      ...chartResults.map((r, i) => `${i + 1}. ${r["Chart Type"] || "Unknown"} — Best For: ${r["Best For"] || "?"}`),
+      `### Chart Types (${chartResults.length} matches):`,
+      ...chartResults.map((r, i) => {
+        const chartType = r["Chart Type"] || r["chart_type"] || r["Type"] || r["name"] || r["Name"] || "Unknown";
+        const bestFor = r["Best For"] || r["best_for"] || r["Description"] || r["description"] || r["Use Case"] || "General";
+        return `${i + 1}. ${chartType} — Best for: ${bestFor}`;
+      }),
       ``,
       `## YOUR TASK`,
       `1. Pick the BEST color palette from the options above (use exact hex values).`,
@@ -254,7 +264,7 @@ const synthesizeDesignSystem = createStep({
       `  "selectedColorIndex": 0,`,
       `  "selectedTypographyIndex": 0,`,
       `  "customStyleName": "Your Creative Name Here",`,
-      `  "selectedCharts": [{ "type": "...", "bestFor": "..." }],`,
+      `  "selectedCharts": [{"type": "chart type from the Charts list above", "bestFor": "what this chart is best for"}], // Pick 2-3 chart types that best fit this workflow`,
       `  "reasoning": "Why these choices work for this workflow"`,
       `}`,
     ].join("\n");
@@ -289,8 +299,8 @@ const synthesizeDesignSystem = createStep({
             },
             fonts: tokens.fonts,
             charts: parsed.selectedCharts || chartResults.slice(0, 3).map(r => ({
-              type: r["Chart Type"] || "Bar Chart",
-              bestFor: r["Best For"] || "Comparisons",
+              type: r["Chart Type"] || r["chart_type"] || r["Type"] || r["name"] || r["Name"] || "Bar Chart",
+              bestFor: r["Best For"] || r["best_for"] || r["Description"] || r["description"] || r["Use Case"] || r["use_case"] || "General visualization",
             })),
             uxGuidelines: uxResults.slice(0, 5).map(r =>
               r["Guideline"] || r["Description"] || r.guideline || "Follow best practices"
@@ -318,8 +328,8 @@ const synthesizeDesignSystem = createStep({
         },
         fonts: deterministicTokens.fonts,
         charts: chartResults.slice(0, 3).map(r => ({
-          type: r["Chart Type"] || r.type || "Bar Chart",
-          bestFor: r["Best For"] || r.bestFor || "Comparisons",
+          type: r["Chart Type"] || r["chart_type"] || r["Type"] || r["name"] || r["Name"] || r.type || "Bar Chart",
+          bestFor: r["Best For"] || r["best_for"] || r["Description"] || r["description"] || r["Use Case"] || r["use_case"] || r.bestFor || "General visualization",
         })),
         uxGuidelines: uxResults.slice(0, 5).map(r =>
           r["Guideline"] || r["Description"] || r.guideline || "Follow best practices"
