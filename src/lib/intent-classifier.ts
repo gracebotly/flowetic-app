@@ -129,3 +129,171 @@ export async function classifyStyleIntent(
 
   return result as StyleIntent;
 }
+
+// ─── Phase 1: Select Entity ─────────────────────────────────────────────────
+
+export const SelectEntityIntentSchema = z.object({
+  intent: z.enum([
+    'select', // User picked entities ("I want to track leads and ROI", "leads + pipeline stages", "all three", "the first two")
+    'question', // User has questions ("what are entities?", "what does ROI metrics track?", "explain pipeline stages")
+    'confused', // User doesn't understand or needs more guidance ("I'm not sure", "what do you recommend?", "help me choose")
+    'other', // Unrelated or ambiguous
+  ]),
+  confidence: z.number().min(0).max(1),
+});
+
+export type SelectEntityIntent = z.infer<typeof SelectEntityIntentSchema>;
+
+export async function classifySelectEntityIntent(
+  userMessage: string,
+  availableEntities: string[] | null,
+  mastra: any,
+): Promise<SelectEntityIntent> {
+  const result = await classifyIntent(
+    {
+      phase: 'select_entity',
+      contextHint: availableEntities?.length
+        ? `User has been presented with these entities to choose from: ${availableEntities.join(', ')}. They can select one or more.`
+        : `User is in entity selection. The system is analyzing their workflow to find trackable entities.`,
+      schema: SelectEntityIntentSchema,
+      userMessage,
+    },
+    mastra,
+  );
+  return result as SelectEntityIntent;
+}
+
+// ─── Phase 2: Recommend (Outcome + Wireframe) ──────────────────────────────
+
+export const RecommendIntentSchema = z.object({
+  intent: z.enum([
+    'select_dashboard', // User chose Dashboard outcome ("dashboard", "I want a dashboard", "the first one", "retention")
+    'select_product', // User chose Product/SaaS outcome ("product", "SaaS wrapper", "the second one", "sell access")
+    'confirm', // User confirms wireframe ("looks good", "yes", "perfect", "let's go", "that works")
+    'refine', // User wants wireframe changes ("add a pie chart", "show costs too", "swap the bottom section", "more metrics")
+    'question', // User has questions ("what's the difference?", "which do you recommend?", "what does product mean?")
+    'other', // Unrelated or ambiguous
+  ]),
+  confidence: z.number().min(0).max(1),
+});
+
+export type RecommendIntent = z.infer<typeof RecommendIntentSchema>;
+
+export async function classifyRecommendIntent(
+  userMessage: string,
+  hasOutcome: boolean,
+  wireframeShown: boolean,
+  mastra: any,
+): Promise<RecommendIntent> {
+  let contextHint: string;
+  if (!hasOutcome) {
+    contextHint = 'User is choosing between Dashboard (client retention, showing value) and Product (SaaS wrapper, selling access). They have NOT picked yet.';
+  } else if (!wireframeShown) {
+    contextHint = 'User has selected an outcome. The system is generating a wireframe preview for them.';
+  } else {
+    contextHint = 'User has been shown a wireframe preview of their dashboard layout. They need to confirm it or request changes before moving to style selection.';
+  }
+
+  const result = await classifyIntent(
+    {
+      phase: 'recommend',
+      contextHint,
+      schema: RecommendIntentSchema,
+      userMessage,
+    },
+    mastra,
+  );
+  return result as RecommendIntent;
+}
+
+// ─── Phase 4: Build Preview ─────────────────────────────────────────────────
+
+export const BuildPreviewIntentSchema = z.object({
+  intent: z.enum([
+    'generate', // User wants to generate/regenerate preview ("generate it", "build the dashboard", "show me", "create preview", "try again")
+    'question', // User has questions about the preview process ("how long?", "what data will it use?", "will it use my colors?")
+    'other', // Unrelated or ambiguous
+  ]),
+  confidence: z.number().min(0).max(1),
+});
+
+export type BuildPreviewIntent = z.infer<typeof BuildPreviewIntentSchema>;
+
+export async function classifyBuildPreviewIntent(
+  userMessage: string,
+  hasPreview: boolean,
+  mastra: any,
+): Promise<BuildPreviewIntent> {
+  const result = await classifyIntent(
+    {
+      phase: 'build_preview',
+      contextHint: hasPreview
+        ? 'A dashboard preview has already been generated. User might want to regenerate it or has questions.'
+        : 'No preview has been generated yet. The system is ready to build a dashboard preview from their selected entities, outcome, and style.',
+      schema: BuildPreviewIntentSchema,
+      userMessage,
+    },
+    mastra,
+  );
+  return result as BuildPreviewIntent;
+}
+
+// ─── Phase 5: Interactive Edit ──────────────────────────────────────────────
+
+export const InteractiveEditIntentSchema = z.object({
+  intent: z.enum([
+    'edit', // User wants to change something ("make it darker", "change the title", "swap the chart", "add a metric", "remove the table")
+    'deploy', // User is done editing and wants to deploy ("deploy", "ship it", "looks good let's go live", "I'm happy with it", "done")
+    'question', // User has questions ("can I change the font?", "how do I add a chart?", "what edits can I make?")
+    'other', // Unrelated or ambiguous
+  ]),
+  confidence: z.number().min(0).max(1),
+});
+
+export type InteractiveEditIntent = z.infer<typeof InteractiveEditIntentSchema>;
+
+export async function classifyInteractiveEditIntent(
+  userMessage: string,
+  mastra: any,
+): Promise<InteractiveEditIntent> {
+  const result = await classifyIntent(
+    {
+      phase: 'interactive_edit',
+      contextHint: 'User has a live dashboard preview and can request edits (layout, style, copy changes) or confirm they are ready to deploy.',
+      schema: InteractiveEditIntentSchema,
+      userMessage,
+    },
+    mastra,
+  );
+  return result as InteractiveEditIntent;
+}
+
+// ─── Phase 6: Deploy ────────────────────────────────────────────────────────
+
+export const DeployIntentSchema = z.object({
+  intent: z.enum([
+    'confirm', // User confirms deployment ("yes", "confirm", "deploy", "go live", "do it", "ship it")
+    'cancel', // User wants to go back or cancel ("wait", "go back", "not yet", "let me edit more", "cancel")
+    'question', // User has questions ("where will it be hosted?", "can I edit after deploy?", "what URL will it have?")
+    'other', // Unrelated or ambiguous
+  ]),
+  confidence: z.number().min(0).max(1),
+});
+
+export type DeployIntent = z.infer<typeof DeployIntentSchema>;
+
+export async function classifyDeployIntent(
+  userMessage: string,
+  mastra: any,
+): Promise<DeployIntent> {
+  const result = await classifyIntent(
+    {
+      phase: 'deploy',
+      contextHint: 'User is at the final deployment step. They need to explicitly confirm to deploy their dashboard to a live client portal URL.',
+      schema: DeployIntentSchema,
+      userMessage,
+    },
+    mastra,
+  );
+  return result as DeployIntent;
+}
