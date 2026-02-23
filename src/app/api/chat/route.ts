@@ -329,6 +329,16 @@ async function handleDeterministicSelectEntity(params: {
     // AI SDK v5 requires text-start/text-delta/text-end SSE chunks per official docs.
     const stream = createUIMessageStream({
       execute: async ({ writer }) => {
+        try {
+          await writer.write({
+            type: 'reasoning',
+            id: generateId(),
+            text: 'Discovering your entities and preparing recommendations based on your connected data source...',
+          } as any);
+        } catch {
+          await writer.write({ type: 'step-start', id: generateId() } as any);
+        }
+
         // Start text block
         const textId = generateId();
         await writer.write({
@@ -593,6 +603,17 @@ async function handleDeterministicStyleGeneration(params: {
 
     const stream = createUIMessageStream({
       execute: async ({ writer }) => {
+        // Emit reasoning-like progress for loading UX
+        try {
+          await writer.write({
+            type: 'reasoning',
+            id: generateId(),
+            text: `🎨 Generating custom design system for "${workflowName}"...\nSearching color palettes, typography, and style patterns...\nSynthesizing unique design tokens from UI/UX knowledge base...`,
+          } as any);
+        } catch {
+          await writer.write({ type: 'step-start', id: generateId() } as any);
+        }
+
         const textId = generateId();
         await writer.write({ type: 'text-start', id: textId });
         const words = responseText.split(' ');
@@ -759,6 +780,16 @@ async function handleDeterministicBuildPreview(params: {
 
     const stream = createUIMessageStream({
       execute: async ({ writer }) => {
+        try {
+          await writer.write({
+            type: 'reasoning',
+            id: generateId(),
+            text: '⚙️ Building dashboard preview...\nAnalyzing schema → Selecting template → Generating component mapping → Building UI spec → Validating...',
+          } as any);
+        } catch {
+          await writer.write({ type: 'step-start', id: generateId() } as any);
+        }
+
         const textId = generateId();
         await writer.write({ type: 'text-start', id: textId });
         const words = responseText.split(' ');
@@ -778,6 +809,36 @@ async function handleDeterministicBuildPreview(params: {
   } catch (err: any) {
     console.error('[deterministic-build-preview] Unexpected error:', err?.message || err);
     return null;
+  }
+}
+
+
+/**
+ * Build provider-specific options to enable reasoning/thinking output.
+ * Without these, models think internally but don't expose readable reasoning text.
+ */
+function buildReasoningProviderOptions(modelId: string): Record<string, any> | null {
+  switch (modelId) {
+    case 'gemini-3-pro-preview':
+      return {
+        google: {
+          thinkingConfig: {
+            thinkingLevel: 'low',
+            includeThoughts: true,
+          },
+        },
+      };
+    case 'claude-sonnet-4-5':
+      return {
+        anthropic: {
+          thinking: {
+            type: 'enabled',
+            budgetTokens: 2048,
+          },
+        },
+      };
+    default:
+      return null;
   }
 }
 
@@ -1762,6 +1823,8 @@ export async function POST(req: Request) {
     // It receives Mastra-wrapped tools and filters per phase — preserving RequestContext
     // while enforcing hard execution-layer gating (fixes AI SDK bug #8653).
     const streamStartMs = Date.now();
+    const selectedModel = String(clientData?.selectedModel || '');
+    const providerOptionsForReasoning = buildReasoningProviderOptions(selectedModel);
     let stepCount = 0;
     const calledTools: string[] = []; // Fix 4: track all tool calls for onFinish checks
     const stream = await withTimeout(
@@ -1775,6 +1838,7 @@ export async function POST(req: Request) {
         sendSources: false,
         defaultOptions: {
           toolCallConcurrency: 1,
+          ...(providerOptionsForReasoning ? { providerOptions: providerOptionsForReasoning } : {}),
           maxSteps: (() => {
             const phase = requestContext.get('phase') as string || 'select_entity';
             const phaseMaxSteps: Record<string, number> = {
