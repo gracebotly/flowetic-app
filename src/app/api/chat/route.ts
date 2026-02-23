@@ -1480,147 +1480,122 @@ export async function POST(req: Request) {
       }
     }
 
-    // ─── DETERMINISTIC STYLE CONFIRMATION (EAGER) ────────────────────────
-    // If phase is style AND design_tokens exist AND style_confirmed is not yet set,
-    // detect confirmation from the user message and set style_confirmed=true.
-    // Then run autoAdvancePhase — might transition style→build_preview right now.
+    // ─── INTENT-BASED STYLE ROUTING ──────────────────────────────────────
+    // Replaces regex-based confirmation/adjustment detection with LLM classification.
+    // LLM classifies intent → CODE routes deterministically.
+    // LLM handles: natural language understanding (what it's good at)
+    // CODE handles: decisions and state transitions (what it's good at)
     if (finalPhase === 'style') {
       const { data: styleSession } = await supabase
         .from('journey_sessions')
-        .select('id, design_tokens, style_confirmed, selected_entities, selected_outcome')
+        .select('id, design_tokens, style_confirmed, selected_entities, selected_outcome, selected_style_bundle_id')
         .eq('thread_id', cleanJourneyThreadId)
         .eq('tenant_id', tenantId)
         .maybeSingle();
 
       if (styleSession?.design_tokens && !styleSession.style_confirmed) {
+        // Extract user message text
         const userMsgs = Array.isArray(rawMessages) ? rawMessages.filter((m: any) => m.role === 'user') : [];
         const lastMsg = userMsgs[userMsgs.length - 1];
         let messageText = '';
         if (lastMsg?.parts && Array.isArray(lastMsg.parts)) {
-          messageText = lastMsg.parts.filter((p: any) => p.type === 'text').map((p: any) => p.text || '').join(' ').toLowerCase().trim();
+          messageText = lastMsg.parts.filter((p: any) => p.type === 'text').map((p: any) => p.text || '').join(' ').trim();
         } else if (typeof lastMsg?.content === 'string') {
-          messageText = lastMsg.content.toLowerCase().trim();
+          messageText = lastMsg.content.trim();
         }
-        const styleConfirmPatterns = [
-          // Single-word confirmations (anchored — these ARE the full message)
-          /^(yes|yeah|yep|yup|sure|ok|okay|correct|confirmed?|approve[d]?|perfect|great|fine|lgtm|proceed)\s*[.!]?$/i,
-          // "looks" / "love" + optional filler + positive adjective
-          /\blooks?\s+.*?(good|right|great|fine|perfect|correct|accurate|nice|awesome|amazing)\b/i,
-          /\blove\s*(it|this|the\s*(style|design|colors?|look))\b/i,
-          // "that/this" + "is/looks" + optional filler + positive adjective
-          /\b(that|this)\s+(is|looks)\s+.*?(good|right|great|fine|perfect|correct|accurate|nice)\b/i,
-          // Action phrases - ONLY when NOT preceded by negation or requesting changes
-          /\b(let'?s?\s*go|go\s*ahead|ship\s*it)\b/i,
-          // "works for me", "i like it", "sounds good" - ONLY positive sentiment
-          /\b(works?\s*(for\s*me)?|i\s*like\s*it|that'?ll?\s*do|sounds?\s*good|i'?m\s*(good|happy|satisfied))\b/i,
-          // ──── NEW: Selection/acceptance patterns ────
-          // "I'll take/use/go with [the/this/that] [new/second] [style/one/design]"
-          /\b(i'?ll|i\s*will|i\s*want\s*to|let'?s|we'?ll)\s+(take|use|go\s*with|pick|choose|select|keep)\b/i,
-          // "use this one", "go with that", "this one", "the new one", "the second one"
-          /\b(use|take|pick|choose|select|go\s*with|keep)\s+(this|that|the)\s+(one|style|design|option|look|theme)\b/i,
-          // "this one" / "that one" / "the new one" / "the second one" as standalone
-          /^(this|that|the\s+(new|second|first|other|last))\s+(one|style|design)\.?\s*$/i,
-          // "I like the new style" / "I prefer this" / "I want this one"
-          /\b(i\s*(like|prefer|want|love|dig))\s+(the|this|that)\b/i,
-          // "lock it in", "confirmed", "approved", "done", "ready"
-          /\b(lock\s*(it|this)?\s*in|confirmed?|approved?|done|ready|finalize[d]?)\b/i,
-          // "build it", "generate the dashboard", "move on", "next" — implies style is accepted
-          /\b(build\s*(it|the\s*dashboard|my\s*dashboard)|generate\s*(the|my)?\s*(dashboard|preview)|move\s*on|next\s*(step|phase)?)\b/i,
-        ];
 
-        // CRITICAL: Check for negation/rejection words that override any confirmation pattern
-        const negationPatterns = [
-          /\b(don'?t|do\s*not|doesn'?t|does\s*not|no\s+(?!new)|nope|nah|never)\b/i,
-          /\b(different|change|adjust|tweak|modify|redo|regenerate|try\s+again|start\s+over)\b/i,
-          /\b(hate|dislike|ugly|bad|wrong|terrible|awful|not\s+(?:right|good|great|what))\b/i,
-        ];
+        if (messageText) {
+          const { classifyStyleIntent } = await import('@/lib/intent-classifier');
 
-        const hasNegation = messageText && negationPatterns.some(p => p.test(messageText));
-        const isStyleConfirmation = messageText &&
-          !hasNegation &&
-          styleConfirmPatterns.some(p => p.test(messageText));
-        if (isStyleConfirmation) {
-          console.log('[api/chat] 🎨 Eager style confirmation detected:', messageText.substring(0, 40));
-          await supabase
-            .from('journey_sessions')
-            .update({ style_confirmed: true, schema_ready: true, updated_at: new Date().toISOString() })
-            .eq('id', styleSession.id)
-            .eq('tenant_id', tenantId);
-          requestContext.set('styleConfirmed', 'true');
+          // Extract style name from design_tokens for context
+          const styleName = styleSession.design_tokens?.name
+            || styleSession.design_tokens?.styleName
+            || styleSession.selected_style_bundle_id
+            || null;
 
-          let advancedToBuildPreview = false;
-          try {
-            const eagerStyleResult = await autoAdvancePhase({
-              supabase,
-              tenantId,
-              journeyThreadId: cleanJourneyThreadId,
-              mastraThreadId: cleanMastraThreadId,
-            });
-            if (eagerStyleResult?.advanced) {
-              requestContext.set('phase', eagerStyleResult.to!);
-              console.log('[api/chat] ✅ Eager style→build_preview advance:', eagerStyleResult);
-              if (eagerStyleResult.to === 'build_preview') {
-                advancedToBuildPreview = true;
-              }
-            }
-          } catch (eagerStyleErr: any) {
-            console.warn('[api/chat] Eager advance after style confirm failed:', eagerStyleErr?.message);
-          }
+          const classification = await classifyStyleIntent(messageText, styleName, mastra);
 
-          // ── AUTO-GENERATE DASHBOARD (Refactor Guide Phase 4) ──────────────
-          // If we just advanced to build_preview, immediately trigger the
-          // preview workflow. The user should NOT have to ask.
-          if (advancedToBuildPreview) {
-            console.log('[api/chat] 🚀 Auto-generating dashboard after style confirmation');
-            try {
-              const buildPreviewStream = await handleDeterministicBuildPreview({
-                mastra,
-                supabase,
-                tenantId,
-                userId,
-                journeyThreadId: cleanJourneyThreadId,
-                mastraThreadId: cleanMastraThreadId,
-                requestContext,
-              });
-              if (buildPreviewStream) {
-                return createUIMessageStreamResponse({
-                  stream: buildPreviewStream,
-                });
-              }
-            } catch (buildErr: any) {
-              console.warn('[api/chat] Auto build_preview failed, falling through to agent:', buildErr?.message);
-            }
-          }
-        }
-        // Detect adjustment requests (darker/lighter/more X/hex codes)
-        const adjustmentPatterns = [
-          /\b(darker|lighter|more\s+\w+|less\s+\w+|change\s+the\s+color|different\s+(color|style|font)|#[0-9a-f]{3,6}|too\s+(dark|light|bright|bold|minimal))\b/i,
-          /\b(don'?t\s+like|hate|dislike|not\s+(right|good|great|what\s+i)|try\s+(again|something)|generate\s+(a\s+)?(new|different|another)|start\s+over|scrap\s+(it|this)|nah|nope)\b/i,
-        ];
-        const isAdjustmentRequest = messageText && adjustmentPatterns.some(p => p.test(messageText));
-        if (isAdjustmentRequest && !isStyleConfirmation) {
-          console.log('[api/chat] 🎨 Style adjustment request detected:', messageText.substring(0, 60));
-          requestContext.set('styleAdjustmentRequested', messageText);
+          // ── CODE DECIDES based on classification ──────────────────────
 
-          // BUG 6 FIX: Reset style_confirmed when user requests adjustments.
-          // Without this, a stale style_confirmed=true from a previous eager
-          // confirmation persists across adjustment cycles, causing autoAdvancePhase
-          // to advance to build_preview with the OLD tokens still in DB.
-          if (styleSession) {
+          if (
+            (classification.intent === 'confirm' || classification.intent === 'advance')
+            && classification.confidence >= 0.6
+          ) {
+            // ── CONFIRM / ADVANCE: Set style_confirmed, advance phase, auto-build ──
+            console.log(`[api/chat] 🎨 Intent classifier: ${classification.intent} (${classification.confidence}) → confirming style`);
+
             await supabase
               .from('journey_sessions')
-              .update({
-                style_confirmed: false,
-                updated_at: new Date().toISOString(),
-              })
+              .update({ style_confirmed: true, schema_ready: true, updated_at: new Date().toISOString() })
+              .eq('id', styleSession.id)
+              .eq('tenant_id', tenantId);
+            requestContext.set('styleConfirmed', 'true');
+
+            let advancedToBuildPreview = false;
+            try {
+              const advResult = await autoAdvancePhase({
+                supabase,
+                tenantId,
+                journeyThreadId: cleanJourneyThreadId,
+                mastraThreadId: cleanMastraThreadId,
+              });
+              if (advResult?.advanced) {
+                requestContext.set('phase', advResult.to!);
+                console.log('[api/chat] ✅ Intent→style confirmed→build_preview advance:', advResult);
+                if (advResult.to === 'build_preview') {
+                  advancedToBuildPreview = true;
+                }
+              }
+            } catch (advErr: any) {
+              console.warn('[api/chat] autoAdvancePhase after intent confirm failed:', advErr?.message);
+            }
+
+            // Auto-generate dashboard if we advanced to build_preview
+            if (advancedToBuildPreview) {
+              console.log('[api/chat] 🚀 Auto-generating dashboard after intent-based style confirmation');
+              try {
+                const buildPreviewStream = await handleDeterministicBuildPreview({
+                  mastra,
+                  supabase,
+                  tenantId,
+                  userId,
+                  journeyThreadId: cleanJourneyThreadId,
+                  mastraThreadId: cleanMastraThreadId,
+                  requestContext,
+                });
+                if (buildPreviewStream) {
+                  return createUIMessageStreamResponse({
+                    stream: buildPreviewStream,
+                  });
+                }
+              } catch (buildErr: any) {
+                console.warn('[api/chat] Auto build_preview after intent confirm failed:', buildErr?.message);
+              }
+            }
+
+          } else if (classification.intent === 'refine' && classification.confidence >= 0.6) {
+            // ── REFINE: Reset style_confirmed, set adjustment context ──
+            console.log(`[api/chat] 🎨 Intent classifier: refine (${classification.confidence}) → adjustment mode`);
+
+            await supabase
+              .from('journey_sessions')
+              .update({ style_confirmed: false, updated_at: new Date().toISOString() })
               .eq('id', styleSession.id)
               .eq('tenant_id', tenantId);
             requestContext.set('styleConfirmed', 'false');
-            console.log('[api/chat] 🔄 Reset style_confirmed=false after adjustment request');
+            requestContext.set('styleAdjustmentRequested', messageText);
+            console.log('[api/chat] 🔄 Reset style_confirmed=false after intent-based refinement detection');
+
+            // Fall through to agent loop — agent will call delegateToDesignAdvisor
+            // with the user's feedback. This is the creative part — LLM handles it.
           }
+
+          // 'question', 'other', or low-confidence: fall through to agent loop
+          // The agent handles conversational responses (what it's good at)
         }
       }
     }
+    // ─── END INTENT-BASED STYLE ROUTING ──────────────────────────────────
 
     // ─── FORCE BUILD_PREVIEW BYPASS ───────────────────────────────────
     // If the client sent forceBuildPreview=true (from clicking Generate Preview button),
