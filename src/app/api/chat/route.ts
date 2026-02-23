@@ -347,15 +347,14 @@ async function handleDeterministicSelectEntity(params: {
     // AI SDK v5 requires text-start/text-delta/text-end SSE chunks per official docs.
     const stream = createUIMessageStream({
       execute: async ({ writer }) => {
-        try {
-          await writer.write({
-            type: 'reasoning',
-            id: generateId(),
-            text: 'Discovering your entities and preparing recommendations based on your connected data source...',
-          } as any);
-        } catch {
-          await writer.write({ type: 'step-start', id: generateId() } as any);
-        }
+        const reasoningId = generateId();
+        await writer.write({ type: 'reasoning-start', id: reasoningId });
+        await writer.write({
+          type: 'reasoning-delta',
+          id: reasoningId,
+          delta: 'Discovering your entities and preparing recommendations based on your connected data source...',
+        });
+        await writer.write({ type: 'reasoning-end', id: reasoningId });
 
         // Start text block
         const textId = generateId();
@@ -622,15 +621,14 @@ async function handleDeterministicStyleGeneration(params: {
     const stream = createUIMessageStream({
       execute: async ({ writer }) => {
         // Emit reasoning-like progress for loading UX
-        try {
-          await writer.write({
-            type: 'reasoning',
-            id: generateId(),
-            text: `🎨 Generating custom design system for "${workflowName}"...\nSearching color palettes, typography, and style patterns...\nSynthesizing unique design tokens from UI/UX knowledge base...`,
-          } as any);
-        } catch {
-          await writer.write({ type: 'step-start', id: generateId() } as any);
-        }
+        const reasoningId = generateId();
+        await writer.write({ type: 'reasoning-start', id: reasoningId });
+        await writer.write({
+          type: 'reasoning-delta',
+          id: reasoningId,
+          delta: `🎨 Generating custom design system for "${workflowName}"...\nSearching color palettes, typography, and style patterns...\nSynthesizing unique design tokens from UI/UX knowledge base...`,
+        });
+        await writer.write({ type: 'reasoning-end', id: reasoningId });
 
         const textId = generateId();
         await writer.write({ type: 'text-start', id: textId });
@@ -798,15 +796,14 @@ async function handleDeterministicBuildPreview(params: {
 
     const stream = createUIMessageStream({
       execute: async ({ writer }) => {
-        try {
-          await writer.write({
-            type: 'reasoning',
-            id: generateId(),
-            text: '⚙️ Building dashboard preview...\nAnalyzing schema → Selecting template → Generating component mapping → Building UI spec → Validating...',
-          } as any);
-        } catch {
-          await writer.write({ type: 'step-start', id: generateId() } as any);
-        }
+        const reasoningId = generateId();
+        await writer.write({ type: 'reasoning-start', id: reasoningId });
+        await writer.write({
+          type: 'reasoning-delta',
+          id: reasoningId,
+          delta: '⚙️ Building dashboard preview...\nAnalyzing schema → Selecting template → Generating component mapping → Building UI spec → Validating...',
+        });
+        await writer.write({ type: 'reasoning-end', id: reasoningId });
 
         const textId = generateId();
         await writer.write({ type: 'text-start', id: textId });
