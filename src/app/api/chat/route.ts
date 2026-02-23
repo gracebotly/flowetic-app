@@ -559,40 +559,9 @@ async function handleDeterministicStyleGeneration(params: {
 
     // Format the design system as a user-friendly presentation
     const styleName = normalizedTokens.style?.name || 'Custom Design';
-    const primary = normalizedTokens.colors?.primary || '#000';
-    const secondary = normalizedTokens.colors?.secondary || '#666';
-    const accent = normalizedTokens.colors?.accent || '#007AFF';
-    const background = normalizedTokens.colors?.background || '#FFFFFF';
     const heading = normalizedTokens.fonts?.heading?.split(',')[0]?.trim() || 'Inter';
     const body = normalizedTokens.fonts?.body?.split(',')[0]?.trim() || 'Inter';
-    const reasoning = data.reasoning || '';
-
-    const charts = (normalizedTokens.charts || [])
-      .slice(0, 3)
-      .map((c: any) => `- **${c.type}** — ${c.bestFor}`)
-      .join('\n');
-
-    const responseText = [
-      `I've crafted a custom design system for your ${workflowName || 'dashboard'}:`,
-      '',
-      `**${styleName}**`,
-      '',
-      `**Colors**`,
-      `- Primary: ${primary}`,
-      `- Secondary: ${secondary}`,
-      `- Accent: ${accent}`,
-      `- Background: ${background}`,
-      '',
-      `**Typography**`,
-      `- Headings: ${heading}`,
-      `- Body: ${body}`,
-      '',
-      charts ? `**Recommended Charts**\n${charts}` : '',
-      '',
-      reasoning ? `*${reasoning}*` : '',
-      '',
-      'Does this style fit your brand? I can generate alternatives if you\'d prefer something different — just tell me what direction you\'re thinking (e.g., "darker", "more minimal", "bolder colors").',
-    ].filter(Boolean).join('\n');
+    const responseText = `Here's your custom design system — **${styleName}**. Take a look and let me know if this fits your brand, or I can generate something different.`;
 
     // Persist the assistant message for reload
     try {
@@ -654,10 +623,16 @@ async function handleDeterministicStyleGeneration(params: {
 }
 
 // ─── DETERMINISTIC BUILD_PREVIEW BYPASS ──────────────────────────────────────
-// When style is confirmed and phase advances to build_preview, bypass the
-// agent entirely and call delegateToPlatformMapper workflow directly.
-// This prevents the agent from calling suggestAction("Generate Preview") buttons
-// and ensures the preview generates immediately on style confirmation.
+// When phase transitions to build_preview (from style confirmation or eager
+// advance), immediately run the generatePreview workflow instead of waiting
+// for the agent to decide to call delegateToPlatformMapper.
+//
+// Per Refactor Guide: "If a decision has a correct answer that can be computed
+// from data, CODE makes that decision."
+//
+// The preview workflow is deterministic: analyzeSchema → selectTemplate →
+// generateMapping → generateUISpec → validateSpec → persist.
+// The agent adds no value here — it just delays and sometimes calls the wrong tool.
 async function handleDeterministicBuildPreview(params: {
   mastra: any;
   supabase: any;
@@ -665,111 +640,143 @@ async function handleDeterministicBuildPreview(params: {
   userId: string;
   journeyThreadId: string;
   mastraThreadId: string;
-  requestContext: RequestContext;
+  requestContext: any;
 }): Promise<ReadableStream | null> {
   const {
-    mastra, supabase, tenantId, userId, journeyThreadId,
-    mastraThreadId, requestContext,
+    mastra, supabase, tenantId, userId, journeyThreadId, requestContext,
   } = params;
 
   const startTime = Date.now();
   try {
-    // Get the platformMappingMaster agent to delegate to
-    const platformMapper = mastra.getAgent('platformMappingMaster');
-    if (!platformMapper) {
-      console.log('[deterministic-build-preview] platformMappingMaster agent not found');
-      return null;
-    }
-
-    // Get session data for context
+    // Read session data for workflow context
     const { data: session } = await supabase
       .from('journey_sessions')
-      .select('selected_entities, selected_outcome, design_tokens')
+      .select('source_id, selected_entities, selected_outcome, design_tokens')
       .eq('thread_id', journeyThreadId)
       .eq('tenant_id', tenantId)
       .maybeSingle();
 
-    const designStyleName = session?.design_tokens?.style?.name || 'Custom';
+    if (!session?.source_id) {
+      console.log('[deterministic-build-preview] No source_id found, falling back to agent');
+      return null;
+    }
 
-    // Build a simple ReadableStream that tells the user we're generating
-    const encoder = new TextEncoder();
-    const stream = new ReadableStream({
-      async start(controller) {
-        try {
-          // Send initial text
-          const initText = `Great choice! I love the "${designStyleName}" design. Let me generate your dashboard preview now...\n\n`;
-          controller.enqueue(encoder.encode(`0:${JSON.stringify(initText)}\n`));
+    // Get the source info for platform type
+    const { data: source } = await supabase
+      .from('source_entities')
+      .select('id, platform_type, name')
+      .eq('id', session.source_id)
+      .eq('tenant_id', tenantId)
+      .maybeSingle();
 
-          // Call the generatePreview workflow directly
-          const workflow = mastra.getWorkflow('generatePreviewWorkflow');
-          if (!workflow) {
-            const errText = "I ran into a technical issue finding the preview workflow. Let me try a different approach.\n";
-            controller.enqueue(encoder.encode(`0:${JSON.stringify(errText)}\n`));
-            controller.close();
-            return;
-          }
+    if (!source) {
+      console.log('[deterministic-build-preview] Source not found, falling back to agent');
+      return null;
+    }
 
-          const run = await workflow.createRun();
-          const result = await run.start({
-            inputData: {
-              tenantId,
-              userId,
-              journeyThreadId,
-            },
-            requestContext,
+    const sourceId = source.id;
+    const platformType = source.platform_type || 'other';
+    const workflowName = source.name || 'Dashboard';
+
+    // Set up RequestContext for the workflow
+    requestContext.set('sourceId', sourceId);
+    requestContext.set('platformType', platformType);
+    requestContext.set('workflowName', workflowName);
+
+    console.log('[deterministic-build-preview] Starting preview workflow:', {
+      sourceId,
+      platformType,
+      workflowName: workflowName.substring(0, 50),
+    });
+
+    // Call the platform API endpoint directly (same as delegateToPlatformMapper)
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL
+      || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+
+    const platformResponse = await fetch(`${baseUrl}/api/agent/platform`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tenantId,
+        userId,
+        sourceId,
+        platformType,
+        task: 'Generate dashboard preview',
+        interfaceId: sourceId, // Use sourceId as interfaceId for new dashboards
+      }),
+    });
+
+    const platformResult = await platformResponse.json();
+    const elapsed = Date.now() - startTime;
+
+    if (!platformResponse.ok || platformResult.type === 'error') {
+      console.error(`[deterministic-build-preview] Workflow failed in ${elapsed}ms:`, platformResult);
+      return null;
+    }
+
+    console.log(`[deterministic-build-preview] ✅ Preview generated in ${elapsed}ms:`, {
+      previewUrl: platformResult.result?.previewUrl,
+      interfaceId: platformResult.result?.interfaceId,
+    });
+
+    // Update session with preview artifacts so autoAdvancePhase can advance to interactive_edit
+    if (platformResult.result?.interfaceId && platformResult.result?.versionId) {
+      await supabase
+        .from('journey_sessions')
+        .update({
+          preview_interface_id: platformResult.result.interfaceId,
+          preview_version_id: platformResult.result.versionId,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('thread_id', journeyThreadId)
+        .eq('tenant_id', tenantId);
+    }
+
+    // Build stream response
+    const previewUrl = platformResult.result?.previewUrl || '';
+    const styleName = session.design_tokens?.style?.name || 'your design system';
+
+    const responseText = [
+      `Your **${styleName}** dashboard is ready! 🎉`,
+      '',
+      previewUrl ? `[View your dashboard preview](${previewUrl})` : '',
+      '',
+      'You can now edit any part of your dashboard — layout, colors, chart types, labels. Just tell me what you\'d like to change.',
+    ].filter(Boolean).join('\n');
+
+    // Persist the message
+    try {
+      await supabase.from('journey_messages').insert({
+        tenant_id: tenantId,
+        thread_id: journeyThreadId,
+        role: 'assistant',
+        content: responseText,
+        created_at: new Date().toISOString(),
+      });
+    } catch (msgErr) {
+      console.warn('[deterministic-build-preview] Failed to persist message:', msgErr);
+    }
+
+    const stream = createUIMessageStream({
+      execute: async ({ writer }) => {
+        const textId = generateId();
+        await writer.write({ type: 'text-start', id: textId });
+        const words = responseText.split(' ');
+        for (let i = 0; i < words.length; i++) {
+          await writer.write({
+            type: 'text-delta',
+            id: textId,
+            delta: i === words.length - 1 ? words[i] : words[i] + ' ',
           });
-
-          const elapsed = Date.now() - startTime;
-          console.log(`[deterministic-build-preview] Workflow completed in ${elapsed}ms, status: ${result.status}`);
-
-          if (result.status === 'success' && result.result) {
-            const previewData = result.result as any;
-            const previewUrl = previewData?.previewUrl || previewData?.url;
-
-            if (previewUrl) {
-              const successText = `Your dashboard preview is ready! 🎉\n\nYou can see it in the preview panel on the right. Feel free to ask me to make any changes — I can adjust colors, charts, layout, or anything else.\n`;
-              controller.enqueue(encoder.encode(`0:${JSON.stringify(successText)}\n`));
-
-              // Emit preview URL as data part for the client to pick up
-              const previewPart = JSON.stringify({
-                type: 'data-preview-ready',
-                previewUrl,
-                interfaceId: previewData?.interfaceId,
-                versionId: previewData?.versionId,
-              });
-              controller.enqueue(encoder.encode(`8:${previewPart}\n`));
-            } else {
-              const noUrlText = "I generated the dashboard but couldn't find the preview URL. Let me check what happened...\n";
-              controller.enqueue(encoder.encode(`0:${JSON.stringify(noUrlText)}\n`));
-            }
-          } else {
-            const failText = "I ran into a technical issue generating the preview. Let me try again — just say 'generate preview'.\n";
-            controller.enqueue(encoder.encode(`0:${JSON.stringify(failText)}\n`));
-          }
-
-          // Run autoAdvance to move to interactive_edit if preview was created
-          try {
-            await autoAdvancePhase({
-              supabase,
-              tenantId,
-              journeyThreadId,
-              mastraThreadId,
-            });
-          } catch { /* non-fatal */ }
-
-          controller.close();
-        } catch (err: any) {
-          console.error('[deterministic-build-preview] Stream error:', err);
-          const errText = "I ran into a technical issue. Let me try a different approach.\n";
-          controller.enqueue(encoder.encode(`0:${JSON.stringify(errText)}\n`));
-          controller.close();
         }
+        await writer.write({ type: 'text-end', id: textId });
       },
     });
 
+    console.log(`[deterministic-build-preview] ✅ Bypassed agent loop in ${elapsed}ms`);
     return stream;
   } catch (err: any) {
-    console.error('[deterministic-build-preview] Error:', err?.message);
+    console.error('[deterministic-build-preview] Unexpected error:', err?.message || err);
     return null;
   }
 }
@@ -1506,21 +1513,26 @@ export async function POST(req: Request) {
           /\b(let'?s?\s*go|go\s*ahead|ship\s*it)\b/i,
           // "works for me", "i like it", "sounds good" - ONLY positive sentiment
           /\b(works?\s*(for\s*me)?|i\s*like\s*it|that'?ll?\s*do|sounds?\s*good|i'?m\s*(good|happy|satisfied))\b/i,
-          // "fits my brand", "matches my brand", "suits my brand", "perfect for my brand"
-          /\b(fits?|matches?|suits?|perfect\s+for)\s+(my\s+)?(brand|style|look|vibe|aesthetic)\b/i,
-          // "this is it", "that's it", "that's the one"
-          /\b(this|that)'?s?\s+(is\s+)?(it|the\s+one)\b/i,
-          // "keep it", "keep this", "use this", "go with this"
-          /\b(keep|use|go\s+with)\s+(it|this|that)\b/i,
-          // "approved", "accepted", "confirmed"
-          /\b(approved?|accepted?|confirmed?|selected?)\b/i,
+          // ──── NEW: Selection/acceptance patterns ────
+          // "I'll take/use/go with [the/this/that] [new/second] [style/one/design]"
+          /\b(i'?ll|i\s*will|i\s*want\s*to|let'?s|we'?ll)\s+(take|use|go\s*with|pick|choose|select|keep)\b/i,
+          // "use this one", "go with that", "this one", "the new one", "the second one"
+          /\b(use|take|pick|choose|select|go\s*with|keep)\s+(this|that|the)\s+(one|style|design|option|look|theme)\b/i,
+          // "this one" / "that one" / "the new one" / "the second one" as standalone
+          /^(this|that|the\s+(new|second|first|other|last))\s+(one|style|design)\.?\s*$/i,
+          // "I like the new style" / "I prefer this" / "I want this one"
+          /\b(i\s*(like|prefer|want|love|dig))\s+(the|this|that)\b/i,
+          // "lock it in", "confirmed", "approved", "done", "ready"
+          /\b(lock\s*(it|this)?\s*in|confirmed?|approved?|done|ready|finalize[d]?)\b/i,
+          // "build it", "generate the dashboard", "move on", "next" — implies style is accepted
+          /\b(build\s*(it|the\s*dashboard|my\s*dashboard)|generate\s*(the|my)?\s*(dashboard|preview)|move\s*on|next\s*(step|phase)?)\b/i,
         ];
 
         // CRITICAL: Check for negation/rejection words that override any confirmation pattern
         const negationPatterns = [
-          /\b(don'?t|do\s*not|doesn'?t|does\s*not|no|nope|nah|never)\b/i,
-          /\b(different|change|adjust|tweak|modify|redo|regenerate|try\s+again)\b/i,
-          /\b(hate|dislike|ugly|bad|wrong|terrible|awful)\b/i,
+          /\b(don'?t|do\s*not|doesn'?t|does\s*not|no\s+(?!new)|nope|nah|never)\b/i,
+          /\b(different|change|adjust|tweak|modify|redo|regenerate|try\s+again|start\s+over)\b/i,
+          /\b(hate|dislike|ugly|bad|wrong|terrible|awful|not\s+(?:right|good|great|what))\b/i,
         ];
 
         const hasNegation = messageText && negationPatterns.some(p => p.test(messageText));
@@ -1535,6 +1547,8 @@ export async function POST(req: Request) {
             .eq('id', styleSession.id)
             .eq('tenant_id', tenantId);
           requestContext.set('styleConfirmed', 'true');
+
+          let advancedToBuildPreview = false;
           try {
             const eagerStyleResult = await autoAdvancePhase({
               supabase,
@@ -1545,36 +1559,37 @@ export async function POST(req: Request) {
             if (eagerStyleResult?.advanced) {
               requestContext.set('phase', eagerStyleResult.to!);
               console.log('[api/chat] ✅ Eager style→build_preview advance:', eagerStyleResult);
-            }
-
-            // ─── DETERMINISTIC BUILD_PREVIEW BYPASS ─────────────────────────
-            // When style is confirmed and we advance to build_preview,
-            // immediately trigger preview generation without waiting for agent.
-            // This eliminates the suggestAction button problem entirely.
-            if (eagerStyleResult?.to === 'build_preview') {
-              try {
-                console.log('[api/chat] 🚀 Triggering deterministic build_preview bypass');
-                const previewStream = await handleDeterministicBuildPreview({
-                  mastra,
-                  supabase,
-                  tenantId,
-                  userId,
-                  journeyThreadId: cleanJourneyThreadId,
-                  mastraThreadId: cleanMastraThreadId,
-                  requestContext,
-                });
-                if (previewStream) {
-                  console.log('[api/chat] ✅ Deterministic build_preview stream ready');
-                  return createUIMessageStreamResponse({
-                    stream: previewStream,
-                  });
-                }
-              } catch (previewErr: any) {
-                console.warn('[api/chat] Deterministic build_preview failed, falling through to agent:', previewErr?.message);
+              if (eagerStyleResult.to === 'build_preview') {
+                advancedToBuildPreview = true;
               }
             }
           } catch (eagerStyleErr: any) {
             console.warn('[api/chat] Eager advance after style confirm failed:', eagerStyleErr?.message);
+          }
+
+          // ── AUTO-GENERATE DASHBOARD (Refactor Guide Phase 4) ──────────────
+          // If we just advanced to build_preview, immediately trigger the
+          // preview workflow. The user should NOT have to ask.
+          if (advancedToBuildPreview) {
+            console.log('[api/chat] 🚀 Auto-generating dashboard after style confirmation');
+            try {
+              const buildPreviewStream = await handleDeterministicBuildPreview({
+                mastra,
+                supabase,
+                tenantId,
+                userId,
+                journeyThreadId: cleanJourneyThreadId,
+                mastraThreadId: cleanMastraThreadId,
+                requestContext,
+              });
+              if (buildPreviewStream) {
+                return createUIMessageStreamResponse({
+                  stream: buildPreviewStream,
+                });
+              }
+            } catch (buildErr: any) {
+              console.warn('[api/chat] Auto build_preview failed, falling through to agent:', buildErr?.message);
+            }
           }
         }
         // Detect adjustment requests (darker/lighter/more X/hex codes)
@@ -1700,6 +1715,42 @@ export async function POST(req: Request) {
         }
         // If handleDeterministicStyleGeneration returned null, fall through to agent
         console.log('[api/chat] Deterministic style bypass returned null, falling through to agent');
+      }
+    }
+
+    // ─── DETERMINISTIC BUILD_PREVIEW BYPASS ─────────────────────────
+    // If phase is build_preview AND no preview exists in DB, auto-generate
+    // the dashboard via platform workflow, bypassing the agent loop entirely.
+    // This ensures the user NEVER has to ask "where is my dashboard?"
+    if (finalPhase === 'build_preview') {
+      const { data: previewCheckSession } = await supabase
+        .from('journey_sessions')
+        .select('preview_interface_id, preview_version_id, source_id, design_tokens')
+        .eq('thread_id', cleanJourneyThreadId)
+        .eq('tenant_id', tenantId)
+        .maybeSingle();
+
+      if (previewCheckSession && !previewCheckSession.preview_interface_id) {
+        console.log('[api/chat] 🚀 build_preview phase with no preview — auto-generating');
+        try {
+          const buildPreviewStream = await handleDeterministicBuildPreview({
+            mastra,
+            supabase,
+            tenantId,
+            userId,
+            journeyThreadId: cleanJourneyThreadId,
+            mastraThreadId: cleanMastraThreadId,
+            requestContext,
+          });
+          if (buildPreviewStream) {
+            console.log('[api/chat] 🚀 Using deterministic build_preview bypass');
+            return createUIMessageStreamResponse({
+              stream: buildPreviewStream,
+            });
+          }
+        } catch (buildErr: any) {
+          console.warn('[api/chat] Deterministic build_preview failed, falling through to agent:', buildErr?.message);
+        }
       }
     }
 
