@@ -14,6 +14,7 @@ const designSystemInputSchema = z.object({
   // Variety parameters — enable regeneration with different results
   userFeedback: z.string().optional().describe("User's style preference or rejection reason, appended to BM25 query for better matching"),
   excludeStyleNames: z.array(z.string()).optional().describe("Style names to exclude from results (e.g. previously rejected styles)"),
+  excludeColorHexValues: z.array(z.string()).optional().describe("Previously used primary hex values to exclude (prevents same-colors-different-name syndrome)"),
 });
 const designSystemOutputSchema = z.object({
   designSystem: z.object({
@@ -75,6 +76,7 @@ const gatherDesignData = createStep({
     userId: z.string().uuid(),
     userFeedback: z.string().optional(),
     excludeStyleNames: z.array(z.string()).optional(),
+    excludeColorHexValues: z.array(z.string()).optional(),
   }),
   execute: async ({ inputData }) => {
     // Build BM25 query: base context + user feedback for variety
@@ -101,30 +103,53 @@ const gatherDesignData = createStep({
         loadUIUXCSV("ux"),
         loadUIUXCSV("product"),
       ]);
-    // Request extra results when excluding, so we still have enough after filtering
-    const extraLimit = inputData.excludeStyleNames?.length || 0;
+    const extraStyleLimit = inputData.excludeStyleNames?.length || 0;
+    const extraColorLimit = inputData.excludeColorHexValues?.length || 0;
     // BM25 rank all domains in parallel
+    // When excluding, fetch MORE results so we have enough after filtering
     const [rawStyleResults, rawColorResults, typographyResults, chartResults, uxResults, productResults] =
       await Promise.all([
-        rankRowsByQuery({ rows: styleRows, query, limit: 3 + extraLimit, domain: 'style' }),
-        rankRowsByQuery({ rows: colorRows, query, limit: 3 + extraLimit, domain: 'color' }),
+        rankRowsByQuery({ rows: styleRows, query, limit: 3 + extraStyleLimit * 2, domain: 'style' }),
+        rankRowsByQuery({ rows: colorRows, query, limit: 3 + extraColorLimit * 3, domain: 'color' }),
         rankRowsByQuery({ rows: typographyRows, query, limit: 3, domain: 'typography' }),
         rankRowsByQuery({ rows: chartRows, query, limit: 3, domain: 'chart' }),
         rankRowsByQuery({ rows: uxRows, query, limit: 5, domain: 'ux' }),
         rankRowsByQuery({ rows: productRows, query, limit: 2, domain: 'product' }),
       ]);
-    // Filter out excluded styles/colors by name to ensure regeneration produces different results
-    const excludeSet = new Set((inputData.excludeStyleNames || []).map((n: string) => n.toLowerCase()));
-    const styleResults = excludeSet.size > 0
-      ? rawStyleResults.filter((r: Record<string, string>) => !excludeSet.has((r["Style Category"] || r["style_category"] || "").toLowerCase())).slice(0, 3)
+    // ── EXCLUSION: Filter out previously shown styles and colors ──────────────
+    //
+    // excludeStyleNames contains LLM-generated creative names ("Pipeline Velocity Pro")
+    // which don't match any CSV column. Style rows can be filtered by "Style Category".
+    //
+    // For COLORS, we exclude by PRIMARY HEX VALUE, not by name.
+    // inputData.excludeColorHexValues (new field) contains hex codes like "#E11D48"
+    // that the user already saw. This prevents "same colors, different name" syndrome.
+    const excludeNameSet = new Set((inputData.excludeStyleNames || []).map((n: string) => n.toLowerCase()));
+    const excludeHexSet = new Set((inputData.excludeColorHexValues || []).map((h: string) => h.toUpperCase()));
+
+    const styleResults = excludeNameSet.size > 0
+      ? rawStyleResults.filter((r: Record<string, string>) =>
+          !excludeNameSet.has((r["Style Category"] || "").toLowerCase())
+        ).slice(0, 3)
       : rawStyleResults.slice(0, 3);
-    const colorResults = excludeSet.size > 0
-      ? rawColorResults.filter((r: Record<string, string>) => !excludeSet.has((r["palette_name"] || r["Palette Name"] || "").toLowerCase())).slice(0, 3)
+
+    // Color exclusion: filter by ACTUAL primary hex value, not by name
+    const colorResults = excludeHexSet.size > 0
+      ? rawColorResults.filter((r: Record<string, string>) =>
+          !excludeHexSet.has((r["Primary (Hex)"] || "").toUpperCase())
+        ).slice(0, 3)
       : rawColorResults.slice(0, 3);
-    console.log(`[designSystemWorkflow:gather] Results: style=${styleResults.length}, color=${colorResults.length}, typography=${typographyResults.length}, chart=${chartResults.length}, ux=${uxResults.length}, product=${productResults.length}`);
+
+    // SAFETY: If exclusion filtered out everything, fall back to unfiltered + offset
+    // This handles the edge case where the user rejected all top-ranked colors
+    const finalColorResults = colorResults.length > 0
+      ? colorResults
+      : rawColorResults.slice(excludeHexSet.size, excludeHexSet.size + 3);
+
+    console.log(`[designSystemWorkflow:gather] Results: style=${styleResults.length}, color=${finalColorResults.length}, typography=${typographyResults.length}, chart=${chartResults.length}, ux=${uxResults.length}, product=${productResults.length}`);
     return {
       styleResults,
-      colorResults,
+      colorResults: finalColorResults,
       typographyResults,
       chartResults,
       uxResults,
@@ -137,6 +162,7 @@ const gatherDesignData = createStep({
       userId: inputData.userId,
       userFeedback: inputData.userFeedback,
       excludeStyleNames: inputData.excludeStyleNames,
+      excludeColorHexValues: inputData.excludeColorHexValues,
     };
   },
 });
@@ -158,6 +184,7 @@ const synthesizeDesignSystem = createStep({
     userId: z.string().uuid(),
     userFeedback: z.string().optional(),
     excludeStyleNames: z.array(z.string()).optional(),
+    excludeColorHexValues: z.array(z.string()).optional(),
   }),
   outputSchema: designSystemOutputSchema,
   execute: async ({ inputData, mastra }) => {
@@ -190,8 +217,8 @@ const synthesizeDesignSystem = createStep({
           },
           fonts: deterministicTokens.fonts,
           charts: chartResults.slice(0, 3).map(r => ({
-            type: r["Chart Type"] || r.type || "Bar Chart",
-            bestFor: r["Best For"] || r.bestFor || "Comparisons",
+            type: r["Best Chart Type"] || r["Chart Type"] || "Bar Chart",
+            bestFor: r["Data Type"] || r["Keywords"] || "General visualization",
           })),
           uxGuidelines: uxResults.slice(0, 5).map(r =>
             r["Guideline"] || r["Description"] || r.guideline || "Follow best practices"
@@ -238,16 +265,17 @@ const synthesizeDesignSystem = createStep({
       ...styleResults.map((r, i) => `${i + 1}. ${r["Style Category"] || "Unknown"} — Type: ${r["Type"] || "?"}, Keywords: ${r["Keywords"] || "?"}, Colors: ${r["Primary Colors"] || "?"}`),
       ``,
       `### Color Palettes (${colorResults.length} matches):`,
-      ...colorResults.map((r, i) => `${i + 1}. ${r["palette_name"] || "Unknown"} — Primary: ${r["primary"]}, Secondary: ${r["secondary"]}, Accent: ${r["accent"]}, Mood: ${r["mood"]}`),
+      ...colorResults.map((r, i) => `${i + 1}. ${r["Product Type"] || "Custom"} — Primary: ${r["Primary (Hex)"] || "?"}, Secondary: ${r["Secondary (Hex)"] || "?"}, Accent/CTA: ${r["CTA (Hex)"] || "?"}, Background: ${r["Background (Hex)"] || "auto"}, Mood: ${r["Notes"] || "?"}`),
       ``,
       `### Typography (${typographyResults.length} matches):`,
       ...typographyResults.map((r, i) => `${i + 1}. ${r["Font Pairing Name"] || "Unknown"} — Heading: ${r["Heading Font"]}, Body: ${r["Body Font"]}, Mood: ${r["Mood/Style Keywords"]}, URL: ${r["Google Fonts URL"] || "none"}`),
       ``,
       `### Chart Types (${chartResults.length} matches):`,
       ...chartResults.map((r, i) => {
-        const chartType = r["Chart Type"] || r["chart_type"] || r["Type"] || r["name"] || r["Name"] || "Unknown";
-        const bestFor = r["Best For"] || r["best_for"] || r["Description"] || r["description"] || r["Use Case"] || "General";
-        return `${i + 1}. ${chartType} — Best for: ${bestFor}`;
+        const chartType = r["Best Chart Type"] || r["Chart Type"] || "Bar Chart";
+        const dataType = r["Data Type"] || r["Keywords"] || "General";
+        const colorGuidance = r["Color Guidance"] || "";
+        return `${i + 1}. ${chartType} — Data: ${dataType}${colorGuidance ? `, Color: ${colorGuidance.substring(0, 80)}` : ""}`;
       }),
       ``,
       `## YOUR TASK`,
@@ -299,8 +327,8 @@ const synthesizeDesignSystem = createStep({
             },
             fonts: tokens.fonts,
             charts: parsed.selectedCharts || chartResults.slice(0, 3).map(r => ({
-              type: r["Chart Type"] || r["chart_type"] || r["Type"] || r["name"] || r["Name"] || "Bar Chart",
-              bestFor: r["Best For"] || r["best_for"] || r["Description"] || r["description"] || r["Use Case"] || r["use_case"] || "General visualization",
+              type: r["Best Chart Type"] || r["Chart Type"] || "Bar Chart",
+              bestFor: r["Data Type"] || r["Keywords"] || "General visualization",
             })),
             uxGuidelines: uxResults.slice(0, 5).map(r =>
               r["Guideline"] || r["Description"] || r.guideline || "Follow best practices"
@@ -328,8 +356,8 @@ const synthesizeDesignSystem = createStep({
         },
         fonts: deterministicTokens.fonts,
         charts: chartResults.slice(0, 3).map(r => ({
-          type: r["Chart Type"] || r["chart_type"] || r["Type"] || r["name"] || r["Name"] || r.type || "Bar Chart",
-          bestFor: r["Best For"] || r["best_for"] || r["Description"] || r["description"] || r["Use Case"] || r["use_case"] || r.bestFor || "General visualization",
+          type: r["Best Chart Type"] || r["Chart Type"] || "Bar Chart",
+          bestFor: r["Data Type"] || r["Keywords"] || "General visualization",
         })),
         uxGuidelines: uxResults.slice(0, 5).map(r =>
           r["Guideline"] || r["Description"] || r.guideline || "Follow best practices"

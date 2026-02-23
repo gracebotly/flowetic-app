@@ -83,6 +83,7 @@ Use this only for regeneration/alternatives.`,
 
       // Read current design_tokens from DB to build exclusion list
       const excludeStyleNames: string[] = [];
+      const excludeColorHexValues: string[] = [];
       if (journeyThreadId && supabaseToken) {
         try {
           const supabase = createAuthenticatedClient(supabaseToken);
@@ -94,10 +95,14 @@ Use this only for regeneration/alternatives.`,
             .maybeSingle();
 
           if (session?.design_tokens) {
-            const currentStyleName = (session.design_tokens as any)?.style?.name;
-            const currentPaletteName = (session.design_tokens as any)?.colors?.paletteName;
+            const previousDesignTokens = session.design_tokens as any;
+            const currentStyleName = previousDesignTokens?.style?.name;
+            const currentPaletteName = previousDesignTokens?.colors?.paletteName;
+            // Extract previous primary color for hex-level exclusion
+            const previousPrimaryHex = previousDesignTokens?.colors?.primary;
             if (currentStyleName) excludeStyleNames.push(currentStyleName);
             if (currentPaletteName) excludeStyleNames.push(currentPaletteName);
+            if (previousPrimaryHex) excludeColorHexValues.push(previousPrimaryHex);
           }
         } catch (readErr) {
           console.warn('[delegateToDesignAdvisor] Non-fatal: failed to read current tokens for exclusion:', readErr);
@@ -107,6 +112,7 @@ Use this only for regeneration/alternatives.`,
       console.log('[delegateToDesignAdvisor] Regenerating design system:', {
         userFeedback: input.task.substring(0, 80),
         excluding: excludeStyleNames,
+        excludeColorHexValues,
         workflowName,
         platformType,
       });
@@ -137,6 +143,7 @@ Use this only for regeneration/alternatives.`,
           // exclusions filter out previously shown styles/palettes
           userFeedback: [input.task, input.additionalContext].filter(Boolean).join(". "),
           excludeStyleNames: excludeStyleNames.length > 0 ? excludeStyleNames : undefined,
+          excludeColorHexValues: excludeColorHexValues.length > 0 ? excludeColorHexValues : undefined,
         },
         requestContext: context?.requestContext,
       });
