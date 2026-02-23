@@ -607,7 +607,21 @@ async function handleDeterministicStyleGeneration(params: {
       console.warn('[deterministic-style] Failed to persist message:', msgErr);
     }
 
-    // Build UIMessageStream (same pattern as handleDeterministicSelectEntity)
+    // Build a DesignSystemCard-compatible data structure
+    const dsCardData = {
+      style: normalizedTokens.style,
+      colors: normalizedTokens.colors,
+      typography: {
+        headingFont: heading,
+        bodyFont: body,
+      },
+      charts: (normalizedTokens.charts || []).map((c: any) => ({
+        type: String(c?.type || 'Chart'),
+        bestFor: String(c?.bestFor || 'Visualization'),
+      })),
+      reasoning: data.reasoning || '',
+    };
+
     const stream = createUIMessageStream({
       execute: async ({ writer }) => {
         const textId = generateId();
@@ -621,11 +635,12 @@ async function handleDeterministicStyleGeneration(params: {
           });
         }
         await writer.write({ type: 'text-end', id: textId });
-        // Stream design tokens as data part for client UI (DesignSystemPair cards)
+
+        // Emit as data-design-system-card — matched by chat-workspace renderer
         await writer.write({
-          type: 'data-design-system',
+          type: 'data-design-system-card',
           id: generateId(),
-          data: normalizedTokens,
+          data: dsCardData,
         } as any);
       },
     });

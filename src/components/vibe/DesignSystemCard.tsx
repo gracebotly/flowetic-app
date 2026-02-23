@@ -11,6 +11,7 @@ interface DesignSystem {
   style: string;
   typography: string;
   bestFor: string;
+  charts?: Array<{ type: string; bestFor: string }>;
 }
 
 interface DesignSystemCardProps {
@@ -45,6 +46,21 @@ export function DesignSystemCard({ system, onSelect, onRegenerate }: DesignSyste
       <div className="mb-4 space-y-1 text-sm text-gray-600">
         <p><span className="font-medium text-gray-700">Style:</span> {system.style}</p>
         <p><span className="font-medium text-gray-700">Typography:</span> {system.typography}</p>
+        {system.charts && system.charts.length > 0 && (
+          <div>
+            <span className="font-medium text-gray-700">Recommended Charts:</span>
+            <ul className="mt-1 ml-4 list-disc space-y-0.5">
+              {system.charts.filter(c => c.type && c.type !== 'Unknown').map((chart, i) => (
+                <li key={i}>
+                  <span className="font-medium text-gray-800">{chart.type}</span>
+                  {chart.bestFor && chart.bestFor !== '?' && (
+                    <span className="text-gray-500"> — {chart.bestFor}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         <p><span className="font-medium text-gray-700">Best for:</span> {system.bestFor}</p>
       </div>
 
