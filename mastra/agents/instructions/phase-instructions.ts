@@ -405,6 +405,7 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
     // Core recommend tools — agent needs these to present outcome choices
     'getEventStats',
     'getOutcomes',
+    'recommendOutcome',
     'searchSkillKnowledge',
     // Wireframe confirmation fallback — if eager regex misses natural language approval
     'confirmWireframe',
