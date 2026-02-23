@@ -1204,15 +1204,32 @@ export async function POST(req: Request) {
             console.warn('[api/chat] Eager advance after style confirm failed:', eagerStyleErr?.message);
           }
         }
-
         // Detect adjustment requests (darker/lighter/more X/hex codes)
         const adjustmentPatterns = [
           /\b(darker|lighter|more\s+\w+|less\s+\w+|change\s+the\s+color|different\s+(color|style|font)|#[0-9a-f]{3,6}|too\s+(dark|light|bright|bold|minimal))\b/i,
+          /\b(don'?t\s+like|hate|dislike|not\s+(right|good|great|what\s+i)|try\s+(again|something)|generate\s+(a\s+)?(new|different|another)|start\s+over|scrap\s+(it|this)|nah|nope)\b/i,
         ];
         const isAdjustmentRequest = messageText && adjustmentPatterns.some(p => p.test(messageText));
         if (isAdjustmentRequest && !isStyleConfirmation) {
           console.log('[api/chat] 🎨 Style adjustment request detected:', messageText.substring(0, 60));
           requestContext.set('styleAdjustmentRequested', messageText);
+
+          // BUG 6 FIX: Reset style_confirmed when user requests adjustments.
+          // Without this, a stale style_confirmed=true from a previous eager
+          // confirmation persists across adjustment cycles, causing autoAdvancePhase
+          // to advance to build_preview with the OLD tokens still in DB.
+          if (styleSession) {
+            await supabase
+              .from('journey_sessions')
+              .update({
+                style_confirmed: false,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', styleSession.id)
+              .eq('tenant_id', tenantId);
+            requestContext.set('styleConfirmed', 'false');
+            console.log('[api/chat] 🔄 Reset style_confirmed=false after adjustment request');
+          }
         }
       }
     }
