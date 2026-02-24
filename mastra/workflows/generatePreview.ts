@@ -8,6 +8,7 @@ import { validateSpec } from '../tools/validateSpec';
 import { persistPreviewVersion } from '../tools/persistPreviewVersion';
 import { callTool } from '../lib/callTool';
 import { transformDataForComponents } from '@/lib/dashboard/transformDataForComponents';
+import { workspace } from '@/mastra/workspace';
 
 // Platform type derived from selectTemplate tool schema
 type SelectTemplatePlatformType = "vapi" | "retell" | "n8n" | "mastra" | "crewai" | "activepieces" | "make";
@@ -247,6 +248,141 @@ const checkMappingCompletenessStep = createStep({
   },
 });
 
+// Step 4.5: Retrieve Design Patterns (Phase 3 — BM25 Intelligence)
+// Searches the 247-pattern BM25 index for industry-specific layout hints,
+// UX guidelines, and product patterns. These flow into generateUISpec
+// where extractLayoutHints() parses them for layout decisions.
+const retrieveDesignPatternsStep = createStep({
+  id: 'retrieveDesignPatterns',
+  inputSchema: z.object({
+    shouldSuspend: z.boolean(),
+    missingFields: z.array(z.string()).optional(),
+    message: z.string().optional(),
+    decision: z.string(),
+  }),
+  outputSchema: z.object({
+    shouldSuspend: z.boolean(),
+    missingFields: z.array(z.string()).optional(),
+    message: z.string().optional(),
+    decision: z.string(),
+    designPatterns: z.array(z.object({
+      content: z.string(),
+      source: z.string(),
+      score: z.number(),
+    })).optional(),
+    uxGuidelines: z.array(z.string()).optional(),
+  }),
+  async execute({ inputData, requestContext, getStepResult }) {
+    // Pass through the completeness check data
+    const { shouldSuspend, missingFields, message, decision } = inputData;
+
+    try {
+      // Get dataSignals from the mapping step (computed in Phase 2)
+      const mappingResult = getStepResult(generateMappingStep);
+      const dataSignals = (mappingResult as { dataSignals?: { layoutQuery?: string } })?.dataSignals;
+      const platformType = (requestContext.get('platformType') || 'make') as string;
+
+      // Build BM25 query from data signals (Phase 2 already computes this)
+      const layoutQuery = dataSignals?.layoutQuery ||
+        `${platformType} dashboard layout`;
+
+      // Search the 247-pattern BM25 index
+      const results = await workspace.search(layoutQuery, {
+        topK: 8,
+        mode: 'bm25',
+      });
+
+      // Filter to relevant UI/UX domains
+      const designPatterns = results
+        .filter(r => {
+          const path = String(r.id || '');
+          return path.includes('ui-ux-pro-max') ||
+                 path.includes('styles') ||
+                 path.includes('products') ||
+                 path.includes('ui-reasoning') ||
+                 path.includes('ux-guidelines');
+        })
+        .slice(0, 5)
+        .map(r => ({
+          content: r.content?.substring(0, 1000) || '',
+          source: String(r.id || ''),
+          score: r.score || 0,
+        }));
+
+      // Also extract UX guidelines from design tokens (already computed by designSystemWorkflow)
+      const dtRaw = requestContext.get('designTokens') as string;
+      let uxGuidelines: string[] = [];
+      if (dtRaw) {
+        try {
+          const parsed = JSON.parse(dtRaw);
+          uxGuidelines = parsed.uxGuidelines || [];
+        } catch { /* ignore parse errors */ }
+      }
+
+      // Also check for rawPatterns stored by runDesignSystemWorkflow (Phase 3 addition)
+      if (dtRaw) {
+        try {
+          const parsed = JSON.parse(dtRaw);
+          if (parsed.rawPatterns) {
+            // Merge raw product/UX patterns from designSystemWorkflow into our results
+            const rawPatternsFromWorkflow: Array<{ content: string; source: string; score: number }> = [];
+
+            if (parsed.rawPatterns.product) {
+              for (const p of parsed.rawPatterns.product) {
+                rawPatternsFromWorkflow.push({
+                  content: p.content || JSON.stringify(p).substring(0, 1000),
+                  source: 'designSystemWorkflow:product',
+                  score: p.score || 0.5,
+                });
+              }
+            }
+            if (parsed.rawPatterns.ux) {
+              for (const u of parsed.rawPatterns.ux) {
+                rawPatternsFromWorkflow.push({
+                  content: u.content || JSON.stringify(u).substring(0, 1000),
+                  source: 'designSystemWorkflow:ux',
+                  score: u.score || 0.5,
+                });
+              }
+            }
+
+            // Deduplicate by content prefix (avoid sending the same pattern twice)
+            const existingPrefixes = new Set(designPatterns.map(p => p.content.substring(0, 100)));
+            for (const rp of rawPatternsFromWorkflow) {
+              if (!existingPrefixes.has(rp.content.substring(0, 100))) {
+                designPatterns.push(rp);
+                existingPrefixes.add(rp.content.substring(0, 100));
+              }
+            }
+          }
+        } catch { /* ignore parse errors */ }
+      }
+
+      console.log(`[retrieveDesignPatterns] BM25 returned ${designPatterns.length} patterns for query: "${layoutQuery.substring(0, 80)}"`);
+
+      return {
+        shouldSuspend,
+        missingFields,
+        message,
+        decision,
+        designPatterns: designPatterns.length > 0 ? designPatterns : undefined,
+        uxGuidelines: uxGuidelines.length > 0 ? [...new Set(uxGuidelines)] : undefined,
+      };
+    } catch (err) {
+      // Non-fatal: if BM25 search fails, proceed without patterns
+      console.error('[retrieveDesignPatterns] BM25 search failed (non-fatal):', err);
+      return {
+        shouldSuspend,
+        missingFields,
+        message,
+        decision,
+        designPatterns: undefined,
+        uxGuidelines: undefined,
+      };
+    }
+  },
+});
+
 // Step 5: generateUISpec
 const generateUISpecStep = createStep({
   id: 'generateUISpec',
@@ -255,6 +391,12 @@ const generateUISpecStep = createStep({
     missingFields: z.array(z.string()).optional(),
     message: z.string().optional(),
     decision: z.string(),
+    designPatterns: z.array(z.object({
+      content: z.string(),
+      source: z.string(),
+      score: z.number(),
+    })).optional(),
+    uxGuidelines: z.array(z.string()).optional(),
   }),
   outputSchema: z.object({
     spec_json: z.record(z.any()),
@@ -367,8 +509,10 @@ const generateUISpecStep = createStep({
         })(),
         // ── Phase 2: Skeleton-aware inputs ──────────────────────────
         dataSignals: mappingDataSignals as any,
-        mode: (requestContext.get('mode') as 'internal' | 'client-facing') || 'internal',
-        intent: (requestContext.get('selectedOutcome') as string) || '',
+        // Phase 3: BM25 design patterns from retrieveDesignPatternsStep
+        designPatterns: inputData.designPatterns,
+        mode: (requestContext.get('mode') || 'internal') as 'internal' | 'client-facing',
+        intent: (requestContext.get('intent') || '') as string,
       },
       { requestContext }
     );
@@ -529,6 +673,7 @@ export const generatePreviewWorkflow = createWorkflow({
   .then(selectTemplateStep)
   .then(generateMappingStep)
   .then(checkMappingCompletenessStep)
+  .then(retrieveDesignPatternsStep)   // Phase 3: BM25 intelligence
   .then(generateUISpecStep)
   .then(validateSpecStep)
   .then(persistPreviewVersionStep)

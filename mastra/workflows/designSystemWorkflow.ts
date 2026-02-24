@@ -56,6 +56,11 @@ const designSystemOutputSchema = z.object({
   }),
   reasoning: z.string(),
   skillActivated: z.boolean(),
+  rawPatterns: z.object({
+    styles: z.array(z.object({ content: z.string(), score: z.number() })).optional(),
+    ux: z.array(z.object({ content: z.string(), score: z.number() })).optional(),
+    product: z.array(z.object({ content: z.string(), score: z.number() })).optional(),
+  }).optional(),
 });
 // ─── Step 1: Gather Design Data (DETERMINISTIC — no LLM) ──────────────
 const gatherDesignData = createStep({
@@ -229,6 +234,20 @@ const synthesizeDesignSystem = createStep({
         },
         reasoning: `Deterministic selection from BM25 results for "${workflowName}" (${platformType}).`,
         skillActivated: true,
+        rawPatterns: {
+          styles: styleResults.slice(0, 2).map(r => ({
+            content: Object.values(r).join(' | ').substring(0, 500),
+            score: 0.8,
+          })),
+          ux: uxResults.slice(0, 3).map(r => ({
+            content: r["Guideline"] || r["Description"] || Object.values(r).join(' | ').substring(0, 500),
+            score: 0.7,
+          })),
+          product: productResults.slice(0, 2).map(r => ({
+            content: r["Product Type"] || r["Description"] || Object.values(r).join(' | ').substring(0, 500),
+            score: 0.6,
+          })),
+        },
       };
     }
     // Build context-aware prompt with variety hints
@@ -339,6 +358,20 @@ const synthesizeDesignSystem = createStep({
           },
           reasoning: parsed.reasoning || `Selected from CSV data for "${workflowName}".`,
           skillActivated: true,
+          rawPatterns: {
+            styles: styleResults.slice(0, 2).map(r => ({
+              content: Object.values(r).join(' | ').substring(0, 500),
+              score: 0.8,
+            })),
+            ux: uxResults.slice(0, 3).map(r => ({
+              content: r["Guideline"] || r["Description"] || Object.values(r).join(' | ').substring(0, 500),
+              score: 0.7,
+            })),
+            product: productResults.slice(0, 2).map(r => ({
+              content: r["Product Type"] || r["Description"] || Object.values(r).join(' | ').substring(0, 500),
+              score: 0.6,
+            })),
+          },
         };
       }
     } catch (err) {
@@ -368,6 +401,20 @@ const synthesizeDesignSystem = createStep({
       },
       reasoning: `Deterministic fallback from BM25 results for "${workflowName}".`,
       skillActivated: true,
+      rawPatterns: {
+        styles: styleResults.slice(0, 2).map(r => ({
+          content: Object.values(r).join(' | ').substring(0, 500),
+          score: 0.8,
+        })),
+        ux: uxResults.slice(0, 3).map(r => ({
+          content: r["Guideline"] || r["Description"] || Object.values(r).join(' | ').substring(0, 500),
+          score: 0.7,
+        })),
+        product: productResults.slice(0, 2).map(r => ({
+          content: r["Product Type"] || r["Description"] || Object.values(r).join(' | ').substring(0, 500),
+          score: 0.6,
+        })),
+      },
     };
   },
 });
