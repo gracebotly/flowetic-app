@@ -452,8 +452,14 @@ const shadow = (() => {
   if (typeof rawShadow === 'string' && rawShadow.includes('px')) return rawShadow;
   return '0 1px 3px rgba(0,0,0,0.08), 0 4px 6px rgba(0,0,0,0.04)';
 })();
-  const headingFont = designTokens?.fonts?.heading ?? undefined;
-  const bodyFont = designTokens?.fonts?.body ?? undefined;
+  const fonts = designTokens?.fonts ?? {};
+  const headingFont = fonts?.heading ?? undefined;
+  const bodyFont = fonts?.body ?? undefined;
+
+  // Extract font family names for Google Fonts loading
+  const headingFontName = (fonts?.heading as string)?.split(',')[0]?.trim();
+  const bodyFontName = (fonts?.body as string)?.split(',')[0]?.trim();
+  const fontsToLoad = [...new Set([headingFontName, bodyFontName].filter(Boolean))];
 
   // Filter visible components
   const visibleComponents = useMemo(
@@ -464,6 +470,12 @@ const shadow = (() => {
   if (visibleComponents.length === 0) {
     return (
       <div className="flex items-center justify-center h-64 text-gray-400" style={containerStyle}>
+        {fontsToLoad.length > 0 && (
+          <link
+            rel="stylesheet"
+            href={`https://fonts.googleapis.com/css2?${fontsToLoad.map(f => `family=${encodeURIComponent(f)}:wght@400;500;600;700`).join('&')}&display=swap`}
+          />
+        )}
         <p>No components in this dashboard spec.</p>
       </div>
     );
@@ -473,6 +485,12 @@ const shadow = (() => {
   if (deviceMode === "mobile" || deviceMode === "tablet") {
     return (
       <div style={{ ...containerStyle, fontFamily: bodyFont || undefined }} className="overflow-hidden">
+        {fontsToLoad.length > 0 && (
+          <link
+            rel="stylesheet"
+            href={`https://fonts.googleapis.com/css2?${fontsToLoad.map(f => `family=${encodeURIComponent(f)}:wght@400;500;600;700`).join('&')}&display=swap`}
+          />
+        )}
         <div className="p-4">
           {spec?.title && (
             <h1 className="text-xl font-bold mb-4" style={{ color: textColor, fontFamily: headingFont || undefined }}>{spec.title}</h1>
@@ -510,6 +528,12 @@ const shadow = (() => {
   // Desktop: Full grid with positioning
   return (
     <div style={{ ...containerStyle, fontFamily: bodyFont || undefined }}>
+      {fontsToLoad.length > 0 && (
+        <link
+          rel="stylesheet"
+          href={`https://fonts.googleapis.com/css2?${fontsToLoad.map(f => `family=${encodeURIComponent(f)}:wght@400;500;600;700`).join('&')}&display=swap`}
+        />
+      )}
       <div className="p-6">
         {spec?.title && (
           <h1 className="text-2xl font-bold mb-6" style={{ color: textColor, fontFamily: headingFont || undefined }}>{spec.title}</h1>
