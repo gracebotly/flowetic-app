@@ -4,7 +4,8 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { persistPreviewVersion } from "../persistPreviewVersion";
 import { extractTenantContext } from "../../lib/tenant-verification";
-import { STYLE_BUNDLE_TOKENS } from "../generateUISpec";
+// Wolf V2 Phase 3: STYLE_BUNDLE_TOKENS removed (was always empty).
+// Validation now uses known bundle ID allowlist + layoutSkeletonId check.
 import { InterfaceContextSchema } from "../../lib/REQUEST_CONTEXT_CONTRACT";
 
 /**
@@ -45,10 +46,24 @@ export const savePreviewVersion = createTool({
     // Per Refactor Guide: "Path B is where generic dashboards come from"
     // If spec was generated directly by LLM (not via generateUISpec), reject it
 
+    // Wolf V2 Phase 3: Validate against known bundle IDs directly.
+    // STYLE_BUNDLE_TOKENS was always empty — this check previously always
+    // fell through to 'custom' path. Now we explicitly list valid IDs.
     const styleBundleId = spec_json.styleBundleId;
+    const KNOWN_BUNDLE_IDS = new Set([
+      'custom',
+      'professional-clean',
+      'vibrant-modern',
+      'minimal-mono',
+      'premium-dark',
+      'warm-organic',
+      'tech-neon',
+      'corporate-trust',
+      'playful-bold',
+    ]);
     const hasValidStyleBundle = styleBundleId && (
-      styleBundleId === 'custom' ||
-      STYLE_BUNDLE_TOKENS[styleBundleId]
+      KNOWN_BUNDLE_IDS.has(styleBundleId) ||
+      spec_json.layoutSkeletonId  // Any skeleton-generated spec is valid
     );
 
     if (!hasValidStyleBundle) {
@@ -95,7 +110,9 @@ export const savePreviewVersion = createTool({
     // ============================================================================
     // Priority: custom tokens (styleBundleId === 'custom') > preset tokens
     // Custom tokens are LLM-generated and unique to this workflow.
-    if (spec_json.styleBundleId === 'custom' || !STYLE_BUNDLE_TOKENS[spec_json.styleBundleId]) {
+    // Wolf V2 Phase 3: All specs use custom tokens (the design system workflow
+    // generates unique tokens per dashboard). The old preset fallback path is gone.
+    if (true) {
       // Custom design system — use tokens as provided, validate minimums
       console.log('[savePreviewVersion] Using custom design tokens (not overwriting)');
       if (!design_tokens?.colors?.primary) {
@@ -118,10 +135,6 @@ export const savePreviewVersion = createTool({
           shadow: design_tokens?.shadow ?? 'soft',
         };
       }
-    } else {
-      // NO PRESET FALLBACK. STYLE_BUNDLE_TOKENS is empty.
-      // Custom tokens are required. If missing primary, that's a bug upstream.
-      console.error('[savePreviewVersion] ❌ No custom tokens and no presets. This should not happen.');
     }
     // ============================================================================
 

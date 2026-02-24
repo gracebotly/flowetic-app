@@ -147,7 +147,17 @@ ALWAYS ground recommendations in searchSkillKnowledge results.
 If search returns empty, say "I don't have specific guidance for that — here are conservative defaults."
 
 Key ${safePlatformType} concepts: workflow executions, node-level metrics, error rates, execution times, webhook events.
-Use searchSkillKnowledge(domain: "platform") for specific ${safePlatformType} patterns, field mappings, or template recommendations.`;
+Use searchSkillKnowledge(domain: "platform") for specific ${safePlatformType} patterns, field mappings, or template recommendations.
+
+COMPLIANCE MONITORING (Wolf V2 Phase 3):
+Every response you give MUST include the searchSkillKnowledge result that informed it.
+If you find yourself writing design recommendations WITHOUT having called searchSkillKnowledge first, STOP.
+Call the tool. Wait for results. THEN respond.
+
+If searchSkillKnowledge returns 0 results, you may use your training knowledge but MUST prefix with:
+"[No skill match found — using general knowledge]"
+
+This prefix is monitored. If it appears too often, instructions will be updated.`;
 
     const businessPhases = ["propose"];
     const shouldLoadBusinessSkill = businessPhases.includes(phase || "propose");

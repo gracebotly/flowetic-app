@@ -108,8 +108,10 @@ export function autoFixSpec(
   rawSpec: Record<string, any>,
   designTokens?: Record<string, any>,
 ): AutoFixResult {
-  // Deep clone to avoid mutating the original
-  const spec = JSON.parse(JSON.stringify(rawSpec));
+  // Wolf V2 Phase 3: structuredClone is immune to prototype pollution attacks
+  // that can occur with JSON round-tripping when __proto__ keys are present.
+  // Available in Node.js 17+ (we're on Node 20+).
+  const spec = structuredClone(rawSpec);
   const fixes: string[] = [];
 
   if (!spec.components || !Array.isArray(spec.components)) {

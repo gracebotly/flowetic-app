@@ -206,7 +206,7 @@ export class PhaseToolGatingProcessor implements Processor {
   }
 
   /**
-   * Phase-aware toolChoice enforcement.
+   * Phase-aware toolChoice enforcement (3-phase system).
    *
    * Instead of always returning "auto", we force specific tool-calling
    * behavior based on which phase we're in and what step we're on.
@@ -217,14 +217,12 @@ export class PhaseToolGatingProcessor implements Processor {
    *   hallucinating design tokens or layout recs. Initial propose message uses
    *   deterministic bypass (handleDeterministicPropose in route.ts), so step-0
    *   enforcement only applies to follow-up messages.
-   * - select_entity step 0: Agent MUST call getEventStats or getDataDrivenEntities
-   *   to discover what data exists. Without "required", it hallucinates entities.
-   * - style step 0: Agent MUST call getStyleRecommendations or searchSkillKnowledge
-   *   to load BM25 design knowledge. Without "required", it invents styles.
-   * - build_preview step 0: Agent MUST call validatePreviewReadiness to check if
-   *   all prerequisites are met before generating preview.
    * - build_edit: "auto" — agent decides based on user intent (edits vs questions).
    * - deploy: Short phase, "auto" is fine.
+   *
+   * Legacy 6-phase names (select_entity, recommend, style, build_preview,
+   * interactive_edit) are normalized to 3-phase names by LEGACY_PHASE_MAP
+   * in route.ts before they reach the processor. No legacy handling here.
    *
    * Safety valve: After (maxSteps - 1), force "none" to guarantee a text
    * response instead of an infinite tool-call loop.
@@ -235,16 +233,13 @@ export class PhaseToolGatingProcessor implements Processor {
     steps?: { toolCalls?: unknown[] }[],
   ): "auto" | "required" | "none" {
     // Phase-specific maxSteps (mirrors route.ts values)
+    // Wolf V2 Phase 3: Legacy aliases removed. route.ts normalizes old DB
+    // sessions before they reach the processor (LEGACY_PHASE_MAP in route.ts).
+    // If an unmapped phase somehow arrives, the fallback `|| 5` handles it.
     const PHASE_MAX_STEPS: Record<string, number> = {
-      propose: 5,      // Step 0: forced tool call (searchSkillKnowledge/getEventStats) + answer questions about proposals
-      build_edit: 10,   // Preview generation + iterative edits
+      propose: 5,
+      build_edit: 10,
       deploy: 3,
-      // Legacy aliases (in case DB hasn't been migrated yet)
-      select_entity: 4,
-      recommend: 5,
-      style: 4,
-      build_preview: 10,
-      interactive_edit: 10,
     };
     const maxSteps = PHASE_MAX_STEPS[phase] || 5;
     // SAFETY VALVE: Force text completion on the last allowed step.
@@ -264,11 +259,10 @@ export class PhaseToolGatingProcessor implements Processor {
     // This forces the agent to call searchSkillKnowledge or getEventStats
     // before responding to user questions, grounding answers in BM25 knowledge
     // instead of hallucinating design tokens or layout recommendations.
+    // Wolf V2 Phase 3: Only 3-phase names. Legacy names are normalized
+    // by route.ts LEGACY_PHASE_MAP before reaching the processor.
     const TOOL_REQUIRED_FIRST_STEP: Set<string> = new Set([
       "propose",        // Must call searchSkillKnowledge/getEventStats for follow-up questions
-      "select_entity",  // Must call getEventStats/getDataDrivenEntities
-      "style",          // Must call getStyleRecommendations/searchSkillKnowledge
-      "build_preview",  // Must call validatePreviewReadiness
     ]);
     // Force tool call on first step for tool-required phases
     if (stepNumber === 0 && TOOL_REQUIRED_FIRST_STEP.has(phase)) {
