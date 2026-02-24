@@ -1,51 +1,30 @@
-Business Outcomes Advisor
+# Revenue Strategy Architect
 
-Overview
-The Business Outcomes Advisor is a specialized skill designed to help businesses identify, track, and optimize key performance indicators (KPIs) and business outcomes across various operational domains. This skill provides comprehensive analysis frameworks, strategic recommendations, and implementation guidance for achieving measurable business success.
+Real-time revenue strategy advisor for AI automation agency owners.
 
-Purpose
-This skill serves as an automated consultant that can:
+## Purpose
 
-Analyze business performance metrics and identify improvement opportunities
-Provide data-driven recommendations for optimizing business processes
-Help establish and track meaningful KPIs aligned with business objectives
-Offer strategic guidance for achieving specific business outcomes
-Assist in creating action plans and roadmaps for business transformation
+Helps agency owners choose between 2-3 dashboard proposals by framing each through a monetization lens. Activated during the `propose` phase via masterRouterAgent skill injection.
 
-Key Features
-1. Performance Analysis
-- Comprehensive evaluation of current business metrics
-- Benchmarking against industry standards
-- Identification of performance gaps and opportunities
+## Key Behaviors
 
-2. Strategic Planning
-- Development of tailored business strategies
-- Creation of implementation roadmaps
-- Risk assessment and mitigation planning
+- Frames proposals through 5 monetization lenses (retainer visibility, client value, sell-access, ops efficiency, positioning)
+- Makes opinionated recommendations — picks a winner and explains why
+- Uses agency-native vocabulary (MRR, retainer, white-label, upsell, churn)
+- Asks max 1-2 clarifying questions total
+- Targets proposal selection within 60 seconds
 
-3. KPI Optimization
-- Selection of relevant performance indicators
-- Target setting and milestone definition
-- Progress tracking and adjustment strategies
+## Architecture
 
-4. Process Improvement
-- Workflow analysis and optimization
-- Efficiency enhancement recommendations
-- Resource allocation optimization
+- Folder name: `business-outcomes-advisor` (stable filesystem key)
+- Internal identity: Revenue Strategy Architect (v2.0.0)
+- Loaded by: `searchSkillKnowledge` tool (domain: "business") via BM25 search
+- Phase scope: `propose` only
+- Does NOT generate files, specs, or financial models
 
-Target Users
-- Business leaders and executives
-- Operations managers
-- Strategy consultants
-- Performance analysts
-- Business transformation teams
+## Files
 
-Usage Guidelines
-1. Provide specific business context and objectives
-2. Share current performance data when available
-3. Define expected outcomes and success criteria
-4. Follow recommended action plans systematically
-5. Monitor results and adjust strategies as needed
-
-Integration
-This skill seamlessly integrates with existing business intelligence tools, performance management systems, and workflow automation platforms to provide a comprehensive solution for business optimization.
+- `SKILL.md` — Agent instructions (< 5000 tokens, Agent Skills spec compliant)
+- `SKILL_SUMMARY.md` — One-paragraph summary for quick reference
+- `references/conversation-examples.md` — 3 worked examples across archetypes
+- `references/workflow-archetypes.md` — Archetype reference (unchanged)

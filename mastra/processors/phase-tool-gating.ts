@@ -58,7 +58,6 @@ const KNOWN_AGENT_TOOLS = new Set([
   'showInteractiveEditPanel',
   // Phase advancement
   'advancePhase',
-  'confirmWireframe',
   // On-demand skill knowledge search
   'searchSkillKnowledge',
   // Workspace-injected tools (auto-added by Mastra when workspace is assigned).
