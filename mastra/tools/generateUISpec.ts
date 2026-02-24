@@ -131,6 +131,83 @@ function cleanEntityName(raw: string): string {
 }
 
 /**
+ * Convert raw database field names into clean, human-readable dashboard labels.
+ * Strips technical suffixes (_ms, _id, _at, _url, _count, _num),
+ * maps well-known field names to friendly terms, and title-cases the result.
+ *
+ * Per data-dashboard-intelligence SKILL.md Section 6:
+ * "Never use raw field names as titles. Never use technical aggregation syntax."
+ *
+ * Examples:
+ *   "duration_ms"    → "Duration"
+ *   "execution_id"   → "Executions"
+ *   "started_at"     → "Started"
+ *   "workflow_name"   → "Workflow"
+ *   "error_message"  → "Errors"
+ *   "call_duration"  → "Call Duration"
+ *   "status"         → "Status"
+ */
+function humanizeFieldName(raw: string): string {
+  // Well-known field name mappings (exact match on raw name)
+  const FIELD_LABEL_MAP: Record<string, string> = {
+    'execution_id': 'Executions',
+    'run_id': 'Runs',
+    'workflow_id': 'Workflow',
+    'call_id': 'Calls',
+    'id': 'Records',
+    'duration_ms': 'Duration',
+    'duration': 'Duration',
+    'execution_time': 'Execution Time',
+    'elapsed_time': 'Elapsed Time',
+    'runtime': 'Runtime',
+    'started_at': 'Started',
+    'ended_at': 'Ended',
+    'created_at': 'Created',
+    'updated_at': 'Updated',
+    'finished_at': 'Finished',
+    'completed_at': 'Completed',
+    'timestamp': 'Time',
+    'error_message': 'Errors',
+    'error_count': 'Errors',
+    'workflow_name': 'Workflow',
+    'scenario_name': 'Scenario',
+    'status': 'Status',
+    'result': 'Result',
+    'outcome': 'Outcome',
+    'cost': 'Cost',
+    'total_cost': 'Total Cost',
+    'amount': 'Amount',
+    'score': 'Score',
+    'success_rate': 'Success Rate',
+    'failure_rate': 'Failure Rate',
+  };
+
+  const lower = raw.toLowerCase();
+  if (FIELD_LABEL_MAP[lower]) return FIELD_LABEL_MAP[lower];
+
+  // Strip known technical suffixes, then title-case
+  let cleaned = raw
+    .replace(/_ms$/i, '')
+    .replace(/_id$/i, '')
+    .replace(/_at$/i, '')
+    .replace(/_url$/i, '')
+    .replace(/_uri$/i, '')
+    .replace(/_count$/i, '')
+    .replace(/_num$/i, '')
+    .replace(/_ts$/i, '')
+    .replace(/_uuid$/i, '');
+
+  // Convert snake_case / camelCase to Title Case
+  cleaned = cleaned
+    .replace(/_/g, ' ')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/\b\w/g, (c: string) => c.toUpperCase())
+    .trim();
+
+  return cleaned || raw;
+}
+
+/**
  * Smart pluralization for dashboard titles.
  * Returns the entity name as-is for titles where plural would sound wrong,
  * and applies basic English pluralization otherwise.
@@ -295,15 +372,15 @@ function buildComponentsFromDesignTokens(
               icon = 'check-circle';
               break;
             case 'avg':
-              title = `Avg ${shortEntityNoun(entity)} ${f.name.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())}`;
+              title = `Avg. ${humanizeFieldName(f.name)}`;
               icon = 'clock';
               break;
             case 'sum':
-              title = `Total ${f.name.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())}`;
+              title = `Total ${humanizeFieldName(f.name)}`;
               icon = 'dollar-sign';
               break;
             default:
-              title = `${shortEntityNoun(entity)} ${f.name.replace(/_/g, ' ')}`;
+              title = `${shortEntityNoun(entity)} ${humanizeFieldName(f.name)}`;
               icon = 'bar-chart-2';
           }
           const unit = f.shape === 'duration' ? 'ms' : undefined;
@@ -366,8 +443,8 @@ function buildComponentsFromDesignTokens(
           const fieldName = m[f.name] || f.name;
           const base: Record<string, unknown> = {
             title: f.component === 'PieChart'
-              ? `${pluralizeEntity(shortEntityNoun(entity))} by ${f.name.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())}`
-              : `Top ${f.name.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())}`,
+              ? `${pluralizeEntity(shortEntityNoun(entity))} by ${humanizeFieldName(f.name)}`
+              : `Top ${humanizeFieldName(f.name)}`,
             dataKey: fieldName,
             valueKey: 'count',
           };
@@ -384,7 +461,7 @@ function buildComponentsFromDesignTokens(
       .slice(0, 8)
       .map(f => ({
         key: f.name,
-        label: f.name.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()),
+        label: humanizeFieldName(f.name),
       }));
 
     components.push({
@@ -504,7 +581,7 @@ function buildComponentsFromDesignTokens(
               columns: allFields.length > 0
                 ? allFields.slice(0, 6).map(f => ({
                     key: f,
-                    label: f.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()),
+                    label: humanizeFieldName(f),
                   }))
                 : [
                     { key: 'id', label: 'ID' },
@@ -541,7 +618,7 @@ function buildComponentsFromDesignTokens(
         columns: allFields.length > 0
           ? allFields.slice(0, 6).map(f => ({
               key: f,
-              label: f.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()),
+              label: humanizeFieldName(f),
             }))
           : [
               { key: 'id', label: 'ID' },
