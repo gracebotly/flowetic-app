@@ -1,9 +1,14 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Sparkles, Paintbrush, Rocket } from "lucide-react";
+import { Sparkles, Paintbrush, Rocket, ListChecks, Wand2, Eye } from "lucide-react";
 
 type JourneyMode =
+  | "select_entity"
+  | "recommend"
+  | "style"
+  | "build_preview"
+  | "interactive_edit"
   | "propose"
   | "build_edit"
   | "deploy";
@@ -12,34 +17,35 @@ interface PhaseIndicatorProps {
   currentMode: JourneyMode | string;
 }
 
-const PHASES = [
+const PHASES_NEW = [
   { id: "propose", label: "Propose", step: 1, icon: Sparkles },
   { id: "build_edit", label: "Build & Edit", step: 2, icon: Paintbrush },
   { id: "deploy", label: "Deploy", step: 3, icon: Rocket },
 ] as const;
 
-// Map legacy phase names to new phases
-function normalizePhase(mode: string): string {
-  const legacyMap: Record<string, string> = {
-    select_entity: "propose",
-    recommend: "propose",
-    style: "propose",
-    align: "propose",
-    build_preview: "build_edit",
-    interactive_edit: "build_edit",
-  };
-  return legacyMap[mode] ?? mode;
-}
+const PHASES_LEGACY = [
+  { id: "select_entity", label: "Select", step: 1, icon: ListChecks },
+  { id: "recommend", label: "Outcome", step: 2, icon: Wand2 },
+  { id: "style", label: "Style", step: 3, icon: Paintbrush },
+  { id: "build_preview", label: "Preview", step: 4, icon: Eye },
+  { id: "interactive_edit", label: "Refine", step: 5, icon: Sparkles },
+  { id: "deploy", label: "Deploy", step: 6, icon: Rocket },
+] as const;
 
 export function PhaseIndicator({ currentMode }: PhaseIndicatorProps) {
-  const normalizedMode = normalizePhase(currentMode);
+  const normalizedMode =
+    currentMode === ("align" as string) ? "style" :
+    currentMode === ("select_entity" as string) && false ? "propose" :
+    currentMode;
+
+  const isNewJourney = normalizedMode === 'propose' || normalizedMode === 'build_edit';
+  const PHASES = isNewJourney ? PHASES_NEW : PHASES_LEGACY;
   const currentPhaseIndex = PHASES.findIndex((p) => p.id === normalizedMode);
   const safeIndex = currentPhaseIndex === -1 ? 0 : currentPhaseIndex;
   const progress = ((safeIndex + 1) / PHASES.length) * 100;
 
   return (
     <div className="w-full">
-      {/* Phase Steps */}
       <div className="flex items-center justify-between mb-3">
         {PHASES.map((phase, index) => {
           const Icon = phase.icon;
@@ -76,7 +82,6 @@ export function PhaseIndicator({ currentMode }: PhaseIndicatorProps) {
                 {phase.label}
               </span>
 
-              {/* Connector line (not after last) */}
               {index < PHASES.length - 1 && (
                 <div
                   className={`
@@ -93,7 +98,6 @@ export function PhaseIndicator({ currentMode }: PhaseIndicatorProps) {
         })}
       </div>
 
-      {/* Progress Bar */}
       <div className="relative w-full h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
         <motion.div
           className="absolute left-0 top-0 h-full bg-gradient-to-r from-blue-500 to-blue-600 rounded-full"

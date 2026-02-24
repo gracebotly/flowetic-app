@@ -206,6 +206,39 @@ export async function classifyRecommendIntent(
   return result as RecommendIntent;
 }
 
+// ─── Phase: Propose (Proposal Selection) ─────────────────────────────────────
+
+export const ProposeIntentSchema = z.object({
+  intent: z.enum([
+    'select_first',
+    'select_second',
+    'select_third',
+    'regenerate',
+    'question',
+    'other',
+  ]),
+  confidence: z.number().min(0).max(1),
+});
+
+export type ProposeIntent = z.infer<typeof ProposeIntentSchema>;
+
+export async function classifyProposeIntent(
+  userMessage: string,
+  proposalCount: number,
+  mastra: any,
+): Promise<ProposeIntent> {
+  const result = await classifyIntent(
+    {
+      phase: 'propose',
+      contextHint: `User has been shown ${proposalCount} dashboard proposals (visual cards with wireframes, color swatches, and descriptions). They need to pick one or request new options. Proposals are numbered 1-${proposalCount}.`,
+      schema: ProposeIntentSchema,
+      userMessage,
+    },
+    mastra,
+  );
+  return result as ProposeIntent;
+}
+
 // ─── Phase 4: Build Preview ─────────────────────────────────────────────────
 
 export const BuildPreviewIntentSchema = z.object({
