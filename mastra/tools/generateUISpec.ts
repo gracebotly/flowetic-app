@@ -245,67 +245,6 @@ function shortEntityNoun(cleanedEntity: string): string {
  * Handles compound types like "Pie Chart or Donut" and "Bar Chart (Horizontal or Vertical)"
  * by checking for partial keyword matches when exact match fails.
  */
-function mapChartRecToComponentType(recType: string): string {
-  const normalized = recType.toLowerCase().trim();
-
-  // Exact match first (fastest path)
-  const exactMap: Record<string, string> = {
-    'funnel chart': 'BarChart',
-    'roi metric card': 'MetricCard',
-    'stacked bar chart': 'BarChart',
-    'kpi cards': 'MetricCard',
-    'kpi card': 'MetricCard',
-    'data tables': 'DataTable',
-    'data table': 'DataTable',
-    'line chart': 'TimeseriesChart',
-    'timeseries chart': 'TimeseriesChart',
-    'time series chart': 'TimeseriesChart',
-    'bar chart': 'BarChart',
-    'pie chart': 'PieChart',
-    'donut chart': 'DonutChart',
-    'area chart': 'TimeseriesChart',
-    'gauge': 'MetricCard',
-    'metric card': 'MetricCard',
-    'table': 'DataTable',
-    'heatmap': 'BarChart',
-    'scatter chart': 'TimeseriesChart',
-    'grouped bar chart': 'BarChart',
-    'horizontal bar chart': 'BarChart',
-    'radar chart': 'BarChart',
-    'bubble chart': 'TimeseriesChart',
-    'treemap': 'BarChart',
-    'waterfall chart': 'BarChart',
-    'combo chart': 'TimeseriesChart',
-    'sparkline': 'TimeseriesChart',
-  };
-
-  if (exactMap[normalized]) return exactMap[normalized];
-
-  // Partial keyword match for compound types like "Pie Chart or Donut",
-  // "Bar Chart (Horizontal or Vertical)", etc.
-  // Order matters: check more specific keywords first.
-  const keywordMap: Array<[string, string]> = [
-    ['pie', 'PieChart'],
-    ['donut', 'DonutChart'],
-    ['line', 'TimeseriesChart'],
-    ['timeseries', 'TimeseriesChart'],
-    ['time series', 'TimeseriesChart'],
-    ['area', 'TimeseriesChart'],
-    ['scatter', 'TimeseriesChart'],
-    ['bar', 'BarChart'],
-    ['funnel', 'BarChart'],
-    ['table', 'DataTable'],
-    ['gauge', 'MetricCard'],
-    ['kpi', 'MetricCard'],
-    ['metric', 'MetricCard'],
-  ];
-
-  for (const [keyword, componentType] of keywordMap) {
-    if (normalized.includes(keyword)) return componentType;
-  }
-
-  return 'BarChart';
-}
 
 /**
  * Build dashboard components driven by the design system's chart recommendations.
@@ -331,7 +270,11 @@ function mapChartRecToComponentType(recType: string): string {
 // ============================================================================
 // Skeleton-Aware Dashboard Component Builder (Phase 2)
 // Replaces the fixed layout with 11 deterministic skeletons.
-// The old buildComponentsFromDesignTokens() is kept as LEGACY fallback.
+// Wolf V2 Phase 4: buildComponentsFromDesignTokens() deleted.
+// All dashboards now use skeleton-based builders:
+// - buildDashboardComponentsFromSkeleton() — for dashboard category
+// - buildProductComponentsFromSkeleton() — for product category
+// - buildAdminComponentsFromSkeleton() — for admin category
 // ============================================================================
 
 function buildDashboardComponentsFromSkeleton(
@@ -560,319 +503,6 @@ function buildAdminComponentsFromSkeleton(
   return components;
 }
 
-function buildComponentsFromDesignTokens(
-  mappings: Record<string, string>,
-  chartRecs: Array<{ type: string; bestFor: string; fieldName?: string }>,
-  entityName: string,
-  fieldAnalysis?: Array<{
-    name: string; type: string; shape: string; component: string;
-    aggregation: string; role: string; uniqueValues: number;
-    totalRows: number; skip: boolean; skipReason?: string;
-  }>,
-): ComponentBlueprint[] {
-  const components: ComponentBlueprint[] = [];
-  const entity = cleanEntityName(entityName);
-  const allFields = Object.values(mappings);
-  let row = 0;
-
-  // ── Use field analysis if available (skill-driven path) ────────────
-  if (fieldAnalysis && fieldAnalysis.length > 0) {
-    const active = fieldAnalysis.filter(f => !f.skip);
-    const heroes = active.filter(f => f.role === 'hero');
-    const supporting = active.filter(f => f.role === 'supporting');
-    const trends = active.filter(f => f.role === 'trend');
-    const breakdowns = active.filter(f => f.role === 'breakdown');
-
-    // ── ROW 0: KPI cards (hero + supporting, max 4) ──────────────────
-    const kpiFields = [...heroes, ...supporting].slice(0, 4);
-    const kpiWidth = kpiFields.length > 0 ? Math.floor(12 / Math.min(kpiFields.length, 4)) : 4;
-
-    kpiFields.forEach((f, i) => {
-      components.push({
-        id: `kpi-${f.name}`,
-        type: 'MetricCard',
-        propsBuilder: (m) => {
-          const fieldName = m[f.name] || f.name;
-          let title: string;
-          let icon: string;
-          switch (f.aggregation) {
-            case 'count':
-              title = `Total ${pluralizeEntity(shortEntityNoun(entity))}`;
-              icon = 'activity';
-              break;
-            case 'percentage':
-              title = `${shortEntityNoun(entity)} Success Rate`;
-              icon = 'check-circle';
-              break;
-            case 'avg':
-              title = `Avg. ${humanizeFieldName(f.name)}`;
-              icon = 'clock';
-              break;
-            case 'sum':
-              title = `Total ${humanizeFieldName(f.name)}`;
-              icon = 'dollar-sign';
-              break;
-            default:
-              title = `${shortEntityNoun(entity)} ${humanizeFieldName(f.name)}`;
-              icon = 'bar-chart-2';
-          }
-          const unit = f.shape === 'duration' ? 'ms' : undefined;
-          const condition = f.aggregation === 'percentage'
-            ? { equals: 'success' }
-            : undefined;
-          return {
-            title,
-            valueField: fieldName,
-            aggregation: f.aggregation === 'count_per_category' ? 'count' : f.aggregation,
-            icon,
-            ...(unit ? { unit } : {}),
-            ...(condition ? { condition } : {}),
-          };
-        },
-        layout: { col: i * kpiWidth, row, w: kpiWidth, h: 2 },
-      });
-    });
-
-    if (kpiFields.length === 0) {
-      components.push({
-        id: 'primary-kpi',
-        type: 'MetricCard',
-        propsBuilder: (m) => ({
-          title: `Total ${pluralizeEntity(shortEntityNoun(entity))}`,
-          valueField: pickField(m, ['execution_id', 'run_id', 'id'], 'id'),
-          aggregation: 'count',
-          icon: 'activity',
-        }),
-        layout: { col: 0, row, w: 4, h: 2 },
-      });
-    }
-
-    row += 2;
-
-    // ── ROW 2: Trend chart (full width) ──────────────────────────────
-    for (const f of trends.slice(0, 1)) {
-      components.push({
-        id: `trend-${f.name}`,
-        type: 'TimeseriesChart',
-        propsBuilder: (m) => ({
-          title: `${pluralizeEntity(shortEntityNoun(entity))} Over Time`,
-          dateField: m[f.name] || f.name,
-          valueField: pickField(m, ['execution_id', 'run_id', 'id', 'status'], 'id'),
-          aggregation: 'count_per_interval',
-        }),
-        layout: { col: 0, row, w: 12, h: 4 },
-      });
-      row += 4;
-    }
-
-    // ── ROW 3: Breakdown charts (half width each) ────────────────────
-    const breakdownSlots = breakdowns.slice(0, 2);
-    const breakdownWidth = breakdownSlots.length === 1 ? 12 : 6;
-    breakdownSlots.forEach((f, i) => {
-      components.push({
-        id: `breakdown-${f.name}`,
-        type: f.component as string,
-        propsBuilder: (m) => {
-          const fieldName = m[f.name] || f.name;
-          const base: Record<string, unknown> = {
-            title: f.component === 'PieChart'
-              ? `${pluralizeEntity(shortEntityNoun(entity))} by ${humanizeFieldName(f.name)}`
-              : `Top ${humanizeFieldName(f.name)}`,
-            dataKey: fieldName,
-            valueKey: 'count',
-          };
-          return base;
-        },
-        layout: { col: i * breakdownWidth, row, w: breakdownWidth, h: 4 },
-      });
-    });
-    if (breakdownSlots.length > 0) row += 4;
-
-    // ── ROW 4: Data table (full width) ───────────────────────────────
-    const tableColumns = active
-      .filter(f => f.shape !== 'long_text' || active.length <= 8)
-      .slice(0, 8)
-      .map(f => ({
-        key: f.name,
-        label: humanizeFieldName(f.name),
-      }));
-
-    components.push({
-      id: 'activity-table',
-      type: 'DataTable',
-      propsBuilder: () => ({
-        title: `Recent ${pluralizeEntity(shortEntityNoun(entity))}`,
-        columns: tableColumns.length > 0 ? tableColumns : [
-          { key: 'id', label: 'ID' },
-          { key: 'name', label: 'Name' },
-          { key: 'status', label: 'Status' },
-          { key: 'timestamp', label: 'Time' },
-        ],
-        pageSize: 10,
-      }),
-      layout: { col: 0, row, w: 12, h: 4 },
-    });
-
-    console.log(
-      `[buildComponentsFromDesignTokens] Built ${components.length} SKILL-DRIVEN components ` +
-      `from ${active.length} active fields for "${entity}" ` +
-      `(${heroes.length} hero, ${supporting.length} supporting, ${trends.length} trend, ${breakdowns.length} breakdown)`
-    );
-
-    return components;
-  }
-
-  // ── LEGACY PATH: chartRecs from designSystemWorkflow BM25 ──────────
-  let metricCount = 0;
-
-  // ROW 0: Three KPI cards (always present)
-  components.push({
-    id: 'primary-kpi',
-    type: 'MetricCard',
-    propsBuilder: (m) => ({
-      title: `Total ${pluralizeEntity(shortEntityNoun(entity))}`,
-      valueField: pickField(m, ['execution_id', 'run_id', 'id'], 'id'),
-      aggregation: 'count',
-      icon: 'activity',
-    }),
-    layout: { col: 0, row, w: 4, h: 2 },
-  });
-
-  components.push({
-    id: 'success-kpi',
-    type: 'MetricCard',
-    propsBuilder: (m) => ({
-      title: `${shortEntityNoun(entity)} Success Rate`,
-      valueField: pickField(m, ['status', 'result', 'outcome'], 'status'),
-      aggregation: 'percentage',
-      condition: { equals: 'success' },
-      icon: 'check-circle',
-    }),
-    layout: { col: 4, row, w: 4, h: 2 },
-  });
-
-  components.push({
-    id: 'duration-kpi',
-    type: 'MetricCard',
-    propsBuilder: (m) => ({
-      title: `Avg ${shortEntityNoun(entity)} Duration`,
-      valueField: pickField(m, ['duration', 'duration_ms', 'execution_time', 'elapsed'], 'duration_ms'),
-      aggregation: 'avg',
-      unit: 'ms',
-      icon: 'clock',
-    }),
-    layout: { col: 8, row, w: 4, h: 2 },
-  });
-
-  row += 2;
-  metricCount = 3;
-
-  // ROWS 2+: Components from chart recommendations
-  for (let i = 0; i < chartRecs.length; i++) {
-    const rec = chartRecs[i];
-    const componentType = mapChartRecToComponentType(rec.type);
-
-    if (componentType === 'MetricCard' && metricCount >= 4) continue;
-    if (componentType === 'MetricCard') metricCount++;
-
-    const chartId = `rec-${i}-${componentType.toLowerCase()}`;
-    const isFullWidth = componentType === 'DataTable' || componentType === 'TimeseriesChart';
-    const width = isFullWidth ? 12 : 8;
-
-    components.push({
-      id: chartId,
-      type: componentType,
-      propsBuilder: (m) => {
-        const shortBestFor = rec.bestFor && rec.bestFor.length < 60
-          && !['trend over time', 'compare categories', 'part-to-whole'].some(g => rec.bestFor.toLowerCase().includes(g))
-          ? rec.bestFor
-          : undefined;
-
-        switch (componentType) {
-          case 'TimeseriesChart':
-            return {
-              title: shortBestFor || `${pluralizeEntity(shortEntityNoun(entity))} Over Time`,
-              dateField: pickField(m, ['timestamp', 'created_at', 'started_at', 'date', 'time'], 'timestamp'),
-              valueField: pickField(m, ['value', 'count', 'duration', 'cost', 'id'], 'value'),
-              aggregation: 'count_per_interval',
-            };
-          case 'BarChart':
-            return {
-              title: shortBestFor || `${pluralizeEntity(shortEntityNoun(entity))} Breakdown`,
-              dataKey: pickField(m, ['status', 'type', 'category', 'workflow_name', 'name'], 'status'),
-              valueKey: 'count',
-            };
-          case 'PieChart':
-          case 'DonutChart':
-            return {
-              title: shortBestFor || `${pluralizeEntity(shortEntityNoun(entity))} Distribution`,
-              dataKey: pickField(m, ['status', 'type', 'category', 'workflow_name'], 'status'),
-            };
-          case 'DataTable':
-            return {
-              title: shortBestFor || `Recent ${pluralizeEntity(shortEntityNoun(entity))}`,
-              columns: allFields.length > 0
-                ? allFields.slice(0, 6).map(f => ({
-                    key: f,
-                    label: humanizeFieldName(f),
-                  }))
-                : [
-                    { key: 'id', label: 'ID' },
-                    { key: 'name', label: 'Name' },
-                    { key: 'status', label: 'Status' },
-                    { key: 'timestamp', label: 'Time' },
-                  ],
-              pageSize: 10,
-            };
-          case 'MetricCard':
-            return {
-              title: shortBestFor || `${shortEntityNoun(entity)} Count`,
-              valueField: pickField(m, ['value', 'cost', 'amount', 'score', 'id'], 'id'),
-              aggregation: 'count',
-              icon: 'bar-chart-2',
-            };
-          default:
-            return { title: shortBestFor || `${pluralizeEntity(shortEntityNoun(entity))} Overview`, field: 'status' };
-        }
-      },
-      layout: { col: 0, row, w: width, h: 4 },
-    });
-
-    row += 4;
-  }
-
-  // FINAL ROW: Data table if none from recommendations
-  if (!components.some(c => c.type === 'DataTable')) {
-    components.push({
-      id: 'activity-table',
-      type: 'DataTable',
-      propsBuilder: (m) => ({
-        title: `Recent ${pluralizeEntity(shortEntityNoun(entity))}`,
-        columns: allFields.length > 0
-          ? allFields.slice(0, 6).map(f => ({
-              key: f,
-              label: humanizeFieldName(f),
-            }))
-          : [
-              { key: 'id', label: 'ID' },
-              { key: 'name', label: 'Name' },
-              { key: 'status', label: 'Status' },
-              { key: 'timestamp', label: 'Time' },
-            ],
-        pageSize: 10,
-      }),
-      layout: { col: 0, row, w: 12, h: 4 },
-    });
-  }
-
-  console.log(
-    `[buildComponentsFromDesignTokens] Built ${components.length} LEGACY components ` +
-    `from ${chartRecs.length} chart recommendations for "${entity}"`
-  );
-
-  return components;
-}
-
 // ============================================================================
 // The tool itself
 // ============================================================================
@@ -1053,10 +683,10 @@ export const generateUISpec = createTool({
     const resolvedEntityName = entityName || platformType || templateId;
     const fieldNames = Object.keys(mappings);
 
-    // ── Phase 2: Skeleton-aware component building ──────────────────
-    // Feature flag: Use ENABLE_SKELETON_LAYOUTS=true to activate.
-    // Falls back to legacy buildComponentsFromDesignTokens() when disabled.
-    const useSkeletons = process.env.ENABLE_SKELETON_LAYOUTS === 'true';
+    // ── Wolf V2 Phase 4: Skeleton-aware component building ──────────
+    // Skeletons are the ONLY path. Feature flag removed.
+    // The legacy buildComponentsFromDesignTokens() function has been deleted.
+    const useSkeletons = true;
     let blueprints: ComponentBlueprint[];
     let skeletonId: SkeletonId | null = null;
 
@@ -1098,12 +728,37 @@ export const generateUISpec = createTool({
         });
       }
     } else {
-      // LEGACY PATH: Fixed layout (pre-Phase 2)
-      blueprints = buildComponentsFromDesignTokens(
+      // Wolf V2 Phase 4: Legacy path removed. Skeletons are required.
+      // If dataSignals is missing, use a default executive-overview skeleton.
+      const fallbackContext: SelectionContext = {
+        uiType: (inputData.uiType || 'dashboard') as UIType,
+        dataShape: {
+          fieldCount: Object.keys(mappings).length,
+          hasTimestamp: false,
+          hasTimeSeries: false,
+          hasBreakdown: false,
+          statusFields: 0,
+          categoricalFields: 0,
+          tableSuitableRatio: 1,
+          eventDensity: 'low',
+          dataStory: 'unknown',
+          layoutQuery: 'executive overview',
+          summary: 'Fallback skeleton context due to missing dataSignals.',
+        } as DataSignals,
+        mode: inputData.mode || 'internal',
+        platform: platformType,
+        intent: inputData.intent || '',
+      };
+      skeletonId = selectSkeleton(fallbackContext);
+      const skeleton = getSkeleton(skeletonId);
+      console.log(`[generateUISpec] Fallback skeleton selected: "${skeletonId}" (no dataSignals provided)`);
+      blueprints = buildDashboardComponentsFromSkeleton(
+        skeleton,
         mappings,
         chartRecs as Array<{ type: string; bestFor: string; fieldName?: string }>,
         resolvedEntityName,
         inputData.fieldAnalysis,
+        (inputData.designPatterns ?? []) as Array<{ content: string; source: string; score: number }>,
       );
     }
 

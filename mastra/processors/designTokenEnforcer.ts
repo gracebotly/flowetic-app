@@ -4,7 +4,8 @@ import type { Processor, ProcessInputStepArgs } from "@mastra/core/processors";
  * Enforces design token system by preventing direct spec generation.
  *
  * Phase 2 Guardrail: Forces all spec generation through generateUISpec tool
- * or runGeneratePreviewWorkflow, which use canonical STYLE_BUNDLE_TOKENS.
+ * or runGeneratePreviewWorkflow, which use the designSystemWorkflow's
+ * deterministic token pipeline. All dashboards are skeleton-based (Wolf V2).
  */
 export class DesignTokenEnforcer implements Processor {
   readonly id = "design-token-enforcer";
