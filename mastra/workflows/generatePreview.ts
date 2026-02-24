@@ -283,6 +283,8 @@ const generateUISpecStep = createStep({
     // Get field analysis and chart recommendations from the new skill-driven mapping
     const fieldAnalysis = (mappingResult as { fieldAnalysis?: unknown }).fieldAnalysis;
     const mappingChartRecs = (mappingResult as { chartRecommendations?: unknown }).chartRecommendations;
+    // Phase 2: Extract dataSignals from mapping result
+    const mappingDataSignals = (mappingResult as { dataSignals?: unknown }).dataSignals;
 
     // ── FIX: Load design tokens from DB if missing from RequestContext ────────
     // Mastra workflow execution can lose RequestContext keys during step
@@ -363,6 +365,10 @@ const generateUISpecStep = createStep({
           const firstEntity = entitiesRaw.split(',')[0].trim();
           return firstEntity || undefined;
         })(),
+        // ── Phase 2: Skeleton-aware inputs ──────────────────────────
+        dataSignals: mappingDataSignals as any,
+        mode: (requestContext.get('mode') as 'internal' | 'client-facing') || 'internal',
+        intent: (requestContext.get('selectedOutcome') as string) || '',
       },
       { requestContext }
     );

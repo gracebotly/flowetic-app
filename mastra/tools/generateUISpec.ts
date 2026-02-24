@@ -1,5 +1,8 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
+import { selectSkeleton, type SelectionContext, type UIType } from '../lib/layout/skeletonSelector';
+import { getSkeleton, SKELETON_VERSION, type LayoutSkeleton, type SkeletonId } from '../lib/layout/skeletons';
+import type { DataSignals } from '../lib/layout/dataSignals';
 
 // ============================================================================
 // Style bundle catalog
@@ -327,6 +330,230 @@ function mapChartRecToComponentType(recType: string): string {
  * are built from actual data shapes. If only chartRecs is provided (legacy
  * designSystemWorkflow BM25 path), falls back to the old behavior.
  */
+// ============================================================================
+// Skeleton-Aware Dashboard Component Builder (Phase 2)
+// Replaces the fixed layout with 11 deterministic skeletons.
+// The old buildComponentsFromDesignTokens() is kept as LEGACY fallback.
+// ============================================================================
+
+function buildDashboardComponentsFromSkeleton(
+  skeleton: LayoutSkeleton,
+  mappings: Record<string, string>,
+  chartRecs: Array<{ type: string; bestFor: string; fieldName?: string }>,
+  entityName: string,
+  fieldAnalysis?: Array<{
+    name: string; type: string; shape: string; component: string;
+    aggregation: string; role: string; uniqueValues: number;
+    totalRows: number; skip: boolean; skipReason?: string;
+  }>,
+  designPatterns?: Array<{ content: string; source: string; score: number }>,
+): ComponentBlueprint[] {
+  const components: ComponentBlueprint[] = [];
+  const entity = cleanEntityName(entityName);
+  const allFields = Object.values(mappings);
+  let row = 0;
+
+  const active = fieldAnalysis?.filter(f => !f.skip) || [];
+  const heroes = active.filter(f => f.role === 'hero');
+  const supporting = active.filter(f => f.role === 'supporting');
+  const trends = active.filter(f => f.role === 'trend');
+  const breakdowns = active.filter(f => f.role === 'breakdown');
+  const layoutHints = extractLayoutHints(designPatterns);
+
+  for (const section of skeleton.sections) {
+    const sectionHeight = section.minHeight || 2;
+
+    switch (section.type) {
+      case 'kpi-grid': {
+        const maxKPIs = Math.min(section.maxItems || skeleton.maxKPIs, skeleton.maxKPIs);
+        const kpiFields = [...heroes, ...supporting].slice(0, maxKPIs);
+        if (kpiFields.length > 0) {
+          const kpiWidth = Math.floor(12 / Math.min(kpiFields.length, maxKPIs));
+          kpiFields.forEach((field, idx) => {
+            components.push({
+              id: `kpi-${idx}`,
+              type: 'MetricCard',
+              propsBuilder: (m) => ({
+                title: humanizeFieldName(field.name),
+                valueField: m[field.name] || field.name,
+                aggregation: field.aggregation,
+                icon: idx === 0 ? 'activity' : idx === 1 ? 'check-circle' : 'clock',
+              }),
+              layout: { col: idx * kpiWidth, row, w: kpiWidth, h: section.compact ? 1 : 2 },
+            });
+          });
+        } else {
+          const fallbackKPIs = [
+            { title: `Total ${pluralizeEntity(shortEntityNoun(entity))}`, field: pickField(mappings, ['execution_id', 'run_id', 'id', 'call_id'], 'id'), agg: 'count', icon: 'activity' },
+            { title: `${shortEntityNoun(entity)} Success Rate`, field: pickField(mappings, ['status', 'result', 'outcome'], 'status'), agg: 'percentage', icon: 'check-circle' },
+            { title: 'Avg Duration', field: pickField(mappings, ['duration', 'duration_ms', 'execution_time', 'elapsed'], 'duration_ms'), agg: 'avg', icon: 'clock' },
+          ].slice(0, skeleton.maxKPIs);
+          const kpiWidth = Math.floor(12 / fallbackKPIs.length);
+          fallbackKPIs.forEach((kpi, idx) => {
+            components.push({
+              id: `kpi-${idx}`,
+              type: 'MetricCard',
+              propsBuilder: () => ({ title: kpi.title, valueField: kpi.field, aggregation: kpi.agg, icon: kpi.icon }),
+              layout: { col: idx * kpiWidth, row, w: kpiWidth, h: section.compact ? 1 : 2 },
+            });
+          });
+        }
+        row += section.compact ? 1 : 2;
+        break;
+      }
+      case 'chart': {
+        const width = section.columns || 12;
+        const colStart = section.columns < 12 ? (section.dominant ? 0 : (12 - section.columns)) : 0;
+        if (trends.length > 0) {
+          const trendField = trends[0];
+          components.push({
+            id: `chart-trend-${row}`,
+            type: 'TimeseriesChart',
+            propsBuilder: (m) => ({
+              title: `${humanizeFieldName(trendField.name)} Over Time`,
+              xAxisField: pickField(m, ['timestamp', 'created_at', 'time', 'date'], 'timestamp'),
+              yAxisField: m[trendField.name] || trendField.name,
+              aggregation: trendField.aggregation,
+            }),
+            layout: { col: colStart, row, w: width, h: sectionHeight > 2 ? sectionHeight : 3 },
+          });
+        } else {
+          const bdField = breakdowns[0];
+          components.push({
+            id: `chart-primary-${row}`,
+            type: 'BarChart',
+            propsBuilder: (m) => ({
+              title: bdField ? `${humanizeFieldName(bdField.name)} Distribution` : `${shortEntityNoun(entity)} Activity`,
+              categoryField: bdField ? (m[bdField.name] || bdField.name) : pickField(m, ['status', 'type', 'category'], 'status'),
+              valueField: pickField(m, ['execution_id', 'run_id', 'id'], 'id'),
+              aggregation: 'count',
+            }),
+            layout: { col: colStart, row, w: width, h: sectionHeight > 2 ? sectionHeight : 3 },
+          });
+        }
+        row += sectionHeight > 2 ? sectionHeight : 3;
+        break;
+      }
+      case 'table': {
+        const tableColumns = active.length > 0
+          ? active.slice(0, 8).map(f => ({ key: f.name, label: humanizeFieldName(f.name) }))
+          : allFields.slice(0, 6).map(f => ({ key: f, label: humanizeFieldName(f) }));
+        const tableHeight = section.dominant ? 5 : 4;
+        components.push({
+          id: `table-${row}`,
+          type: 'DataTable',
+          propsBuilder: () => ({
+            title: `${shortEntityNoun(entity)} Details`,
+            columns: tableColumns,
+            pageSize: section.dominant ? 20 : 10,
+            sortable: true,
+          }),
+          layout: { col: 0, row, w: 12, h: tableHeight },
+        });
+        row += tableHeight;
+        break;
+      }
+      case 'feed': {
+        components.push({
+          id: `feed-${row}`,
+          type: 'DataTable',
+          propsBuilder: (m) => ({
+            title: `Live ${shortEntityNoun(entity)} Feed`,
+            columns: active.slice(0, 5).map(f => ({ key: f.name, label: humanizeFieldName(f.name) })),
+            pageSize: 15,
+            sortable: true,
+            defaultSort: { field: pickField(m, ['timestamp', 'created_at', 'time'], 'timestamp'), direction: 'desc' },
+          }),
+          layout: { col: 0, row, w: 12, h: 4 },
+        });
+        row += 4;
+        break;
+      }
+      case 'insight-card': {
+        components.push({
+          id: `insight-${row}`,
+          type: 'MetricCard',
+          propsBuilder: (m) => ({
+            title: layoutHints.insightHeadline || 'Key Insight',
+            valueField: heroes.length > 0 ? (m[heroes[0].name] || heroes[0].name) : pickField(m, ['execution_id', 'run_id', 'id'], 'id'),
+            aggregation: heroes.length > 0 ? heroes[0].aggregation : 'count',
+            variant: 'hero',
+            narrative: true,
+          }),
+          layout: { col: 0, row, w: 12, h: 3 },
+        });
+        row += 3;
+        break;
+      }
+      case 'filters': {
+        components.push({
+          id: `filters-${row}`,
+          type: 'MetricCard',
+          propsBuilder: () => ({ title: 'Filters', valueField: 'filter_placeholder', aggregation: 'count', variant: 'filter-bar' }),
+          layout: { col: 0, row, w: 12, h: 1 },
+        });
+        row += 1;
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
+  return components;
+}
+
+function extractLayoutHints(
+  designPatterns?: Array<{ content: string; source: string; score: number }>,
+): {
+  insightHeadline?: string;
+  emphasisColor?: string;
+  preferDarkMode?: boolean;
+  statusIndicators?: boolean;
+  realTimeUpdates?: boolean;
+} {
+  if (!designPatterns || designPatterns.length === 0) return {};
+  const allContent = designPatterns.map(p => p.content.toLowerCase()).join(' ');
+  return {
+    realTimeUpdates: allContent.includes('real-time') || allContent.includes('real time') || allContent.includes('live'),
+    statusIndicators: allContent.includes('status indicator') || allContent.includes('health check'),
+    preferDarkMode: allContent.includes('dark mode') || allContent.includes('dark theme') || allContent.includes('dark palette'),
+    emphasisColor: allContent.includes('trust') && allContent.includes('blue') ? 'trust-blue' : undefined,
+  };
+}
+
+function buildProductComponentsFromSkeleton(
+  skeleton: LayoutSkeleton,
+  input: { entityName?: string; platformType?: string; designPatterns?: Array<{ content: string; source: string; score: number }> },
+): ComponentBlueprint[] {
+  const components: ComponentBlueprint[] = [];
+  const entity = cleanEntityName(input.entityName || 'Product');
+  let row = 0;
+  for (const section of skeleton.sections) {
+    if (section.type === 'hero') {
+      components.push({ id: `hero-${row}`, type: 'HeroSection', propsBuilder: () => ({ headline: `${entity}`, subheadline: 'Powered by AI automation', ctaText: 'Get Started', ctaLink: '#pricing' }), layout: { col: 0, row, w: 12, h: 3 } });
+      row += 3;
+    }
+  }
+  return components;
+}
+
+function buildAdminComponentsFromSkeleton(
+  skeleton: LayoutSkeleton,
+  input: { entityName?: string; platformType?: string; designPatterns?: Array<{ content: string; source: string; score: number }> },
+): ComponentBlueprint[] {
+  const components: ComponentBlueprint[] = [];
+  const entity = cleanEntityName(input.entityName || 'Records');
+  let row = 0;
+  for (const section of skeleton.sections) {
+    if (section.type === 'page-header') {
+      components.push({ id: `header-${row}`, type: 'PageHeader', propsBuilder: () => ({ title: entity }), layout: { col: 0, row, w: 12, h: 1 } });
+      row += 1;
+    }
+  }
+  return components;
+}
+
 function buildComponentsFromDesignTokens(
   mappings: Record<string, string>,
   chartRecs: Array<{ type: string; bestFor: string; fieldName?: string }>,
@@ -671,6 +898,31 @@ export const generateUISpec = createTool({
       skipReason: z.string().optional(),
     })).optional(),
     entityName: z.string().optional(),
+    // ── Phase 2: Skeleton-aware inputs ──────────────────────────────
+    dataSignals: z.object({
+      fieldCount: z.number(),
+      hasTimestamp: z.boolean(),
+      hasTimeSeries: z.boolean(),
+      hasBreakdown: z.boolean(),
+      statusFields: z.number(),
+      categoricalFields: z.number(),
+      tableSuitableRatio: z.number(),
+      eventDensity: z.enum(['low', 'medium', 'high']),
+      dataStory: z.enum(['healthy', 'warning', 'critical', 'unknown']),
+      layoutQuery: z.string(),
+      summary: z.string(),
+    }).optional(),
+    designPatterns: z.array(z.object({
+      content: z.string(),
+      source: z.string(),
+      score: z.number(),
+    })).optional(),
+    mode: z.enum(['internal', 'client-facing']).optional(),
+    intent: z.string().optional(),
+    uiType: z.enum([
+      'dashboard', 'landing-page', 'form-wizard',
+      'results-display', 'admin-crud', 'settings', 'auth',
+    ]).optional(),
   }),
   outputSchema: z.object({
     spec_json: z.record(z.any()),
@@ -787,13 +1039,61 @@ export const generateUISpec = createTool({
     // Fallback chain: entityName (from selectedEntities) → platformType → templateId
     // NEVER pass templateId raw (e.g. "workflow-dashboard") — it's a slug, not a label
     const resolvedEntityName = entityName || platformType || templateId;
-    const blueprints = buildComponentsFromDesignTokens(
-      mappings,
-      chartRecs,
-      resolvedEntityName,
-      inputData.fieldAnalysis,
-    );
     const fieldNames = Object.keys(mappings);
+
+    // ── Phase 2: Skeleton-aware component building ──────────────────
+    // Feature flag: Use ENABLE_SKELETON_LAYOUTS=true to activate.
+    // Falls back to legacy buildComponentsFromDesignTokens() when disabled.
+    const useSkeletons = process.env.ENABLE_SKELETON_LAYOUTS === 'true';
+    let blueprints: ComponentBlueprint[];
+    let skeletonId: SkeletonId | null = null;
+
+    if (useSkeletons && inputData.dataSignals) {
+      // Select skeleton deterministically from data signals
+      const selectionContext: SelectionContext = {
+        uiType: (inputData.uiType || 'dashboard') as UIType,
+        dataShape: inputData.dataSignals as DataSignals,
+        mode: inputData.mode || 'internal',
+        platform: platformType,
+        intent: inputData.intent || '',
+      };
+      skeletonId = selectSkeleton(selectionContext);
+      const skeleton = getSkeleton(skeletonId);
+
+      console.log(`[generateUISpec] Skeleton selected: "${skeletonId}" (${skeleton.name}) for ${platformType}`);
+
+      // Route to the correct builder based on skeleton category
+      if (skeleton.category === 'dashboard') {
+        blueprints = buildDashboardComponentsFromSkeleton(
+          skeleton,
+          mappings,
+          chartRecs as Array<{ type: string; bestFor: string; fieldName?: string }>,
+          resolvedEntityName,
+          inputData.fieldAnalysis,
+          (inputData.designPatterns ?? []) as Array<{ content: string; source: string; score: number }>,
+        );
+      } else if (skeleton.category === 'product') {
+        blueprints = buildProductComponentsFromSkeleton(skeleton, {
+          entityName: resolvedEntityName,
+          platformType,
+          designPatterns: (inputData.designPatterns ?? []) as Array<{ content: string; source: string; score: number }>,
+        });
+      } else {
+        blueprints = buildAdminComponentsFromSkeleton(skeleton, {
+          entityName: resolvedEntityName,
+          platformType,
+          designPatterns: (inputData.designPatterns ?? []) as Array<{ content: string; source: string; score: number }>,
+        });
+      }
+    } else {
+      // LEGACY PATH: Fixed layout (pre-Phase 2)
+      blueprints = buildComponentsFromDesignTokens(
+        mappings,
+        chartRecs as Array<{ type: string; bestFor: string; fieldName?: string }>,
+        resolvedEntityName,
+        inputData.fieldAnalysis,
+      );
+    }
 
     const components = blueprints.map(bp => ({
       id: bp.id,
@@ -804,16 +1104,24 @@ export const generateUISpec = createTool({
 
     const parsedCustomForMeta = customTokensJson ? JSON.parse(customTokensJson) : {};
     const entity = cleanEntityName(resolvedEntityName);
+    const skeleton = skeletonId ? getSkeleton(skeletonId) : null;
 
     const spec_json = {
       version: '1.0',
       templateId,
       platformType,
       styleBundleId,
+      // Phase 2: Skeleton metadata
+      ...(skeletonId ? {
+        layoutSkeletonId: skeletonId,
+        skeletonVersion: SKELETON_VERSION,
+      } : {}),
       layout: {
         type: 'grid',
         columns: 12,
-        gap: Math.max(16, styleTokens.spacing.unit * 2),
+        gap: skeleton
+          ? Math.max(skeleton.spacingPx, styleTokens.spacing.unit * 2)
+          : Math.max(16, styleTokens.spacing.unit * 2),
       },
       components,
       metadata: {
@@ -825,6 +1133,14 @@ export const generateUISpec = createTool({
         styleName: parsedCustomForMeta.style?.name || parsedCustomForMeta.styleName || undefined,
         generatedAt: new Date().toISOString(),
         chartRecommendationsUsed: chartRecs,
+        // Phase 2: Skeleton observability
+        ...(skeletonId ? {
+          layoutSkeletonId: skeletonId,
+          skeletonName: skeleton?.name,
+          skeletonCategory: skeleton?.category,
+          skeletonSpacing: skeleton?.spacing,
+          designPatternsUsed: inputData.designPatterns?.length || 0,
+        } : {}),
       },
     };
 

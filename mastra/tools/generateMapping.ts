@@ -14,6 +14,7 @@
 
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
+import { computeDataSignals } from '../lib/layout/dataSignals';
 
 // ============================================================================
 // Field Shape Classification (Skill Section 1)
@@ -350,6 +351,19 @@ export const generateMapping = createTool({
       bestFor: z.string(),
       fieldName: z.string(),
     })),
+    dataSignals: z.object({
+      fieldCount: z.number(),
+      hasTimestamp: z.boolean(),
+      hasTimeSeries: z.boolean(),
+      hasBreakdown: z.boolean(),
+      statusFields: z.number(),
+      categoricalFields: z.number(),
+      tableSuitableRatio: z.number(),
+      eventDensity: z.enum(['low', 'medium', 'high']),
+      dataStory: z.enum(['healthy', 'warning', 'critical', 'unknown']),
+      layoutQuery: z.string(),
+      summary: z.string(),
+    }).optional(),
     missingFields: z.array(z.string()),
     confidence: z.number().min(0).max(1),
   }),
@@ -421,21 +435,39 @@ export const generateMapping = createTool({
       confidence,
     });
 
+    // ── Step 5: Compute data signals for skeleton selection (Phase 2) ──
+    const fieldAnalysisOutput = classified.map(f => ({
+      name: f.name,
+      type: f.type,
+      shape: f.shape,
+      component: f.component,
+      aggregation: f.aggregation,
+      role: f.role,
+      uniqueValues: f.uniqueValues,
+      totalRows: f.totalRows,
+      skip: f.skip,
+      skipReason: f.skipReason,
+    }));
+
+    const dataSignals = computeDataSignals(fieldAnalysisOutput, mappings);
+
+    console.log('[generateMapping] Data signals computed:', {
+      fieldCount: dataSignals.fieldCount,
+      hasTimestamp: dataSignals.hasTimestamp,
+      hasTimeSeries: dataSignals.hasTimeSeries,
+      statusFields: dataSignals.statusFields,
+      categoricalFields: dataSignals.categoricalFields,
+      tableSuitableRatio: dataSignals.tableSuitableRatio.toFixed(2),
+      eventDensity: dataSignals.eventDensity,
+      dataStory: dataSignals.dataStory,
+      layoutQuery: dataSignals.layoutQuery.substring(0, 80),
+    });
+
     return {
       mappings,
-      fieldAnalysis: classified.map(f => ({
-        name: f.name,
-        type: f.type,
-        shape: f.shape,
-        component: f.component,
-        aggregation: f.aggregation,
-        role: f.role,
-        uniqueValues: f.uniqueValues,
-        totalRows: f.totalRows,
-        skip: f.skip,
-        skipReason: f.skipReason,
-      })),
+      fieldAnalysis: fieldAnalysisOutput,
       chartRecommendations,
+      dataSignals,
       missingFields,
       confidence,
     };
