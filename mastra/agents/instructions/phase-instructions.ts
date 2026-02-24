@@ -1,11 +1,8 @@
 import type { RequestContext } from "@mastra/core/request-context";
 
 export type FloweticPhase =
-  | "select_entity"
-  | "recommend"
-  | "style"
-  | "build_preview"
-  | "interactive_edit"
+  | "propose"
+  | "build_edit"
   | "deploy";
 
 export type PhaseInstructionContext = {
@@ -23,22 +20,22 @@ export type PhaseInstructionContext = {
  */
 export function getPhaseFromRequestContext(
   requestContext: RequestContext,
-  fallback: FloweticPhase = "select_entity",
+  fallback: FloweticPhase = "propose",
 ): FloweticPhase {
   const raw = String(requestContext?.get?.("phase") ?? requestContext?.get?.("mode") ?? "").trim();
   if (!raw) return fallback;
 
-  // Legacy aliases
-  if (raw === "outcome") return "recommend";
-  // "align" no longer exists — map it forward to "style"
-  if (raw === "align" || raw === "story") return "style";
+  // Legacy aliases — map old 6-phase names to new 3-phase names
+  if (raw === "select_entity" || raw === "recommend" || raw === "style" || raw === "outcome" || raw === "align" || raw === "story") {
+    return "propose";
+  }
+  if (raw === "build_preview" || raw === "interactive_edit") {
+    return "build_edit";
+  }
 
   const allowed: FloweticPhase[] = [
-    "select_entity",
-    "recommend",
-    "style",
-    "build_preview",
-    "interactive_edit",
+    "propose",
+    "build_edit",
     "deploy",
   ];
   if ((allowed as string[]).includes(raw)) return raw as FloweticPhase;
@@ -65,252 +62,80 @@ export function getPhaseInstructions(phase: FloweticPhase, ctx: PhaseInstruction
 
   const templates: Record<FloweticPhase, string> = {
     // ─────────────────────────────────────────────────────────────────────────
-    // PHASE 1: SELECT ENTITY
+    // PHASE 1: PROPOSE
+    // System analyzed data, classified archetype, generated 2-3 proposals.
+    // Agent presents them, user picks one.
     // ─────────────────────────────────────────────────────────────────────────
-    select_entity: [
-      `You are in the SELECT ENTITY phase for a ${platformType} workflow${workflowName ? `: "${workflowName}"` : ''}.`,
-      "",
-      "YOUR FIRST PRIORITY in this phase:",
-      "1. Call getDataDrivenEntities with the sourceId to discover entities with real event counts.",
-      "2. If getDataDrivenEntities returns hasData: true, use those entities for your suggestions.",
-      "3. Include event counts in suggestions (e.g., \"Leads — 847 events tracked\").",
-      "4. If hasData: false, fall back to getEventStats (without type filter) to check for any events.",
-      "5. Only if NO events exist, suggest likely entities based on workflow name and platform.",
-      "",
-      "CRITICAL: Always call getDataDrivenEntities FIRST. Do NOT guess entity names.",
-      "",
-      "Present 3-5 entities specific to this workflow. Each should have:",
-      "- Name (from real data if available)",
-      "- Event count (if data exists)",
-      "- 1-sentence description",
-      "",
-      "Phase transitions are automatic. When the user selects entities, the system advances to the recommend phase automatically.",
-    ].join("\n"),
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // PHASE 2: RECOMMEND OUTCOME + WIREFRAME PREVIEW
-    // ─────────────────────────────────────────────────────────────────────────
-    recommend: [
-      "# PHASE: RECOMMEND OUTCOME + WIREFRAME PREVIEW",
+    propose: [
+      "# PHASE: PROPOSE",
       `Workflow: "${workflowName}" | Platform: ${platformType}`,
-      selectedEntities ? `Selected entities: ${selectedEntities}` : "",
       "",
-      "## Your job (TWO STEPS in this phase)",
+      "You are presenting AI-generated dashboard proposals to the user.",
+      "The system has already:",
+      "- Analyzed their data (entities, fields, event types)",
+      "- Classified their workflow archetype",
+      "- Generated 2-3 complete proposals with custom design systems and wireframes",
       "",
-      "### STEP 1: Dashboard vs Product",
-      selectedOutcome ? `✅ Outcome already selected: ${selectedOutcome}. Skip to STEP 2.` : "",
-      !selectedOutcome ? "Present Dashboard (monitoring) vs Product (client-facing tool) as a quick 2-3 sentence choice." : "",
-      !selectedOutcome ? "Ask the user: 'Would you like a **Dashboard** for monitoring your workflows, or a **Product** interface for your clients?' Keep it to 2-3 sentences explaining each option." : "",
+      "The proposals are rendered as visual cards in the right panel.",
       "",
-      "### STEP 2: Generate ONE Smart Wireframe Preview (MANDATORY after outcome selection)",
+      "## Your job:",
+      "1. Open with a brief, confident analysis of their data (2-3 sentences max)",
+      "2. Explain what you found and why each proposal fits their workflow",
+      "3. If user asks questions, answer from the analysis data",
+      "4. If user picks a proposal, confirm their choice enthusiastically",
+      "5. If user says 'none of these' or wants different options, offer to regenerate",
       "",
-      "Once the user picks Dashboard or Product, generate a SINGLE wireframe that previews",
-      "what the system will build. You already have everything you need:",
-      `- Platform: ${platformType} (determines the template and component types)`,
-      selectedEntities ? `- Entities: ${selectedEntities} (determines KPIs, charts, and table columns)` : "- Entities: (from user's selection in previous phase)",
-      selectedOutcome ? `- Outcome: ${selectedOutcome} (dashboard monitoring vs client-facing product)` : "- Outcome: (from Step 1)",
+      "## Do NOT:",
+      "- Ask what kind of UI they want — the proposals already cover the options",
+      "- Show raw JSON or technical details",
+      "- Hedge or be uncertain — be confident like a design lead presenting to a client",
+      "- Skip straight to building — the user MUST pick a proposal first",
       "",
-      "DO NOT present 3 options. DO NOT ask the user to 'pick a layout.'",
-      "Generate ONE wireframe that accurately represents the dashboard they are about to get.",
-      "",
-      "# ⛔ MANDATORY OUTPUT FORMAT FOR WIREFRAME (READ THIS FIRST)",
-      "",
-      "The wireframe MUST use this EXACT format:",
-      "  1. A brief intro: 'Based on your selections, here\\'s what your dashboard will look like:'",
-      "  2. A code block with 5-10 line ASCII wireframe using ┌ ┐ └ ┘ │ ─ characters",
-      "  3. A 1-2 sentence explanation of what each section shows",
-      "  4. The question: 'Does this look right? I can adjust before we move to styling.'",
-      "",
-      "ANTI-PATTERN — NEVER do this:",
-      "```",
-      "❌ BAD: Presenting 3 options for the user to pick from.",
-      "❌ BAD: Text description without ASCII wireframe.",
-      "❌ BAD: Generic wireframe that doesn't reflect the user's entities.",
-      "```",
-      "",
-      "CORRECT FORMAT — ALWAYS do this:",
-      "```",
-      "✅ GOOD: One tailored wireframe based on the user's data:",
-      "",
-      "Based on your selections, here's what your dashboard will look like:",
-      "",
-      "┌──────────────────────────────────────────┐",
-      "│ [Total Runs] [Success Rate] [Avg Time]   │",
-      "├──────────────────────────┬───────────────┤",
-      "│                          │               │",
-      "│   📈 Runs Over Time      │  Status Split │",
-      "│                          │   ● ● ●       │",
-      "├──────────────────────────┴───────────────┤",
-      "│  Recent Runs                             │",
-      "│  ID | Workflow | Status | Duration | Time│",
-      "└──────────────────────────────────────────┘",
-      "",
-      "Top row: Key metrics from your tracked entities.",
-      "Middle: Timeline of activity + status breakdown.",
-      "Bottom: Recent activity log with details.",
-      "",
-      "Does this look right? I can adjust before we move to styling.",
-      "```",
-      "",
-      "IMPORTANT: Replace the example KPIs, charts, and table columns with the user's",
-      "ACTUAL selected entities and platform-appropriate metrics. A Vapi dashboard should",
-      "show call metrics. An n8n dashboard should show workflow execution metrics.",
-      "",
-      "## WIREFRAME CONFIRMATION",
-      "",
-      "After showing the wireframe, WAIT for the user to respond.",
-      "- If user says 'yes', 'looks good', 'let\\'s go', 'confirmed', etc.:",
-      "  The system will detect the confirmation and advance to style automatically.",
-      "- If user asks for changes (e.g., 'add a pie chart', 'show costs too'):",
-      "  Regenerate the wireframe with adjustments and ask again.",
-      "- Do NOT advance to style until the user has confirmed the wireframe.",
-      "",
-      "## PHASE ADVANCEMENT",
-      "Phase transitions are automatic. After the user confirms the wireframe,",
-      "the system sets wireframe_confirmed=true and advances to style via autoAdvancePhase.",
+      "## Phase advancement:",
+      "When the user selects a proposal via __ACTION__:select_proposal:N or natural language,",
+      "the system advances to build_edit automatically.",
       "You do NOT need to call any tool to advance the phase.",
-      "Do NOT attempt to advance to style until the user has BOTH selected an outcome",
-      "AND confirmed the wireframe preview.",
-      "",
-      "## Behavior rules",
-      "- Present STEP 1 first (if outcome not selected), then STEP 2.",
-      "- Never skip the wireframe step. It is mandatory after outcome selection.",
-      "- Generate ONE wireframe tailored to the user's data — NOT 3 options.",
-      "- After wireframe confirmation, move to style. Do not add more steps.",
-      "",
-      "## Do NOT",
-      "- Do not present multiple layout options. One wireframe only.",
-      "- Do not re-ask Dashboard vs Product after user has confirmed.",
-      "- Do not mention internal tool or agent names.",
-      "- Do not advance to style without wireframe confirmation.",
-    ].filter(Boolean).join("\n"),
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // PHASE 3: SELECT STYLE
-    // ─────────────────────────────────────────────────────────────────────────
-    style: [
-      "# PHASE: SELECT STYLE",
-      `Workflow: "${workflowName}" | Outcome: ${selectedOutcome || "Dashboard"}`,
-      selectedEntities ? `Tracking: ${selectedEntities}` : "",
-      "",
-      "## HOW THIS PHASE WORKS",
-      "",
-      "The initial design system has been AUTO-GENERATED by the system before you respond.",
-      "The user already sees a complete design system (colors, fonts, charts) in the chat.",
-      "Your job is to handle REFINEMENT — not initial generation.",
-      "",
-      "## WHAT TO DO ON YOUR FIRST RESPONSE",
-      "",
-      "The design system was already presented to the user. If the user's message is a",
-      "confirmation (from the previous phase), simply acknowledge you're ready for their",
-      "feedback on the design. Do NOT regenerate or re-present the design system.",
-      "",
-      "## STYLE CONFIRMATION DETECTION",
-      "When the user confirms the style (e.g., 'this fits my brand', 'looks good', 'love it',",
-      "'yes', 'let's go', 'use this'), the system automatically advances to build_preview.",
-      "You do NOT need to call any tool to generate the preview. The system handles it.",
-      "If you receive a confirmation message, simply acknowledge it briefly.",
-      "Do NOT call suggestAction — you don't have access to it in this phase.",
-      "Do NOT tell the user to click a button. The preview generates automatically.",
-      "",
-      "## WHEN USER WANTS CHANGES (CRITICAL — USE TOOLS)",
-      "",
-      "If the user asks for a different style, call `delegateToDesignAdvisor` with their feedback:",
-      "- User says 'darker theme' → delegateToDesignAdvisor with task: 'darker theme with deep colors'",
-      "- User says 'more premium' → delegateToDesignAdvisor with task: 'premium professional design'",
-      "- User says 'try something different' → delegateToDesignAdvisor with task: 'generate a completely different style'",
-      "",
-      "OR call `runDesignSystemWorkflow` with userFeedback parameter:",
-      `- runDesignSystemWorkflow({ workflowName: "${workflowName}", platformType: "${platformType}",`,
-      `    selectedOutcome: "${selectedOutcome || 'dashboard'}", userFeedback: "user's preference here" })`,
-      "",
-      "Both tools will:",
-      "1. Search the design database with the user's preferences",
-      "2. Exclude previously shown styles (automatic)",
-      "3. Generate a NEW design system",
-      "4. Persist the new tokens to the database",
-      "",
-      "After the tool returns, present the new design to the user.",
-      "",
-      "## STRICT RULES",
-      "",
-      "- NEVER invent colors, fonts, or design values from memory",
-      "- NEVER write a markdown essay about design without calling a tool",
-      "- NEVER describe a design system in text that isn't backed by tool results",
-      "- NEVER use ASCII box drawings (┌ ┐ └ ┘ │ ─) in this phase",
-      "- When presenting tool results, reference specific hex codes and font names from the result",
-      "",
-      "## PHASE ADVANCEMENT",
-      "Phase transitions are automatic. When the user confirms the style",
-      "(says 'yes', 'looks good', 'let's go'), the system detects the confirmation",
-      "and advances to build_preview automatically. You do NOT need to call any tool to advance.",
-      "",
-      "## Do NOT",
-      "- Do not show more than 2 options at once",
-      "- Do not re-list styles after the user has chosen",
-      "- Do not output raw design tokens or JSON unless explicitly asked",
-      "- Do not add unnecessary steps between style selection and preview generation",
     ].join("\n"),
 
     // ─────────────────────────────────────────────────────────────────────────
-    // PHASE 4: BUILD PREVIEW
+    // PHASE 2: BUILD + EDIT
+    // System builds the preview from the selected proposal. User iterates.
     // ─────────────────────────────────────────────────────────────────────────
-    build_preview: [
-      "# PHASE: BUILD PREVIEW",
+    build_edit: [
+      "# PHASE: BUILD + EDIT",
       `Workflow: "${workflowName}" | Platform: ${platformType}`,
       selectedEntities ? `Entities: ${selectedEntities}` : "",
       selectedOutcome ? `Outcome: ${selectedOutcome}` : "",
       "",
-      "⚠️ CRITICAL: When user says 'generate', 'build', 'create dashboard', or 'preview', you MUST:",
+      "The user selected a proposal and the system is building (or has built) their preview.",
+      "Once the preview is ready, they are in interactive edit mode.",
       "",
-      "1. Call `delegateToPlatformMapper` with task: 'Generate dashboard preview' and include outcome + style context",
-      "2. The specialist will handle: validatePreviewReadiness → runGeneratePreviewWorkflow",
-      "3. Do NOT try to generate previews yourself — always delegate to this specialist",
+      "## Your job:",
+      "1. If the preview is still building, keep the user informed with brief status updates",
+      "2. Once the preview is ready, celebrate briefly and explain what they can edit",
+      "3. Handle edit requests: color changes, add/remove components, rearrange layout",
+      "4. When user is satisfied, offer deployment",
       "",
-      "## AUTO-GENERATE (NO BUTTON)",
-      "Do NOT use suggestAction to show a 'Generate' button. Instead, IMMEDIATELY call",
-      "delegateToPlatformMapper when you enter this phase. The user already selected their",
-      "style — they expect the preview to generate automatically without clicking a button.",
+      "## For ALL edit requests:",
+      "1. Call `delegateToDashboardBuilder` with the specific edit request",
+      "2. The specialist handles: getCurrentSpec → applySpecPatch → validateSpec → savePreviewVersion",
+      "3. Do NOT try to edit dashboard specs yourself — always delegate",
       "",
-      "## PHASE ADVANCEMENT",
-      "Phase transitions are automatic. After the preview is generated and saved,",
-      "the system advances to interactive_edit automatically via autoAdvancePhase.",
-      "You do NOT need to call any tool to advance the phase.",
-      "",
-      "## WHAT TO DO AFTER SPECIALIST COMPLETES:",
-      "- If success: Tell user 'Your dashboard preview is ready!' and show the previewUrl",
-      "- If error: Say 'I encountered a technical issue' and offer to retry",
-    ].join("\n"),
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // PHASE 5: INTERACTIVE EDIT
-    // ─────────────────────────────────────────────────────────────────────────
-    interactive_edit: [
-      "# PHASE: INTERACTIVE EDIT",
-      "",
-      "⚠️ CRITICAL: You MUST use tools to handle ANY edit request. Text responses alone are NOT acceptable.",
-      "",
-      "## MANDATORY WORKFLOW FOR ALL EDIT REQUESTS",
-      "When the user asks to change, edit, modify, update, add, remove, or adjust ANYTHING about the dashboard:",
-      "",
-      "1. **FIRST** call `delegateToDashboardBuilder` with the specific edit request",
-      "2. The specialist will handle: getCurrentSpec → applySpecPatch → validateSpec → savePreviewVersion",
-      "3. Do NOT try to edit dashboard specs yourself — always delegate to this specialist",
-      "",
-      "## PHASE ADVANCEMENT",
-      "When the user confirms they want to deploy (e.g., 'deploy', 'ship it', 'looks good'),",
-      "acknowledge their intent. The system handles the phase transition automatically.",
-      "You do NOT need to call any tool to advance the phase.",
+      "## For preview generation:",
+      "1. Call `delegateToPlatformMapper` with task: 'Generate dashboard preview'",
+      "2. The specialist handles: validatePreviewReadiness → runGeneratePreviewWorkflow",
       "",
       "## EXAMPLES OF EDIT REQUESTS (all require tool calls):",
       "- 'Make it darker with a navy background' → delegateToDashboardBuilder",
-      "- 'Add a pie chart showing conversion rates' → delegateToDashboardBuilder", 
+      "- 'Add a pie chart showing conversion rates' → delegateToDashboardBuilder",
       "- 'Change the primary color to blue and increase spacing' → delegateToDashboardBuilder",
       "",
+      "## Phase advancement:",
+      "When user confirms they want to deploy, the system handles transition automatically.",
     ].join("\n"),
 
     // ─────────────────────────────────────────────────────────────────────────
-    // PHASE 6: DEPLOY
+    // PHASE 3: DEPLOY
     // ─────────────────────────────────────────────────────────────────────────
     deploy: [
       "# PHASE: DEPLOY",
@@ -328,27 +153,18 @@ export function getPhaseInstructions(phase: FloweticPhase, ctx: PhaseInstruction
   return templates[phase];
 }
 
+
 export function getPhaseDescription(phase: FloweticPhase): string {
   const descriptions: Record<FloweticPhase, string> = {
-    select_entity: "Select workflow entity",
-    recommend: "Choose Dashboard vs Product",
-    style: "Pick style bundle",
-    build_preview: "Generate preview",
-    interactive_edit: "Interactive editing",
+    propose: "Choose a proposal",
+    build_edit: "Build & edit dashboard",
     deploy: "Deploy confirmation",
   };
   return descriptions[phase] ?? phase;
 }
 
 export function getNextPhase(current: FloweticPhase): FloweticPhase | null {
-  const order: FloweticPhase[] = [
-    "select_entity",
-    "recommend",
-    "style",
-    "build_preview",
-    "interactive_edit",
-    "deploy",
-  ];
+  const order: FloweticPhase[] = ["propose", "build_edit", "deploy"];
   const idx = order.indexOf(current);
   if (idx === -1) return null;
   return idx >= order.length - 1 ? null : order[idx + 1];
@@ -367,104 +183,27 @@ export function getNextPhase(current: FloweticPhase): FloweticPhase | null {
  * Tool names must match the keys in masterRouterAgent's tools object.
  */
 export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
-  select_entity: [
-    // Discovery tools
+  propose: [
+    // Analysis tools — agent may need to look up data for answering questions
     'getEventStats',
     'getDataDrivenEntities',
-    'getOutcomes',
     'searchSkillKnowledge',
-    // Sources — read-only in discovery phase
-    // FIX (P0): createSource/updateSource/deleteSource REMOVED from select_entity.
-    // Having write tools here caused the agent to hallucinate source creation during
-    // entity discovery, leading to duplicate key crashes. Source CRUD is available
-    // in build_preview and interactive_edit phases where it belongs.
+    // Navigation
+    'navigateTo',
+    // Read-only sources
     'listSources',
-    // NOTE: advancePhase intentionally omitted — autoAdvancePhase handles
-    // select_entity→recommend transition deterministically.
-    // Utility (always available)
-    'navigateTo',
-    'suggestAction',
-    'todoAdd',
-    'todoList',
-    'todoUpdate',
-    'todoComplete',
-    // Workspace tools (read-only filesystem + BM25 skill search)
-    'mastra_workspace_read_file',
-    'mastra_workspace_list_files',
-    'mastra_workspace_file_stat',
-    'mastra_workspace_search',
   ],
 
-  recommend: [
-    // Core recommend tools — agent needs these to present outcome choices
-    'getEventStats',
-    'getOutcomes',
-    'recommendOutcome',
-    'searchSkillKnowledge',
-    // Wireframe confirmation fallback — if eager regex misses natural language approval
-    'confirmWireframe',
-    // Navigation only — no utility tools
-    'navigateTo',
-    // REMOVED: todoAdd, todoList, todoUpdate, todoComplete
-    //   → Agent was burning steps on irrelevant todo housekeeping after
-    //     getOutcomes returned, causing 300s Vercel timeout. Todo tools
-    //     serve no purpose in recommend phase (no tasks to track yet).
-    // REMOVED: mastra_workspace_read_file, mastra_workspace_list_files,
-    //   mastra_workspace_file_stat, mastra_workspace_search
-    //   → Agent was calling workspace tools after getting confused by
-    //     getEventStats validation failure. Workspace read is not needed
-    //     in recommend — the agent only needs to present Dashboard vs Product.
-    // REMOVED: suggestAction (Bug 9 fix — still removed)
-    // REMOVED: advancePhase (Bug 4 fix — still removed)
-  ],
-
-  style: [
-    // Design tools ONLY — no preview generation, no platform mapping
-    'runDesignSystemWorkflow',
-    'delegateToDesignAdvisor',
-    'getStyleRecommendations',
-    'getTypographyRecommendations',
-    'getChartRecommendations',
-    'getUXGuidelines',
-    'getProductRecommendations',
-    'getColorRecommendations',
-    'getIconRecommendations',
-    'searchSkillKnowledge',
-    'skill-activate',
-    'skill-search',
-    // getStyleBundles REMOVED — preset system deprecated in favour of custom tokens
-    // NOTE: setSchemaReady intentionally omitted — /api/chat auto-sets schema_ready=true
-    // when all selections (entities, outcome, style) are present. setSchemaReady is
-    // available in build_preview phase via platformMappingMaster only.
-    // NOTE: advancePhase intentionally omitted from style phase.
-    // Phase transitions are deterministic via autoAdvancePhase in onFinish.
-    // Having advancePhase here caused a 14-step tool storm that created
-    // duplicate fc_ itemIds, crashing OpenAI Responses API with:
-    // "Duplicate item found with id fc_0445fd9e..."
-    // See: https://community.openai.com/t/duplicate-item-found-with-id-msg-when-submitting-tool-output-400-invalid-request-error/1373703
-    // Utility
-    'navigateTo',
-    'todoAdd',
-    'todoList',
-    'todoUpdate',
-    'todoComplete',
-    // Workspace tools (read-only filesystem + BM25 skill search)
-    'mastra_workspace_read_file',
-    'mastra_workspace_list_files',
-    'mastra_workspace_file_stat',
-    'mastra_workspace_search',
-  ],
-
-  build_preview: [
+  build_edit: [
     // Platform mapping & preview generation
     'delegateToPlatformMapper',
+    'delegateToDashboardBuilder',
     'validatePreviewReadiness',
     'getEventStats',
     'searchSkillKnowledge',
     'skill-activate',
     'skill-search',
-    // Design tools (for style adjustments during preview — user may say
-    // "make this more premium" or "change to a dark theme" during build)
+    // Design tools
     'getStyleRecommendations',
     'getColorRecommendations',
     'getTypographyRecommendations',
@@ -472,91 +211,40 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
     'getUXGuidelines',
     'getProductRecommendations',
     'getIconRecommendations',
-    // Sources CRUD (moved here from select_entity — agent may need to
-    // create/update sources during build phase for data connectivity)
+    'runDesignSystemWorkflow',
+    'delegateToDesignAdvisor',
+    // Editor
+    'showInteractiveEditPanel',
+    // Sources CRUD
     'createSource',
     'listSources',
     'updateSource',
     'deleteSource',
-    // Projects CRUD (may need to create/update project during build)
-    'createProject',
-    'listProjects',
-    'updateProject',
-    'deleteProject',
-    // NOTE: advancePhase intentionally omitted — autoAdvancePhase handles transitions.
-    // Utility
-    'navigateTo',
-    'todoAdd',
-    'todoList',
-    'todoUpdate',
-    'todoComplete',
-    // Workspace tools (read-only filesystem + BM25 skill search)
-    'mastra_workspace_read_file',
-    'mastra_workspace_list_files',
-    'mastra_workspace_file_stat',
-    'mastra_workspace_search',
-  ],
-
-  interactive_edit: [
-    // Edit tools
-    'showInteractiveEditPanel',
-    'delegateToDashboardBuilder',
-    'searchSkillKnowledge',
-    'skill-activate',
-    'skill-search',
-    // Design tools (for style adjustments during editing — user may request
-    // color changes, font swaps, or chart type modifications)
-    'getStyleRecommendations',
-    'getColorRecommendations',
-    'getTypographyRecommendations',
-    'getChartRecommendations',
-    'getUXGuidelines',
-    'getProductRecommendations',
-    'getIconRecommendations',
-    // Can re-generate if needed
-    'delegateToPlatformMapper',
-    'validatePreviewReadiness',
     // Projects CRUD
     'createProject',
     'listProjects',
     'updateProject',
     'deleteProject',
-    // NOTE: advancePhase intentionally omitted — autoAdvancePhase handles transitions.
-    // Utility
+    // Navigation & utility
     'navigateTo',
     'suggestAction',
     'todoAdd',
     'todoList',
     'todoUpdate',
     'todoComplete',
-    // Workspace tools (read-only filesystem + BM25 skill search)
+    // Workspace tools
     'mastra_workspace_read_file',
     'mastra_workspace_list_files',
     'mastra_workspace_file_stat',
     'mastra_workspace_search',
+    // Phase advancement (manual override for stuck states)
+    'advancePhase',
   ],
 
   deploy: [
-    // NOTE: advancePhase intentionally omitted — deploy is a terminal phase,
-    // transitions are handled by the deployment workflow, not the LLM.
-    // Can still edit
-    'showInteractiveEditPanel',
-    'searchSkillKnowledge',
-    'delegateToDashboardBuilder',
-    // Projects CRUD (final project updates during deploy)
-    'listProjects',
-    'updateProject',
-    // Utility
     'navigateTo',
     'suggestAction',
-    'todoAdd',
-    'todoList',
-    'todoUpdate',
-    'todoComplete',
-    // Workspace tools (read-only filesystem + BM25 skill search)
-    'mastra_workspace_read_file',
-    'mastra_workspace_list_files',
-    'mastra_workspace_file_stat',
-    'mastra_workspace_search',
+    'listProjects',
+    'advancePhase',
   ],
 };

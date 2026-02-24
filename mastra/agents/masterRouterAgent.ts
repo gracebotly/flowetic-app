@@ -133,14 +133,14 @@ export const masterRouterAgent: Agent = new Agent({
     const platformSkillSummary = `## Platform: ${safePlatformType.toUpperCase()}
 You are advising on ${safePlatformType} workflow dashboards. Key concepts: workflow executions, node-level metrics, error rates, execution times, webhook events. Use the searchSkillKnowledge tool (domain: "platform") to look up specific ${safePlatformType} patterns, field mappings, or template recommendations when needed.`;
 
-    const businessPhases = ["outcome", "recommend", "select_entity"];
-    const shouldLoadBusinessSkill = businessPhases.includes(phase || "select_entity");
+    const businessPhases = ["propose"];
+    const shouldLoadBusinessSkill = businessPhases.includes(phase || "propose");
     const businessSkillSummary = shouldLoadBusinessSkill
       ? `## Business Outcomes Advisor
 Guide entity selection and outcome framing with business context. Frame dashboards as client retention tools, products as scalable revenue. Use searchSkillKnowledge (domain: "business") for specific outcome frameworks and KPI patterns.`
       : "";
 
-    const designPhases = ["style", "build_preview"];
+    const designPhases = ["build_edit"];
     const shouldLoadDesignSkill = designPhases.includes(phase || "");
     const designSkillSummary = shouldLoadDesignSkill
       ? `## Design System Advisor
@@ -152,7 +152,7 @@ Use BM25 search tools (getStyleRecommendations, getTypographyRecommendations, et
     // until build_preview. Loading 11K chars of component-mapping instructions
     // in recommend phase wastes context and primes the agent to think about
     // dashboard components before the user has even chosen Dashboard vs Product.
-    const dashboardIntelPhases = ["build_preview", "interactive_edit"];
+    const dashboardIntelPhases = ["build_edit"];
     const shouldLoadDashboardIntel = dashboardIntelPhases.includes(phase || "");
     const dashboardIntelContent = shouldLoadDashboardIntel
       ? await getCachedSkillAsync("data-dashboard-intelligence")

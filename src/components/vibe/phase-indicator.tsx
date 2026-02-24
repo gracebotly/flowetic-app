@@ -1,91 +1,106 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { Sparkles, Paintbrush, Rocket } from "lucide-react";
 
 type JourneyMode =
-  | "select_entity"
-  | "recommend"
-  | "style"
-  | "build_preview"
-  | "interactive_edit"
+  | "propose"
+  | "build_edit"
   | "deploy";
 
 interface PhaseIndicatorProps {
-  currentMode: JourneyMode;
+  currentMode: JourneyMode | string;
 }
 
 const PHASES = [
-  { id: "select_entity", label: "Select", step: 1 },
-  { id: "recommend", label: "Outcome", step: 2 },
-  { id: "style", label: "Style", step: 3 },
-  { id: "build_preview", label: "Preview", step: 4 },
-  { id: "interactive_edit", label: "Refine", step: 5 },
-  { id: "deploy", label: "Deploy", step: 6 },
+  { id: "propose", label: "Propose", step: 1, icon: Sparkles },
+  { id: "build_edit", label: "Build & Edit", step: 2, icon: Paintbrush },
+  { id: "deploy", label: "Deploy", step: 3, icon: Rocket },
 ] as const;
 
-export function PhaseIndicator({ currentMode }: PhaseIndicatorProps) {
-  // Handle legacy "align" phase — map it to "style" so the bar doesn't break
-  const normalizedMode = currentMode === ("align" as string) ? "style" : currentMode;
+// Map legacy phase names to new phases
+function normalizePhase(mode: string): string {
+  const legacyMap: Record<string, string> = {
+    select_entity: "propose",
+    recommend: "propose",
+    style: "propose",
+    align: "propose",
+    build_preview: "build_edit",
+    interactive_edit: "build_edit",
+  };
+  return legacyMap[mode] ?? mode;
+}
 
+export function PhaseIndicator({ currentMode }: PhaseIndicatorProps) {
+  const normalizedMode = normalizePhase(currentMode);
   const currentPhaseIndex = PHASES.findIndex((p) => p.id === normalizedMode);
   const safeIndex = currentPhaseIndex === -1 ? 0 : currentPhaseIndex;
   const progress = ((safeIndex + 1) / PHASES.length) * 100;
 
-  // Yellow line at Phase 3 (style) = step 3 of 6 = 50%
-  const previewThreshold = (3 / PHASES.length) * 100;
-
-  const isBeforePreview = safeIndex < 2; // Before "style" phase
-
   return (
     <div className="w-full">
-      {/* Progress Bar Container */}
-      <div className="relative w-full h-2 bg-white dark:bg-gray-900 rounded-full overflow-hidden border border-gray-200">
-        {/* Green Progress Fill (animated) */}
+      {/* Phase Steps */}
+      <div className="flex items-center justify-between mb-3">
+        {PHASES.map((phase, index) => {
+          const Icon = phase.icon;
+          const isActive = index === safeIndex;
+          const isCompleted = index < safeIndex;
+
+          return (
+            <div key={phase.id} className="flex items-center gap-2">
+              <div
+                className={`
+                  flex items-center justify-center w-8 h-8 rounded-full
+                  transition-colors duration-200
+                  ${isActive
+                    ? "bg-blue-600 text-white"
+                    : isCompleted
+                      ? "bg-green-500 text-white"
+                      : "bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500"
+                  }
+                `}
+              >
+                <Icon className="w-4 h-4" />
+              </div>
+              <span
+                className={`
+                  text-sm font-medium transition-colors duration-200
+                  ${isActive
+                    ? "text-gray-900 dark:text-white"
+                    : isCompleted
+                      ? "text-green-600 dark:text-green-400"
+                      : "text-gray-400 dark:text-gray-500"
+                  }
+                `}
+              >
+                {phase.label}
+              </span>
+
+              {/* Connector line (not after last) */}
+              {index < PHASES.length - 1 && (
+                <div
+                  className={`
+                    flex-1 h-0.5 mx-2 min-w-[2rem] transition-colors duration-200
+                    ${isCompleted
+                      ? "bg-green-500"
+                      : "bg-gray-200 dark:bg-gray-700"
+                    }
+                  `}
+                />
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Progress Bar */}
+      <div className="relative w-full h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
         <motion.div
-          className="absolute left-0 top-0 h-full bg-gradient-to-r from-green-400 to-green-600"
+          className="absolute left-0 top-0 h-full bg-gradient-to-r from-blue-500 to-blue-600 rounded-full"
           initial={{ width: 0 }}
           animate={{ width: `${progress}%` }}
           transition={{ duration: 0.6, ease: "easeOut" }}
         />
-
-        {/* Yellow Preview Threshold Line */}
-        <div
-          className="absolute top-0 h-full w-0.5 bg-yellow-400 z-10"
-          style={{ left: `${previewThreshold}%` }}
-        >
-          {/* Yellow marker dot */}
-          <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-yellow-400 rounded-full shadow-sm" />
-        </div>
-      </div>
-
-      {/* Status Text */}
-      <div className="mt-2 flex items-center justify-between text-xs">
-        <span className="text-gray-600 dark:text-gray-400 font-medium">
-          {PHASES[safeIndex]?.label || "Processing..."}
-        </span>
-
-        {isBeforePreview && (
-          <motion.span
-            className="text-yellow-600 dark:text-yellow-400"
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-          >
-            Preview will appear once you reach the yellow line
-          </motion.span>
-        )}
-
-        {!isBeforePreview && safeIndex < PHASES.length - 1 && (
-          <span className="text-green-600 dark:text-green-400 font-medium">
-            Preview available
-          </span>
-        )}
-
-        {safeIndex === PHASES.length - 1 && (
-          <span className="text-green-600 dark:text-green-400 font-semibold">
-            Complete ✓
-          </span>
-        )}
       </div>
     </div>
   );

@@ -107,8 +107,8 @@ export class PhaseToolGatingProcessor implements Processor {
     tools,
     requestContext,
   }: ProcessInputStepArgs): ProcessInputStepResult {
-    const currentPhase = (requestContext?.get?.("phase") as FloweticPhase) || "select_entity";
-    const rawAllowedNames = PHASE_TOOL_ALLOWLIST[currentPhase] || PHASE_TOOL_ALLOWLIST.select_entity;
+    const currentPhase = (requestContext?.get?.("phase") as FloweticPhase) || "propose";
+    const rawAllowedNames = PHASE_TOOL_ALLOWLIST[currentPhase] || PHASE_TOOL_ALLOWLIST.propose;
 
     if (!tools) {
       return {};
@@ -186,12 +186,12 @@ export class PhaseToolGatingProcessor implements Processor {
     // allowed the tool call through despite activeTools filtering.
     // The primary defense is tool-level validation in advancePhase.ts.
     const currentPhaseForLog = requestContext?.get?.('phase') as string | undefined;
-    if (currentPhaseForLog === 'recommend') {
-      const allowedForRecommend = PHASE_TOOL_ALLOWLIST['recommend'] || [];
-      if (!allowedForRecommend.includes('advancePhase')) {
+    if (currentPhaseForLog === 'propose') {
+      const allowedForPropose = PHASE_TOOL_ALLOWLIST['propose'] || [];
+      if (!allowedForPropose.includes('advancePhase')) {
         // advancePhase is not in the allowlist — if it still gets called,
         // that's the AI SDK #8653 bug. Log it for monitoring.
-        console.log('[PhaseToolGating] advancePhase correctly excluded from recommend allowlist. Tool-level validation is primary defense.');
+        console.log('[PhaseToolGating] advancePhase correctly excluded from propose allowlist. Tool-level validation is primary defense.');
       }
     }
 
@@ -235,12 +235,15 @@ export class PhaseToolGatingProcessor implements Processor {
   ): "auto" | "required" | "none" {
     // Phase-specific maxSteps (mirrors route.ts values)
     const PHASE_MAX_STEPS: Record<string, number> = {
-      select_entity: 3,
-      recommend: 6,  // Increased: agent needs steps for getOutcomes + present wireframe + handle confirmation response
-      style: 5,
-      build_preview: 8,
-      interactive_edit: 10,
+      propose: 4,      // Analysis lookup + answer questions about proposals
+      build_edit: 10,   // Preview generation + iterative edits
       deploy: 3,
+      // Legacy aliases (in case DB hasn't been migrated yet)
+      select_entity: 4,
+      recommend: 4,
+      style: 4,
+      build_preview: 10,
+      interactive_edit: 10,
     };
     const maxSteps = PHASE_MAX_STEPS[phase] || 5;
     // SAFETY VALVE: Force text completion on the last allowed step.

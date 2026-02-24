@@ -73,11 +73,12 @@ const analyzeSchemaStep = createStep({
     const selectedOutcome = requestContext?.get('selectedOutcome') as string;
     const selectedStyleBundleId = requestContext?.get('selectedStyleBundleId') as string;
 
-    if (phase && phase !== 'build_preview' && phase !== 'interactive_edit') {
+    const allowedPhases = ['build_edit', 'build_preview', 'interactive_edit'];
+    if (phase && !allowedPhases.includes(phase)) {
       console.error(`[analyzeSchemaStep] PHASE GUARD: phase="${phase}", blocking workflow execution`);
       throw new Error(
         `PHASE_GUARD: generatePreviewWorkflow cannot run in phase "${phase}". ` +
-        `Required: "build_preview" or "interactive_edit" phase.`
+        `Required: "build_edit" phase.`
       );
     }
 

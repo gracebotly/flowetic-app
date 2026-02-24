@@ -103,7 +103,7 @@ async function autoAdvancePhase(params: {
   let session = null;
   const { data: byThread } = await supabase
     .from('journey_sessions')
-    .select('id, mode, selected_entities, selected_outcome, selected_layout, selected_style_bundle_id, schema_ready, preview_interface_id, preview_version_id, wireframe_confirmed, style_confirmed')
+    .select('id, mode, selected_proposal_index, proposals, design_tokens, preview_interface_id, preview_version_id')
     .eq('thread_id', journeyThreadId)
     .eq('tenant_id', tenantId)
     .maybeSingle();
@@ -113,7 +113,7 @@ async function autoAdvancePhase(params: {
   } else {
     const { data: byMastra } = await supabase
       .from('journey_sessions')
-      .select('id, mode, selected_entities, selected_outcome, selected_layout, selected_style_bundle_id, schema_ready, preview_interface_id, preview_version_id, wireframe_confirmed, style_confirmed')
+      .select('id, mode, selected_proposal_index, proposals, design_tokens, preview_interface_id, preview_version_id')
       .eq('mastra_thread_id', mastraThreadId)
       .eq('tenant_id', tenantId)
       .maybeSingle();
@@ -125,67 +125,32 @@ async function autoAdvancePhase(params: {
     return { advanced: false };
   }
 
-  const currentPhase = session.mode;
+  // Normalize legacy phase names
+  const LEGACY_MAP: Record<string, string> = {
+    'select_entity': 'propose',
+    'recommend': 'propose',
+    'style': 'propose',
+    'build_preview': 'build_edit',
+    'interactive_edit': 'build_edit',
+  };
+  const currentPhase = LEGACY_MAP[session.mode] ?? session.mode;
   let nextPhase: string | null = null;
 
-  // 2. Deterministic transition rules - CODE-DRIVEN per Refactor Guide Phase 4
-  // Rule: If selection exists → auto-advance. No LLM decisions, no confirmations.
+  // 2. Deterministic transition rules — 3-phase journey
+  if (currentPhase === 'propose' && session.selected_proposal_index != null) {
+    nextPhase = 'build_edit';
+    console.log('[autoAdvancePhase] Proposal selected → build_edit');
 
-  if (currentPhase === 'select_entity' && session.selected_entities) {
-    // Validate selected_entities is not a bare UUID (sourceId accidentally stored)
-    const entities = String(session.selected_entities).trim();
-    const isBareUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(entities);
-
-    if (isBareUuid) {
-      console.warn('[autoAdvancePhase] selected_entities is a bare UUID (sourceId), not advancing');
-    } else {
-      nextPhase = 'recommend';
-    }
-
-  } else if (currentPhase === 'recommend' && session.selected_outcome && session.wireframe_confirmed) {
-    // Advance to style ONLY when both outcome is selected AND wireframe is confirmed.
-    // The wireframe step in recommend phase is mandatory — the agent must present a
-    // wireframe preview and the user must confirm it before moving to style.
-    // wireframe_confirmed is set by: (1) eager detection in route.ts when user says
-    // "looks good"/"yes" etc, or (2) client sends wireframeConfirmed=true via clientData.
-    nextPhase = 'style';
-    console.log('[autoAdvancePhase] Code-driven advance: outcome + wireframe confirmed → style');
-
-  } else if (currentPhase === 'style' && session.selected_style_bundle_id && session.style_confirmed) {
-    // Advance to build_preview ONLY when style bundle is selected AND user confirmed.
-    // The style phase is where the agent presents the custom design system and the user
-    // reviews/iterates. style_confirmed is set by: (1) eager detection in route.ts
-    // when user says "looks good"/"yes" etc, or (2) client sends styleConfirmed=true.
-    // Auto-set schema_ready flag when advancing.
-
-    if (!session.schema_ready) {
-      await supabase
-        .from('journey_sessions')
-        .update({ schema_ready: true, updated_at: new Date().toISOString() })
-        .eq('id', session.id)
-        .eq('tenant_id', tenantId);
-      console.log('[autoAdvancePhase] Auto-set schema_ready=true for style bundle:', session.selected_style_bundle_id);
-    }
-
-    nextPhase = 'build_preview';
-    console.log('[autoAdvancePhase] Code-driven advance: style confirmed → build_preview');
-
-  } else if (currentPhase === 'build_preview' && session.preview_interface_id && session.preview_version_id) {
-    // PHASE 4 FIX: Add missing transition to interactive_edit
-    // Auto-advance when preview artifacts exist (CODE-DRIVEN)
-    nextPhase = 'interactive_edit';
-    console.log('[autoAdvancePhase] Code-driven advance: preview generated → interactive_edit');
+  } else if (currentPhase === 'build_edit' && session.preview_interface_id && session.preview_version_id) {
+    // Don't auto-advance to deploy — user must explicitly confirm
+    // But log that preview is ready
+    console.log('[autoAdvancePhase] Preview ready in build_edit phase (user must confirm deploy)');
   }
 
   if (!nextPhase) {
     console.log('[autoAdvancePhase] No transition needed:', {
       currentPhase,
-      hasEntities: !!session.selected_entities,
-      hasOutcome: !!session.selected_outcome,
-      wireframeConfirmed: !!session.wireframe_confirmed,
-      hasStyle: !!session.selected_style_bundle_id,
-      styleConfirmed: !!session.style_confirmed,
-      schemaReady: session.schema_ready,
+      hasProposalIndex: session.selected_proposal_index != null,
       hasPreview: !!(session.preview_interface_id && session.preview_version_id),
     });
     return { advanced: false };
@@ -203,7 +168,7 @@ async function autoAdvancePhase(params: {
     return { advanced: false };
   }
 
-  console.log('[autoAdvancePhase] ✅ Phase advanced:', {
+  console.log('[autoAdvancePhase] Phase advanced:', {
     from: currentPhase,
     to: nextPhase,
     sessionId: session.id,
@@ -1100,26 +1065,48 @@ export async function POST(req: Request) {
           }
         }
 
-        const VALID_PHASES = ['select_entity', 'recommend', 'style', 'build_preview', 'interactive_edit', 'deploy'] as const;
+        const VALID_PHASES = ['propose', 'build_edit', 'deploy'] as const;
+        // Legacy phase mapping: if DB has old phase names, normalize them
+        const LEGACY_PHASE_MAP: Record<string, string> = {
+          'select_entity': 'propose',
+          'recommend': 'propose',
+          'style': 'propose',
+          'build_preview': 'build_edit',
+          'interactive_edit': 'build_edit',
+        };
 
         if (sessionRow?.mode) {
-          if (VALID_PHASES.includes(sessionRow.mode as any)) {
-            requestContext.set('phase', sessionRow.mode);
+          // Normalize legacy phase names from old 6-phase journey
+          const normalizedPhase = LEGACY_PHASE_MAP[sessionRow.mode] ?? sessionRow.mode;
+
+          if (VALID_PHASES.includes(normalizedPhase as any)) {
+            requestContext.set('phase', normalizedPhase);
             console.log('[api/chat] Phase from DB:', {
               clientPhase: clientData.phase,
               dbPhase: sessionRow.mode,
-              overridden: clientData.phase !== sessionRow.mode,
+              normalizedPhase,
+              overridden: clientData.phase !== normalizedPhase,
               sessionId: sessionRow.id,
               threadId: clientJourneyThreadId,
             });
+
+            // If DB had a legacy phase, update it to the new name
+            if (normalizedPhase !== sessionRow.mode) {
+              await supabase
+                .from('journey_sessions')
+                .update({ mode: normalizedPhase, updated_at: new Date().toISOString() })
+                .eq('id', sessionRow.id)
+                .eq('tenant_id', tenantId);
+              console.log('[api/chat] Migrated legacy phase:', { from: sessionRow.mode, to: normalizedPhase });
+            }
           } else {
             // Bad data in DB — don't let it crash the agent
-            console.warn('[api/chat] Invalid phase in DB, falling back to select_entity:', {
+            console.warn('[api/chat] Invalid phase in DB, falling back to propose:', {
               invalidPhase: sessionRow.mode,
               sessionId: sessionRow.id,
               threadId: clientJourneyThreadId,
             });
-            requestContext.set('phase', 'select_entity');
+            requestContext.set('phase', 'propose');
           }
         } else {
           // Log when no session found - helps debug why phase might be wrong

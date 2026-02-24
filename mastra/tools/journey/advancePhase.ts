@@ -23,24 +23,21 @@ export const advancePhase = createTool({
   description: `Manually advance the journey phase.
 
 ⚠️ IMPORTANT: Phase transitions are AUTOMATIC based on user selections:
-- select_entity → recommend: Auto-advances when entity selected
-- recommend → style: Auto-advances when outcome selected
-- style → build_preview: Auto-advances when style selected AND schema ready
+- propose → build_edit: Auto-advances when user selects a proposal
+- build_edit → deploy: Auto-advances when user confirms deployment
 
 Only use this tool for:
 - User explicitly requests to skip a phase
 - Error recovery (stuck state)
 - Override when automatic transition failed
 
-Valid phases: select_entity, recommend, style, build_preview, refine`,
+Valid phases: propose, build_edit, deploy`,
 
   inputSchema: z.object({
     newPhase: z.enum([
-      'select_entity',
-      'recommend',
-      'style',
-      'build_preview',
-      'refine',
+      'propose',
+      'build_edit',
+      'deploy',
     ]),
     selectedValue: z.string().optional().describe('Optional value to persist (entities for recommend, outcome for style)'),
   }),
@@ -87,38 +84,15 @@ Valid phases: select_entity, recommend, style, build_preview, refine`,
     const supabase = createAuthenticatedClient(accessToken);
 
     // Set RequestContext based on selectedValue and phase
-    // NOTE: advancePhase ONLY writes selectedEntities and selectedStyleBundleId.
-    // selected_outcome is owned exclusively by recommendOutcome tool.
-    // advancePhase previously wrote selectedOutcome with arbitrary LLM input,
-    // overwriting the correct data-computed value (e.g., "workflow_ops" over "dashboard").
-    // BUG 7 FIX: resolve slug here so it can be used both for RC and updateData below.
-    let resolvedStyleSlug: string | null = null;
     if (selectedValue) {
-      if (newPhase === 'recommend') {
-        context?.requestContext?.set('selectedEntities', selectedValue);
+      if (newPhase === 'build_edit') {
+        context?.requestContext?.set('selectedProposalIndex', selectedValue);
       }
-      // REMOVED: newPhase === 'style' → selectedOutcome write
-      // recommendOutcome is the single source of truth for selected_outcome
-      if (newPhase === 'style') {
-        // Layout selection triggers recommend → style
-        context?.requestContext?.set('selectedLayout', selectedValue);
-      }
-      if (newPhase === 'build_preview') {
-        // BUG 7 FIX: Resolve display name → canonical slug BEFORE storing.
-        // Without this, raw display names like "Modern SaaS" get stored,
-        // which later fuzzy-match to wrong themes (e.g. "neon-cyber").
-        // Custom design system names stored as-is. No preset slug resolution needed.
-        resolvedStyleSlug = String(selectedValue).trim() || null;
-        if (resolvedStyleSlug) {
-          context?.requestContext?.set('selectedStyleBundleId', resolvedStyleSlug);
-        } else {
-          // If resolution fails, still set the raw value on context
-          // but do NOT write to DB (CHECK constraint would reject it)
-          console.warn('[advancePhase] Could not resolve style bundle:', selectedValue);
-          context?.requestContext?.set('selectedStyleBundleId', selectedValue);
-        }
+      if (newPhase === 'deploy') {
+        context?.requestContext?.set('deployIntent', selectedValue);
       }
     }
+
 
     // Validation: Check required data based on target phase
     // BUG FIX: Use thread_id column, not id column.
@@ -128,89 +102,42 @@ Valid phases: select_entity, recommend, style, build_preview, refine`,
       check: () => Promise<{ valid: boolean; missing: string[] }>;
       message: string;
     }> = {
-      recommend: {
-        check: async () => ({ valid: true, missing: [] }),
-        message: 'Cannot advance to recommend',
-      },
-      style: {
+      build_edit: {
         check: async () => {
-          const selectedOutcome = context.requestContext?.get('selectedOutcome');
-          const wireframeConfirmed = context.requestContext?.get('wireframeConfirmed');
           const missingFields: string[] = [];
-          // Check selected_outcome (existing validation)
-          if (!selectedOutcome) {
-            const { data } = await supabase
-              .from('journey_sessions')
-              .select('selected_outcome')
-              .eq('thread_id', journeyThreadId)
-              .eq('tenant_id', tenantId)
-              .maybeSingle();
-            if (!data?.selected_outcome) missingFields.push('selectedOutcome');
-          }
-          // BUG 4 FIX: Check wireframe_confirmed before allowing recommend → style.
-          // The recommend phase requires the user to explicitly confirm the wireframe
-          // preview before advancing. Without this check, the agent can call
-          // advancePhase({ newPhase: 'style' }) and bypass the wireframe gate entirely,
-          // defeating the deterministic autoAdvancePhase refactor.
-          // See: AI SDK Issue #8653 — activeTools doesn't prevent tool execution.
-          if (wireframeConfirmed !== 'true') {
-            const { data: wfData } = await supabase
-              .from('journey_sessions')
-              .select('wireframe_confirmed')
-              .eq('thread_id', journeyThreadId)
-              .eq('tenant_id', tenantId)
-              .maybeSingle();
-            if (wfData?.wireframe_confirmed !== true) {
-              missingFields.push('wireframeConfirmed (user must confirm wireframe preview first)');
-            }
-          }
-          return { valid: missingFields.length === 0, missing: missingFields };
-        },
-        message: 'Cannot advance to style: wireframe not confirmed or missing selections',
-      },
-      build_preview: {
-        check: async () => {
-          const selectedOutcome = context.requestContext?.get('selectedOutcome');
-          const selectedStyleBundleId = context.requestContext?.get('selectedStyleBundleId');
-          const missingFields: string[] = [];
-
-          if (!selectedOutcome) {
-            const { data } = await supabase
-              .from('journey_sessions')
-              .select('selected_outcome')
-              .eq('thread_id', journeyThreadId)
-              .eq('tenant_id', tenantId)
-              .maybeSingle();
-            if (!data?.selected_outcome) missingFields.push('selectedOutcome');
-          }
-          if (!selectedStyleBundleId) {
-            const { data } = await supabase
-              .from('journey_sessions')
-              .select('selected_style_bundle_id, design_tokens')
-              .eq('thread_id', journeyThreadId)
-              .eq('tenant_id', tenantId)
-              .maybeSingle();
-            if (!data?.selected_style_bundle_id && !data?.design_tokens) {
-              missingFields.push('design system (no custom tokens or preset)');
-            }
-          }
-
-          // CRITICAL: Check schema_ready from database
           const { data: sessionData } = await supabase
             .from('journey_sessions')
-            .select('schema_ready')
+            .select('selected_proposal_index, design_tokens, proposals')
             .eq('thread_id', journeyThreadId)
             .eq('tenant_id', tenantId)
             .maybeSingle();
-          if (sessionData?.schema_ready !== true) {
-            missingFields.push('schemaReady (must be true in database)');
-          }
 
+          if (sessionData?.selected_proposal_index == null && !sessionData?.design_tokens) {
+            missingFields.push('proposal selection or design tokens (must select a proposal first)');
+          }
           return { valid: missingFields.length === 0, missing: missingFields };
         },
-        message: 'Cannot advance to build_preview: Missing required data or schema not ready',
+        message: 'Cannot advance to build_edit: No proposal selected and no design tokens present',
+      },
+      deploy: {
+        check: async () => {
+          const missingFields: string[] = [];
+          const { data: sessionData } = await supabase
+            .from('journey_sessions')
+            .select('preview_interface_id, preview_version_id')
+            .eq('thread_id', journeyThreadId)
+            .eq('tenant_id', tenantId)
+            .maybeSingle();
+
+          if (!sessionData?.preview_interface_id || !sessionData?.preview_version_id) {
+            missingFields.push('preview must be generated before deploying');
+          }
+          return { valid: missingFields.length === 0, missing: missingFields };
+        },
+        message: 'Cannot advance to deploy: Preview has not been generated yet',
       },
     };
+
 
     const validation = requiredDataMap[newPhase];
     if (validation) {
@@ -226,25 +153,16 @@ Valid phases: select_entity, recommend, style, build_preview, refine`,
     }
 
     // Update phase and persist selected values
-    // NOTE: advancePhase does NOT write selected_outcome — that's owned by recommendOutcome.
-    // BUG FIX: Query by thread_id, not id — use .select() to detect 0-row updates
-    const updateData: Record<string, string> = {
+    const updateData: Record<string, any> = {
       mode: newPhase,
       updated_at: new Date().toISOString(),
     };
-    if (selectedValue && newPhase === 'recommend') {
-      updateData.selected_entities = selectedValue;
+    if (selectedValue && newPhase === 'build_edit') {
+      const parsed = Number(selectedValue);
+      if (Number.isFinite(parsed)) {
+        updateData.selected_proposal_index = parsed;
+      }
     }
-    // Persist layout selection when advancing to style
-    if (selectedValue && newPhase === 'style') {
-      updateData.selected_layout = selectedValue;
-    }
-    // BUG 7 FIX: Persist resolved style slug to DB when advancing to build_preview
-    if (resolvedStyleSlug && newPhase === 'build_preview') {
-      updateData.selected_style_bundle_id = resolvedStyleSlug;
-    }
-    // REMOVED: selected_outcome write for newPhase === 'style'
-    // recommendOutcome tool is the single owner of selected_outcome.
 
     const { data: updatedRows, error } = await supabase
       .from('journey_sessions')

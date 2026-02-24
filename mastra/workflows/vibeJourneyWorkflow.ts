@@ -5,7 +5,7 @@ import { detectSelection } from "../validation/selection-checks";
 import { getMastra } from "../index";
 
 // "storyboard" removed — no longer a valid selection kind
-type SelectionKind = "entity" | "outcome" | "style_bundle" | "deploy";
+type SelectionKind = "proposal" | "deploy";
 
 const VibeJourneySuspendSchema = z.object({
   prompt: z.string().min(1),
@@ -15,16 +15,13 @@ const VibeJourneySuspendSchema = z.object({
 
 const VibeJourneyResumeSchema = z.object({
   userSelection: z.string().min(1),
-  selectionType: z.enum(["entity", "outcome", "style_bundle"]),
+  selectionType: z.enum(["proposal", "deploy"]),
 });
 
 // "align" removed from phase list
 const FloweticPhase = z.enum([
-  "select_entity",
-  "recommend",
-  "style",
-  "build_preview",
-  "interactive_edit",
+  "propose",
+  "build_edit",
   "deploy",
 ]);
 export type FloweticPhase = z.infer<typeof FloweticPhase>;
@@ -34,7 +31,7 @@ export const VibeJourneyInput = z.object({
 });
 
 export const VibeJourneyState = z.object({
-  currentPhase: FloweticPhase.default("select_entity"),
+  currentPhase: FloweticPhase.default("propose"),
 
   // Selections tracked across phases (storyboard removed):
   selectedEntity: z.string().optional(),
@@ -81,10 +78,9 @@ function applyStateToRequestContext(params: {
 }
 
 /**
- * Phase transitions (storyboard/align removed):
- *   select_entity + entity     → recommend
- *   recommend    + outcome     → style          (was → align)
- *   style        + style_bundle → build_preview
+ * Phase transitions:
+ *   propose   + proposal → build_edit
+ *   build_edit + deploy  → deploy
  */
 function nextPhaseForSelection(params: {
   currentPhase: FloweticPhase;
@@ -92,39 +88,32 @@ function nextPhaseForSelection(params: {
 }): FloweticPhase | null {
   const { currentPhase, selectionType } = params;
 
-  if (currentPhase === "select_entity" && selectionType === "entity") return "recommend";
-  if (currentPhase === "recommend" && selectionType === "outcome") return "style";
-  if (currentPhase === "style" && selectionType === "style_bundle") return "build_preview";
-
-  // Later phases:
-  if ((currentPhase === "interactive_edit" || currentPhase === "deploy") && selectionType === "deploy") return "deploy";
+  if (currentPhase === "propose" && selectionType === "proposal") return "build_edit";
+  if (currentPhase === "build_edit" && selectionType === "deploy") return "deploy";
 
   return null;
 }
 
+
 function getSelectionPrompt(phase: FloweticPhase): string {
   const prompts: Record<FloweticPhase, string> = {
-    select_entity: "Which parts of your workflow would you like to track?",
-    recommend: "Would you like a Dashboard or Product?",
-    style: "Which style fits your brand?",
-    build_preview: "Generating your preview now.",
-    interactive_edit: "What edits would you like to make?",
+    propose: "Which proposal do you prefer?",
+    build_edit: "What edits would you like to make?",
     deploy: "Ready to deploy?",
   };
   return prompts[phase] ?? "Please make a selection to continue.";
 }
 
+
 function getSelectionOptions(phase: FloweticPhase): string[] {
   const options: Record<FloweticPhase, string[]> = {
-    select_entity: [],
-    recommend: ["dashboard", "product"],
-    style: [],
-    build_preview: ["generate_preview"],
-    interactive_edit: ["deploy"],
+    propose: [],
+    build_edit: ["deploy"],
     deploy: ["confirm_deploy"],
   };
   return options[phase] ?? [];
 }
+
 
 const phaseTransitionStep = createStep({
   id: "phaseTransition",
@@ -164,9 +153,7 @@ const phaseTransitionStep = createStep({
         });
       }
 
-      if (selection.type === "entity") state.selectedEntity = selection.value;
-      if (selection.type === "outcome") state.selectedOutcome = selection.value;
-      if (selection.type === "style_bundle") state.selectedStyleBundleId = selection.value;
+      if (selection.type === "proposal") state.selectedOutcome = selection.value;
 
       const next = nextPhaseForSelection({
         currentPhase: state.currentPhase,
@@ -190,9 +177,7 @@ const phaseTransitionStep = createStep({
       });
     }
 
-    if (selection.type === "entity") state.selectedEntity = selection.value;
-    if (selection.type === "outcome") state.selectedOutcome = selection.value;
-    if (selection.type === "style_bundle") state.selectedStyleBundleId = selection.value;
+    if (selection.type === "proposal") state.selectedOutcome = selection.value;
 
     // Legacy: if someone sends a storyboard selection, just ignore it and don't block
     // (forward-compatible with old UI versions that might still emit storyboard tokens)
