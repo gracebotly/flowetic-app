@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo } from "react";
-import { Card, Metric, Text, AreaChart, BarChart, DonutChart } from '@tremor/react';
+import { AreaChart, BarChart, DonutChart } from '@tremor/react';
 import type { DeviceMode } from "@/components/vibe/editor";
 
 interface ComponentSpec {
@@ -157,6 +157,8 @@ function ComponentCard({
   cardBackground,
   borderRadius,
   shadow,
+  headingFont,
+  bodyFont,
   isEditing,
   onClick,
 }: {
@@ -168,6 +170,8 @@ function ComponentCard({
   cardBackground: string;
   borderRadius: number;
   shadow: string;
+  headingFont?: string;
+  bodyFont?: string;
   isEditing: boolean;
   onClick?: () => void;
 }) {
@@ -176,114 +180,235 @@ function ComponentCard({
   const { props, id } = component;
   const title = props?.title ?? id;
 
-  return (
-    <div
-      className={`
-        h-full border p-4
-        transition-all duration-200
-        ${isEditing ? "cursor-pointer hover:border-blue-400 hover:shadow-md" : ""}
-      `}
-      data-component-type={type}
-      style={{
-        borderRadius: `${borderRadius}px`,
-        boxShadow: shadow,
-        backgroundColor: cardBackground,
-        borderColor: `${textColor}15`,
-      }}
-      onClick={isEditing ? onClick : undefined}
-      role={isEditing ? "button" : undefined}
-      tabIndex={isEditing ? 0 : undefined}
-      aria-label={isEditing ? `Edit ${title}` : undefined}
-    >
-      {/* Header */}
-      <div className="mb-3">
-        <h3 className="text-sm font-semibold" style={{ color: textColor }}>{title}</h3>
-      </div>
+  const cardStyle: React.CSSProperties = {
+    borderRadius: `${borderRadius}px`,
+    boxShadow: shadow,
+    backgroundColor: cardBackground,
+    borderColor: `${textColor}10`,
+    overflow: "hidden",
+  };
 
-      {/* Premium content based on type */}
-      <div className={`flex-1 ${
-        type === 'MetricCard' ? 'min-h-[80px]' :
-        type === 'DataTable' ? 'min-h-[120px]' :
-        'min-h-[200px]'
-      }`}>
-        {type === "MetricCard" ? (
-          <div className="text-center py-4">
-            <Metric style={{ color: textColor }}>
-              {props?.value ?? "—"}
-            </Metric>
-            <Text style={{ color: `${textColor}99` }}>
-              {props?.subtitle ?? props?.label ?? "Metric"}
-            </Text>
-          </div>
-        ) : type === "LineChart" || type === "TimeseriesChart" ? (
-          <AreaChart
-            className="h-full"
-            data={props?.data ?? [
-              { date: "Jan", value: 100 },
-              { date: "Feb", value: 150 },
-              { date: "Mar", value: 120 },
-              { date: "Apr", value: 180 },
-            ]}
-            index="date"
-            categories={["value"]}
-            colors={[primaryColor]}
-            showLegend={false}
-            showGridLines={false}
-            showYAxis={false}
-          />
-        ) : type === "BarChart" ? (
-          <BarChart
-            className="h-full"
-            data={props?.data ?? [
-              { name: "A", value: 40 },
-              { name: "B", value: 65 },
-              { name: "C", value: 50 },
-              { name: "D", value: 80 },
-            ]}
-            index="name"
-            categories={["value"]}
-            colors={[primaryColor, secondaryColor]}
-            showLegend={false}
-            showGridLines={false}
-          />
-        ) : type === "PieChart" || type === "DonutChart" ? (
-          <DonutChart
-            className="h-full"
-            data={props?.data ?? [
-              { name: "Success", value: 75 },
-              { name: "Failed", value: 15 },
-              { name: "Pending", value: 10 },
-            ]}
-            category="value"
-            index="name"
-            colors={[primaryColor, secondaryColor, accentColor]}
-            showLabel={true}
-          />
-        ) : type === "DataTable" ? (
-          <div className="text-xs" style={{ color: `${textColor}99` }}>
-            <div className="grid grid-cols-4 gap-2 font-medium pb-2 mb-2" style={{ borderBottomColor: `${textColor}20`, borderBottomWidth: '1px' }}>
-              {(props?.columns ?? ["ID", "Name", "Status", "Date"]).slice(0, 4).map((col: string | { key: string; label: string }, i: number) => (
-                <div key={i} className="truncate">
-                  {typeof col === 'string' ? col : col.label}
-                </div>
-              ))}
-            </div>
-            {[1, 2, 3].map((row) => (
-              <div key={row} className="grid grid-cols-4 gap-2 py-1 border-b border-gray-100">
-                {[1, 2, 3, 4].map((cell) => (
-                  <div key={cell} className="h-3 rounded animate-pulse" style={{ backgroundColor: `${textColor}15` }} />
-                ))}
+  if (type === "MetricCard") {
+    const value = props?.value ?? "—";
+    const subtitle = props?.subtitle ?? props?.label ?? null;
+    const hasRealValue = props?.value != null && props?.value !== "—";
+
+    return (
+      <div
+        className={`h-full border transition-all duration-200 ${
+          isEditing ? "cursor-pointer hover:border-blue-400 hover:shadow-md" : ""
+        }`}
+        style={cardStyle}
+        data-component-type={type}
+        onClick={isEditing ? onClick : undefined}
+        role={isEditing ? "button" : undefined}
+        tabIndex={isEditing ? 0 : undefined}
+        aria-label={isEditing ? `Edit ${title}` : undefined}
+      >
+        <div
+          style={{
+            height: "4px",
+            background: `linear-gradient(90deg, ${primaryColor}, ${accentColor || primaryColor}dd)`,
+            borderRadius: `${borderRadius}px ${borderRadius}px 0 0`,
+          }}
+        />
+
+        <div className="p-5">
+          <div className="flex items-center justify-between mb-3">
+            <span
+              className="text-xs font-medium uppercase tracking-wider"
+              style={{
+                color: `${textColor}88`,
+                fontFamily: bodyFont || undefined,
+                letterSpacing: "0.05em",
+              }}
+            >
+              {title}
+            </span>
+            {props?.icon && (
+              <div
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-xs"
+                style={{
+                  backgroundColor: `${primaryColor}15`,
+                  color: primaryColor,
+                }}
+              >
+                {getIconSymbol(props.icon)}
               </div>
-            ))}
+            )}
           </div>
-        ) : (
-          <div className="flex items-center justify-center h-full text-sm" style={{ color: `${textColor}66` }}>
-            {type} component
+
+          <div
+            className="text-3xl font-bold tracking-tight"
+            style={{
+              color: hasRealValue ? textColor : `${textColor}40`,
+              fontFamily: headingFont || undefined,
+              lineHeight: 1.2,
+            }}
+          >
+            {value}
           </div>
-        )}
+
+          {subtitle && (
+            <div
+              className="text-sm mt-1.5"
+              style={{
+                color: `${textColor}66`,
+                fontFamily: bodyFont || undefined,
+              }}
+            >
+              {subtitle}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (type === "LineChart" || type === "TimeseriesChart" || type === "AreaChart") {
+    const chartData = props?.data ?? [
+      { date: "Jan", value: 100 },
+      { date: "Feb", value: 150 },
+      { date: "Mar", value: 120 },
+      { date: "Apr", value: 180 },
+    ];
+
+    return (
+      <div className={`h-full border transition-all duration-200 ${
+          isEditing ? "cursor-pointer hover:border-blue-400 hover:shadow-md" : ""
+        }`} style={cardStyle} data-component-type={type} onClick={isEditing ? onClick : undefined} role={isEditing ? "button" : undefined} tabIndex={isEditing ? 0 : undefined}>
+        <div className="p-4">
+          <h3 className="text-sm font-semibold mb-3" style={{ color: textColor, fontFamily: headingFont || undefined }}>{title}</h3>
+          <div className="min-h-[200px]">
+            <AreaChart className="h-full" data={chartData} index="date" categories={["value"]} colors={[primaryColor]} showLegend={false} showGridLines={false} showYAxis={false} curveType="natural" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (type === "BarChart") {
+    const chartData = props?.data ?? [
+      { name: "A", value: 40 },
+      { name: "B", value: 65 },
+      { name: "C", value: 50 },
+      { name: "D", value: 80 },
+    ];
+
+    return (
+      <div className={`h-full border transition-all duration-200 ${
+          isEditing ? "cursor-pointer hover:border-blue-400 hover:shadow-md" : ""
+        }`} style={cardStyle} data-component-type={type} onClick={isEditing ? onClick : undefined} role={isEditing ? "button" : undefined} tabIndex={isEditing ? 0 : undefined}>
+        <div className="p-4">
+          <h3 className="text-sm font-semibold mb-3" style={{ color: textColor, fontFamily: headingFont || undefined }}>{title}</h3>
+          <div className="min-h-[200px]">
+            <BarChart className="h-full" data={chartData} index="name" categories={["value"]} colors={[primaryColor, secondaryColor]} showLegend={false} showGridLines={false} />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (type === "PieChart" || type === "DonutChart") {
+    const chartData = props?.data ?? [
+      { name: "Success", value: 75 },
+      { name: "Failed", value: 15 },
+      { name: "Pending", value: 10 },
+    ];
+
+    return (
+      <div className={`h-full border transition-all duration-200 ${
+          isEditing ? "cursor-pointer hover:border-blue-400 hover:shadow-md" : ""
+        }`} style={cardStyle} data-component-type={type} onClick={isEditing ? onClick : undefined} role={isEditing ? "button" : undefined} tabIndex={isEditing ? 0 : undefined}>
+        <div className="p-4">
+          <h3 className="text-sm font-semibold mb-3" style={{ color: textColor, fontFamily: headingFont || undefined }}>{title}</h3>
+          <div className="min-h-[200px]">
+            <DonutChart className="h-full" data={chartData} category="value" index="name" colors={[primaryColor, secondaryColor, accentColor]} showLabel={true} />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (type === "DataTable") {
+    const columns = props?.columns ?? ["ID", "Name", "Status", "Date"];
+    const columnLabels = columns.slice(0, 5).map((c: any) => typeof c === "string" ? c : c.label || c.key);
+    const rows = props?.rows;
+    const columnKeys = columns.slice(0, 5).map((c: any) => typeof c === "string" ? c : c.key);
+
+    return (
+      <div className={`h-full border transition-all duration-200 ${
+          isEditing ? "cursor-pointer hover:border-blue-400 hover:shadow-md" : ""
+        }`} style={cardStyle} data-component-type={type} onClick={isEditing ? onClick : undefined} role={isEditing ? "button" : undefined} tabIndex={isEditing ? 0 : undefined}>
+        <div className="p-4">
+          <h3 className="text-sm font-semibold mb-3" style={{ color: textColor, fontFamily: headingFont || undefined }}>{title}</h3>
+          <div className="min-h-[120px] text-xs overflow-x-auto" style={{ fontFamily: bodyFont || undefined }}>
+            <div className="grid gap-2 font-semibold pb-2 mb-1" style={{gridTemplateColumns: `repeat(${columnLabels.length}, 1fr)`, borderBottom: `2px solid ${primaryColor}30`, color: textColor}}>
+              {columnLabels.map((col: string, i: number) => (<div key={i} className="truncate px-1">{col}</div>))}
+            </div>
+
+            {rows && rows.length > 0 ? (
+              rows.slice(0, 5).map((row: Record<string, any>, rowIdx: number) => (
+                <div key={rowIdx} className="grid gap-2 py-1.5 px-0" style={{gridTemplateColumns: `repeat(${columnLabels.length}, 1fr)`, backgroundColor: rowIdx % 2 === 0 ? "transparent" : `${primaryColor}05`, color: `${textColor}cc`, borderBottom: `1px solid ${textColor}08`}}>
+                  {columnKeys.map((key: string, cellIdx: number) => (
+                    <div key={cellIdx} className="truncate px-1">{row[key] ?? "—"}</div>
+                  ))}
+                </div>
+              ))
+            ) : (
+              [1, 2, 3].map((rowIdx) => (
+                <div key={rowIdx} className="grid gap-2 py-1.5" style={{gridTemplateColumns: `repeat(${columnLabels.length}, 1fr)`}}>
+                  {columnLabels.map((_: any, cellIdx: number) => (
+                    <div key={cellIdx} className="h-3 rounded animate-pulse" style={{ backgroundColor: `${textColor}12` }} />
+                  ))}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`h-full border p-4 transition-all duration-200 ${isEditing ? "cursor-pointer hover:border-blue-400 hover:shadow-md" : ""}`} style={cardStyle} data-component-type={type} onClick={isEditing ? onClick : undefined}>
+      <div className="mb-3">
+        <h3 className="text-sm font-semibold" style={{ color: textColor, fontFamily: headingFont || undefined }}>{title}</h3>
+      </div>
+      <div className="flex items-center justify-center h-full text-sm" style={{ color: `${textColor}66` }}>
+        {type} component
       </div>
     </div>
   );
+}
+
+function getIconSymbol(iconName: string): string {
+  const iconMap: Record<string, string> = {
+    activity: "📊",
+    "bar-chart": "📊",
+    "pie-chart": "🍩",
+    "line-chart": "📈",
+    trending: "📈",
+    "trending-up": "📈",
+    zap: "⚡",
+    clock: "⏱️",
+    timer: "⏱️",
+    users: "👥",
+    user: "👤",
+    check: "✅",
+    "check-circle": "✅",
+    alert: "⚠️",
+    "alert-triangle": "⚠️",
+    dollar: "💰",
+    money: "💰",
+    percent: "%",
+    hash: "#",
+    database: "🗄️",
+    server: "🖥️",
+    cpu: "⚙️",
+    settings: "⚙️",
+  };
+  return iconMap[iconName.toLowerCase()] || "📊";
 }
 
 export function ResponsiveDashboardRenderer({
@@ -370,6 +495,8 @@ const shadow = (() => {
                 cardBackground={cardBackground}
                 borderRadius={borderRadius}
                 shadow={shadow}
+                headingFont={headingFont}
+                bodyFont={bodyFont}
                 isEditing={isEditing}
                 onClick={() => onWidgetClick?.(comp.id)}
               />
@@ -411,6 +538,8 @@ const shadow = (() => {
                 cardBackground={cardBackground}
                 borderRadius={borderRadius}
                 shadow={shadow}
+                headingFont={headingFont}
+                bodyFont={bodyFont}
                 isEditing={isEditing}
                 onClick={() => onWidgetClick?.(comp.id)}
               />
