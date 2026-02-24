@@ -357,6 +357,165 @@ async function handleDeterministicSelectEntity(params: {
   }
 }
 
+// ─── DETERMINISTIC PROPOSE BYPASS ────────────────────────────────────────────
+// On the FIRST propose-phase message, bypass the agent entirely and:
+// 1. Read session data (source, entities, outcome)
+// 2. Call generateProposals() to run 3× designSystemWorkflow in parallel
+// 3. Persist proposals to journey_sessions.proposals
+// 4. Stream proposals as data-proposals part + text explanation to frontend
+//
+// Subsequent propose messages (user asking questions, selecting) go through agent.
+async function handleDeterministicPropose(params: {
+  mastra: any;
+  supabase: any;
+  tenantId: string;
+  userId: string;
+  journeyThreadId: string;
+  mastraThreadId: string;
+  requestContext: any;
+}): Promise<ReadableStream | null> {
+  const { mastra, supabase, tenantId, userId, journeyThreadId, requestContext } = params;
+
+  const startTime = Date.now();
+  try {
+    const { data: existingSession } = await supabase
+      .from('journey_sessions')
+      .select('proposals, selected_entities, selected_outcome, source_id')
+      .eq('thread_id', journeyThreadId)
+      .eq('tenant_id', tenantId)
+      .maybeSingle();
+
+    if (existingSession?.proposals) {
+      console.log('[deterministic-propose] Proposals already exist, skipping generation');
+      const existingProposals = existingSession.proposals;
+      const stream = createUIMessageStream({
+        execute: async ({ writer }) => {
+          const textId = generateId();
+          await writer.write({ type: 'text-start', id: textId });
+          await writer.write({
+            type: 'text-delta',
+            id: textId,
+            delta: "Here are the proposals I've prepared for your dashboard. Take a look and pick the one that fits your vision!",
+          });
+          await writer.write({ type: 'text-end', id: textId });
+
+          await writer.write({
+            type: 'data-proposals',
+            id: generateId(),
+            data: existingProposals,
+          } as any);
+        },
+      });
+      return stream;
+    }
+
+    if (!existingSession?.source_id) {
+      console.log('[deterministic-propose] No source_id, falling back to agent');
+      return null;
+    }
+
+    const { data: source } = await supabase
+      .from('source_entities')
+      .select('id, platform_type, name')
+      .eq('id', existingSession.source_id)
+      .eq('tenant_id', tenantId)
+      .maybeSingle();
+
+    if (!source) {
+      console.log('[deterministic-propose] Source not found, falling back to agent');
+      return null;
+    }
+
+    const workflowName = source.name || 'Dashboard';
+    const platformType = source.platform_type || 'other';
+    const selectedEntities = existingSession.selected_entities
+      ? (Array.isArray(existingSession.selected_entities)
+        ? existingSession.selected_entities.map((e: any) => e.name || e).join(', ')
+        : String(existingSession.selected_entities))
+      : '';
+
+    console.log('[deterministic-propose] Starting proposal generation:', {
+      workflowName: workflowName.substring(0, 50),
+      platformType,
+      entities: selectedEntities.substring(0, 80),
+    });
+
+    const { generateProposals } = await import('@/mastra/lib/generateProposals');
+
+    const result = await generateProposals({
+      workflowName,
+      platformType,
+      selectedEntities,
+      tenantId,
+      userId,
+      mastra,
+      requestContext,
+    });
+
+    if (!result.success || result.proposals.length === 0) {
+      console.warn('[deterministic-propose] Generation failed:', result.error);
+      return null;
+    }
+
+    const { error: persistError } = await supabase
+      .from('journey_sessions')
+      .update({
+        proposals: result.payload,
+        archetype: {
+          archetype: result.archetype,
+          confidence: 1.0,
+        },
+        updated_at: new Date().toISOString(),
+      })
+      .eq('thread_id', journeyThreadId)
+      .eq('tenant_id', tenantId);
+
+    if (persistError) {
+      console.error('[deterministic-propose] Failed to persist proposals:', persistError.message);
+    }
+
+    const proposalNames = result.proposals.map((p, i) => `${i + 1}. **${p.title}** — ${p.pitch}`).join('\n');
+    const responseText = `I've analyzed your ${workflowName} workflow and generated ${result.proposals.length} tailored dashboard proposals.\n\n${proposalNames}\n\nCheck out the visual previews in the panel on the right. Which one speaks to you?`;
+
+    const stream = createUIMessageStream({
+      execute: async ({ writer }) => {
+        const reasoningId = generateId();
+        await writer.write({ type: 'reasoning-start', id: reasoningId });
+        await writer.write({
+          type: 'reasoning-delta',
+          id: reasoningId,
+          delta: `Analyzing "${workflowName}" workflow...\nClassifying archetype: ${result.archetype}\nGenerating ${result.proposals.length} unique design proposals in parallel...`,
+        });
+        await writer.write({ type: 'reasoning-end', id: reasoningId });
+
+        const textId = generateId();
+        await writer.write({ type: 'text-start', id: textId });
+        const words = responseText.split(' ');
+        for (let i = 0; i < words.length; i++) {
+          await writer.write({
+            type: 'text-delta',
+            id: textId,
+            delta: i === words.length - 1 ? words[i] : words[i] + ' ',
+          });
+        }
+        await writer.write({ type: 'text-end', id: textId });
+
+        await writer.write({
+          type: 'data-proposals',
+          id: generateId(),
+          data: result.payload,
+        } as any);
+      },
+    });
+
+    console.log(`[deterministic-propose] ✅ Generated ${result.proposals.length} proposals in ${Date.now() - startTime}ms`);
+    return stream;
+  } catch (err) {
+    console.error('[deterministic-propose] Unexpected error, falling back to agent:', err);
+    return null;
+  }
+}
+
 // ─── DETERMINISTIC RECOMMEND OUTCOME DETECTION ──────────────────────────────
 // The recommend phase has TWO selections that must be persisted:
 //   1. selected_outcome (dashboard | product) — from user's choice or __ACTION__ token
@@ -1407,6 +1566,26 @@ export async function POST(req: Request) {
     const isSystemInit = lastUserText.toLowerCase().includes('system: initialize') ||
                          lastUserText.toLowerCase().includes('system:initialize');
 
+    // ─── DETERMINISTIC PROPOSE BYPASS ─────────────────────────────────
+    // On the first propose-phase message (init or no proposals yet),
+    // generate proposals deterministically and stream them to the client.
+    if (finalPhase === 'propose' && (isInitMessage || isSystemInit)) {
+      const proposeStream = await handleDeterministicPropose({
+        mastra,
+        supabase,
+        tenantId,
+        userId,
+        journeyThreadId: cleanJourneyThreadId,
+        mastraThreadId: cleanMastraThreadId,
+        requestContext,
+      });
+      if (proposeStream) {
+        console.log('[api/chat] 🚀 Using deterministic propose bypass');
+        return createUIMessageStreamResponse({ stream: proposeStream });
+      }
+    }
+    // ─── END DETERMINISTIC PROPOSE BYPASS ─────────────────────────────
+
     if (
       finalPhase === 'select_entity' &&
       (isInitMessage || isSystemInit)
@@ -1652,6 +1831,95 @@ export async function POST(req: Request) {
       }
     }
     // ─── END INTENT-BASED STYLE ROUTING ──────────────────────────────────
+
+    // ─── PROPOSAL SELECTION DETECTION ─────────────────────────────────
+    // Detect when user picks a proposal (via __ACTION__ token or natural language)
+    // and persist selected_proposal_index to DB.
+    if (finalPhase === 'propose') {
+      const messageText = extractLastUserMessageText(rawMessages);
+
+      if (messageText) {
+        const actionMatch = messageText.match(/__ACTION__:select_proposal:(\d+)/);
+        let selectedIndex: number | null = null;
+
+        if (actionMatch) {
+          selectedIndex = parseInt(actionMatch[1], 10);
+          console.log(`[api/chat] 🎯 Proposal selection via __ACTION__: index=${selectedIndex}`);
+        } else {
+          const { classifyProposeIntent } = await import('@/lib/intent-classifier');
+          const { data: propSession } = await supabase
+            .from('journey_sessions')
+            .select('proposals')
+            .eq('thread_id', cleanJourneyThreadId)
+            .eq('tenant_id', tenantId)
+            .maybeSingle();
+
+          const proposalCount = propSession?.proposals?.proposals?.length || 0;
+          if (proposalCount > 0) {
+            const classification = await classifyProposeIntent(messageText, proposalCount, mastra);
+
+            if (classification.intent === 'select_first' && classification.confidence >= 0.7) {
+              selectedIndex = 0;
+            } else if (classification.intent === 'select_second' && classification.confidence >= 0.7) {
+              selectedIndex = 1;
+            } else if (classification.intent === 'select_third' && classification.confidence >= 0.7 && proposalCount >= 3) {
+              selectedIndex = 2;
+            }
+
+            if (selectedIndex !== null) {
+              console.log(`[api/chat] 🎯 Proposal selection via NL: index=${selectedIndex} (${classification.intent}, ${classification.confidence})`);
+            }
+          }
+        }
+
+        if (selectedIndex !== null) {
+          const { data: proposalSession } = await supabase
+            .from('journey_sessions')
+            .select('id, proposals')
+            .eq('thread_id', cleanJourneyThreadId)
+            .eq('tenant_id', tenantId)
+            .maybeSingle();
+
+          if (proposalSession) {
+            const selectedProposal = proposalSession.proposals?.proposals?.[selectedIndex];
+            const designTokens = selectedProposal?.designSystem || null;
+            const selectedOutcome = selectedProposal?.emphasisBlend?.product >= 0.5 ? 'product' : 'dashboard';
+
+            await supabase
+              .from('journey_sessions')
+              .update({
+                selected_proposal_index: selectedIndex,
+                design_tokens: designTokens,
+                selected_outcome: selectedOutcome,
+                schema_ready: true,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', proposalSession.id)
+              .eq('tenant_id', tenantId);
+
+            requestContext.set('selectedProposalIndex', String(selectedIndex));
+            requestContext.set('selectedOutcome', selectedOutcome);
+            console.log(`[api/chat] ✅ Persisted proposal selection: index=${selectedIndex}, outcome=${selectedOutcome}`);
+
+            try {
+              const advResult = await autoAdvancePhase({
+                supabase,
+                tenantId,
+                journeyThreadId: cleanJourneyThreadId,
+                mastraThreadId: cleanMastraThreadId,
+              });
+              if (advResult?.advanced) {
+                requestContext.set('phase', advResult.to!);
+                console.log('[api/chat] Auto-advanced after proposal selection:', advResult);
+              }
+            } catch (advErr) {
+              console.warn('[api/chat] autoAdvance after proposal selection failed:', advErr);
+            }
+          }
+        }
+      }
+    }
+    // ─── END PROPOSAL SELECTION DETECTION ──────────────────────────────
 
     // ─── INTENT-BASED SELECT_ENTITY ROUTING ────────────────────────────────
     // Detect entity selections from natural language instead of relying on

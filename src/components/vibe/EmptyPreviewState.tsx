@@ -17,6 +17,8 @@ type JourneyMode =
   | 'style'
   | 'build_preview'
   | 'interactive_edit'
+  | 'propose'
+  | 'build_edit'
   | 'deploy';
 
 interface EmptyPreviewStateProps {
@@ -79,6 +81,23 @@ const stageConfig: Record<JourneyMode, {
     hint: "Click Deploy when you're happy with the result",
     color: "text-indigo-500",
     bgGradient: "from-indigo-50 to-purple-50",
+  },
+
+  propose: {
+    icon: Sparkles,
+    title: "Crafting your proposals",
+    description: "Generating tailored dashboard designs",
+    hint: "I'm analyzing your workflow and creating 3 unique proposals",
+    color: "text-indigo-500",
+    bgGradient: "from-indigo-50 to-violet-50",
+  },
+  build_edit: {
+    icon: Layout,
+    title: "Building your dashboard",
+    description: "Your selected proposal is being brought to life",
+    hint: "Use the chat to request changes to colors, layout, or components",
+    color: "text-emerald-500",
+    bgGradient: "from-emerald-50 to-teal-50",
   },
 };
 
