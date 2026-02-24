@@ -278,13 +278,18 @@ const generateUISpecStep = createStep({
     const platformType = (requestContext.get("platformType") || 'make') as SelectTemplatePlatformType;
     const selectedStyleBundleId = (requestContext.get("selectedStyleBundleId") || 'professional-clean') as string;
 
+    // Get field analysis and chart recommendations from the new skill-driven mapping
+    const fieldAnalysis = (mappingResult as { fieldAnalysis?: unknown }).fieldAnalysis;
+    const mappingChartRecs = (mappingResult as { chartRecommendations?: unknown }).chartRecommendations;
+
     const result = await callTool(generateUISpec,
       {
         templateId,
         mappings: mappings,
         platformType,
         selectedStyleBundleId,
-        chartRecommendations: (() => {
+        fieldAnalysis,
+        chartRecommendations: mappingChartRecs || (() => {
           const dtJson = requestContext.get('designTokens') as string;
           if (dtJson) {
             try { return JSON.parse(dtJson).charts; } catch { return undefined; }

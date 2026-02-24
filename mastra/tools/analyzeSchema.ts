@@ -20,8 +20,12 @@ export const analyzeSchema = createTool({
       type: z.enum(['string', 'number', 'boolean', 'date', 'object', 'array']),
       sample: z.any(),
       nullable: z.boolean(),
+      uniqueValues: z.number(),
+      totalRows: z.number(),
+      avgLength: z.number().optional(),
     })),
     eventTypes: z.array(z.string()),
+    totalEvents: z.number(),
     confidence: z.number().min(0).max(1),
   }),
   execute: async (inputData, context) => {
@@ -120,13 +124,23 @@ export const analyzeSchema = createTool({
       }
     });
 
-    // Convert to output format
-    const fields = Array.from(fieldMap.entries()).map(([name, data]) => ({
-      name,
-      type: data.type as 'string' | 'number' | 'boolean' | 'date' | 'object' | 'array',
-      sample: data.samples[0],
-      nullable: data.nullCount > 0,
-    }));
+    // Convert to output format with cardinality metadata for skill-driven mapping
+    const totalRows = events.length;
+    const fields = Array.from(fieldMap.entries()).map(([name, data]) => {
+      const uniqueSet = new Set(data.samples.map((s: unknown) => String(s)));
+      const avgLength = data.type === 'string' && data.samples.length > 0
+        ? data.samples.reduce((sum: number, s: unknown) => sum + String(s).length, 0) / data.samples.length
+        : undefined;
+      return {
+        name,
+        type: data.type as 'string' | 'number' | 'boolean' | 'date' | 'object' | 'array',
+        sample: data.samples[0],
+        nullable: data.nullCount > 0,
+        uniqueValues: uniqueSet.size,
+        totalRows,
+        ...(avgLength !== undefined ? { avgLength } : {}),
+      };
+    });
 
     // ── Confidence scoring ──
     // Base confidence from sample size
@@ -151,6 +165,7 @@ export const analyzeSchema = createTool({
     const result = {
       fields,
       eventTypes: Array.from(eventTypes),
+      totalEvents: events.length,
       confidence,
     };
 
@@ -168,7 +183,7 @@ export const analyzeSchema = createTool({
         .maybeSingle();
 
       if (schemaRow?.id) {
-        const sampleEvents = events.slice(0, 5).map((evt: Record<string, any>) => ({
+        const sampleEvents = events.slice(0, 5).map((evt: Record<string, unknown>) => ({
           id: evt.id,
           type: evt.type,
           name: evt.name,
@@ -184,6 +199,7 @@ export const analyzeSchema = createTool({
               fields: result.fields,
               eventTypes: result.eventTypes,
               eventCounts: { total: events.length },
+              totalEvents: result.totalEvents,
               confidence: result.confidence,
             },
             sample_events: sampleEvents,

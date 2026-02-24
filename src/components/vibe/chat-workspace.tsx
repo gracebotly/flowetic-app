@@ -40,6 +40,7 @@ import { PhaseIndicator } from "@/components/vibe/phase-indicator";
 import { InlineChoice } from "@/components/vibe/inline-choice";
 import { DesignSystemPair } from "@/components/vibe/design-system-pair";
 import { DesignSystemCard } from './DesignSystemCard';
+import { ProposalGallery } from './ProposalGallery';
 import { ReasoningBlock } from "@/components/vibe/ReasoningBlock";
 import { ErrorDisplay } from "@/components/vibe/ErrorDisplay";
 import { ModelSelector, type ModelId } from "./model-selector";
@@ -212,6 +213,12 @@ export function ChatWorkspace({
   const [isListening, setIsListening] = useState(false);
   const [isChatExpanded, setIsChatExpanded] = useState(false);
   const [selectedModel, setSelectedModel] = useState<ModelId>("gemini-3-pro-preview");
+
+  // Proposal state (2-phase journey)
+  const [proposals, setProposals] = useState<import('@/types/proposal').ProposalsPayload | null>(null);
+  const [isProposalLoading, setIsProposalLoading] = useState(false);
+  const [selectedProposalIndex, setSelectedProposalIndex] = useState<number | null>(null);
+
 
   // Guard against concurrent init + user sends
   const initSendInFlight = useRef(false);
@@ -997,10 +1004,13 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
   useEffect(() => {
     if (journeyMode === 'propose') {
       setIsChatExpanded(true);
+      if (!proposals) {
+        setIsProposalLoading(true);
+      }
     } else {
       setIsChatExpanded(false);
     }
-  }, [journeyMode]);
+  }, [journeyMode, proposals]);
 
   // Mobile detection
   useEffect(() => {
@@ -1565,6 +1575,18 @@ return (
                                   }
                                 />
                               );
+                            }
+
+                            // ✅ RENDER: Proposals (from deterministic propose bypass)
+                            if (part.type === 'data-proposals') {
+                              const proposalData = (part as any).data as import('@/types/proposal').ProposalsPayload;
+                              if (proposalData && !proposals) {
+                                setTimeout(() => {
+                                  setProposals(proposalData);
+                                  setIsProposalLoading(false);
+                                }, 0);
+                              }
+                              return null;
                             }
 
                             // ✅ RENDER: Single design system card (from deterministic style bypass)
@@ -2143,7 +2165,17 @@ return (
             )}
             {/* Preview content */}
             <div className="flex-1 overflow-auto bg-gray-100 p-4">
-              {vibeContext?.previewUrl && view !== "edit" && journeyMode !== "build_edit" ? (
+              {journeyMode === 'propose' ? (
+                <ProposalGallery
+                  payload={proposals}
+                  isLoading={isProposalLoading}
+                  selectedIndex={selectedProposalIndex}
+                  onSelect={(index) => {
+                    setSelectedProposalIndex(index);
+                    void sendAi(`__ACTION__:select_proposal:${index}`, {});
+                  }}
+                />
+              ) : vibeContext?.previewUrl && view !== "edit" && journeyMode !== "build_edit" ? (
                 <div className="h-full bg-white rounded-lg shadow-sm overflow-hidden">
                   <iframe
                     src={vibeContext.previewUrl}
