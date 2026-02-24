@@ -2186,6 +2186,21 @@ return (
                 </div>
               ) : journeyMode === "build_edit" && vibeContext?.previewUrl ? (
                 <div className="h-full flex items-start justify-center py-4">
+                  {(() => {
+                    const dt = loadedDesignTokens || effectiveDesignTokens;
+                    const hf = (dt?.fonts?.heading as string)?.split(",")[0]?.trim();
+                    const bf = (dt?.fonts?.body as string)?.split(",")[0]?.trim();
+                    const fonts = [...new Set([hf, bf].filter(Boolean))];
+                    if (fonts.length === 0) return null;
+                    return (
+                      <link
+                        rel="stylesheet"
+                        href={`https://fonts.googleapis.com/css2?${fonts
+                          .map((f) => `family=${encodeURIComponent(f)}:wght@400;500;600;700`)
+                          .join("&")}&display=swap`}
+                      />
+                    );
+                  })()}
                   <ResponsiveDashboardRenderer
                     spec={loadedSpec ?? {
                       title: "Dashboard Preview",

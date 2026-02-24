@@ -7,6 +7,7 @@ import { generateUISpec } from '../tools/generateUISpec';
 import { validateSpec } from '../tools/validateSpec';
 import { persistPreviewVersion } from '../tools/persistPreviewVersion';
 import { callTool } from '../lib/callTool';
+import { transformDataForComponents } from '@/lib/dashboard/transformDataForComponents';
 
 // Platform type derived from selectTemplate tool schema
 type SelectTemplatePlatformType = "vapi" | "retell" | "n8n" | "mastra" | "crewai" | "activepieces" | "make";
@@ -282,6 +283,8 @@ const generateUISpecStep = createStep({
     // Get field analysis and chart recommendations from the new skill-driven mapping
     const fieldAnalysis = (mappingResult as { fieldAnalysis?: unknown }).fieldAnalysis;
     const mappingChartRecs = (mappingResult as { chartRecommendations?: unknown }).chartRecommendations;
+    // Phase 2: Extract dataSignals from mapping result
+    const mappingDataSignals = (mappingResult as { dataSignals?: unknown }).dataSignals;
 
     // ── FIX: Load design tokens from DB if missing from RequestContext ────────
     // Mastra workflow execution can lose RequestContext keys during step
@@ -362,11 +365,63 @@ const generateUISpecStep = createStep({
           const firstEntity = entitiesRaw.split(',')[0].trim();
           return firstEntity || undefined;
         })(),
+        // ── Phase 2: Skeleton-aware inputs ──────────────────────────
+        dataSignals: mappingDataSignals as any,
+        mode: (requestContext.get('mode') as 'internal' | 'client-facing') || 'internal',
+        intent: (requestContext.get('selectedOutcome') as string) || '',
       },
       { requestContext }
     );
 
-    return result;
+    // Pre-compute aggregated values from events and bake them into spec_json
+    let enrichedSpec = result?.spec_json ?? {};
+    try {
+      const tenantId = initData.tenantId || requestContext.get('tenantId') as string;
+      const interfaceId = initData.interfaceId;
+      const supabaseToken = requestContext.get('supabaseAccessToken') as string;
+
+      if (tenantId && interfaceId && supabaseToken) {
+        const { createAuthenticatedClient } = await import('../lib/supabase');
+        const supabase = createAuthenticatedClient(supabaseToken);
+        const { data: events } = await supabase
+          .from('events')
+          .select('*')
+          .eq('tenant_id', tenantId)
+          .eq('interface_id', interfaceId)
+          .order('created_at', { ascending: false })
+          .limit(500);
+
+        if (events && events.length > 0) {
+          const flatEvents = events.map((evt: any) => {
+            const flat: Record<string, any> = { ...evt };
+            if (evt.state && typeof evt.state === 'object') {
+              for (const [key, value] of Object.entries(evt.state)) {
+                if (flat[key] == null || flat[key] === '') flat[key] = value;
+              }
+              if (flat.duration_ms != null) flat.duration_ms = Number(flat.duration_ms);
+            }
+            if (evt.labels && typeof evt.labels === 'object') {
+              for (const [key, value] of Object.entries(evt.labels)) {
+                if (flat[key] == null || flat[key] === '') flat[key] = value;
+              }
+            }
+            return flat;
+          });
+
+          enrichedSpec = transformDataForComponents(enrichedSpec, flatEvents);
+          console.log(`[generateUISpecStep] Pre-computed values from ${flatEvents.length} events for ${enrichedSpec.components?.length ?? 0} components`);
+        } else {
+          console.log('[generateUISpecStep] No events found — spec will have placeholder values');
+        }
+      }
+    } catch (err) {
+      console.error('[generateUISpecStep] Event enrichment failed (non-fatal):', err);
+    }
+
+    return {
+      ...result,
+      spec_json: enrichedSpec,
+    };
   },
 });
 
