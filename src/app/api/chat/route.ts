@@ -1926,12 +1926,19 @@ export async function POST(req: Request) {
             const designTokens = selectedProposal?.designSystem || null;
             const selectedOutcome = selectedProposal?.emphasisBlend?.product >= 0.5 ? 'product' : 'dashboard';
 
+            // Extract selected_entities from proposal context
+            // In 2-phase journey, entities are embedded in the proposal generation context
+            const proposalEntities = proposalSession.proposals?.context?.selectedEntities
+              || proposalSession.proposals?.proposals?.[selectedIndex]?.context?.selectedEntities
+              || null;
+
             await supabase
               .from('journey_sessions')
               .update({
                 selected_proposal_index: selectedIndex,
                 design_tokens: designTokens,
                 selected_outcome: selectedOutcome,
+                selected_entities: proposalEntities,
                 schema_ready: true,
                 updated_at: new Date().toISOString(),
               })
