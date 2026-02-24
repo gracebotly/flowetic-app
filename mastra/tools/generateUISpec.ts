@@ -1133,12 +1133,14 @@ export const generateUISpec = createTool({
         styleName: parsedCustomForMeta.style?.name || parsedCustomForMeta.styleName || undefined,
         generatedAt: new Date().toISOString(),
         chartRecommendationsUsed: chartRecs,
-        // Phase 2: Skeleton observability
+        // Phase 2: Skeleton observability + Wolf V2: breakpoints for renderer
         ...(skeletonId ? {
           layoutSkeletonId: skeletonId,
           skeletonName: skeleton?.name,
           skeletonCategory: skeleton?.category,
           skeletonSpacing: skeleton?.spacing,
+          skeletonVisualHierarchy: skeleton?.visualHierarchy,
+          skeletonBreakpoints: skeleton?.breakpoints,
           designPatternsUsed: inputData.designPatterns?.length || 0,
         } : {}),
       },
