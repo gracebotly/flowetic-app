@@ -183,6 +183,7 @@ function ComponentCard({
         transition-all duration-200
         ${isEditing ? "cursor-pointer hover:border-blue-400 hover:shadow-md" : ""}
       `}
+      data-component-type={type}
       style={{
         borderRadius: `${borderRadius}px`,
         boxShadow: shadow,
@@ -200,7 +201,11 @@ function ComponentCard({
       </div>
 
       {/* Premium content based on type */}
-      <div className="flex-1 min-h-0">
+      <div className={`flex-1 ${
+        type === 'MetricCard' ? 'min-h-[80px]' :
+        type === 'DataTable' ? 'min-h-[120px]' :
+        'min-h-[200px]'
+      }`}>
         {type === "MetricCard" ? (
           <div className="text-center py-4">
             <Metric style={{ color: textColor }}>
@@ -292,7 +297,7 @@ export function ResponsiveDashboardRenderer({
   const layout = spec?.layout ?? { type: "grid", columns: 12, gap: 16 };
 
   const baseColumns = typeof layout === "object" ? layout.columns ?? 12 : 12;
-  const baseGap = typeof layout === "object" ? layout.gap ?? 16 : 16;
+  const baseGap = Math.max(16, typeof layout === "object" ? layout.gap ?? 16 : 16);
 
   // Responsive values
   const columns = getResponsiveColumns(baseColumns, deviceMode);
@@ -313,7 +318,15 @@ export function ResponsiveDashboardRenderer({
   const containerStyle = getDeviceContainerStyle(deviceMode, backgroundColor);
 
   const borderRadius = designTokens?.borderRadius ?? 8;
-  const shadow = designTokens?.shadow ?? "0 2px 4px rgba(0,0,0,0.05)";
+  const rawShadow = designTokens?.shadow;
+const shadow = (() => {
+  if (!rawShadow || rawShadow === 'soft') return '0 1px 3px rgba(0,0,0,0.08), 0 4px 6px rgba(0,0,0,0.04)';
+  if (rawShadow === 'medium') return '0 4px 6px rgba(0,0,0,0.1), 0 10px 15px rgba(0,0,0,0.05)';
+  if (rawShadow === 'hard') return '0 10px 25px rgba(0,0,0,0.15)';
+  if (rawShadow === 'none') return 'none';
+  if (typeof rawShadow === 'string' && rawShadow.includes('px')) return rawShadow;
+  return '0 1px 3px rgba(0,0,0,0.08), 0 4px 6px rgba(0,0,0,0.04)';
+})();
   const headingFont = designTokens?.fonts?.heading ?? undefined;
   const bodyFont = designTokens?.fonts?.body ?? undefined;
 

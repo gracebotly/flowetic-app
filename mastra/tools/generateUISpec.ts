@@ -148,6 +148,21 @@ function pluralizeEntity(word: string): string {
 }
 
 /**
+ * Extract a short entity noun for use in KPI titles.
+ * For long workflow names like "Lead Qualification Pipeline with ROI Tracker",
+ * returns the vocabulary-normalized noun (e.g., "Run") instead of the full name.
+ * For short names (≤3 words), returns the name as-is.
+ */
+function shortEntityNoun(cleanedEntity: string): string {
+  const words = cleanedEntity.trim().split(/\s+/);
+  // Short names are fine as-is
+  if (words.length <= 3) return cleanedEntity;
+  // For long workflow names, use the universal noun "Run" (per SKILL.md vocabulary normalization)
+  // The full name goes in the dashboard title; KPI cards use the short noun
+  return 'Run';
+}
+
+/**
  * Map a design system chart recommendation type to a renderer component type.
  * Handles compound types like "Pie Chart or Donut" and "Bar Chart (Horizontal or Vertical)"
  * by checking for partial keyword matches when exact match fails.
@@ -236,7 +251,7 @@ function buildComponentsFromDesignTokens(
     id: 'primary-kpi',
     type: 'MetricCard',
     propsBuilder: (m) => ({
-      title: `Total ${pluralizeEntity(entity)}`,
+      title: `Total ${pluralizeEntity(shortEntityNoun(entity))}`,
       valueField: pickField(m, ['execution_id', 'run_id', 'id'], 'id'),
       aggregation: 'count',
       icon: 'activity',
@@ -248,7 +263,7 @@ function buildComponentsFromDesignTokens(
     id: 'success-kpi',
     type: 'MetricCard',
     propsBuilder: (m) => ({
-      title: `${entity} Success Rate`,
+      title: `${shortEntityNoun(entity)} Success Rate`,
       valueField: pickField(m, ['status', 'result', 'outcome'], 'status'),
       aggregation: 'percentage',
       condition: { equals: 'success' },
@@ -261,7 +276,7 @@ function buildComponentsFromDesignTokens(
     id: 'duration-kpi',
     type: 'MetricCard',
     propsBuilder: (m) => ({
-      title: `Avg ${entity} Duration`,
+      title: `Avg ${shortEntityNoun(entity)} Duration`,
       valueField: pickField(m, ['duration', 'duration_ms', 'execution_time', 'elapsed'], 'duration_ms'),
       aggregation: 'avg',
       unit: 'ms',
@@ -306,7 +321,7 @@ function buildComponentsFromDesignTokens(
         switch (componentType) {
           case 'TimeseriesChart':
             return {
-              title: shortBestFor || `${pluralizeEntity(entity)} Over Time`,
+              title: shortBestFor || `${pluralizeEntity(shortEntityNoun(entity))} Over Time`,
               xField: 'timestamp',
               yField: pickField(m, ['id', 'execution_id', 'run_id'], 'id'),
               aggregation: 'count',
@@ -314,19 +329,19 @@ function buildComponentsFromDesignTokens(
             };
           case 'BarChart':
             return {
-              title: shortBestFor || `${pluralizeEntity(entity)} by Status`,
+              title: shortBestFor || `${pluralizeEntity(shortEntityNoun(entity))} by Status`,
               field: pickField(m, ['status', 'type', 'name', 'category'], 'status'),
               aggregation: 'count',
             };
           case 'PieChart':
           case 'DonutChart':
             return {
-              title: shortBestFor || `${pluralizeEntity(entity)} by Category`,
+              title: shortBestFor || `${pluralizeEntity(shortEntityNoun(entity))} by Category`,
               field: pickField(m, ['status', 'type', 'category', 'name'], 'status'),
             };
           case 'DataTable':
             return {
-              title: `Recent ${pluralizeEntity(entity)}`,
+              title: `Recent ${pluralizeEntity(shortEntityNoun(entity))}`,
               columns: allFields.length > 0
                 ? allFields.slice(0, 6).map(f => ({
                     key: f,
@@ -342,13 +357,13 @@ function buildComponentsFromDesignTokens(
             };
           case 'MetricCard':
             return {
-              title: shortBestFor || `${entity} Count`,
+              title: shortBestFor || `${shortEntityNoun(entity)} Count`,
               valueField: pickField(m, ['value', 'cost', 'amount', 'score', 'id'], 'id'),
               aggregation: 'count',
               icon: 'bar-chart-2',
             };
           default:
-            return { title: shortBestFor || `${pluralizeEntity(entity)} Overview`, field: 'status' };
+            return { title: shortBestFor || `${pluralizeEntity(shortEntityNoun(entity))} Overview`, field: 'status' };
         }
       },
       layout: { col, row, w: width, h: 4 },
@@ -363,7 +378,7 @@ function buildComponentsFromDesignTokens(
       id: 'activity-table',
       type: 'DataTable',
       propsBuilder: (m) => ({
-        title: `Recent ${pluralizeEntity(entity)}`,
+        title: `Recent ${pluralizeEntity(shortEntityNoun(entity))}`,
         columns: allFields.length > 0
           ? allFields.slice(0, 6).map(f => ({
               key: f,
@@ -544,7 +559,7 @@ export const generateUISpec = createTool({
       layout: {
         type: 'grid',
         columns: 12,
-        gap: styleTokens.spacing.unit / 2,
+        gap: Math.max(16, styleTokens.spacing.unit * 2),
       },
       components,
       metadata: {

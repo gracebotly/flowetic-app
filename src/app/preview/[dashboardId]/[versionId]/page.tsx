@@ -550,7 +550,7 @@ export default async function PreviewPage({ params }: PreviewPageProps) {
   const subtitleColor = (version.design_tokens?.colors?.secondary as string) || '#64748B';
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen" style={{ backgroundColor: (version.design_tokens?.colors?.background as string) || '#ffffff' }}>
       {fontsToLoad.length > 0 && (
         <link
           rel="stylesheet"
@@ -582,8 +582,16 @@ export default async function PreviewPage({ params }: PreviewPageProps) {
             version.design_tokens?.colors ??
             version.design_tokens?.theme?.colors ?? { primary: "#3b82f6" },
           borderRadius: version.design_tokens?.radius ?? version.design_tokens?.borderRadius ?? 8,
-          shadow:
-            version.design_tokens?.shadow ?? "0 1px 3px rgba(0,0,0,0.1)",
+          shadow: (() => {
+            const raw = version.design_tokens?.shadow;
+            if (!raw || raw === 'soft') return '0 1px 3px rgba(0,0,0,0.08), 0 4px 6px rgba(0,0,0,0.04)';
+            if (raw === 'medium') return '0 4px 6px rgba(0,0,0,0.1), 0 10px 15px rgba(0,0,0,0.05)';
+            if (raw === 'hard') return '0 10px 25px rgba(0,0,0,0.15)';
+            if (raw === 'none') return 'none';
+            // If it looks like a CSS value already, use it
+            if (typeof raw === 'string' && raw.includes('px')) return raw;
+            return '0 1px 3px rgba(0,0,0,0.08), 0 4px 6px rgba(0,0,0,0.04)';
+          })(),
           fonts: version.design_tokens?.fonts ?? undefined,
         }}
         deviceMode="desktop"
