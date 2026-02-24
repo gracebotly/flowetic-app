@@ -59,6 +59,32 @@ function getDeviceContainerStyle(deviceMode: DeviceMode, bgColor: string): React
   }
 }
 
+/**
+ * Phase 2: Generate CSS custom properties from design tokens.
+ * Applied at the container level so all child components can consume
+ * them via var(--gf-primary) etc. This is the Tailwind 4 recommended
+ * pattern instead of passing 12+ individual color props.
+ */
+function generateTokenCSS(designTokens: DesignTokens): React.CSSProperties {
+  const colors = designTokens?.colors ?? {};
+  const fonts = designTokens?.fonts ?? {};
+
+  return {
+    '--gf-primary': colors.primary ?? '#3b82f6',
+    '--gf-secondary': colors.secondary ?? '#64748B',
+    '--gf-accent': colors.accent ?? '#14B8A6',
+    '--gf-background': colors.background ?? '#ffffff',
+    '--gf-surface': colors.surface ?? '#f8fafc',
+    '--gf-text': colors.text ?? '#111827',
+    '--gf-muted': colors.muted ?? '#6b7280',
+    '--gf-radius': `${designTokens?.borderRadius ?? 8}px`,
+    '--gf-shadow': designTokens?.shadow ?? '0 1px 3px rgba(0,0,0,0.08)',
+    '--gf-font-heading': fonts?.heading ?? 'Inter, sans-serif',
+    '--gf-font-body': fonts?.body ?? 'Inter, sans-serif',
+    '--gf-spacing': '8px',
+  } as React.CSSProperties;
+}
+
 // ── Types ──
 interface SkeletonBreakpoints {
   mobile?: { stackSections?: boolean; hideSections?: string[]; columnOverrides?: Record<string, number> };
@@ -69,7 +95,7 @@ interface DashboardSpec {
   title?: string;
   components?: ComponentSpec[];
   layout?: { type?: string; columns?: number; gap?: number };
-  metadata?: { layoutSkeletonId?: string; skeletonBreakpoints?: SkeletonBreakpoints; skeletonVisualHierarchy?: string; [key: string]: any };
+  metadata?: Record<string, any>;
 }
 interface ResponsiveDashboardRendererProps {
   spec: DashboardSpec;
@@ -88,25 +114,48 @@ export function ResponsiveDashboardRenderer({ spec, designTokens, deviceMode, is
   const columns = getResponsiveColumns(baseColumns, deviceMode);
   const gap = getResponsiveGap(baseGap, deviceMode);
 
+  // Phase 2: Read BM25 preferDarkMode hint from spec metadata
+  const preferDarkMode = spec?.metadata?.preferDarkMode || false;
+
+  // If BM25 patterns suggest dark mode but tokens have light background, invert
+  const effectiveTokens = useMemo(() => {
+    if (!preferDarkMode) return designTokens;
+
+    const bg = designTokens?.colors?.background || '#ffffff';
+    const isDarkAlready = bg.toLowerCase() < '#888888';
+    if (isDarkAlready) return designTokens;
+
+    return {
+      ...designTokens,
+      colors: {
+        ...designTokens?.colors,
+        background: '#0f172a',
+        surface: '#1e293b',
+        text: '#f1f5f9',
+        muted: '#94a3b8',
+      },
+    };
+  }, [designTokens, preferDarkMode]);
+
   // Design tokens
-  const colors = designTokens?.colors ?? {};
+  const colors = effectiveTokens?.colors ?? {};
   const backgroundColor = colors?.background ?? "#ffffff";
   const textColor = colors?.text ?? "#111827";
   const containerStyle = getDeviceContainerStyle(deviceMode, backgroundColor);
-  const fonts = designTokens?.fonts ?? {};
+  const fonts = effectiveTokens?.fonts ?? {};
   const headingFont = (fonts?.heading as string)?.split(",")[0]?.trim();
   const bodyFont = (fonts?.body as string)?.split(",")[0]?.trim();
   const fontsToLoad = [...new Set([headingFont, bodyFont].filter(Boolean))];
 
   // Skeleton breakpoints (Wolf V2)
-  const skeletonBreakpoints = spec?.metadata?.skeletonBreakpoints;
-  const visualHierarchy = spec?.metadata?.skeletonVisualHierarchy;
+  const skeletonBreakpoints = spec?.metadata?.skeletonBreakpoints as SkeletonBreakpoints | undefined;
+  const visualHierarchy = spec?.metadata?.skeletonVisualHierarchy as string | undefined;
 
   // Filter: hide sections on mobile per skeleton breakpoints
   const visibleComponents = useMemo(() => {
     let filtered = components.filter((comp: ComponentSpec) => !comp?.props?.hidden);
     if (deviceMode === "mobile" && skeletonBreakpoints?.mobile?.hideSections) {
-      const hidden = new Set(skeletonBreakpoints.mobile.hideSections);
+      const hidden = new Set<string>(skeletonBreakpoints.mobile.hideSections as string[]);
       filtered = filtered.filter((comp) => {
         const prefix = comp.id.split("-")[0];
         return !hidden.has(comp.id) && !hidden.has(prefix) &&
@@ -139,7 +188,7 @@ export function ResponsiveDashboardRenderer({ spec, designTokens, deviceMode, is
   // Mobile/Tablet: Stack vertically
   if (deviceMode === "mobile" || deviceMode === "tablet") {
     return (
-      <div style={{ ...containerStyle, fontFamily: bodyFont || undefined }} className="overflow-hidden">
+      <div style={{ ...containerStyle, ...generateTokenCSS(effectiveTokens), fontFamily: bodyFont || undefined }} className="overflow-hidden">
         {fontLink}
         <div className="p-4">
           {spec?.title && <h1 className="text-xl font-bold mb-4" style={{ color: textColor, fontFamily: headingFont || undefined }}>{spec.title}</h1>}
@@ -147,7 +196,7 @@ export function ResponsiveDashboardRenderer({ spec, designTokens, deviceMode, is
             {sortedComponents.map((comp: ComponentSpec) => {
               const resolved = resolveComponentType(comp.type);
               const Renderer = getRenderer(resolved);
-              return <Renderer key={comp.id} component={{ ...comp, type: resolved }} designTokens={designTokens} deviceMode={deviceMode} isEditing={isEditing} onClick={() => onWidgetClick?.(comp.id)} />;
+              return <Renderer key={comp.id} component={{ ...comp, type: resolved }} designTokens={effectiveTokens} deviceMode={deviceMode} isEditing={isEditing} onClick={() => onWidgetClick?.(comp.id)} />;
             })}
           </div>
         </div>
@@ -157,7 +206,7 @@ export function ResponsiveDashboardRenderer({ spec, designTokens, deviceMode, is
 
   // Desktop: Full grid with positioning
   return (
-    <div style={{ ...containerStyle, fontFamily: bodyFont || undefined }}>
+    <div style={{ ...containerStyle, ...generateTokenCSS(effectiveTokens), fontFamily: bodyFont || undefined }}>
       {fontLink}
       <div className="p-6">
         {spec?.title && <h1 className="text-2xl font-bold mb-6" style={{ color: textColor, fontFamily: headingFont || undefined }}>{spec.title}</h1>}
@@ -167,7 +216,7 @@ export function ResponsiveDashboardRenderer({ spec, designTokens, deviceMode, is
             const Renderer = getRenderer(resolved);
             return (
               <div key={comp.id} style={{ gridColumn: `${(comp.layout?.col ?? 0) + 1} / span ${comp.layout?.w ?? 4}`, gridRow: `${(comp.layout?.row ?? 0) + 1} / span ${comp.layout?.h ?? 2}` }}>
-                <Renderer component={{ ...comp, type: resolved }} designTokens={designTokens} deviceMode={deviceMode} isEditing={isEditing} onClick={() => onWidgetClick?.(comp.id)} />
+                <Renderer component={{ ...comp, type: resolved }} designTokens={effectiveTokens} deviceMode={deviceMode} isEditing={isEditing} onClick={() => onWidgetClick?.(comp.id)} />
               </div>
             );
           })}

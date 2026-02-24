@@ -317,6 +317,67 @@ const retrieveDesignPatternsStep = createStep({
 
       console.log(`[retrieveDesignPatterns] Loaded ${designPatterns.length} patterns from designSystemWorkflow`);
 
+      // ── Phase 2: Direct BM25 search using layoutQuery from dataSignals ──
+      try {
+        const mappingResult = getStepResult(generateMappingStep);
+        const dataSignals = (mappingResult as any)?.dataSignals;
+
+        if (dataSignals?.layoutQuery) {
+          const { workspace } = await import('../workspace');
+          const { ensureUIUXSearchInitialized } = await import('../tools/uiux/initUIUXSearch');
+          await ensureUIUXSearchInitialized();
+
+          const { getCachedPatterns, setCachedPatterns, buildPatternCacheKey } = await import('../lib/patternCache');
+          const cacheKey = buildPatternCacheKey(
+            (requestContext.get('skeletonId') as string) || 'unknown',
+            (requestContext.get('platformType') as string) || 'unknown'
+          );
+          const cached = getCachedPatterns(cacheKey);
+
+          if (cached) {
+            console.log(`[retrieveDesignPatterns] Using cached BM25 patterns (${cached.length} entries)`);
+            for (const p of cached) {
+              if (!designPatterns.some(existing => existing.content === p.content)) {
+                designPatterns.push(p);
+              }
+            }
+          } else {
+            const bm25Results = await workspace.search(dataSignals.layoutQuery, {
+              topK: 8,
+              mode: 'bm25',
+            });
+
+            const newPatterns: Array<{ content: string; source: string; score: number }> = [];
+
+            for (const result of bm25Results) {
+              const content = result.content || '';
+              const domain = result.metadata?.domain || 'layout';
+              const score = result.score ?? 0;
+
+              if (score > 4.0 && !designPatterns.some(p => p.content === content)) {
+                const pattern = {
+                  content,
+                  source: `bm25-direct-${domain}`,
+                  score,
+                };
+                designPatterns.push(pattern);
+                newPatterns.push(pattern);
+              }
+            }
+
+            if (newPatterns.length > 0) {
+              setCachedPatterns(cacheKey, newPatterns);
+            }
+
+            console.log(
+              `[retrieveDesignPatterns] Direct BM25 search added ${newPatterns.length} patterns from layoutQuery: "${dataSignals.layoutQuery.substring(0, 60)}..."`
+            );
+          }
+        }
+      } catch (bm25Err) {
+        console.warn('[retrieveDesignPatterns] Direct BM25 search failed (non-fatal):', bm25Err);
+      }
+
       return {
         shouldSuspend,
         missingFields,
