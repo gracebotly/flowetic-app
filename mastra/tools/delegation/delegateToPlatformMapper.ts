@@ -69,19 +69,16 @@ DO NOT try to generate previews yourself — always delegate to this specialist.
         taskLower.includes('build') ||
         taskLower.includes('dashboard');
 
-      // HARD PHASE BLOCK: Phase must be build_preview or interactive_edit.
-      // This runs BEFORE the DB check. Even if DB has all required fields,
-      // we block preview generation from wrong phases. This prevents the
-      // scenario where eager advance sets all fields but the agent is still
-      // running in style phase and calls delegateToPlatformMapper.
-      if (isPreviewRequest && currentPhase !== 'build_preview' && currentPhase !== 'interactive_edit') {
+      // HARD PHASE BLOCK: Phase must be build_edit (or legacy build_preview/interactive_edit).
+      const allowedPreviewPhases = ['build_edit', 'build_preview', 'interactive_edit'];
+      if (isPreviewRequest && !allowedPreviewPhases.includes(currentPhase)) {
         console.warn(
-          `[delegateToPlatformMapper] HARD PHASE GUARD: Blocked - phase is "${currentPhase}", not "build_preview" or "interactive_edit". Task: "${input.task.substring(0, 80)}"`
+          `[delegateToPlatformMapper] HARD PHASE GUARD: Blocked - phase is "${currentPhase}", not in ${JSON.stringify(allowedPreviewPhases)}. Task: "${input.task.substring(0, 80)}"`
         );
         return {
           success: false,
           response: `I need to finish the ${currentPhase} phase before generating a preview. Let's complete the current step first.`,
-          error: `PHASE_GUARD: Phase is "${currentPhase}", must be "build_preview" or "interactive_edit" for preview generation.`,
+          error: `PHASE_GUARD: Phase is "${currentPhase}", must be "build_edit" for preview generation.`,
         };
       }
 

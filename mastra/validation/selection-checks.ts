@@ -1,22 +1,13 @@
-export type ValidationResult = {
-  success: boolean;
-  message: string;
-  details?: Record<string, unknown>;
-  duration?: number;
-};
+// Centralized selection action parsing + phase/selection compatibility checks.
 
-export type SelectionType = "entity" | "outcome" | "style_bundle" | "deploy";
+export type SelectionType = "proposal" | "deploy";
 
 export type DetectedSelection =
-  | { type: "entity"; value: string }
-  | { type: "outcome"; value: string }
-  | { type: "style_bundle"; value: string }
+  | { type: "proposal"; value: string }
   | { type: "deploy"; value: string };
 
-const ENTITY_RE = /__ACTION__:select_entity:([^\s]+)\b/;
-const OUTCOME_RE = /__ACTION__:select_outcome:([^\s]+)\b/;
-// Legacy: storyboard regex removed — storyboard phase eliminated
-const STYLE_BUNDLE_RE = /__ACTION__:select_style_bundle:([^\s]+)\b/;
+// 3-phase journey: only proposal and deploy tokens
+const PROPOSAL_RE = /__ACTION__:select_proposal:([0-9]+)\b/;
 const DEPLOY_RE = /__ACTION__:(confirm_deploy|deploy):([^\s]+)\b/;
 
 export function detectSelection(userMessage: string): DetectedSelection | null {
@@ -25,21 +16,13 @@ export function detectSelection(userMessage: string): DetectedSelection | null {
     return { type: "deploy", value: deploy[2] };
   }
 
-  const entity = userMessage.match(ENTITY_RE);
-  if (entity?.[1]) return { type: "entity", value: entity[1] };
-
-  const outcome = userMessage.match(OUTCOME_RE);
-  if (outcome?.[1]) return { type: "outcome", value: outcome[1] };
-
-  // Legacy: storyboard tokens silently ignored (phase removed)
-
-  const style = userMessage.match(STYLE_BUNDLE_RE);
-  if (style?.[1]) return { type: "style_bundle", value: style[1] };
+  const proposal = userMessage.match(PROPOSAL_RE);
+  if (proposal?.[1]) return { type: "proposal", value: proposal[1] };
 
   return null;
 }
 
-export function hasAnySelectionAction(userMessage: string): boolean {
+export function hasSelectionAction(userMessage: string): boolean {
   return detectSelection(userMessage) !== null;
 }
 
@@ -49,26 +32,27 @@ export function selectionPhaseMatch(
 ): { ok: boolean; expected?: SelectionType } {
   if (!phase) return { ok: true };
 
-  if (phase === "select_entity") return { ok: selection.type === "entity", expected: "entity" };
-  if (phase === "recommend") return { ok: selection.type === "outcome", expected: "outcome" };
-  // Legacy: "align" phase removed — map to "style" for backward compat
-  if (phase === "align") return { ok: selection.type === "style_bundle", expected: "style_bundle" };
-  if (phase === "style") return { ok: selection.type === "style_bundle", expected: "style_bundle" };
+  // Map legacy phase names to new phases for matching
+  const normalizedPhase =
+    (phase === "select_entity" || phase === "recommend" || phase === "style") ? "propose" :
+    (phase === "build_preview" || phase === "interactive_edit") ? "build_edit" :
+    phase;
 
-  if (phase === "deploy" || phase === "interactive_edit") {
+  if (normalizedPhase === "propose") return { ok: selection.type === "proposal", expected: "proposal" };
+  if (normalizedPhase === "build_edit" || normalizedPhase === "deploy") {
     return { ok: selection.type === "deploy", expected: "deploy" };
   }
 
-  // Other phases: don't enforce strict matching in Phase 1
   return { ok: true };
 }
 
+
 export function makeValidationResult(params: {
   success: boolean;
+  startMs: number;
   message: string;
   details?: Record<string, unknown>;
-  startMs: number;
-}): ValidationResult {
+}) {
   return {
     success: params.success,
     message: params.message,

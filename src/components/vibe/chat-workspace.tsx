@@ -59,12 +59,23 @@ import { useEditActions } from "@/hooks/useEditActions";
 type ViewMode = "preview" | "edit";
 
 type JourneyMode =
-  | "select_entity"
-  | "recommend"
-  | "style"
-  | "build_preview"
-  | "interactive_edit"
+  | "propose"
+  | "build_edit"
   | "deploy";
+
+// Legacy phase mapping for old sessions loaded from DB
+const LEGACY_JOURNEY_MAP: Record<string, JourneyMode> = {
+  select_entity: "propose",
+  recommend: "propose",
+  style: "propose",
+  align: "propose",
+  build_preview: "build_edit",
+  interactive_edit: "build_edit",
+};
+
+function normalizeJourneyMode(mode: string): JourneyMode {
+  return (LEGACY_JOURNEY_MAP[mode] ?? mode) as JourneyMode;
+}
 
 type ToolUiPayload =
   | {
@@ -221,8 +232,9 @@ export function ChatWorkspace({
 
       const serverPhase = (message as any).metadata?.serverPhase;
       if (serverPhase && serverPhase !== journeyModeRef.current) {
-        console.log('[onFinish] Phase sync from metadata:', { from: journeyModeRef.current, to: serverPhase });
-        setJourneyMode(serverPhase as JourneyMode);
+        const normalized = normalizeJourneyMode(serverPhase);
+        console.log('[onFinish] Phase sync from metadata:', { from: journeyModeRef.current, to: normalized, raw: serverPhase });
+        setJourneyMode(normalized);
       }
 
       if (message.parts) {
@@ -238,7 +250,7 @@ export function ChatWorkspace({
           const newPhase = (lastPhaseUpdate as any).output.currentPhase || (lastPhaseUpdate as any).output.newPhase;
           if (newPhase && newPhase !== journeyModeRef.current) {
             console.log('[onFinish] Phase sync from advancePhase tool:', { from: journeyModeRef.current, to: newPhase });
-            setJourneyMode(newPhase as JourneyMode);
+            setJourneyMode(normalizeJourneyMode(newPhase));
           }
         }
       }
@@ -256,7 +268,7 @@ export function ChatWorkspace({
           const output = (lastPreviewSave as any).output;
           if (output?.previewUrl) {
             console.log('[onFinish] Preview saved → advancing to interactive_edit');
-            setJourneyMode('interactive_edit');
+            setJourneyMode("build_edit");
 
             const url = String(output.previewUrl);
             const UUID_RE = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
@@ -285,9 +297,10 @@ export function ChatWorkspace({
             );
             if (res.ok) {
               const json = await res.json();
-              if (json.phase && json.phase !== journeyModeRef.current) {
-                console.log('[onFinish] Phase sync from DB poll:', { from: journeyModeRef.current, to: json.phase });
-                setJourneyMode(json.phase as JourneyMode);
+              if (json.phase && normalizeJourneyMode(json.phase) !== journeyModeRef.current) {
+                const normalized = normalizeJourneyMode(json.phase);
+                console.log('[onFinish] Phase sync from DB poll:', { from: journeyModeRef.current, to: normalized, raw: json.phase });
+                setJourneyMode(normalized);
 
                 if (json.phase === 'interactive_edit' && json.previewUrl) {
                   const url = String(json.previewUrl);
@@ -372,7 +385,7 @@ export function ChatWorkspace({
         interfaceId,
       } : prev);
 
-      setJourneyMode("interactive_edit");
+      setJourneyMode("build_edit");
       setView("preview");
     }
 
@@ -671,7 +684,7 @@ export function ChatWorkspace({
               interfaceId: extractedInterfaceId,
               previewVersionId: extractedVersionId,
             } : prev);
-            setJourneyMode("interactive_edit");
+            setJourneyMode("build_edit");
             setView("preview");
           }
         }
@@ -740,7 +753,7 @@ export function ChatWorkspace({
   const [vibeContext, setVibeContext] = useState<VibeContextExtended | null>(null);
   const [vibeInitDone, setVibeInitDone] = useState(false);
 
-  const [journeyMode, setJourneyMode] = useState<JourneyMode>("select_entity");
+  const [journeyMode, setJourneyMode] = useState<JourneyMode>("propose");
   const [selectedOutcome, setSelectedOutcome] = useState<"dashboard" | "product" | null>(null);
   const [selectedStyleBundleId, setSelectedStyleBundleId] = useState<string | null>(null);
   const [densityPreset, setDensityPreset] = useState<"compact" | "comfortable" | "spacious">("comfortable");
@@ -982,7 +995,7 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
 
   // Auto-expand chat for recommend phase
   useEffect(() => {
-    if (journeyMode === 'recommend') {
+    if (journeyMode === 'propose') {
       setIsChatExpanded(true);
     } else {
       setIsChatExpanded(false);
@@ -999,7 +1012,7 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
 
   // Auto-open edit panel when in interactive_edit mode
   useEffect(() => {
-    if (journeyMode === "interactive_edit") {
+    if (journeyMode === "build_edit") {
       setEditPanelOpen(true);
       setView("edit");
       // Auto-populate widgets from spec if showInteractiveEditPanel wasn't called
@@ -1196,7 +1209,7 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
     setToolUi(null);
 
     // restore journey fields
-    if (s.mode) setJourneyMode(s.mode);
+    if (s.mode) setJourneyMode(normalizeJourneyMode(s.mode));
     if (typeof s.selected_outcome !== "undefined") {
       // Validate that the value matches the agent schema
       const validOutcomes: Array<"dashboard" | "product"> = ["dashboard", "product"];
@@ -1244,7 +1257,7 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
     const newThreadId = crypto.randomUUID();
 
     // Reset all journey state to prevent bleed from previous sessions
-    setJourneyMode("select_entity");
+    setJourneyMode("propose");
     setSelectedOutcome(null);
     setSelectedStyleBundleId(null);
     setEditPanelOpen(false);
@@ -1420,7 +1433,7 @@ return (
           {/* Expand button - show only in recommend phase (separate div) */}
           <div className="border-b border-gray-200 px-4 py-2 flex justify-end">
             {/* Expand button - show only in recommend phase */}
-            {journeyMode === "recommend" && (
+            {journeyMode === "propose" && (
               <button
                 type="button"
                 onClick={() => setIsChatExpanded(!isChatExpanded)}
@@ -2025,8 +2038,8 @@ return (
                       setEditPanelOpen(false);
                       // If we were in interactive_edit, go back to build_preview
                       // so the iframe renders instead of ResponsiveDashboardRenderer
-                      if (journeyMode === "interactive_edit") {
-                        setJourneyMode("build_preview");
+                      if (journeyMode === "build_edit") {
+                        setJourneyMode("build_edit");
                       }
                     }}
                     className={cn(
@@ -2046,7 +2059,7 @@ return (
                     title="Edit Dashboard"
                     onClick={() => {
                       setView("edit");
-                      setJourneyMode("interactive_edit");
+                      setJourneyMode("build_edit");
                       setEditPanelOpen(true);
                       setDeviceMode("desktop");
                       // Auto-populate editWidgets from loadedSpec when user clicks Edit
@@ -2120,7 +2133,7 @@ return (
           {/* Right Panel - Preview Area */}
           <div className="flex-1 overflow-hidden flex flex-col">
             {/* Device preview toolbar - only show in edit mode */}
-            {(journeyMode === "interactive_edit" || view === "edit") && (
+            {(journeyMode === "build_edit" || view === "edit") && (
               <div className="p-2 border-b border-gray-200 bg-gray-50 flex justify-center">
                 <DevicePreviewToolbar
                   value={deviceMode}
@@ -2130,7 +2143,7 @@ return (
             )}
             {/* Preview content */}
             <div className="flex-1 overflow-auto bg-gray-100 p-4">
-              {vibeContext?.previewUrl && view !== "edit" && journeyMode !== "interactive_edit" ? (
+              {vibeContext?.previewUrl && view !== "edit" && journeyMode !== "build_edit" ? (
                 <div className="h-full bg-white rounded-lg shadow-sm overflow-hidden">
                   <iframe
                     src={vibeContext.previewUrl}
@@ -2139,7 +2152,7 @@ return (
                     sandbox="allow-scripts allow-same-origin"
                   />
                 </div>
-              ) : journeyMode === "interactive_edit" && vibeContext?.previewUrl ? (
+              ) : journeyMode === "build_edit" && vibeContext?.previewUrl ? (
                 <div className="h-full flex items-start justify-center py-4">
                   <ResponsiveDashboardRenderer
                     spec={loadedSpec ?? {
@@ -2161,7 +2174,7 @@ return (
                     }}
                   />
                 </div>
-              ) : journeyMode === "build_preview" ? (
+              ) : journeyMode === "build_edit" ? (
                 <div className="flex items-center justify-center h-full">
                   <div className="text-center">
                     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
@@ -2170,7 +2183,7 @@ return (
                 </div>
               ) : (
                 <EmptyPreviewState
-                  journeyMode={journeyMode}
+                  journeyMode={journeyMode as any}
                   entityName={vibeContext?.displayName}
                 />
               )}
@@ -2190,8 +2203,8 @@ return (
             onClose={() => {
               setEditPanelOpen(false);
               setView("preview");
-              if (journeyMode === "interactive_edit") {
-                setJourneyMode("build_preview");
+              if (journeyMode === "build_edit") {
+                setJourneyMode("build_edit");
               }
             }}
             onToggleWidget={(widgetId) => {
