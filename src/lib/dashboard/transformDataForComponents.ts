@@ -115,7 +115,16 @@ function enrichMetricCard(component: ComponentSpec, events: FlatEvent[]): Compon
   }
 
   if (typeof computedValue === "number") {
-    computedValue = formatMetricValue(computedValue, props.valueField);
+    if (isNaN(computedValue) || !isFinite(computedValue)) {
+      computedValue = "—";
+    } else {
+      computedValue = formatMetricValue(computedValue, props.valueField);
+    }
+  }
+
+  // Bug 6 fix: Catch any remaining edge cases where value is NaN/undefined
+  if (computedValue === undefined || computedValue === null || computedValue === "NaN" || computedValue === "NaN%") {
+    computedValue = "No data";
   }
 
   return {
@@ -128,9 +137,16 @@ function enrichTimeseriesChart(component: ComponentSpec, events: FlatEvent[]): C
   const { props } = component;
   if (!events.length) return component;
 
-  const dateField = props?.dateField || props?.xField || "created_at";
-  const valueField = props?.valueField || props?.yField || "execution_id";
+  // Bug 6 fix: Also check xAxisField/yAxisField which generateUISpec sets
+  const dateField = props?.dateField || props?.xField || props?.xAxisField || "created_at";
+  const rawValueField = props?.valueField || props?.yField || props?.yAxisField || "execution_id";
   const aggregation = props?.aggregation || "count";
+
+  // Bug 6 fix: If valueField is a timestamp (common misassignment), 
+  // fall back to count aggregation instead of trying to chart timestamp values
+  const isTimestampValue = rawValueField.includes('_at') || rawValueField === 'timestamp' || rawValueField === 'date';
+  const valueField = isTimestampValue ? 'count' : rawValueField;
+  const effectiveAggregation = isTimestampValue ? 'count' : aggregation;
 
   const grouped: Record<string, FlatEvent[]> = {};
   events.forEach((e) => {
@@ -151,9 +167,9 @@ function enrichTimeseriesChart(component: ComponentSpec, events: FlatEvent[]): C
     .map(([date, items]) => ({
       date,
       value:
-        aggregation === "count"
+        effectiveAggregation === "count" || effectiveAggregation === "count_per_interval"
           ? items.length
-          : aggregation === "avg"
+          : effectiveAggregation === "avg"
             ? Math.round(
                 items
                   .map((i) => Number(i[valueField]))

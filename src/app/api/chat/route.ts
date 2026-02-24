@@ -1933,6 +1933,7 @@ export async function POST(req: Request) {
             const selectedProposal = proposalSession.proposals?.proposals?.[selectedIndex];
             const designTokens = selectedProposal?.designSystem || null;
             const selectedOutcome = selectedProposal?.emphasisBlend?.product >= 0.5 ? 'product' : 'dashboard';
+            const selectedWireframe = selectedProposal?.wireframeLayout || null;
 
             // Extract selected_entities from proposal context
             // In 2-phase journey, entities are embedded in the proposal generation context
@@ -1947,6 +1948,7 @@ export async function POST(req: Request) {
                 design_tokens: designTokens,
                 selected_outcome: selectedOutcome,
                 selected_entities: proposalEntities,
+                selected_wireframe: selectedWireframe,
                 schema_ready: true,
                 updated_at: new Date().toISOString(),
               })
@@ -1955,7 +1957,10 @@ export async function POST(req: Request) {
 
             requestContext.set('selectedProposalIndex', String(selectedIndex));
             requestContext.set('selectedOutcome', selectedOutcome);
-            console.log(`[api/chat] ✅ Persisted proposal selection: index=${selectedIndex}, outcome=${selectedOutcome}`);
+            if (selectedWireframe) {
+              requestContext.set('proposalWireframe', JSON.stringify(selectedWireframe));
+            }
+            console.log(`[api/chat] ✅ Persisted proposal selection: index=${selectedIndex}, outcome=${selectedOutcome}, wireframe=${selectedWireframe ? selectedWireframe.name : 'none'}`);
 
             try {
               const advResult = await autoAdvancePhase({

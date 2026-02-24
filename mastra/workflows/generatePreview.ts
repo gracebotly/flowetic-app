@@ -493,6 +493,38 @@ const generateUISpecStep = createStep({
       }
     }
 
+    // ── Load proposal wireframe from DB if not in RequestContext ──────────
+    if (!requestContext.get('proposalWireframe')) {
+      const journeyThreadId = requestContext.get('journeyThreadId') as string;
+      const supabaseToken = requestContext.get('supabaseAccessToken') as string;
+      const stepTenantId = initData.tenantId || requestContext.get('tenantId') as string;
+
+      if (journeyThreadId && supabaseToken && stepTenantId) {
+        try {
+          const { createAuthenticatedClient } = await import('../lib/supabase');
+          const supabase = createAuthenticatedClient(supabaseToken);
+          const { data: session } = await supabase
+            .from('journey_sessions')
+            .select('selected_wireframe')
+            .eq('thread_id', journeyThreadId)
+            .eq('tenant_id', stepTenantId)
+            .maybeSingle();
+
+          if (session?.selected_wireframe) {
+            requestContext.set('proposalWireframe', JSON.stringify(session.selected_wireframe));
+            console.log('[generateUISpecStep] ✅ Loaded proposal wireframe from DB:', {
+              name: (session.selected_wireframe as any)?.name,
+              componentCount: (session.selected_wireframe as any)?.components?.length,
+            });
+          } else {
+            console.log('[generateUISpecStep] No proposal wireframe in DB — builder will use skeleton layout');
+          }
+        } catch (dbErr) {
+          console.error('[generateUISpecStep] Failed to load wireframe from DB (non-fatal):', dbErr);
+        }
+      }
+    }
+
     const result = await callTool(generateUISpec,
       {
         templateId,
@@ -531,6 +563,14 @@ const generateUISpecStep = createStep({
           // Plain string: use first comma-separated value, pass through cleanEntityName later
           const firstEntity = entitiesRaw.split(',')[0].trim();
           return firstEntity || undefined;
+        })(),
+        // Bug 2 fix: Pass proposal wireframe as layout template
+        proposalWireframe: (() => {
+          const wireframeJson = requestContext.get('proposalWireframe') as string;
+          if (wireframeJson) {
+            try { return JSON.parse(wireframeJson); } catch { return undefined; }
+          }
+          return undefined;
         })(),
         // ── Phase 2: Skeleton-aware inputs ──────────────────────────
         dataSignals: mappingDataSignals as any,
