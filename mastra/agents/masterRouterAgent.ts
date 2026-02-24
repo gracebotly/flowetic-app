@@ -18,7 +18,6 @@ import {
   delegateToDesignAdvisor,
 } from "../tools/delegation";
 import { advancePhase } from "../tools/journey/advancePhase";
-import { confirmWireframe } from "@/mastra/tools/journey/confirmWireframe";
 import { generatePreviewWorkflow } from "../workflows/generatePreview";
 import { connectionBackfillWorkflow } from "../workflows/connectionBackfill";
 import { deployDashboardWorkflow } from "../workflows/deployDashboard";
@@ -136,8 +135,8 @@ You are advising on ${safePlatformType} workflow dashboards. Key concepts: workf
     const businessPhases = ["propose"];
     const shouldLoadBusinessSkill = businessPhases.includes(phase || "propose");
     const businessSkillSummary = shouldLoadBusinessSkill
-      ? `## Business Outcomes Advisor
-Guide entity selection and outcome framing with business context. Frame dashboards as client retention tools, products as scalable revenue. Use searchSkillKnowledge (domain: "business") for specific outcome frameworks and KPI patterns.`
+      ? `## Revenue Strategy Architect
+Frame dashboard proposals through agency monetization lenses: retainer visibility, client value demonstration, sell-access models, ops efficiency, positioning leverage. Make opinionated recommendations fast — pick a winner and explain why. Use searchSkillKnowledge (domain: "business") for revenue framing patterns and conversation examples.`
       : "";
 
     const designPhases = ["build_edit"];
@@ -386,7 +385,6 @@ Use BM25 search tools (getStyleRecommendations, getTypographyRecommendations, et
   tools: {
     // Phase advancement
     advancePhase,
-    confirmWireframe,
     // Sub-agent delegation (replaces agents: {} config)
     delegateToPlatformMapper,
     delegateToDashboardBuilder,
