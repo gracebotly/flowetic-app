@@ -136,6 +136,7 @@ Be creative — this should feel crafted for THIS specific workflow, not generic
       // BUG 4 FIX: Workflow now returns single design system
       const designSystem: any = data.designSystem;
       const reasoning: string = data.reasoning ?? "";
+      const rawPatterns = data.rawPatterns ?? null;
 
       if (!designSystem) {
         return { success: false, error: "Workflow returned no design system" };
@@ -171,6 +172,8 @@ Be creative — this should feel crafted for THIS specific workflow, not generic
         spacing: designSystem.spacing || { unit: 8 },
         radius: designSystem.radius ?? 8,
         shadow: designSystem.shadow || 'soft',
+        // Phase 3: Preserve raw BM25 patterns for downstream layout intelligence
+        rawPatterns: rawPatterns || undefined,
       };
       console.log('[runDesignSystemWorkflow] Normalized tokens:', {
         styleName: normalizedTokens.style?.name,
