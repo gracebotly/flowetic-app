@@ -491,6 +491,8 @@ async function handleDeterministicPropose(params: {
       userId,
       mastra,
       requestContext,
+      supabase,
+      sourceId: existingSession?.source_id || undefined,
     });
 
     if (!result.success || result.proposals.length === 0) {
@@ -516,7 +518,12 @@ async function handleDeterministicPropose(params: {
     }
 
     const proposalNames = result.proposals.map((p, i) => `${i + 1}. **${p.title}** — ${p.pitch}`).join('\n');
-    const responseText = `I've analyzed your ${workflowName} workflow and generated ${result.proposals.length} tailored dashboard proposals.\n\n${proposalNames}\n\nCheck out the visual previews in the panel on the right. Which one speaks to you?`;
+    let responseText: string;
+    if (result.proposals.length === 1) {
+      responseText = `I've analyzed your ${workflowName} workflow and your current data. Based on what's available, I've designed the best dashboard I can build right now.\n\n${proposalNames}\n\nTo unlock richer dashboard options, send more event types from your workflow. Check out the preview on the right!`;
+    } else {
+      responseText = `I've analyzed your ${workflowName} workflow and generated ${result.proposals.length} tailored dashboard proposals based on your actual data.\n\n${proposalNames}\n\nCheck out the visual previews in the panel on the right. Which one speaks to you?`;
+    }
 
     const stream = createUIMessageStream({
       execute: async ({ writer }) => {

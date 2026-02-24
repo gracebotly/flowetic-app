@@ -53,6 +53,20 @@ function pickField(
   return fallback;
 }
 
+
+/**
+ * Map a chart recommendation type string to a component type.
+ * Handles various naming conventions from the design system workflow.
+ */
+function mapChartRecType(recType: string): string {
+  const t = recType.toLowerCase();
+  if (t.includes('timeseries') || t.includes('line') || t.includes('area')) return 'TimeseriesChart';
+  if (t.includes('bar')) return 'BarChart';
+  if (t.includes('pie') || t.includes('donut')) return 'PieChart';
+  if (t.includes('table')) return 'DataTable';
+  return 'BarChart';
+}
+
 // ============================================================================
 // Design-Token-Driven Component Builder
 // REPLACES all hardcoded template functions. Every dashboard is unique.
@@ -301,6 +315,15 @@ function buildDashboardComponentsFromSkeleton(
   const breakdowns = active.filter(f => f.role === 'breakdown');
   const layoutHints = extractLayoutHints(designPatterns);
 
+  // ── Bug 3 Fix: Track used chart fields to prevent duplicates ──────
+  const usedChartFields = new Set<string>();
+  let trendIndex = 0;
+  let breakdownIndex = 0;
+  const chartRecQueue = (chartRecs || [])
+    .filter(r => r.fieldName)
+    .map(r => ({ ...r }));
+  let chartRecIndex = 0;
+
   for (const section of skeleton.sections) {
     const sectionHeight = section.minHeight || 2;
 
@@ -347,37 +370,93 @@ function buildDashboardComponentsFromSkeleton(
       case 'chart': {
         const width = section.columns || 12;
         const colStart = section.columns < 12 ? (section.dominant ? 0 : (12 - section.columns)) : 0;
-        if (trends.length > 0) {
-          const trendField = trends[0];
-          components.push({
-            id: `chart-trend-${row}`,
-            type: 'TimeseriesChart',
-            propsBuilder: (m) => ({
-              title: `${humanizeFieldName(trendField.name)} Over Time`,
-              xAxisField: pickField(m, ['timestamp', 'created_at', 'time', 'date'], 'timestamp'),
-              yAxisField: m[trendField.name] || trendField.name,
-              aggregation: trendField.aggregation,
-              emphasisColor: layoutHints.emphasisColor || undefined,
-              showLiveIndicator: layoutHints.realTimeUpdates || false,
-            }),
-            layout: { col: colStart, row, w: width, h: sectionHeight > 2 ? sectionHeight : 3 },
-          });
-        } else {
-          const bdField = breakdowns[0];
-          components.push({
-            id: `chart-primary-${row}`,
-            type: 'BarChart',
-            propsBuilder: (m) => ({
-              title: bdField ? `${humanizeFieldName(bdField.name)} Distribution` : `${shortEntityNoun(entity)} Activity`,
-              categoryField: bdField ? (m[bdField.name] || bdField.name) : pickField(m, ['status', 'type', 'category'], 'status'),
-              valueField: pickField(m, ['execution_id', 'run_id', 'id'], 'id'),
-              aggregation: 'count',
-              emphasisColor: layoutHints.emphasisColor || undefined,
-              showLiveIndicator: layoutHints.realTimeUpdates || false,
-            }),
-            layout: { col: colStart, row, w: width, h: sectionHeight > 2 ? sectionHeight : 3 },
-          });
+
+        // ── Bug 3 Fix: Try to find an UNUSED trend or breakdown field ──
+        let assignedTrend = false;
+        while (trendIndex < trends.length) {
+          const trendField = trends[trendIndex];
+          trendIndex++;
+          if (!usedChartFields.has(trendField.name)) {
+            usedChartFields.add(trendField.name);
+            components.push({
+              id: `chart-trend-${row}`,
+              type: 'TimeseriesChart',
+              propsBuilder: (m) => ({
+                title: `${humanizeFieldName(trendField.name)} Over Time`,
+                xAxisField: pickField(m, ['timestamp', 'created_at', 'time', 'date'], 'timestamp'),
+                yAxisField: m[trendField.name] || trendField.name,
+                aggregation: trendField.aggregation,
+                emphasisColor: layoutHints.emphasisColor || undefined,
+                showLiveIndicator: layoutHints.realTimeUpdates || false,
+              }),
+              layout: { col: colStart, row, w: width, h: sectionHeight > 2 ? sectionHeight : 3 },
+            });
+            assignedTrend = true;
+            break;
+          }
         }
+
+        if (!assignedTrend) {
+          let assignedBreakdown = false;
+          while (breakdownIndex < breakdowns.length) {
+            const bdField = breakdowns[breakdownIndex];
+            breakdownIndex++;
+            if (!usedChartFields.has(bdField.name)) {
+              usedChartFields.add(bdField.name);
+              components.push({
+                id: `chart-breakdown-${row}`,
+                type: section.columns <= 6 ? 'PieChart' : 'BarChart',
+                propsBuilder: (m) => ({
+                  title: `${humanizeFieldName(bdField.name)} Distribution`,
+                  categoryField: m[bdField.name] || bdField.name,
+                  valueField: 'count',
+                  aggregation: 'count',
+                }),
+                layout: { col: colStart, row, w: width, h: sectionHeight > 2 ? sectionHeight : 3 },
+              });
+              assignedBreakdown = true;
+              break;
+            }
+          }
+
+          if (!assignedBreakdown) {
+            let assignedFromRec = false;
+            while (chartRecIndex < chartRecQueue.length) {
+              const rec = chartRecQueue[chartRecIndex];
+              chartRecIndex++;
+              if (rec.fieldName && !usedChartFields.has(rec.fieldName)) {
+                usedChartFields.add(rec.fieldName);
+                const chartType = mapChartRecType(rec.type);
+                components.push({
+                  id: `chart-rec-${row}`,
+                  type: chartType,
+                  propsBuilder: (m) => ({
+                    title: rec.bestFor || `${humanizeFieldName(rec.fieldName!)} Chart`,
+                    ...(chartType === 'TimeseriesChart'
+                      ? {
+                          xAxisField: pickField(m, ['timestamp', 'created_at', 'time', 'date'], 'timestamp'),
+                          yAxisField: m[rec.fieldName!] || rec.fieldName,
+                          aggregation: 'count_per_interval',
+                        }
+                      : {
+                          categoryField: m[rec.fieldName!] || rec.fieldName,
+                          valueField: 'count',
+                          aggregation: 'count',
+                        }),
+                  }),
+                  layout: { col: colStart, row, w: width, h: sectionHeight > 2 ? sectionHeight : 3 },
+                });
+                assignedFromRec = true;
+                break;
+              }
+            }
+
+            if (!assignedFromRec) {
+              console.log(`[buildDashboardComponentsFromSkeleton] Skipping chart section "${section.id}" at row ${row} — all chart fields exhausted`);
+            }
+          }
+        }
+
         row += sectionHeight > 2 ? sectionHeight : 3;
         break;
       }
@@ -762,12 +841,30 @@ export const generateUISpec = createTool({
       );
     }
 
-    const components = blueprints.map(bp => ({
+    const rawComponents = blueprints.map(bp => ({
       id: bp.id,
       type: bp.type,
       props: bp.propsBuilder(mappings, fieldNames),
       layout: bp.layout,
     }));
+
+    // ── Bug 3 Fix: Final deduplication safety net ──────────────────
+    // Remove any components that ended up with identical (type, primary-field) tuples
+    const seenChartSignatures = new Set<string>();
+    const components = rawComponents.filter(c => {
+      if (!['TimeseriesChart', 'BarChart', 'PieChart', 'LineChart'].includes(c.type)) {
+        return true;
+      }
+      const props = c.props as Record<string, unknown>;
+      const primaryField = (props.yAxisField || props.categoryField || props.valueField || c.id) as string;
+      const signature = `${c.type}::${primaryField}`;
+      if (seenChartSignatures.has(signature)) {
+        console.log(`[generateUISpec] Dedup: removing duplicate chart ${c.id} (${signature})`);
+        return false;
+      }
+      seenChartSignatures.add(signature);
+      return true;
+    });
 
     const specLayoutHints = extractLayoutHints(
       (inputData.designPatterns ?? []) as Array<{ content: string; source: string; score: number }>
