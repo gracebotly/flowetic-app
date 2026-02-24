@@ -80,7 +80,7 @@ export const runGeneratePreviewWorkflow = createTool({
       if (session) {
         const missing: string[] = [];
         const validPreviewPhases = ['build_edit', 'build_preview', 'interactive_edit'];
-        if (!validPreviewPhases.includes(session.mode)) missing.push(`phase is "${session.mode}" (must be "build_edit")`);
+        if (!validPreviewPhases.includes(session.mode)) missing.push(`phase is "${session.mode}" (must be one of: ${validPreviewPhases.join(', ')})`);
         if (!session.selected_outcome) missing.push('selectedOutcome not set');
         if (!session.selected_style_bundle_id && !session.design_tokens) missing.push('design system not set');
         if (!session.schema_ready) missing.push('schema not ready');
@@ -101,8 +101,8 @@ export const runGeneratePreviewWorkflow = createTool({
     } else {
       // If we can't verify from DB, check RequestContext phase as fallback
       const currentPhase = context?.requestContext?.get('phase') as string;
-      const validPreviewPhases = ['build_edit', 'build_preview', 'interactive_edit'];
-      if (currentPhase && !validPreviewPhases.includes(currentPhase)) {
+      const validFallbackPhases = ['build_edit', 'build_preview', 'interactive_edit'];
+      if (currentPhase && !validFallbackPhases.includes(currentPhase)) {
         console.error(
           `[runGeneratePreviewWorkflow] PHASE GUARD (fallback): phase="${currentPhase}", blocked.`
         );
