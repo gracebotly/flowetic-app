@@ -318,6 +318,14 @@ const retrieveDesignPatternsStep = createStep({
       console.log(`[retrieveDesignPatterns] Loaded ${designPatterns.length} patterns from designSystemWorkflow`);
 
       // ── Phase 2: Direct BM25 search using layoutQuery from dataSignals ──
+      // ── SECURITY NOTE (Wolf V2 Phase 3) ──────────────────────────────────
+      // Design patterns are from shared skill CSVs (workspace/skills/),
+      // NOT from tenant-specific data. BM25 search over workspace index is
+      // safe for multi-tenant use because the index contains only product
+      // knowledge, not user data. The uiux_data Supabase table queried by
+      // loadUIUXCSV is also tenant-agnostic (no tenant_id column).
+      // If pattern sources ever include tenant data, add tenant_id filtering.
+      // ─────────────────────────────────────────────────────────────────────
       try {
         const mappingResult = getStepResult(generateMappingStep);
         const dataSignals = (mappingResult as any)?.dataSignals;

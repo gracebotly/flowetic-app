@@ -9,20 +9,10 @@ import type { DataSignals } from '../lib/layout/dataSignals';
 // Used to resolve selectedStyleBundleId → design tokens
 // Design selection now handled by designSystemWorkflow + ui-ux-pro-max skill
 // ============================================================================
-/**
- * STYLE_BUNDLE_TOKENS — DEPRECATED.
- * Kept as empty record for backward compatibility with savePreviewVersion imports.
- * All design tokens now come from designSystemWorkflow → CSV data.
- * If no custom tokens exist, the system should trigger the design workflow,
- * NOT fall back to hardcoded presets.
- */
-export const STYLE_BUNDLE_TOKENS: Record<string, {
-  colors: { primary: string; secondary: string; success: string; warning: string; error: string; background: string; text: string };
-  fonts: { heading: string; body: string };
-  spacing: { unit: number };
-  radius: number;
-  shadow: string;
-}> = {};
+// Wolf V2 Phase 3: STYLE_BUNDLE_TOKENS deleted.
+// All design tokens come from designSystemWorkflow → CSV data.
+// savePreviewVersion no longer imports this — it validates via layoutSkeletonId
+// and known bundle ID allowlist instead.
 
 // ============================================================================
 // Template component blueprints — deterministic base per template type
@@ -129,6 +119,14 @@ function cleanEntityName(raw: string): string {
     .replace(/\boperations\b/gi, 'Runs')
     .replace(/\bassistant\b/gi, 'Agent')
     .replace(/\bassistants\b/gi, 'Agents');
+
+  // Wolf V2 Phase 3: Sanitize against HTML/JS injection in component IDs and titles.
+  // Entity names flow into spec_json component IDs and dashboard titles — unsanitized
+  // input like <script>alert(1)</script> would be dangerous in rendered previews.
+  cleaned = cleaned
+    .replace(/[<>'"&]/g, '')   // Remove HTML/JS injection chars
+    .replace(/[{}()]/g, '')    // Remove template literal injection chars
+    .substring(0, 100);        // Length limit to prevent abuse
 
   return cleaned || 'Dashboard';
 }
@@ -943,7 +941,13 @@ export const generateUISpec = createTool({
     // If runDesignSystemWorkflow ran and persisted tokens, they're loaded into RC.
     // Use them directly — no preset resolution needed.
     const customTokensJson = context?.requestContext?.get('designTokens') as string;
-    let styleTokens: typeof STYLE_BUNDLE_TOKENS[string];
+    let styleTokens: {
+      colors: { primary: string; secondary: string; success: string; warning: string; error: string; background: string; text: string };
+      fonts: { heading: string; body: string };
+      spacing: { unit: number };
+      radius: number;
+      shadow: string;
+    };
     let styleBundleId: string;
 
     if (customTokensJson) {

@@ -1292,6 +1292,7 @@ export async function POST(req: Request) {
 
             // If DB had a legacy phase, update it to the new name
             if (normalizedPhase !== sessionRow.mode) {
+              console.warn(`[api/chat] ⚠️ LEGACY PHASE DETECTED: "${sessionRow.mode}" → "${normalizedPhase}". Session: ${sessionRow.id}. This session was created under the old 6-phase journey. Migrating to 3-phase.`);
               await supabase
                 .from('journey_sessions')
                 .update({ mode: normalizedPhase, updated_at: new Date().toISOString() })
