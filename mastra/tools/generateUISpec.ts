@@ -378,6 +378,8 @@ function buildDashboardComponentsFromSkeleton(
                 valueField: m[field.name] || field.name,
                 aggregation: field.aggregation,
                 icon: idx === 0 ? 'activity' : idx === 1 ? 'check-circle' : 'clock',
+                variant: layoutHints.statusIndicators && field.shape === 'status' ? 'status-indicator' : 'default',
+                showTrend: layoutHints.realTimeUpdates || false,
               }),
               layout: { col: idx * kpiWidth, row, w: kpiWidth, h: section.compact ? 1 : 2 },
             });
@@ -414,6 +416,8 @@ function buildDashboardComponentsFromSkeleton(
               xAxisField: pickField(m, ['timestamp', 'created_at', 'time', 'date'], 'timestamp'),
               yAxisField: m[trendField.name] || trendField.name,
               aggregation: trendField.aggregation,
+              emphasisColor: layoutHints.emphasisColor || undefined,
+              showLiveIndicator: layoutHints.realTimeUpdates || false,
             }),
             layout: { col: colStart, row, w: width, h: sectionHeight > 2 ? sectionHeight : 3 },
           });
@@ -427,6 +431,8 @@ function buildDashboardComponentsFromSkeleton(
               categoryField: bdField ? (m[bdField.name] || bdField.name) : pickField(m, ['status', 'type', 'category'], 'status'),
               valueField: pickField(m, ['execution_id', 'run_id', 'id'], 'id'),
               aggregation: 'count',
+              emphasisColor: layoutHints.emphasisColor || undefined,
+              showLiveIndicator: layoutHints.realTimeUpdates || false,
             }),
             layout: { col: colStart, row, w: width, h: sectionHeight > 2 ? sectionHeight : 3 },
           });
@@ -454,15 +460,17 @@ function buildDashboardComponentsFromSkeleton(
         break;
       }
       case 'feed': {
+        const feedType = layoutHints.realTimeUpdates ? 'StatusFeed' : 'DataTable';
         components.push({
           id: `feed-${row}`,
-          type: 'DataTable',
+          type: feedType,
           propsBuilder: (m) => ({
             title: `Live ${shortEntityNoun(entity)} Feed`,
             columns: active.slice(0, 5).map(f => ({ key: f.name, label: humanizeFieldName(f.name) })),
             pageSize: 15,
             sortable: true,
             defaultSort: { field: pickField(m, ['timestamp', 'created_at', 'time'], 'timestamp'), direction: 'desc' },
+            pollingInterval: layoutHints.realTimeUpdates ? 30000 : undefined,
           }),
           layout: { col: 0, row, w: 12, h: 4 },
         });
@@ -1102,6 +1110,10 @@ export const generateUISpec = createTool({
       layout: bp.layout,
     }));
 
+    const specLayoutHints = extractLayoutHints(
+      (inputData.designPatterns ?? []) as Array<{ content: string; source: string; score: number }>
+    );
+
     const parsedCustomForMeta = customTokensJson ? JSON.parse(customTokensJson) : {};
     const entity = cleanEntityName(resolvedEntityName);
     const skeleton = skeletonId ? getSkeleton(skeletonId) : null;
@@ -1143,6 +1155,9 @@ export const generateUISpec = createTool({
           skeletonBreakpoints: skeleton?.breakpoints,
           designPatternsUsed: inputData.designPatterns?.length || 0,
         } : {}),
+        preferDarkMode: specLayoutHints.preferDarkMode || false,
+        realTimeUpdates: specLayoutHints.realTimeUpdates || false,
+        statusIndicators: specLayoutHints.statusIndicators || false,
       },
     };
 
