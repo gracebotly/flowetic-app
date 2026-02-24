@@ -89,7 +89,11 @@ export const masterRouterAgent: Agent = new Agent({
     skillMD: z.string().optional(),
 
     // Journey state (OPTIONAL)
-    phase: z.enum(['select_entity', 'recommend', 'style', 'build_preview', 'interactive_edit', 'deploy']).optional(),
+    // Primary phases (current 3-phase architecture):
+    //   propose, build_edit, deploy
+    // Legacy phases (kept for backward compatibility with old DB sessions + phase-tool-gating):
+    //   select_entity, recommend, style, build_preview, interactive_edit
+    phase: z.enum(['propose', 'build_edit', 'deploy', 'select_entity', 'recommend', 'style', 'build_preview', 'interactive_edit']).optional(),
     // Accepts any outcome category string - frontend maps template IDs to categories
     // Valid values: 'dashboard', 'product' (see OUTCOME_CATALOG in src/data/outcomes.ts)
     selectedOutcome: z.string().optional().nullable(),

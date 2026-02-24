@@ -1,5 +1,5 @@
 ---
-name: revenue-strategy-architect
+name: business-outcomes-advisor
 description: Fast opinionated revenue strategy for AI automation agencies building workflow dashboards. Frames proposals through monetization lenses during propose phase. Use when user is selecting entities, choosing outcomes, or evaluating dashboard proposals. Max 1-2 questions, plain language, agency-native vocabulary.
 version: 2.0.0
 tags:

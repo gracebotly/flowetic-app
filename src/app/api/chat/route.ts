@@ -1256,7 +1256,7 @@ export async function POST(req: Request) {
                 .update({ mode: normalizedPhase, updated_at: new Date().toISOString() })
                 .eq('id', sessionRow.id)
                 .eq('tenant_id', tenantId);
-              console.log('[api/chat] Migrated legacy phase:', { from: sessionRow.mode, to: normalizedPhase });
+              console.log('[api/chat] ✅ Migrated legacy 6-phase → 3-phase:', { from: sessionRow.mode, to: normalizedPhase });
             }
           } else {
             // Bad data in DB — don't let it crash the agent
