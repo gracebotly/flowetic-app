@@ -3,7 +3,7 @@ import React from "react";
 import type { RendererProps } from "../componentRegistry";
 import { buildCardStyle, getIconSymbol } from "../componentRegistry";
 
-export function MetricCardRenderer({ component, designTokens: dt, deviceMode, isEditing, onClick }: RendererProps) {
+export function MetricCardRenderer({ component, designTokens: dt, isEditing, onClick }: RendererProps) {
   const primary = dt.colors?.primary ?? "#3b82f6";
   const accent = dt.colors?.accent ?? "#14B8A6";
   const textColor = dt.colors?.text ?? "#111827";
@@ -19,14 +19,14 @@ export function MetricCardRenderer({ component, designTokens: dt, deviceMode, is
   return (
     <div className={`h-full border transition-all duration-200 ${isEditing ? "cursor-pointer hover:border-blue-400 hover:shadow-md" : ""}`} style={cardStyle} data-component-type="MetricCard" onClick={isEditing ? onClick : undefined} role={isEditing ? "button" : undefined} tabIndex={isEditing ? 0 : undefined} aria-label={isEditing ? `Edit ${title}` : undefined}>
       <div style={{ height: "4px", background: `linear-gradient(90deg, ${primary}, ${accent || primary}dd)`, borderRadius: `${dt.borderRadius ?? 8}px ${dt.borderRadius ?? 8}px 0 0` }} />
-      <div className={deviceMode === "mobile" ? "p-3" : "p-5"}>
+      <div className="p-3 @[300px]:p-4 @[400px]:p-5">
         <div className="flex items-center justify-between mb-3">
           <span className="text-xs font-medium uppercase tracking-wider" style={{ color: `${textColor}88`, fontFamily: bodyFont || undefined, letterSpacing: "0.05em" }}>{title}</span>
           {props?.icon && (
             <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs" style={{ backgroundColor: `${primary}15`, color: primary }}>{getIconSymbol(props.icon)}</div>
           )}
         </div>
-        <div className={`${deviceMode === "mobile" ? "text-2xl" : "text-3xl"} font-bold tracking-tight`} style={{ color: hasRealValue ? textColor : `${textColor}40`, fontFamily: headingFont || undefined, lineHeight: 1.2 }}>{value}</div>
+        <div className="text-2xl @[300px]:text-3xl font-bold tracking-tight" style={{ color: hasRealValue ? textColor : `${textColor}40`, fontFamily: headingFont || undefined, lineHeight: 1.2 }}>{value}</div>
         {subtitle && <div className="text-sm mt-1.5" style={{ color: `${textColor}66`, fontFamily: bodyFont || undefined }}>{subtitle}</div>}
         {props?.showTrend && props?.trend && (
           <div className="flex items-center gap-1 mt-2 text-xs" style={{ color: props.trend === "up" ? "#22c55e" : props.trend === "down" ? "#ef4444" : `${textColor}66` }}>

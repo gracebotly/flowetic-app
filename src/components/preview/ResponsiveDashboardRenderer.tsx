@@ -2,6 +2,7 @@
 
 import React, { useMemo } from "react";
 import dynamic from "next/dynamic";
+import { motion } from "framer-motion";
 import type { DeviceMode } from "@/components/vibe/editor";
 import { resolveComponentType, type ComponentSpec, type DesignTokens, type RendererProps } from "./componentRegistry";
 
@@ -185,18 +186,42 @@ export function ResponsiveDashboardRenderer({ spec, designTokens, deviceMode, is
     return (<div className="flex items-center justify-center h-64 text-gray-400" style={containerStyle}>{fontLink}<p>No components in this dashboard spec.</p></div>);
   }
 
-  // Mobile/Tablet: Stack vertically
+  // Mobile/Tablet: Stack vertically + container queries + staggered animations
   if (deviceMode === "mobile" || deviceMode === "tablet") {
     return (
       <div style={{ ...containerStyle, ...generateTokenCSS(effectiveTokens), fontFamily: bodyFont || undefined }} className="overflow-hidden">
         {fontLink}
         <div className="p-4">
-          {spec?.title && <h1 className="text-xl font-bold mb-4" style={{ color: textColor, fontFamily: headingFont || undefined }}>{spec.title}</h1>}
+          {spec?.title && (
+            <motion.h1
+              className="text-xl font-bold mb-4"
+              style={{ color: textColor, fontFamily: headingFont || undefined }}
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, ease: [0.25, 0.1, 0.25, 1.0] }}
+            >
+              {spec.title}
+            </motion.h1>
+          )}
           <div className="grid" style={{ gridTemplateColumns: `repeat(${columns}, 1fr)`, gap: `${gap}px` }}>
-            {sortedComponents.map((comp: ComponentSpec) => {
+            {sortedComponents.map((comp: ComponentSpec, index: number) => {
               const resolved = resolveComponentType(comp.type);
               const Renderer = getRenderer(resolved);
-              return <Renderer key={comp.id} component={{ ...comp, type: resolved }} designTokens={effectiveTokens} deviceMode={deviceMode} isEditing={isEditing} onClick={() => onWidgetClick?.(comp.id)} />;
+              return (
+                <motion.div
+                  key={comp.id}
+                  className="@container"
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{
+                    duration: 0.3,
+                    delay: index * 0.04,
+                    ease: [0.25, 0.1, 0.25, 1.0],
+                  }}
+                >
+                  <Renderer component={{ ...comp, type: resolved }} designTokens={effectiveTokens} deviceMode={deviceMode} isEditing={isEditing} onClick={() => onWidgetClick?.(comp.id)} />
+                </motion.div>
+              );
             })}
           </div>
         </div>
@@ -204,20 +229,44 @@ export function ResponsiveDashboardRenderer({ spec, designTokens, deviceMode, is
     );
   }
 
-  // Desktop: Full grid with positioning
+  // Desktop: Full grid with positioning + container queries + staggered animations
   return (
     <div style={{ ...containerStyle, ...generateTokenCSS(effectiveTokens), fontFamily: bodyFont || undefined }}>
       {fontLink}
       <div className="p-6">
-        {spec?.title && <h1 className="text-2xl font-bold mb-6" style={{ color: textColor, fontFamily: headingFont || undefined }}>{spec.title}</h1>}
+        {spec?.title && (
+          <motion.h1
+            className="text-2xl font-bold mb-6"
+            style={{ color: textColor, fontFamily: headingFont || undefined }}
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, ease: [0.25, 0.1, 0.25, 1.0] }}
+          >
+            {spec.title}
+          </motion.h1>
+        )}
         <div className="grid" style={{ gridTemplateColumns: `repeat(${baseColumns}, 1fr)`, gap: `${gap}px` }}>
-          {sortedComponents.map((comp: ComponentSpec) => {
+          {sortedComponents.map((comp: ComponentSpec, index: number) => {
             const resolved = resolveComponentType(comp.type);
             const Renderer = getRenderer(resolved);
             return (
-              <div key={comp.id} style={{ gridColumn: `${(comp.layout?.col ?? 0) + 1} / span ${comp.layout?.w ?? 4}`, gridRow: `${(comp.layout?.row ?? 0) + 1} / span ${comp.layout?.h ?? 2}` }}>
+              <motion.div
+                key={comp.id}
+                className="@container"
+                style={{
+                  gridColumn: `${(comp.layout?.col ?? 0) + 1} / span ${comp.layout?.w ?? 4}`,
+                  gridRow: `${(comp.layout?.row ?? 0) + 1} / span ${comp.layout?.h ?? 2}`,
+                }}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{
+                  duration: 0.3,
+                  delay: index * 0.05,
+                  ease: [0.25, 0.1, 0.25, 1.0],
+                }}
+              >
                 <Renderer component={{ ...comp, type: resolved }} designTokens={effectiveTokens} deviceMode={deviceMode} isEditing={isEditing} onClick={() => onWidgetClick?.(comp.id)} />
-              </div>
+              </motion.div>
             );
           })}
         </div>
