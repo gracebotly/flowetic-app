@@ -212,16 +212,18 @@ export class PhaseToolGatingProcessor implements Processor {
    * behavior based on which phase we're in and what step we're on.
    *
    * Rationale per phase:
+   * - propose step 0: Agent MUST call searchSkillKnowledge or getEventStats before
+   *   responding to follow-up questions. Grounds answers in BM25 knowledge instead of
+   *   hallucinating design tokens or layout recs. Initial propose message uses
+   *   deterministic bypass (handleDeterministicPropose in route.ts), so step-0
+   *   enforcement only applies to follow-up messages.
    * - select_entity step 0: Agent MUST call getEventStats or getDataDrivenEntities
    *   to discover what data exists. Without "required", it hallucinates entities.
    * - style step 0: Agent MUST call getStyleRecommendations or searchSkillKnowledge
    *   to load BM25 design knowledge. Without "required", it invents styles.
    * - build_preview step 0: Agent MUST call validatePreviewReadiness to check if
    *   all prerequisites are met before generating preview.
-   * - recommend: Purely conversational (outcome selection is deterministic in route.ts).
-   *   "auto" is correct here — no tool calls are required.
-   * - interactive_edit: User-driven refinements. "auto" lets agent decide whether
-   *   to call applySpecPatch based on user intent.
+   * - build_edit: "auto" — agent decides based on user intent (edits vs questions).
    * - deploy: Short phase, "auto" is fine.
    *
    * Safety valve: After (maxSteps - 1), force "none" to guarantee a text
@@ -234,12 +236,12 @@ export class PhaseToolGatingProcessor implements Processor {
   ): "auto" | "required" | "none" {
     // Phase-specific maxSteps (mirrors route.ts values)
     const PHASE_MAX_STEPS: Record<string, number> = {
-      propose: 4,      // Analysis lookup + answer questions about proposals
+      propose: 5,      // Step 0: forced tool call (searchSkillKnowledge/getEventStats) + answer questions about proposals
       build_edit: 10,   // Preview generation + iterative edits
       deploy: 3,
       // Legacy aliases (in case DB hasn't been migrated yet)
       select_entity: 4,
-      recommend: 4,
+      recommend: 5,
       style: 4,
       build_preview: 10,
       interactive_edit: 10,
@@ -256,7 +258,14 @@ export class PhaseToolGatingProcessor implements Processor {
     }
     // Phases where the LLM MUST call a tool on step 0.
     // These are phases where skipping tool calls produces hallucinated output.
+    // NOTE: "propose" is included because the initial propose message uses a
+    // deterministic bypass in route.ts (handleDeterministicPropose), so step-0
+    // enforcement only affects FOLLOW-UP questions in the propose phase.
+    // This forces the agent to call searchSkillKnowledge or getEventStats
+    // before responding to user questions, grounding answers in BM25 knowledge
+    // instead of hallucinating design tokens or layout recommendations.
     const TOOL_REQUIRED_FIRST_STEP: Set<string> = new Set([
+      "propose",        // Must call searchSkillKnowledge/getEventStats for follow-up questions
       "select_entity",  // Must call getEventStats/getDataDrivenEntities
       "style",          // Must call getStyleRecommendations/searchSkillKnowledge
       "build_preview",  // Must call validatePreviewReadiness

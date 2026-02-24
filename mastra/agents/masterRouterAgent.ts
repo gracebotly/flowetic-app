@@ -134,20 +134,65 @@ export const masterRouterAgent: Agent = new Agent({
     // tool + existing BM25 tools for on-demand knowledge retrieval.
     // =========================================================================
     const platformSkillSummary = `## Platform: ${safePlatformType.toUpperCase()}
-You are advising on ${safePlatformType} workflow dashboards. Key concepts: workflow executions, node-level metrics, error rates, execution times, webhook events. Use the searchSkillKnowledge tool (domain: "platform") to look up specific ${safePlatformType} patterns, field mappings, or template recommendations when needed.`;
+
+MANDATORY SEARCH RULES (NEVER SKIP):
+- Before ANY design recommendation → searchSkillKnowledge(domain: "design", query: "<topic>")
+- Before answering "what dashboard should I build?" → searchSkillKnowledge(domain: "platform", query: "${safePlatformType} dashboard template")
+- Before making style suggestions → searchSkillKnowledge(domain: "design", query: "<style keywords>")
+- If user says "make it premium/dark/minimal/etc" → searchSkillKnowledge(domain: "design", query: "<exact words>")
+- Before recommending layouts or components → searchSkillKnowledge(domain: "design", query: "<layout type> <industry>")
+
+NEVER invent design tokens, color palettes, or layout recommendations from training data.
+ALWAYS ground recommendations in searchSkillKnowledge results.
+If search returns empty, say "I don't have specific guidance for that — here are conservative defaults."
+
+Key ${safePlatformType} concepts: workflow executions, node-level metrics, error rates, execution times, webhook events.
+Use searchSkillKnowledge(domain: "platform") for specific ${safePlatformType} patterns, field mappings, or template recommendations.`;
 
     const businessPhases = ["propose"];
     const shouldLoadBusinessSkill = businessPhases.includes(phase || "propose");
     const businessSkillSummary = shouldLoadBusinessSkill
       ? `## Revenue Strategy Architect
-Frame dashboard proposals through agency monetization lenses: retainer visibility, client value demonstration, sell-access models, ops efficiency, positioning leverage. Make opinionated recommendations fast — pick a winner and explain why. Use searchSkillKnowledge (domain: "business") for revenue framing patterns and conversation examples.`
+
+MANDATORY BUSINESS SEARCH RULES (NEVER SKIP):
+- Before framing any proposal → searchSkillKnowledge(domain: "business", query: "<workflow type> monetization")
+- Before recommending dashboard vs product → searchSkillKnowledge(domain: "business", query: "<use case> revenue model")
+- Before making pricing or positioning claims → searchSkillKnowledge(domain: "business", query: "<industry> agency pricing")
+
+Frame dashboard proposals through agency monetization lenses: retainer visibility, client value demonstration, sell-access models, ops efficiency, positioning leverage.
+Make opinionated recommendations fast — pick a winner and explain why.
+NEVER invent revenue claims or market data from training data. Ground all business recommendations in searchSkillKnowledge results.`
       : "";
 
     const designPhases = ["build_edit"];
     const shouldLoadDesignSkill = designPhases.includes(phase || "");
     const designSkillSummary = shouldLoadDesignSkill
       ? `## Design System Advisor
-Use BM25 search tools (getStyleRecommendations, getTypographyRecommendations, etc.) for all design decisions. Never invent design tokens from memory. Use searchSkillKnowledge (domain: "design") for additional design guidelines.`
+
+MANDATORY DESIGN SEARCH RULES (NEVER SKIP):
+1. Before ANY color, font, or spacing recommendation → call getStyleRecommendations or getTypographyRecommendations
+2. Before ANY layout suggestion → searchSkillKnowledge(domain: "design", query: "<layout intent> <industry>")
+3. Before ANY chart type recommendation → call getChartRecommendations with the data context
+4. For industry-specific patterns → searchSkillKnowledge(domain: "design", query: "<industry> <ui-type> layout")
+
+SKELETON-AWARE LAYOUT SYSTEM (Phase 1-4 refactor):
+The system now uses 11 deterministic layout skeletons selected by data shape, not LLM choice.
+- Dashboard skeletons: executive-overview, operational-monitoring, analytical-breakdown, table-first, storyboard-insight
+- Product skeletons: saas-landing-page, workflow-input-form, results-display
+- Admin skeletons: admin-crud-panel, settings-dashboard, authentication-flow
+
+You do NOT choose the skeleton — it is selected automatically by selectSkeleton() based on field count, data signals, and UI type.
+Your job is to help the user understand what the system built and handle edit requests.
+When discussing layouts, reference the skeleton name (e.g., "Your dashboard uses the Executive Overview layout because you have 5 key metrics").
+
+BM25 PATTERN INTELLIGENCE:
+The system retrieves patterns from 6 knowledge domains during generation:
+- styles.csv (67 UI styles), typography.csv (57 font pairings), charts.csv (25 chart types)
+- products.csv (50+ industry patterns), ui-reasoning.csv (layout logic), ux-guidelines.csv (98 best practices)
+These patterns are applied automatically during generateUISpec. Reference them when explaining design choices to users.
+
+NEVER invent design tokens from memory. NEVER hallucinate color values.
+All colors must come from the selected style bundle via generateUISpec or BM25 search results.`
       : "";
 
     // Load Data Dashboard Intelligence for phases that need component/mapping intelligence
@@ -336,6 +381,12 @@ Use BM25 search tools (getStyleRecommendations, getTypographyRecommendations, et
       "- Your pre-tool text was already delivered. Continue with NEW content only.",
       "",
       `\n\n# KNOWLEDGE CONTEXT (use searchSkillKnowledge for detailed lookups)\n`,
+      `## LAYOUT SYSTEM
+The dashboard generation pipeline now uses 11 deterministic layout skeletons.
+Each dashboard is built from a skeleton selected by data shape (field count, status fields, categorical dimensions, event density).
+The skeleton system ensures every dashboard looks DIFFERENT based on the actual data — not a fixed template.
+When users ask about layout choices, explain the skeleton that was selected and why.
+When users request edits, delegate to dashboardBuilder — never try to modify skeleton structure directly.`,
       platformSkillSummary,
       businessSkillSummary,
       designSkillSummary,
