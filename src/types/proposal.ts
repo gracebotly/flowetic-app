@@ -127,5 +127,15 @@ export interface ProposalsPayload {
     platformType: string;
     selectedEntities: string;
     archetype: Archetype;
+    dataAvailability?: {
+      totalEvents: number;
+      eventTypes: string[];
+      availableFields: string[];
+      fieldShapes: Record<string, 'status' | 'timestamp' | 'duration' | 'identifier' | 'text' | 'numeric'>;
+      dataRichness: 'rich' | 'moderate' | 'sparse' | 'minimal';
+      canSupportTimeseries: boolean;
+      canSupportBreakdowns: boolean;
+      usableFieldCount: number;
+    };
   };
 }

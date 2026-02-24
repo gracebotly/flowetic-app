@@ -23,6 +23,139 @@ import type {
 } from '@/types/proposal';
 import { classifyArchetype, ARCHETYPE_TITLE_TEMPLATES } from './classifyArchetype';
 
+// ─── Data Availability Assessment ─────────────────────────────────────────
+// Queries actual event data BEFORE generating proposals to ensure
+// proposals only promise what the data can deliver.
+
+interface DataAvailability {
+  totalEvents: number;
+  eventTypes: string[];
+  availableFields: string[];
+  fieldShapes: Record<string, 'status' | 'timestamp' | 'duration' | 'identifier' | 'text' | 'numeric'>;
+  dataRichness: 'rich' | 'moderate' | 'sparse' | 'minimal';
+  canSupportTimeseries: boolean;
+  canSupportBreakdowns: boolean;
+  usableFieldCount: number;
+}
+
+function inferFieldShape(fieldName: string, sampleValue: unknown): DataAvailability['fieldShapes'][string] {
+  const name = fieldName.toLowerCase();
+  if (name.includes('status') || name.includes('state') || name.includes('result') || name.includes('outcome')) return 'status';
+  if (name.includes('_at') || name.includes('time') || name.includes('date') || name.includes('timestamp')) return 'timestamp';
+  if (name.includes('duration') || name.includes('elapsed') || name.includes('_ms') || name.includes('_seconds')) return 'duration';
+  if (name.includes('_id') || name === 'id') return 'identifier';
+  if (typeof sampleValue === 'number') return 'numeric';
+  return 'text';
+}
+
+function humanizeLabel(fieldName: string): string {
+  return fieldName
+    .replace(/_/g, ' ')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/\b\w/g, c => c.toUpperCase());
+}
+
+async function assessDataAvailability(
+  supabase: any,
+  tenantId: string,
+  sourceId?: string,
+): Promise<DataAvailability> {
+  try {
+    let query = supabase
+      .from('events')
+      .select('type, labels, state, timestamp', { count: 'exact' })
+      .eq('tenant_id', tenantId)
+      .order('timestamp', { ascending: false })
+      .limit(50);
+
+    if (sourceId) {
+      query = query.eq('source_id', sourceId);
+    }
+
+    const { data: events, count } = await query;
+    const totalEvents = typeof count === 'number' ? count : (events?.length ?? 0);
+
+    if (!events || events.length === 0) {
+      return {
+        totalEvents: 0,
+        eventTypes: [],
+        availableFields: [],
+        fieldShapes: {},
+        dataRichness: 'minimal',
+        canSupportTimeseries: false,
+        canSupportBreakdowns: false,
+        usableFieldCount: 0,
+      };
+    }
+
+    const eventTypes = [...new Set(events.map((e: any) => e.type).filter(Boolean))] as string[];
+    const fieldSet = new Set<string>();
+    const fieldSamples: Record<string, unknown> = {};
+
+    for (const event of events) {
+      if (event.labels && typeof event.labels === 'object') {
+        for (const [key, value] of Object.entries(event.labels)) {
+          fieldSet.add(key);
+          if (!fieldSamples[key]) fieldSamples[key] = value;
+        }
+      }
+      if (event.state && typeof event.state === 'object') {
+        for (const [key, value] of Object.entries(event.state)) {
+          fieldSet.add(key);
+          if (!fieldSamples[key]) fieldSamples[key] = value;
+        }
+      }
+    }
+
+    const availableFields = [...fieldSet];
+    const fieldShapes: Record<string, DataAvailability['fieldShapes'][string]> = {};
+    for (const field of availableFields) {
+      fieldShapes[field] = inferFieldShape(field, fieldSamples[field]);
+    }
+
+    const timestampFields = availableFields.filter(f => fieldShapes[f] === 'timestamp');
+    const statusFields = availableFields.filter(f => fieldShapes[f] === 'status');
+    const usableFieldCount = availableFields.filter(f => fieldShapes[f] !== 'identifier').length;
+
+    const canSupportTimeseries = timestampFields.length > 0 || totalEvents >= 5;
+    const canSupportBreakdowns = statusFields.length > 0 || eventTypes.length > 1;
+
+    let dataRichness: DataAvailability['dataRichness'];
+    if (usableFieldCount >= 10 && eventTypes.length >= 3) {
+      dataRichness = 'rich';
+    } else if (usableFieldCount >= 6 && eventTypes.length >= 2) {
+      dataRichness = 'moderate';
+    } else if (usableFieldCount >= 3 || totalEvents >= 5) {
+      dataRichness = 'sparse';
+    } else {
+      dataRichness = 'minimal';
+    }
+
+    return {
+      totalEvents,
+      eventTypes,
+      availableFields,
+      fieldShapes,
+      dataRichness,
+      canSupportTimeseries,
+      canSupportBreakdowns,
+      usableFieldCount,
+    };
+  } catch (err) {
+    console.error('[assessDataAvailability] Error querying events:', err);
+    return {
+      totalEvents: 0,
+      eventTypes: [],
+      availableFields: [],
+      fieldShapes: {},
+      dataRichness: 'minimal',
+      canSupportTimeseries: false,
+      canSupportBreakdowns: false,
+      usableFieldCount: 0,
+    };
+  }
+}
+
 // ─── Types for workflow integration ───────────────────────────────────────
 
 interface DesignSystemWorkflowInput {
@@ -52,6 +185,10 @@ interface GenerateProposalsInput {
   mastra: any;
   /** Optional RequestContext to pass through to workflow runs */
   requestContext?: any;
+  /** Supabase client for data availability queries */
+  supabase?: any;
+  /** Source ID to scope event queries */
+  sourceId?: string;
 }
 
 interface GenerateProposalsResult {
@@ -76,11 +213,31 @@ function buildWireframeLayout(
   blend: EmphasisBlend,
   entities: string[],
   proposalIndex: number,
+  dataAvailability?: DataAvailability | null,
 ): WireframeLayout {
   const components: WireframeComponent[] = [];
-  const entityLabels = entities.length > 0
-    ? entities
-    : ['Metric 1', 'Metric 2', 'Metric 3'];
+  let entityLabels: string[];
+  if (dataAvailability && dataAvailability.usableFieldCount > 0) {
+    const shapes = dataAvailability.fieldShapes;
+    const labels: string[] = [];
+    const statusField = dataAvailability.availableFields.find(f => shapes[f] === 'status');
+    const durationField = dataAvailability.availableFields.find(f => shapes[f] === 'duration');
+    const timestampField = dataAvailability.availableFields.find(f => shapes[f] === 'timestamp');
+    const numericField = dataAvailability.availableFields.find(f => shapes[f] === 'numeric');
+
+    if (statusField) labels.push('Success Rate');
+    if (durationField) labels.push('Avg Duration');
+    if (timestampField) labels.push('Runs Over Time');
+    if (numericField) labels.push(humanizeLabel(numericField));
+    if (labels.length === 0) labels.push('Total Events');
+
+    while (labels.length < 3) labels.push(`Metric ${labels.length + 1}`);
+    entityLabels = labels;
+  } else {
+    entityLabels = entities.length > 0
+      ? entities
+      : ['Metric 1', 'Metric 2', 'Metric 3'];
+  }
 
   // Dominant emphasis determines the layout pattern
   const dominant = blend.dashboard >= blend.product && blend.dashboard >= blend.analytics
@@ -293,6 +450,36 @@ export async function generateProposals(
     signals: classification.matchedSignals,
   });
 
+  let dataAvailability: DataAvailability | null = null;
+  let proposalCount = 3;
+
+  if (input.supabase) {
+    dataAvailability = await assessDataAvailability(
+      input.supabase,
+      input.tenantId,
+      input.sourceId,
+    );
+
+    console.log(`[generateProposals] Data availability: ${dataAvailability.dataRichness} — ${dataAvailability.totalEvents} events, ${dataAvailability.usableFieldCount} usable fields, types: [${dataAvailability.eventTypes.join(', ')}]`);
+
+    switch (dataAvailability.dataRichness) {
+      case 'minimal':
+        proposalCount = 1;
+        break;
+      case 'sparse':
+        proposalCount = 2;
+        break;
+      case 'moderate':
+        proposalCount = Math.min(3, dataAvailability.eventTypes.length >= 2 ? 3 : 2);
+        break;
+      case 'rich':
+        proposalCount = 3;
+        break;
+    }
+
+    console.log(`[generateProposals] Will generate ${proposalCount} proposals (data richness: ${dataAvailability.dataRichness})`);
+  }
+
   // Step 2: Get the design system workflow
   const workflow = input.mastra?.getWorkflow?.('designSystemWorkflow');
   if (!workflow) {
@@ -348,7 +535,7 @@ export async function generateProposals(
   const proposals: Proposal[] = [];
   const titles = classification.titleTemplates;
 
-  for (let index = 0; index < classification.blendPresets.length; index++) {
+  for (let index = 0; index < Math.min(classification.blendPresets.length, proposalCount); index++) {
     const blend = classification.blendPresets[index];
     const title = titles[index] || `Proposal ${index + 1}`;
     const workflowStart = Date.now();
@@ -384,7 +571,7 @@ export async function generateProposals(
           archetype: classification.archetype,
           emphasisBlend: blend,
           designSystem: normalizeDesignSystem(data.designSystem),
-          wireframeLayout: buildWireframeLayout(blend, entities, index),
+          wireframeLayout: buildWireframeLayout(blend, entities, index, dataAvailability),
           reasoning: data.reasoning || '',
         });
       } else {
@@ -396,7 +583,7 @@ export async function generateProposals(
           archetype: classification.archetype,
           emphasisBlend: blend,
           designSystem: normalizeDesignSystem({}),
-          wireframeLayout: buildWireframeLayout(blend, entities, index),
+          wireframeLayout: buildWireframeLayout(blend, entities, index, dataAvailability),
           reasoning: 'Design system generation encountered an error. Please try regenerating.',
         });
       }
@@ -410,7 +597,7 @@ export async function generateProposals(
         archetype: classification.archetype,
         emphasisBlend: blend,
         designSystem: normalizeDesignSystem({}),
-        wireframeLayout: buildWireframeLayout(blend, entities, index),
+        wireframeLayout: buildWireframeLayout(blend, entities, index, dataAvailability),
         reasoning: 'Design system generation encountered an error. Please try regenerating.',
       });
     }
@@ -428,11 +615,12 @@ export async function generateProposals(
       platformType: input.platformType,
       selectedEntities: input.selectedEntities,
       archetype: classification.archetype,
+      dataAvailability: dataAvailability || undefined,
     },
   };
 
   const totalMs = Date.now() - totalStart;
-  console.log(`[generateProposals] ✅ Generated ${proposals.length} proposals in ${totalMs}ms`);
+  console.log(`[generateProposals] ✅ Generated ${proposals.length}/${proposalCount} proposals in ${totalMs}ms (data: ${dataAvailability?.dataRichness ?? 'unknown'})`);
 
   return {
     success: true,
