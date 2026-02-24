@@ -236,16 +236,16 @@ const synthesizeDesignSystem = createStep({
         skillActivated: true,
         rawPatterns: {
           styles: styleResults.slice(0, 2).map(r => ({
-            content: Object.values(r).join(' | ').substring(0, 500),
-            score: 0.8,
+            content: Object.values(r).join(' | ').split('\n').slice(0, 8).join('\n').substring(0, 500),
+            score: Number(r._score || r.score || 0.8),
           })),
           ux: uxResults.slice(0, 3).map(r => ({
             content: r["Guideline"] || r["Description"] || Object.values(r).join(' | ').substring(0, 500),
-            score: 0.7,
+            score: Number(r._score || r.score || 0.7),
           })),
           product: productResults.slice(0, 2).map(r => ({
             content: r["Product Type"] || r["Description"] || Object.values(r).join(' | ').substring(0, 500),
-            score: 0.6,
+            score: Number(r._score || r.score || 0.6),
           })),
         },
       };
@@ -360,16 +360,16 @@ const synthesizeDesignSystem = createStep({
           skillActivated: true,
           rawPatterns: {
             styles: styleResults.slice(0, 2).map(r => ({
-              content: Object.values(r).join(' | ').substring(0, 500),
-              score: 0.8,
+              content: Object.values(r).join(' | ').split('\n').slice(0, 8).join('\n').substring(0, 500),
+              score: Number(r._score || r.score || 0.8),
             })),
             ux: uxResults.slice(0, 3).map(r => ({
               content: r["Guideline"] || r["Description"] || Object.values(r).join(' | ').substring(0, 500),
-              score: 0.7,
+              score: Number(r._score || r.score || 0.7),
             })),
             product: productResults.slice(0, 2).map(r => ({
               content: r["Product Type"] || r["Description"] || Object.values(r).join(' | ').substring(0, 500),
-              score: 0.6,
+              score: Number(r._score || r.score || 0.6),
             })),
           },
         };
@@ -403,16 +403,16 @@ const synthesizeDesignSystem = createStep({
       skillActivated: true,
       rawPatterns: {
         styles: styleResults.slice(0, 2).map(r => ({
-          content: Object.values(r).join(' | ').substring(0, 500),
-          score: 0.8,
+          content: Object.values(r).join(' | ').split('\n').slice(0, 8).join('\n').substring(0, 500),
+          score: Number(r._score || r.score || 0.8),
         })),
         ux: uxResults.slice(0, 3).map(r => ({
           content: r["Guideline"] || r["Description"] || Object.values(r).join(' | ').substring(0, 500),
-          score: 0.7,
+          score: Number(r._score || r.score || 0.7),
         })),
         product: productResults.slice(0, 2).map(r => ({
           content: r["Product Type"] || r["Description"] || Object.values(r).join(' | ').substring(0, 500),
-          score: 0.6,
+          score: Number(r._score || r.score || 0.6),
         })),
       },
     };
