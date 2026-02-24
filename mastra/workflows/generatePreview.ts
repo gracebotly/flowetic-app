@@ -273,6 +273,7 @@ const generateUISpecStep = createStep({
       throw new Error('SPEC_GENERATION_FAILED');
     }
     
+    const initData = getInitData() as GeneratePreviewInput;
     const templateId = templateResult.templateId;
     const mappings = mappingResult.mappings;
     const platformType = (requestContext.get("platformType") || 'make') as SelectTemplatePlatformType;
@@ -281,6 +282,46 @@ const generateUISpecStep = createStep({
     // Get field analysis and chart recommendations from the new skill-driven mapping
     const fieldAnalysis = (mappingResult as { fieldAnalysis?: unknown }).fieldAnalysis;
     const mappingChartRecs = (mappingResult as { chartRecommendations?: unknown }).chartRecommendations;
+
+    // ── FIX: Load design tokens from DB if missing from RequestContext ────────
+    // Mastra workflow execution can lose RequestContext keys during step
+    // serialization. The DB is the source of truth for design tokens.
+    if (!requestContext.get('designTokens')) {
+      console.warn('[generateUISpecStep] designTokens missing from RequestContext — loading from DB');
+      const journeyThreadId = requestContext.get('journeyThreadId') as string;
+      const supabaseToken = requestContext.get('supabaseAccessToken') as string;
+      const stepTenantId = initData.tenantId || requestContext.get('tenantId') as string;
+
+      if (journeyThreadId && supabaseToken && stepTenantId) {
+        try {
+          const { createAuthenticatedClient } = await import('../lib/supabase');
+          const supabase = createAuthenticatedClient(supabaseToken);
+          const { data: session } = await supabase
+            .from('journey_sessions')
+            .select('design_tokens')
+            .eq('thread_id', journeyThreadId)
+            .eq('tenant_id', stepTenantId)
+            .maybeSingle();
+
+          if (session?.design_tokens) {
+            requestContext.set('designTokens', JSON.stringify(session.design_tokens));
+            requestContext.set('designSystemGenerated', 'true');
+            const dbTokens = session.design_tokens as {
+              style?: { name?: string };
+              colors?: { primary?: string };
+            };
+            console.log('[generateUISpecStep] ✅ Loaded design tokens from DB:', {
+              styleName: dbTokens?.style?.name,
+              primary: dbTokens?.colors?.primary,
+            });
+          } else {
+            console.error('[generateUISpecStep] ❌ No design tokens in DB either');
+          }
+        } catch (dbErr) {
+          console.error('[generateUISpecStep] Failed to load design tokens from DB:', dbErr);
+        }
+      }
+    }
 
     const result = await callTool(generateUISpec,
       {

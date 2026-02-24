@@ -380,7 +380,7 @@ async function handleDeterministicPropose(params: {
   try {
     const { data: existingSession } = await supabase
       .from('journey_sessions')
-      .select('proposals, selected_entities, selected_outcome, source_id')
+      .select('proposals, selected_entities, selected_outcome, source_id, entity_id')
       .eq('thread_id', journeyThreadId)
       .eq('tenant_id', tenantId)
       .maybeSingle();
@@ -414,25 +414,66 @@ async function handleDeterministicPropose(params: {
       return null;
     }
 
-    const { data: source } = await supabase
-      .from('source_entities')
-      .select('id, platform_type, name')
+    // ─── FIX: Use BOTH source_id (sources table) and entity_id (source_entities table) ───
+    // journey_sessions.source_id → sources table (has platform type)
+    // journey_sessions.entity_id → source_entities table (has workflow name)
+    //
+    // Previous bug: queried source_entities with source_id UUID, which belongs
+    // to the sources table. Result was always null → "Source not found, falling back to agent".
+
+    // Step 1: Get platform type from sources table
+    const { data: sourceRow } = await supabase
+      .from('sources')
+      .select('id, type, name')
       .eq('id', existingSession.source_id)
       .eq('tenant_id', tenantId)
       .maybeSingle();
 
-    if (!source) {
-      console.log('[deterministic-propose] Source not found, falling back to agent');
+    if (!sourceRow) {
+      console.log('[deterministic-propose] Source not found in sources table, falling back to agent');
       return null;
     }
 
-    const workflowName = source.name || 'Dashboard';
-    const platformType = source.platform_type || 'other';
-    const selectedEntities = existingSession.selected_entities
-      ? (Array.isArray(existingSession.selected_entities)
+    // Step 2: Get workflow name from source_entities table (if entity_id exists)
+    let workflowName = sourceRow.name || 'Dashboard';
+    const platformType = sourceRow.type || 'other';
+
+    if (existingSession.entity_id) {
+      const { data: entityRow } = await supabase
+        .from('source_entities')
+        .select('id, entity_kind, display_name, external_id')
+        .eq('id', existingSession.entity_id)
+        .eq('tenant_id', tenantId)
+        .maybeSingle();
+
+      if (entityRow?.display_name) {
+        workflowName = entityRow.display_name;
+        console.log('[deterministic-propose] Resolved entity:', {
+          entityId: entityRow.id,
+          displayName: entityRow.display_name,
+          entityKind: entityRow.entity_kind,
+        });
+      }
+    }
+
+    console.log('[deterministic-propose] Resolved source + entity:', {
+      sourceId: existingSession.source_id,
+      entityId: existingSession.entity_id || '(none)',
+      platformType,
+      workflowName: workflowName.substring(0, 60),
+    });
+
+    // Build selectedEntities from session data or fall back to entity display name
+    let selectedEntities = '';
+    if (existingSession.selected_entities) {
+      selectedEntities = Array.isArray(existingSession.selected_entities)
         ? existingSession.selected_entities.map((e: any) => e.name || e).join(', ')
-        : String(existingSession.selected_entities))
-      : '';
+        : String(existingSession.selected_entities);
+    } else if (workflowName && workflowName !== 'Dashboard') {
+      // If no explicit entity selection, use the workflow name as a hint
+      // This prevents generateProposals from running with empty entity context
+      selectedEntities = workflowName;
+    }
 
     console.log('[deterministic-propose] Starting proposal generation:', {
       workflowName: workflowName.substring(0, 50),
@@ -1885,12 +1926,19 @@ export async function POST(req: Request) {
             const designTokens = selectedProposal?.designSystem || null;
             const selectedOutcome = selectedProposal?.emphasisBlend?.product >= 0.5 ? 'product' : 'dashboard';
 
+            // Extract selected_entities from proposal context
+            // In 2-phase journey, entities are embedded in the proposal generation context
+            const proposalEntities = proposalSession.proposals?.context?.selectedEntities
+              || proposalSession.proposals?.proposals?.[selectedIndex]?.context?.selectedEntities
+              || null;
+
             await supabase
               .from('journey_sessions')
               .update({
                 selected_proposal_index: selectedIndex,
                 design_tokens: designTokens,
                 selected_outcome: selectedOutcome,
+                selected_entities: proposalEntities,
                 schema_ready: true,
                 updated_at: new Date().toISOString(),
               })

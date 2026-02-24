@@ -79,7 +79,8 @@ export const runGeneratePreviewWorkflow = createTool({
 
       if (session) {
         const missing: string[] = [];
-        if (session.mode !== 'build_preview') missing.push(`phase is "${session.mode}" (must be "build_preview")`);
+        const validPreviewPhases = ['build_edit', 'build_preview', 'interactive_edit'];
+        if (!validPreviewPhases.includes(session.mode)) missing.push(`phase is "${session.mode}" (must be one of: ${validPreviewPhases.join(', ')})`);
         if (!session.selected_outcome) missing.push('selectedOutcome not set');
         if (!session.selected_style_bundle_id && !session.design_tokens) missing.push('design system not set');
         if (!session.schema_ready) missing.push('schema not ready');
@@ -92,7 +93,7 @@ export const runGeneratePreviewWorkflow = createTool({
             success: false,
             error: "PHASE_GUARD",
             message: `Cannot generate preview: ${missing.join('; ')}. ` +
-              `Complete the journey phases (select_entity → recommend → style → build_preview) first.`,
+              `Complete the journey phases (select_entity → recommend → style → build_edit) first.`,
             currentPhase: session.mode,
           };
         }
@@ -100,14 +101,15 @@ export const runGeneratePreviewWorkflow = createTool({
     } else {
       // If we can't verify from DB, check RequestContext phase as fallback
       const currentPhase = context?.requestContext?.get('phase') as string;
-      if (currentPhase && currentPhase !== 'build_preview') {
+      const validFallbackPhases = ['build_edit', 'build_preview', 'interactive_edit'];
+      if (currentPhase && !validFallbackPhases.includes(currentPhase)) {
         console.error(
           `[runGeneratePreviewWorkflow] PHASE GUARD (fallback): phase="${currentPhase}", blocked.`
         );
         return {
           success: false,
           error: "PHASE_GUARD",
-          message: `Cannot generate preview from phase "${currentPhase}". Must be in "build_preview" phase.`,
+          message: `Cannot generate preview from phase "${currentPhase}". Must be in "build_edit" phase.`,
           currentPhase,
         };
       }

@@ -315,7 +315,7 @@ export async function generateProposals(
     };
   }
 
-  // Step 3: Run 3 design system workflows in parallel with variety params
+  // Step 3: Run 3 design system workflows sequentially with variety params
   const dsStart = Date.now();
   const entities = input.selectedEntities
     .split(',')
@@ -329,7 +329,30 @@ export async function generateProposals(
     `${classification.archetype} analytics data-dense detailed`,
   ];
 
-  const workflowPromises = classification.blendPresets.map(async (blend, index) => {
+  // ── Run 3 design system workflows SEQUENTIALLY ──────────────────────
+  //
+  // WHY SEQUENTIAL (not parallel):
+  // Each workflow's synthesize step calls designAdvisorAgent.generate(),
+  // which hits the Gemini API. Running 3 parallel LLM calls to the same
+  // API key caused the 3rd call to hang indefinitely — Gemini's rate
+  // limit doesn't return 429, the connection just stalls. This was the
+  // root cause of the 504 timeout: Promise.allSettled waited forever
+  // for a promise that would never resolve.
+  //
+  // Sequential execution adds ~20-30s but guarantees every call gets a
+  // clean API window. 45s that completes > 15s that times out at 300s.
+  //
+  // FUTURE OPTIMIZATION: Split gather (BM25, no LLM) from synthesis
+  // (LLM). Run 3 gathers in parallel, then 3 syntheses sequentially.
+
+  const proposals: Proposal[] = [];
+  const titles = classification.titleTemplates;
+
+  for (let index = 0; index < classification.blendPresets.length; index++) {
+    const blend = classification.blendPresets[index];
+    const title = titles[index] || `Proposal ${index + 1}`;
+    const workflowStart = Date.now();
+
     try {
       const run = await workflow.createRun();
       const result = await run.start({
@@ -349,66 +372,53 @@ export async function generateProposals(
         requestContext: input.requestContext,
       } as any);
 
+      const elapsed = Date.now() - workflowStart;
+
       if (result.status === 'success' && result.result) {
         const data = result.result as any;
-        return {
-          success: true,
-          designSystem: data.designSystem,
+        console.log(`[generateProposals] Workflow ${index} ✅ completed in ${elapsed}ms — "${data.designSystem?.style?.name || 'unnamed'}"`);
+        proposals.push({
+          index,
+          title,
+          pitch: generatePitch(blend, classification.archetype),
+          archetype: classification.archetype,
+          emphasisBlend: blend,
+          designSystem: normalizeDesignSystem(data.designSystem),
+          wireframeLayout: buildWireframeLayout(blend, entities, index),
           reasoning: data.reasoning || '',
-        } as DesignSystemResult & { success: true };
+        });
+      } else {
+        console.error(`[generateProposals] Workflow ${index} ❌ failed (status: ${result.status}) in ${elapsed}ms — this should not happen with sequential execution. Check Gemini API key and model availability.`);
+        proposals.push({
+          index,
+          title,
+          pitch: generatePitch(blend, classification.archetype),
+          archetype: classification.archetype,
+          emphasisBlend: blend,
+          designSystem: normalizeDesignSystem({}),
+          wireframeLayout: buildWireframeLayout(blend, entities, index),
+          reasoning: 'Design system generation encountered an error. Please try regenerating.',
+        });
       }
-
-      console.warn(`[generateProposals] Workflow ${index} failed:`, result.status);
-      return { success: false as const, index };
     } catch (err: any) {
-      console.error(`[generateProposals] Workflow ${index} error:`, err?.message);
-      return { success: false as const, index };
-    }
-  });
-
-  const results = await Promise.allSettled(workflowPromises);
-  const dsMs = Date.now() - dsStart;
-
-  console.log(`[generateProposals] Design workflows completed in ${dsMs}ms`);
-
-  // Step 4: Assemble proposals from results
-  const proposals: Proposal[] = [];
-  const titles = classification.titleTemplates;
-
-  for (let i = 0; i < classification.blendPresets.length; i++) {
-    const result = results[i];
-    const blend = classification.blendPresets[i];
-    const title = titles[i] || `Proposal ${i + 1}`;
-
-    if (result.status === 'fulfilled' && (result.value as any).success) {
-      const ds = (result.value as any) as DesignSystemResult;
-
+      const elapsed = Date.now() - workflowStart;
+      console.error(`[generateProposals] Workflow ${index} ❌ error after ${elapsed}ms:`, err?.message);
       proposals.push({
-        index: i,
-        title,
-        pitch: generatePitch(blend, classification.archetype),
-        archetype: classification.archetype,
-        emphasisBlend: blend,
-        designSystem: normalizeDesignSystem(ds.designSystem),
-        wireframeLayout: buildWireframeLayout(blend, entities, i),
-        reasoning: ds.reasoning,
-      });
-    } else {
-      // Fallback: still create a proposal with default design tokens
-      // This ensures the user always sees 3 cards even if one workflow fails
-      console.warn(`[generateProposals] Using fallback for proposal ${i}`);
-      proposals.push({
-        index: i,
+        index,
         title,
         pitch: generatePitch(blend, classification.archetype),
         archetype: classification.archetype,
         emphasisBlend: blend,
         designSystem: normalizeDesignSystem({}),
-        wireframeLayout: buildWireframeLayout(blend, entities, i),
-        reasoning: 'Generated with default design tokens (workflow fallback).',
+        wireframeLayout: buildWireframeLayout(blend, entities, index),
+        reasoning: 'Design system generation encountered an error. Please try regenerating.',
       });
     }
   }
+
+  const dsMs = Date.now() - dsStart;
+  const successCount = proposals.filter(p => p.reasoning && !p.reasoning.includes('error')).length;
+  console.log(`[generateProposals] All 3 design workflows completed in ${dsMs}ms (${successCount}/3 succeeded)`);
 
   const payload: ProposalsPayload = {
     proposals,
