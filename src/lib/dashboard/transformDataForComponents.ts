@@ -43,6 +43,15 @@ export function transformDataForComponents(
     if (normalizedType === "DataTable") {
       return enrichDataTable(component, events);
     }
+    if (normalizedType === "InsightCard") {
+      return enrichInsightCard(component, events);
+    }
+    if (normalizedType === "StatusFeed") {
+      return enrichStatusFeed(component, events);
+    }
+    if (normalizedType === "CRUDTable") {
+      return enrichCRUDTable(component, events);
+    }
 
     return component;
   });
@@ -211,6 +220,52 @@ function enrichDataTable(component: ComponentSpec, events: FlatEvent[]): Compone
   };
 }
 
+function enrichInsightCard(component: ComponentSpec, events: FlatEvent[]): ComponentSpec {
+  const { props } = component;
+  if (!events.length) return component;
+  const valueField = props?.valueField || "value";
+  const values = events.map((e) => Number(e[valueField])).filter((n) => !isNaN(n));
+  if (values.length === 0) return component;
+  const avg = Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 100) / 100;
+  const halfLen = Math.ceil(values.length / 2);
+  const recent = values.slice(-halfLen);
+  const recentAvg = recent.reduce((a, b) => a + b, 0) / Math.max(recent.length, 1);
+  const trend = recentAvg > avg * 1.02 ? "up" : recentAvg < avg * 0.98 ? "down" : "stable";
+  const trendPct = Math.abs(Math.round(((recentAvg - avg) / Math.max(avg, 1)) * 100));
+  return {
+    ...component,
+    props: {
+      ...props,
+      computedValue: typeof avg === "number" ? formatMetricValue(avg, valueField) : String(avg),
+      trend,
+      trendDelta: `${trendPct}%`,
+      narrative: `${props?.title || "Metric"} is trending ${trend} with ${events.length} data points.`,
+    },
+  };
+}
+
+function enrichStatusFeed(component: ComponentSpec, events: FlatEvent[]): ComponentSpec {
+  const { props } = component;
+  if (!events.length) return component;
+  const statusField = props?.statusField || "status";
+  const timeField = props?.timeField || "created_at";
+  const messageField = props?.messageField || "name";
+  const feedItems = events
+    .sort((a, b) => new Date(b[timeField] || 0).getTime() - new Date(a[timeField] || 0).getTime())
+    .slice(0, 10)
+    .map((e) => ({
+      status: String(e[statusField] || "unknown"),
+      timestamp: e[timeField] || "",
+      message: String(e[messageField] || e.id || "—"),
+    }));
+  return { ...component, props: { ...props, feedItems } };
+}
+
+function enrichCRUDTable(component: ComponentSpec, events: FlatEvent[]): ComponentSpec {
+  const enriched = enrichDataTable(component, events);
+  return { ...enriched, props: { ...enriched.props, showActions: true } };
+}
+
 function normalizeType(rawType: string): string {
   const map: Record<string, string> = {
     "kpi-card": "MetricCard", kpi_card: "MetricCard", kpi: "MetricCard",
@@ -224,6 +279,10 @@ function normalizeType(rawType: string): string {
     table: "DataTable",
     "timeseries-chart": "TimeseriesChart", TimeseriesChart: "TimeseriesChart",
     "area-chart": "AreaChart", AreaChart: "AreaChart",
+    // Wolf V2: new component types
+    "insight-card": "InsightCard", InsightCard: "InsightCard",
+    "status-feed": "StatusFeed", StatusFeed: "StatusFeed",
+    "crud-table": "CRUDTable", CRUDTable: "CRUDTable",
   };
   return map[rawType] || rawType;
 }

@@ -1033,7 +1033,7 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
           kind: (
             comp.type === "MetricCard" || comp.type === "kpi-card" || comp.type === "kpi" || comp.type === "kpi_card" || comp.type === "metric-card" ? "metric" as const :
             comp.type === "LineChart" || comp.type === "BarChart" || comp.type === "PieChart" || comp.type === "DonutChart" || comp.type === "AreaChart" || comp.type === "TimeseriesChart" || comp.type === "line-chart" || comp.type === "bar-chart" || comp.type === "pie-chart" ? "chart" as const :
-            comp.type === "DataTable" || comp.type === "data-table" || comp.type === "data_table" || comp.type === "table" ? "table" as const :
+            comp.type === "DataTable" || comp.type === "data-table" || comp.type === "data_table" || comp.type === "table" || comp.type === "CRUDTable" || comp.type === "crud-table" ? "table" as const :
             "other" as const
           ),
           enabled: !comp.props?.hidden,
@@ -2093,7 +2093,7 @@ return (
                           kind: (
                             comp.type === "MetricCard" || comp.type === "kpi-card" || comp.type === "kpi" || comp.type === "kpi_card" || comp.type === "metric-card" ? "metric" as const :
                             comp.type === "LineChart" || comp.type === "BarChart" || comp.type === "PieChart" || comp.type === "DonutChart" || comp.type === "AreaChart" || comp.type === "TimeseriesChart" || comp.type === "line-chart" || comp.type === "bar-chart" || comp.type === "pie-chart" ? "chart" as const :
-                            comp.type === "DataTable" || comp.type === "data-table" || comp.type === "data_table" || comp.type === "table" ? "table" as const :
+                            comp.type === "DataTable" || comp.type === "data-table" || comp.type === "data_table" || comp.type === "table" || comp.type === "CRUDTable" || comp.type === "crud-table" ? "table" as const :
                             "other" as const
                           ),
                           enabled: !comp.props?.hidden,
