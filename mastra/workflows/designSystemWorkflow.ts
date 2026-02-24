@@ -299,6 +299,7 @@ const synthesizeDesignSystem = createStep({
       const result = await agent.generate(prompt, {
         maxSteps: 1,
         toolChoice: "none",
+        abortSignal: AbortSignal.timeout(90_000), // 90s — Gemini API can hang indefinitely (known bug)
       });
       const text = result.text || "";
       const jsonMatch = text.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/)?.[1] || text.match(/\{[\s\S]*\}/)?.[0];
