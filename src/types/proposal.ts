@@ -184,5 +184,14 @@ export interface ProposalsPayload {
       naturalSummary?: string;
       timeSpanHours?: number;
     };
+    /** Goal Explorer metadata for debugging and observability */
+    goalExplorer?: {
+      source: 'llm' | 'fallback';
+      reasoning: string;
+      explorerMs: number;
+      dataSummary: string;
+      goalCount: number;
+      goalTitles: string[];
+    };
   };
 }

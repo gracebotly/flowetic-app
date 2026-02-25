@@ -16,7 +16,8 @@
 // Called from: generateProposals.ts (replaces classifyArchetype as primary)
 // ============================================================================
 
-import { generateText } from 'ai';
+import { generateObject } from 'ai';
+import { z } from 'zod';
 import { getModelById } from './models/modelSelector';
 import { classifyArchetype } from './classifyArchetype';
 import type {
@@ -135,93 +136,32 @@ const VALID_ARCHETYPES: Archetype[] = [
   'data_integration', 'client_reporting', 'ai_automation', 'general',
 ];
 
-const VALID_CHART_TYPES = [
-  'kpi', 'line_chart', 'bar_chart', 'pie_chart', 'table', 'funnel', 'timeline', 'status_grid',
-] as const;
+// ─── Zod schema for structured LLM output ─────────────────────────────────
+// Using generateObject() with a Zod schema prevents truncated JSON,
+// enforces types at the provider level, and eliminates parse failures.
 
-function parseExplorerResponse(
-  raw: string,
-  data: DataAvailability,
-): { category: Archetype; confidence: number; reasoning: string; proposalCount: number; goals: ProposalGoal[] } | null {
-  try {
-    // Strip markdown fences if present
-    const cleaned = raw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
-    const parsed = JSON.parse(cleaned);
-
-    // Validate category
-    const category: Archetype = VALID_ARCHETYPES.includes(parsed.category)
-      ? parsed.category
-      : 'general';
-
-    // Validate confidence
-    const confidence = typeof parsed.confidence === 'number'
-      ? Math.min(1, Math.max(0, parsed.confidence))
-      : 0.5;
-
-    // Validate reasoning
-    const reasoning = typeof parsed.reasoning === 'string'
-      ? parsed.reasoning
-      : 'LLM provided no reasoning.';
-
-    // Validate proposalCount against data constraints
-    let proposalCount = typeof parsed.proposalCount === 'number'
-      ? Math.min(3, Math.max(1, Math.round(parsed.proposalCount)))
-      : 1;
-
-    // Enforce our data-richness caps regardless of what the LLM says
-    if (data.totalEvents < 10) proposalCount = Math.min(proposalCount, 1);
-    else if (data.totalEvents < 50 || data.dataRichness === 'sparse') proposalCount = Math.min(proposalCount, 2);
-
-    // Validate goals
-    const goals: ProposalGoal[] = [];
-    if (Array.isArray(parsed.goals)) {
-      for (const goal of parsed.goals.slice(0, proposalCount)) {
-        const title = typeof goal.title === 'string' ? goal.title : `Proposal ${goals.length + 1}`;
-        const pitch = typeof goal.pitch === 'string' ? goal.pitch : '';
-
-        // Validate focusMetrics exist in actual data
-        const focusMetrics = Array.isArray(goal.focusMetrics)
-          ? goal.focusMetrics.filter((m: string) =>
-              data.availableFields.includes(m) || ['totalEvents', 'eventTypes'].includes(m)
-            )
-          : [];
-
-        // Validate chart types
-        const chartTypes = Array.isArray(goal.chartTypes)
-          ? goal.chartTypes.filter((ct: string) =>
-              VALID_CHART_TYPES.includes(ct as any)
-            )
-          : ['kpi'];
-
-        // Validate emphasis blend
-        let emphasis: EmphasisBlend = { dashboard: 0.6, product: 0.2, analytics: 0.2 };
-        if (goal.emphasis && typeof goal.emphasis === 'object') {
-          const d = Number(goal.emphasis.dashboard) || 0;
-          const p = Number(goal.emphasis.product) || 0;
-          const a = Number(goal.emphasis.analytics) || 0;
-          const total = d + p + a;
-          if (total > 0) {
-            emphasis = {
-              dashboard: Math.round((d / total) * 100) / 100,
-              product: Math.round((p / total) * 100) / 100,
-              analytics: Math.round((a / total) * 100) / 100,
-            };
-          }
-        }
-
-        goals.push({ title, pitch, focusMetrics, chartTypes, emphasis });
-      }
-    }
-
-    // If LLM returned no valid goals, fail to fallback
-    if (goals.length === 0) return null;
-
-    return { category, confidence, reasoning, proposalCount: goals.length, goals };
-  } catch (err) {
-    console.error('[goalExplorer] Failed to parse LLM response:', err);
-    return null;
-  }
-}
+const GoalExplorerOutputSchema = z.object({
+  category: z.enum([
+    'ops_monitoring', 'lead_pipeline', 'voice_analytics', 'content_automation',
+    'data_integration', 'client_reporting', 'ai_automation', 'general',
+  ]),
+  confidence: z.number().min(0).max(1),
+  reasoning: z.string(),
+  proposalCount: z.number().int().min(1).max(3),
+  goals: z.array(z.object({
+    title: z.string(),
+    pitch: z.string(),
+    focusMetrics: z.array(z.string()),
+    chartTypes: z.array(z.enum([
+      'kpi', 'line_chart', 'bar_chart', 'pie_chart', 'table', 'funnel', 'timeline', 'status_grid',
+    ])),
+    emphasis: z.object({
+      dashboard: z.number(),
+      product: z.number(),
+      analytics: z.number(),
+    }),
+  })).min(1).max(3),
+});
 
 // ─── Build fallback result from classifyArchetype ─────────────────────────
 
@@ -246,14 +186,51 @@ function buildFallbackResult(
     }
   }
 
+  // ── Derive chartTypes from data (data-aware fallback) ─────────────
+  // Even without an LLM, we know what the data supports.
+  // This ensures fallback proposals have rich wireframes, not just a KPI stub.
+  const fallbackChartTypes: Array<'kpi' | 'line_chart' | 'bar_chart' | 'pie_chart' | 'table' | 'status_grid'> = ['kpi'];
+  if (data?.canSupportTimeseries) {
+    fallbackChartTypes.push('line_chart');
+  }
+  if (data?.canSupportBreakdowns) {
+    fallbackChartTypes.push('bar_chart');
+  }
+  if ((data?.usableFieldCount ?? 0) > 3) {
+    fallbackChartTypes.push('table');
+  }
+  // If status field exists, add status_grid
+  if (data?.fieldShapes && Object.values(data.fieldShapes).includes('status')) {
+    fallbackChartTypes.push('status_grid');
+  }
+
+  // ── Derive focusMetrics from field shapes ─────────────────────────
+  const fallbackFocusMetrics: string[] = [];
+  if (data?.availableFields) {
+    for (const field of data.availableFields) {
+      const shape = data.fieldShapes[field];
+      // Include status, duration, numeric, and timestamp fields — skip identifiers and generic text
+      if (shape && ['status', 'duration', 'numeric', 'timestamp'].includes(shape)) {
+        fallbackFocusMetrics.push(field);
+      }
+    }
+  }
+
+  // ── Derive pitch from data ────────────────────────────────────────
+  const fallbackPitch = data
+    ? `Track ${data.totalEvents} ${data.eventTypes.join('/')} events across ${data.usableFieldCount} data dimensions.${
+        data.canSupportTimeseries ? ' Includes time-series trends.' : ''
+      }${data.canSupportBreakdowns ? ' Supports categorical breakdowns.' : ''}`
+    : '';
+
   // Convert archetype presets → ProposalGoal[]
   const goals: ProposalGoal[] = classification.blendPresets
     .slice(0, proposalCount)
     .map((blend, i) => ({
       title: classification.titleTemplates[i] || `Proposal ${i + 1}`,
-      pitch: '', // generateProposals will use generatePitch() as before
-      focusMetrics: [],
-      chartTypes: ['kpi' as const],
+      pitch: fallbackPitch,
+      focusMetrics: fallbackFocusMetrics,
+      chartTypes: fallbackChartTypes,
       emphasis: blend,
     }));
 
@@ -307,44 +284,90 @@ export async function exploreGoals(
   const dataSummary = buildDataSummary(workflowName, platformType, selectedEntities, data);
   console.log(`[goalExplorer] Data summary:\n${dataSummary}`);
 
-  // ── Call LLM (LIDA Goal Explorer step) ────────────────────────────
-  try {
-    const model = getModelById('gemini-3-pro-preview');
-    const prompt = buildExplorerPrompt(dataSummary);
+  // ── Call LLM with structured output (retry once on failure) ───────
+  const model = getModelById('gemini-3-pro-preview');
+  const prompt = buildExplorerPrompt(dataSummary);
 
-    const result = await generateText({
-      model,
-      prompt,
-      maxOutputTokens: 800,
-      temperature: 0.3, // Low temperature for consistent structured output
-    });
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const result = await generateObject({
+        model,
+        schema: GoalExplorerOutputSchema,
+        prompt,
+        temperature: attempt === 0 ? 0.3 : 0, // Retry with temp 0
+        maxOutputTokens: 1500,
+      });
 
-    const elapsed = Date.now() - start;
-    console.log(`[goalExplorer] LLM responded in ${elapsed}ms (${result.text.length} chars)`);
+      const elapsed = Date.now() - start;
+      const obj = result.object;
+      console.log(`[goalExplorer] LLM responded in ${elapsed}ms (attempt ${attempt + 1})`);
 
-    // ── Parse and validate ───────────────────────────────────────────
-    const parsed = parseExplorerResponse(result.text, data);
+      // ── Validate goals against actual data ───────────────────────
+      // Enforce data-richness caps regardless of what the LLM says
+      let proposalCount = obj.proposalCount;
+      if (data.totalEvents < 10) proposalCount = Math.min(proposalCount, 1);
+      else if (data.totalEvents < 50 || data.dataRichness === 'sparse') proposalCount = Math.min(proposalCount, 2);
 
-    if (!parsed) {
-      console.warn('[goalExplorer] LLM response unparseable — falling back to keyword classifier');
+      const goals: ProposalGoal[] = obj.goals.slice(0, proposalCount).map((goal) => {
+        // Validate focusMetrics exist in actual data
+        const focusMetrics = goal.focusMetrics.filter((m) =>
+          data.availableFields.includes(m) || ['totalEvents', 'eventTypes'].includes(m)
+        );
+
+        // Normalize emphasis to sum to 1.0
+        const d = goal.emphasis.dashboard || 0;
+        const p = goal.emphasis.product || 0;
+        const a = goal.emphasis.analytics || 0;
+        const total = d + p + a;
+        const emphasis: EmphasisBlend = total > 0
+          ? {
+              dashboard: Math.round((d / total) * 100) / 100,
+              product: Math.round((p / total) * 100) / 100,
+              analytics: Math.round((a / total) * 100) / 100,
+            }
+          : { dashboard: 0.6, product: 0.2, analytics: 0.2 };
+
+        return {
+          title: goal.title,
+          pitch: goal.pitch,
+          focusMetrics,
+          chartTypes: goal.chartTypes,
+          emphasis,
+        };
+      });
+
+      if (goals.length === 0) {
+        console.warn(`[goalExplorer] LLM returned 0 valid goals (attempt ${attempt + 1})`);
+        continue; // Retry
+      }
+
+      console.log(`[goalExplorer] ✅ LLM classified as "${obj.category}" (${obj.confidence}) with ${goals.length} goals`);
+
+      return {
+        category: VALID_ARCHETYPES.includes(obj.category) ? obj.category : 'general',
+        confidence: Math.min(1, Math.max(0, obj.confidence)),
+        reasoning: obj.reasoning || 'LLM provided no reasoning.',
+        proposalCount: goals.length,
+        goals,
+        dataSummary,
+        explorerMs: elapsed,
+        source: 'llm' as const,
+      };
+    } catch (err: unknown) {
+      const elapsed = Date.now() - start;
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`[goalExplorer] LLM call failed (attempt ${attempt + 1}) after ${elapsed}ms:`, message);
+
+      if (attempt === 0) {
+        console.log('[goalExplorer] Retrying with temperature 0...');
+        continue;
+      }
+
+      // Both attempts failed — fall back
       return buildFallbackResult(workflowName, platformType, selectedEntities, data, dataSummary, elapsed);
     }
-
-    console.log(`[goalExplorer] ✅ LLM classified as "${parsed.category}" (${parsed.confidence}) with ${parsed.goals.length} goals`);
-
-    return {
-      category: parsed.category,
-      confidence: parsed.confidence,
-      reasoning: parsed.reasoning,
-      proposalCount: parsed.goals.length,
-      goals: parsed.goals,
-      dataSummary,
-      explorerMs: elapsed,
-      source: 'llm',
-    };
-  } catch (err: any) {
-    const elapsed = Date.now() - start;
-    console.error(`[goalExplorer] LLM call failed after ${elapsed}ms:`, err?.message);
-    return buildFallbackResult(workflowName, platformType, selectedEntities, data, dataSummary, elapsed);
   }
+
+  // Should not reach here, but safety fallback
+  return buildFallbackResult(workflowName, platformType, selectedEntities, data, dataSummary, Date.now() - start);
 }
