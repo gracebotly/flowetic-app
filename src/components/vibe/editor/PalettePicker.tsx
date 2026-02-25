@@ -40,8 +40,8 @@ export function PalettePicker({
       <div className="grid grid-cols-2 gap-3">
         {palettes.map((palette) => {
           const isSelected = selectedId === palette.id;
-          const visibleSwatches = palette.swatches.slice(0, MAX_VISIBLE_SWATCHES);
-          const hiddenCount = Math.max(0, palette.swatches.length - MAX_VISIBLE_SWATCHES);
+          const visibleSwatches = (palette.swatches || []).slice(0, MAX_VISIBLE_SWATCHES);
+          const hiddenCount = Math.max(0, (palette.swatches || []).length - MAX_VISIBLE_SWATCHES);
 
           return (
             <button
@@ -105,7 +105,7 @@ export function PalettePicker({
 
               {/* Hover tooltip with full palette */}
               <AnimatePresence>
-                {hoveredId === palette.id && palette.swatches.length > MAX_VISIBLE_SWATCHES && (
+                {hoveredId === palette.id && (palette.swatches || []).length > MAX_VISIBLE_SWATCHES && (
                   <motion.div
                     initial={{ opacity: 0, y: 5 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -113,7 +113,7 @@ export function PalettePicker({
                     className="absolute left-0 right-0 top-full mt-2 p-3 bg-white border border-gray-200 rounded-lg shadow-lg z-20"
                   >
                     <div className="flex flex-wrap gap-1.5">
-                      {palette.swatches.map((swatch, index) => (
+                      {(palette.swatches || []).map((swatch, index) => (
                         <div
                           key={index}
                           className="flex items-center gap-1.5"
