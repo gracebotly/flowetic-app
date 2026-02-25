@@ -28,6 +28,42 @@ export const ComponentType = z.enum([
 
 export type ComponentType = z.infer<typeof ComponentType>;
 
+// Phase 3: Component type alias resolution during normalization
+// This map mirrors componentRegistry.ts TYPE_ALIASES (server-side copy for Mastra tools)
+const TYPE_ALIASES: Record<string, string> = {
+  "kpi-card": "MetricCard", kpi_card: "MetricCard", kpi: "MetricCard",
+  "metric-card": "MetricCard",
+  "line-chart": "LineChart", line_chart: "LineChart", chart: "LineChart",
+  "bar-chart": "BarChart", bar_chart: "BarChart",
+  "pie-chart": "PieChart", pie_chart: "PieChart",
+  "donut-chart": "DonutChart", donut_chart: "DonutChart",
+  "data-table": "DataTable", data_table: "DataTable", table: "DataTable",
+  "timeseries-chart": "TimeseriesChart",
+  "area-chart": "AreaChart",
+  "insight-card": "InsightCard",
+  "status-feed": "StatusFeed",
+  "empty-state": "EmptyStateCard", "empty-state-card": "EmptyStateCard", empty_state: "EmptyStateCard",
+  "hero-section": "HeroSection",
+  "feature-grid": "FeatureGrid",
+  "pricing-cards": "PricingCards",
+  "cta-section": "CTASection",
+  "social-proof-bar": "SocialProofBar",
+  "page-header": "PageHeader",
+  "filter-bar": "FilterBar",
+  "crud-table": "CRUDTable",
+  "auth-form": "AuthForm",
+  "brand-visual": "BrandVisual",
+};
+
+function resolveTypeAlias(rawType: string): string {
+  if (TYPE_ALIASES[rawType]) return TYPE_ALIASES[rawType];
+  const normalized = rawType.toLowerCase().replace(/[-_\s]/g, "");
+  for (const [alias, canonical] of Object.entries(TYPE_ALIASES)) {
+    if (alias.toLowerCase().replace(/[-_\s]/g, "") === normalized) return canonical;
+  }
+  return rawType;
+}
+
 // ── Layout schema ──────────────────────────────────────────────────────
 export const LayoutSchema = z.object({
   col: z.number(),
@@ -39,9 +75,8 @@ export const LayoutSchema = z.object({
 // ── Component schema ───────────────────────────────────────────────────
 export const ComponentSchema = z.object({
   id: z.string(),
-  type: z.string(), // NOTE: kept as z.string() for Phase 1 backward compat.
-  // Phase 3 will tighten to ComponentType.
-  props: z.record(z.any()),
+  type: ComponentType, // Phase 3: strict allowlist enforcement
+  props: z.record(z.any()), // Phase 3: prop sanitization handled by propSchemas.ts at render/persist boundaries
   layout: LayoutSchema,
 });
 
@@ -104,6 +139,7 @@ export function normalizeSpec(raw: Record<string, unknown>): Record<string, unkn
 
   let componentCorrections = 0;
   spec.components = (spec.components as any[]).map((comp: any) => {
+    comp.type = resolveTypeAlias(comp.type || "MetricCard");
     const needsProps = comp.props == null;
     const needsLayout = !comp.layout?.col && comp.layout?.col !== 0
       || !comp.layout?.row && comp.layout?.row !== 0

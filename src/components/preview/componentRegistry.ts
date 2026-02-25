@@ -1,6 +1,7 @@
 "use client";
 
 import type { DeviceMode } from "@/components/vibe/editor";
+import { sanitizeProps } from "@/lib/spec/propSchemas";
 
 // ============================================================================
 // Shared types for all component renderers
@@ -92,19 +93,26 @@ const KNOWN_TYPES = new Set([
   "EmptyStateCard",
 ]);
 
-export function resolveComponentType(rawType: string): string {
+export function resolveComponentType(rawType: string): string | null {
   if (TYPE_ALIASES[rawType]) return TYPE_ALIASES[rawType];
   if (KNOWN_TYPES.has(rawType)) return rawType;
   const normalized = rawType.toLowerCase().replace(/[-_\s]/g, "");
   for (const [alias, canonical] of Object.entries(TYPE_ALIASES)) {
     if (alias.toLowerCase().replace(/[-_\s]/g, "") === normalized) return canonical;
   }
-  return rawType; // Unknown — FallbackCard will handle it
+  // Phase 3: Reject unknown types instead of passing through
+  console.warn(`[componentRegistry] ⚠️ Unknown component type rejected: "${rawType}"`);
+  return null;
 }
 
 export function isKnownType(resolvedType: string): boolean {
   return KNOWN_TYPES.has(resolvedType);
 }
+
+// ============================================================================
+// Prop sanitization (Phase 3)
+// ============================================================================
+export { sanitizeProps };
 
 // ============================================================================
 // Icon helper (shared across renderers)

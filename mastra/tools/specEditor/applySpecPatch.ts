@@ -4,6 +4,7 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { OptionalAuditContextSchema } from "../../lib/REQUEST_CONTEXT_CONTRACT";
 import { normalizeSpec } from "../../lib/spec/uiSpecSchema";
+import { ComponentType } from "../../lib/spec/uiSpecSchema";
 
 const LayoutSchema = z.object({
   col: z.number().int().min(0),
@@ -190,6 +191,14 @@ export const applySpecPatch = createTool({
       if (op.op === "addComponent") {
         ensureComponentsArray();
         if (!op.component) throw new Error("PATCH_INVALID_COMPONENT");
+        // Phase 3: Validate component type against allowlist
+        const typeCheck = ComponentType.safeParse(op.component.type);
+        if (!typeCheck.success) {
+          throw new Error(
+            `INVALID_COMPONENT_TYPE: "${op.component.type}" is not in the component allowlist. ` +
+            `Valid types: ${ComponentType.options.join(', ')}`
+          );
+        }
         const exists = spec.components.some((c: any) => c?.id === op.component!.id);
         if (exists) throw new Error(`DUPLICATE_COMPONENT_ID:${op.component.id}`);
         spec.components.push(op.component);

@@ -4,7 +4,7 @@ import React, { useMemo } from "react";
 import dynamic from "next/dynamic";
 import { motion } from "framer-motion";
 import type { DeviceMode } from "@/components/vibe/editor";
-import { deriveMuted, deriveSurface, isColorDark, resolveComponentType, type ComponentSpec, type DesignTokens, type RendererProps } from "./componentRegistry";
+import { deriveMuted, deriveSurface, isColorDark, resolveComponentType, sanitizeProps, type ComponentSpec, type DesignTokens, type RendererProps } from "./componentRegistry";
 
 // Dashboard components (always loaded — 90% of renders)
 import { MetricCardRenderer } from "./components/MetricCard";
@@ -25,7 +25,6 @@ const PageHeaderRenderer = dynamic(() => import("./components/PageHeader"), { ss
 const FilterBarRenderer = dynamic(() => import("./components/FilterBar"), { ssr: false });
 const CRUDTableRenderer = dynamic(() => import("./components/CRUDTable"), { ssr: false });
 const AuthFormRenderer = dynamic(() => import("./components/AuthForm"), { ssr: false });
-const FallbackCardRenderer = dynamic(() => import("./components/FallbackCard"), { ssr: false });
 
 // ── Renderer map ──
 const RENDERER_MAP: Record<string, React.ComponentType<RendererProps>> = {
@@ -43,8 +42,13 @@ const RENDERER_MAP: Record<string, React.ComponentType<RendererProps>> = {
   EmptyStateCard,
 };
 
-function getRenderer(resolvedType: string): React.ComponentType<RendererProps> {
-  return RENDERER_MAP[resolvedType] || (FallbackCardRenderer as any);
+function getRenderer(resolvedType: string): React.ComponentType<RendererProps> | null {
+  const renderer = RENDERER_MAP[resolvedType];
+  if (!renderer) {
+    console.warn(`[ResponsiveDashboardRenderer] ⚠️ No renderer registered for type: "${resolvedType}"`);
+    return null;
+  }
+  return renderer;
 }
 
 // ── Responsive helpers (preserved from original) ──
@@ -255,7 +259,9 @@ export function ResponsiveDashboardRenderer({ spec, designTokens, deviceMode, is
               const filledComponents = fillGridGaps(sortedComponents, baseColumns);
               return filledComponents.map((comp: ComponentSpec, index: number) => {
                 const resolved = resolveComponentType(comp.type);
+                if (!resolved) return null; // Phase 3: skip unknown component types
                 const Renderer = getRenderer(resolved);
+                if (!Renderer) return null; // Phase 3: skip unregistered renderers
                 // Tablet: wide components (w >= 7 out of 12) span full width
                 const tabletSpan = deviceMode === "tablet" && columns === 2
                   ? (comp.layout?.w ?? 4) >= 7 ? 2 : 1
@@ -273,7 +279,7 @@ export function ResponsiveDashboardRenderer({ spec, designTokens, deviceMode, is
                       ease: [0.25, 0.1, 0.25, 1.0],
                     }}
                   >
-                    <Renderer component={{ ...comp, type: resolved }} designTokens={effectiveTokens} deviceMode={deviceMode} isEditing={isEditing} onClick={() => onWidgetClick?.(comp.id)} />
+                    <Renderer component={{ ...comp, type: resolved, props: sanitizeProps(resolved, comp.props ?? {}) }} designTokens={effectiveTokens} deviceMode={deviceMode} isEditing={isEditing} onClick={() => onWidgetClick?.(comp.id)} />
                   </motion.div>
                 );
               });
@@ -357,7 +363,9 @@ export function ResponsiveDashboardRenderer({ spec, designTokens, deviceMode, is
             const filledComponents = fillGridGaps(sortedComponents, baseColumns);
             return filledComponents.map((comp: ComponentSpec, index: number) => {
               const resolved = resolveComponentType(comp.type);
+              if (!resolved) return null; // Phase 3: skip unknown component types
               const Renderer = getRenderer(resolved);
+              if (!Renderer) return null; // Phase 3: skip unregistered renderers
               return (
                 <motion.div
                   key={comp.id}
@@ -375,7 +383,7 @@ export function ResponsiveDashboardRenderer({ spec, designTokens, deviceMode, is
                     ease: [0.25, 0.1, 0.25, 1.0],
                   }}
                 >
-                  <Renderer component={{ ...comp, type: resolved }} designTokens={effectiveTokens} deviceMode={deviceMode} isEditing={isEditing} onClick={() => onWidgetClick?.(comp.id)} />
+                  <Renderer component={{ ...comp, type: resolved, props: sanitizeProps(resolved, comp.props ?? {}) }} designTokens={effectiveTokens} deviceMode={deviceMode} isEditing={isEditing} onClick={() => onWidgetClick?.(comp.id)} />
                 </motion.div>
               );
             });
