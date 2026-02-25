@@ -84,18 +84,37 @@ const gatherDesignData = createStep({
     excludeColorHexValues: z.array(z.string()).optional(),
   }),
   execute: async ({ inputData }) => {
-    // Build BM25 query: base context + user feedback for variety
-    const queryParts = [
-      inputData.workflowName,
-      inputData.platformType,
-      inputData.selectedOutcome,
-    ];
-    // Append user feedback to BM25 query for regeneration variety.
-    // Keywords like "darker", "premium", "minimal" shift BM25 ranking
-    // to surface different styles/colors than the initial generation.
+    // BUG 2B ISSUE B FIX: Build a focused BM25 query.
+    // Previously the FULL workflow name ("Template 1: Lead Qualification Pipeline
+    // with ROI Tracker") + platform + archetype created 15+ terms where shared
+    // noise dominated BM25 scoring. Both proposals got identical search results
+    // because most query terms were the same.
+    //
+    // Now: extract only distinguishing keywords. Workflow name is truncated to
+    // 4 meaningful words, platform name removed, and user feedback (the highest
+    // signal term) is passed through fully.
+    const queryParts: string[] = [];
+
+    // Extract meaningful keywords from workflow name (strip template numbers and platform names)
+    if (inputData.workflowName) {
+      const cleaned = inputData.workflowName
+        .replace(/template\s*\d+:?\s*/i, '')
+        .replace(/\b(n8n|make|zapier|vapi|retell)\b/gi, '')
+        .trim();
+      const words = cleaned.split(/\s+/).filter(w => w.length > 2).slice(0, 4);
+      if (words.length > 0) queryParts.push(words.join(' '));
+    }
+
+    // selectedOutcome is useful signal (e.g., "dashboard", "product")
+    if (inputData.selectedOutcome) {
+      queryParts.push(inputData.selectedOutcome);
+    }
+
+    // User feedback is the highest-signal term — pass it fully
     if (inputData.userFeedback) {
       queryParts.push(inputData.userFeedback);
     }
+
     const query = queryParts.filter(Boolean).join(" ");
     console.log(`[designSystemWorkflow:gather] BM25 query: "${query}"${inputData.excludeStyleNames?.length ? ` (excluding: ${inputData.excludeStyleNames.join(', ')})` : ''}`);
     // Load all CSVs
@@ -112,14 +131,17 @@ const gatherDesignData = createStep({
     const extraColorLimit = inputData.excludeColorHexValues?.length || 0;
     // BM25 rank all domains in parallel
     // When excluding, fetch MORE results so we have enough after filtering
+    // BUG 2B ISSUE A FIX: Increase limits from 3 to 8 for style/color/typography.
+    // With only 3 results, the LLM synthesizer always picks the "safest" match.
+    // 8 gives the LLM enough variety to differentiate proposals.
     const [rawStyleResults, rawColorResults, typographyResults, chartResults, uxResults, productResults] =
       await Promise.all([
-        rankRowsByQuery({ rows: styleRows, query, limit: 3 + extraStyleLimit * 2, domain: 'style' }),
-        rankRowsByQuery({ rows: colorRows, query, limit: 3 + extraColorLimit * 3, domain: 'color' }),
-        rankRowsByQuery({ rows: typographyRows, query, limit: 3, domain: 'typography' }),
-        rankRowsByQuery({ rows: chartRows, query, limit: 3, domain: 'chart' }),
+        rankRowsByQuery({ rows: styleRows, query, limit: 8 + extraStyleLimit * 2, domain: 'style' }),
+        rankRowsByQuery({ rows: colorRows, query, limit: 8 + extraColorLimit * 3, domain: 'color' }),
+        rankRowsByQuery({ rows: typographyRows, query, limit: 8, domain: 'typography' }),
+        rankRowsByQuery({ rows: chartRows, query, limit: 5, domain: 'chart' }),
         rankRowsByQuery({ rows: uxRows, query, limit: 5, domain: 'ux' }),
-        rankRowsByQuery({ rows: productRows, query, limit: 2, domain: 'product' }),
+        rankRowsByQuery({ rows: productRows, query, limit: 3, domain: 'product' }),
       ]);
     // ── EXCLUSION: Filter out previously shown styles and colors ──────────────
     //
@@ -135,15 +157,15 @@ const gatherDesignData = createStep({
     const styleResults = excludeNameSet.size > 0
       ? rawStyleResults.filter((r: Record<string, string>) =>
           !excludeNameSet.has((r["Style Category"] || "").toLowerCase())
-        ).slice(0, 3)
-      : rawStyleResults.slice(0, 3);
+        ).slice(0, 8)
+      : rawStyleResults.slice(0, 8);
 
     // Color exclusion: filter by ACTUAL primary hex value, not by name
     const colorResults = excludeHexSet.size > 0
       ? rawColorResults.filter((r: Record<string, string>) =>
           !excludeHexSet.has((r["Primary (Hex)"] || "").toUpperCase())
-        ).slice(0, 3)
-      : rawColorResults.slice(0, 3);
+        ).slice(0, 8)
+      : rawColorResults.slice(0, 8);
 
     // SAFETY: If exclusion filtered out everything, fall back to unfiltered + offset
     // This handles the edge case where the user rejected all top-ranked colors

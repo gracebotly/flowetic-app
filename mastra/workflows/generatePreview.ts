@@ -362,7 +362,10 @@ const retrieveDesignPatternsStep = createStep({
               const domain = result.metadata?.domain || 'layout';
               const score = result.score ?? 0;
 
-              if (score > 4.0 && !designPatterns.some(p => p.content === content)) {
+              // BUG 2A FIX: Lowered threshold from 4.0 to 1.5.
+              // BM25 scores vary by query length and corpus size. 4.0 filtered
+              // out nearly all results, causing 0 patterns despite 247 indexed entries.
+              if (score > 1.5 && !designPatterns.some(p => p.content === content)) {
                 const pattern = {
                   content,
                   source: `bm25-direct-${domain}`,
