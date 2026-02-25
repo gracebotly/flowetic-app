@@ -156,6 +156,61 @@ async function assessDataAvailability(
   }
 }
 
+// ─── Data-Aware Feedback Hints ────────────────────────────────────────────
+// Instead of hardcoded strings like "monitoring operations professional",
+// build BM25 hints that describe what the data ACTUALLY supports.
+// A workflow with 13 error events and 1 event type should not get a hint
+// about "data-dense detailed analytics" — it should get "error monitoring
+// reliability tracking".
+
+function buildDataAwareFeedbackHints(
+  archetype: Archetype,
+  dataAvailability: DataAvailability | null,
+  proposalCount: number,
+): string[] {
+  if (!dataAvailability || dataAvailability.dataRichness === 'minimal') {
+    // Minimal data: one simple hint is all we need
+    return [`${archetype} simple overview summary`];
+  }
+
+  const shapes = dataAvailability.fieldShapes;
+  const fields = dataAvailability.availableFields;
+
+  // Build capability descriptors from actual field shapes
+  const capabilities: string[] = [];
+  if (fields.some(f => shapes[f] === 'status')) capabilities.push('status tracking');
+  if (fields.some(f => shapes[f] === 'duration')) capabilities.push('performance timing');
+  if (fields.some(f => shapes[f] === 'timestamp')) capabilities.push('time-series trends');
+  if (fields.some(f => shapes[f] === 'numeric')) capabilities.push('numeric metrics');
+  if (dataAvailability.canSupportBreakdowns) capabilities.push('categorical breakdown');
+  if (dataAvailability.eventTypes.length > 1) capabilities.push('multi-type comparison');
+
+  const capString = capabilities.slice(0, 3).join(' ');
+
+  const hints: string[] = [];
+
+  // Proposal 0: operational focus (always generated)
+  hints.push(`${archetype} ${capString} operational`);
+
+  if (proposalCount >= 2) {
+    // Proposal 1: client-facing — but only claim what data supports
+    const clientCaps = dataAvailability.canSupportTimeseries
+      ? 'trend visibility client-facing'
+      : 'summary overview client-facing';
+    hints.push(`${archetype} ${clientCaps}`);
+  }
+
+  if (proposalCount >= 3) {
+    // Proposal 2: analytics — but scoped to actual data density
+    const analyticsCaps = dataAvailability.usableFieldCount >= 6
+      ? 'detailed analytics multi-metric'
+      : 'focused analytics key-metrics';
+    hints.push(`${archetype} ${analyticsCaps}`);
+  }
+
+  return hints;
+}
+
 // ─── Types for workflow integration ───────────────────────────────────────
 
 interface DesignSystemWorkflowInput {
@@ -231,7 +286,8 @@ function buildWireframeLayout(
     if (numericField) labels.push(humanizeLabel(numericField));
     if (labels.length === 0) labels.push('Total Events');
 
-    while (labels.length < 3) labels.push(`Metric ${labels.length + 1}`);
+    // BUG 2B ISSUE C FIX: Do NOT pad with fake "Metric N" labels.
+    // If the data only supports 1 real metric, show 1 KPI, not 3 empty ones.
     entityLabels = labels;
   } else {
     entityLabels = entities.length > 0
@@ -247,9 +303,9 @@ function buildWireframeLayout(
       : 'analytics';
 
   if (dominant === 'dashboard') {
-    // Dashboard-dominant: KPI row → line chart → bar chart → table
+    // Dashboard-dominant: layout scaled to what data actually supports
     const kpiCount = Math.min(entityLabels.length, 4);
-    const kpiWidth = Math.floor(12 / kpiCount);
+    const kpiWidth = kpiCount > 0 ? Math.floor(12 / kpiCount) : 12;
 
     for (let i = 0; i < kpiCount; i++) {
       components.push({
@@ -260,32 +316,52 @@ function buildWireframeLayout(
       });
     }
 
-    components.push({
-      id: 'trend-chart',
-      type: 'line_chart',
-      label: `${entityLabels[0] || 'Primary'} Over Time`,
-      layout: { col: 0, row: 1, w: 8, h: 2 },
-    });
+    let nextRow = 1;
 
-    components.push({
-      id: 'breakdown',
-      type: 'bar_chart',
-      label: 'Breakdown by Type',
-      layout: { col: 8, row: 1, w: 4, h: 2 },
-    });
+    // Only add trend chart if data has timeseries capability
+    if (dataAvailability?.canSupportTimeseries) {
+      const chartWidth = dataAvailability?.canSupportBreakdowns ? 8 : 12;
+      components.push({
+        id: 'trend-chart',
+        type: 'line_chart',
+        label: `${entityLabels[0] || 'Primary'} Over Time`,
+        layout: { col: 0, row: nextRow, w: chartWidth, h: 2 },
+      });
 
+      // Only add breakdown chart if data has categorical fields
+      if (dataAvailability?.canSupportBreakdowns) {
+        components.push({
+          id: 'breakdown',
+          type: 'bar_chart',
+          label: 'Breakdown by Type',
+          layout: { col: 8, row: nextRow, w: 4, h: 2 },
+        });
+      }
+      nextRow += 2;
+    } else if (dataAvailability?.canSupportBreakdowns) {
+      // No timeseries but has breakdowns — show bar chart full width
+      components.push({
+        id: 'breakdown',
+        type: 'bar_chart',
+        label: 'Breakdown by Type',
+        layout: { col: 0, row: nextRow, w: 12, h: 2 },
+      });
+      nextRow += 2;
+    }
+
+    // Always include a data table — raw data is always available
     components.push({
       id: 'data-table',
       type: 'table',
       label: 'Recent Activity',
-      layout: { col: 0, row: 3, w: 12, h: 2 },
+      layout: { col: 0, row: nextRow, w: 12, h: 2 },
     });
 
     return { name: 'Dashboard Grid', components };
   }
 
   if (dominant === 'product') {
-    // Product-dominant: hero metric → action cards → status list
+    // Product-dominant: hero metric + supporting content, scaled to data
     components.push({
       id: 'hero-metric',
       type: 'kpi',
@@ -293,78 +369,97 @@ function buildWireframeLayout(
       layout: { col: 0, row: 0, w: 6, h: 2 },
     });
 
-    components.push({
-      id: 'secondary-metric',
-      type: 'kpi',
-      label: entityLabels[1] || 'Secondary Metric',
-      layout: { col: 6, row: 0, w: 6, h: 2 },
-    });
+    if (entityLabels.length > 1) {
+      components.push({
+        id: 'secondary-metric',
+        type: 'kpi',
+        label: entityLabels[1],
+        layout: { col: 6, row: 0, w: 6, h: 2 },
+      });
+    }
 
-    components.push({
-      id: 'main-chart',
-      type: proposalIndex === 1 ? 'bar_chart' : 'line_chart',
-      label: `${entityLabels[0] || 'Performance'} Trend`,
-      layout: { col: 0, row: 2, w: 7, h: 2 },
-    });
+    let nextRow = 2;
 
-    components.push({
-      id: 'status-list',
-      type: 'status_grid',
-      label: 'Status Overview',
-      layout: { col: 7, row: 2, w: 5, h: 2 },
-    });
+    // Add chart only if data supports it
+    if (dataAvailability?.canSupportTimeseries) {
+      components.push({
+        id: 'main-chart',
+        type: proposalIndex === 1 ? 'bar_chart' : 'line_chart',
+        label: `${entityLabels[0] || 'Performance'} Trend`,
+        layout: { col: 0, row: nextRow, w: dataAvailability?.canSupportBreakdowns ? 7 : 12, h: 2 },
+      });
+
+      if (dataAvailability?.canSupportBreakdowns) {
+        components.push({
+          id: 'status-list',
+          type: 'status_grid',
+          label: 'Status Overview',
+          layout: { col: 7, row: nextRow, w: 5, h: 2 },
+        });
+      }
+      nextRow += 2;
+    } else if (dataAvailability?.canSupportBreakdowns) {
+      components.push({
+        id: 'status-list',
+        type: 'status_grid',
+        label: 'Status Overview',
+        layout: { col: 0, row: nextRow, w: 12, h: 2 },
+      });
+      nextRow += 2;
+    }
 
     return { name: 'Client Portal', components };
   }
 
-  // Analytics-dominant: dense data layout
-  components.push({
-    id: 'summary-kpi-1',
-    type: 'kpi',
-    label: entityLabels[0] || 'Total Volume',
-    layout: { col: 0, row: 0, w: 3, h: 1 },
-  });
+  // Analytics-dominant: data-dense layout, but only show what data supports
+  const kpiCount = Math.min(entityLabels.length, 4);
+  const kpiWidth = kpiCount > 0 ? Math.floor(12 / kpiCount) : 12;
 
-  components.push({
-    id: 'summary-kpi-2',
-    type: 'kpi',
-    label: entityLabels[1] || 'Success Rate',
-    layout: { col: 3, row: 0, w: 3, h: 1 },
-  });
+  for (let i = 0; i < kpiCount; i++) {
+    components.push({
+      id: `summary-kpi-${i + 1}`,
+      type: 'kpi',
+      label: entityLabels[i] || `KPI ${i + 1}`,
+      layout: { col: i * kpiWidth, row: 0, w: kpiWidth, h: 1 },
+    });
+  }
 
-  components.push({
-    id: 'summary-kpi-3',
-    type: 'kpi',
-    label: entityLabels[2] || 'Avg Duration',
-    layout: { col: 6, row: 0, w: 3, h: 1 },
-  });
+  let nextRow = 1;
 
-  components.push({
-    id: 'summary-kpi-4',
-    type: 'kpi',
-    label: 'Anomalies',
-    layout: { col: 9, row: 0, w: 3, h: 1 },
-  });
+  if (dataAvailability?.canSupportTimeseries) {
+    const trendWidth = dataAvailability?.canSupportBreakdowns ? 6 : 12;
+    components.push({
+      id: 'main-trend',
+      type: 'line_chart',
+      label: 'Trend Analysis',
+      layout: { col: 0, row: nextRow, w: trendWidth, h: 2 },
+    });
 
-  components.push({
-    id: 'main-trend',
-    type: 'line_chart',
-    label: 'Trend Analysis',
-    layout: { col: 0, row: 1, w: 6, h: 2 },
-  });
+    if (dataAvailability?.canSupportBreakdowns) {
+      components.push({
+        id: 'distribution',
+        type: 'pie_chart',
+        label: 'Distribution',
+        layout: { col: 6, row: nextRow, w: 6, h: 2 },
+      });
+    }
+    nextRow += 2;
+  } else if (dataAvailability?.canSupportBreakdowns) {
+    components.push({
+      id: 'distribution',
+      type: 'pie_chart',
+      label: 'Distribution',
+      layout: { col: 0, row: nextRow, w: 12, h: 2 },
+    });
+    nextRow += 2;
+  }
 
-  components.push({
-    id: 'distribution',
-    type: 'pie_chart',
-    label: 'Distribution',
-    layout: { col: 6, row: 1, w: 6, h: 2 },
-  });
-
+  // Always include detail table for analytics
   components.push({
     id: 'detail-table',
     type: 'table',
     label: 'Detailed Records',
-    layout: { col: 0, row: 3, w: 12, h: 2 },
+    layout: { col: 0, row: nextRow, w: 12, h: 2 },
   });
 
   return { name: 'Analytics Deep-Dive', components };
@@ -509,12 +604,15 @@ export async function generateProposals(
     .map((e) => e.trim())
     .filter(Boolean);
 
-  // Each run gets different feedback hint to shift BM25 ranking
-  const feedbackHints = [
-    `${classification.archetype} monitoring operations professional`,
-    `${classification.archetype} client-facing branded premium`,
-    `${classification.archetype} analytics data-dense detailed`,
-  ];
+  // BUG 2B ISSUE C FIX: Derive feedback hints from ACTUAL data capabilities.
+  // Previously these were hardcoded ("monitoring operations professional")
+  // which made every proposal look like it could do everything regardless of data.
+  // Now: hints describe what the data can actually support.
+  const feedbackHints = buildDataAwareFeedbackHints(
+    classification.archetype,
+    dataAvailability,
+    proposalCount,
+  );
 
   // ── Run 3 design system workflows SEQUENTIALLY ──────────────────────
   //

@@ -1888,13 +1888,44 @@ export async function POST(req: Request) {
       const messageText = extractLastUserMessageText(rawMessages);
 
       if (messageText) {
+        // ── Bug 2 Fix: Idempotency guard ─────────────────────────────
+        // If this session already has a selected proposal AND phase already
+        // advanced past propose, skip re-processing. Prevents infinite loop
+        // when frontend double-fires __ACTION__:select_proposal.
         const actionMatch = messageText.match(/__ACTION__:select_proposal:(\d+)/);
+        if (actionMatch) {
+          const { data: existingSession } = await supabase
+            .from('journey_sessions')
+            .select('selected_proposal_index, mode')
+            .eq('thread_id', cleanJourneyThreadId)
+            .eq('tenant_id', tenantId)
+            .maybeSingle();
+
+          if (
+            existingSession?.selected_proposal_index !== null &&
+            existingSession?.selected_proposal_index !== undefined &&
+            existingSession?.mode !== 'propose'
+          ) {
+            console.log('[api/chat] ⏭️ Bug 2 fix: Proposal already selected, skipping duplicate __ACTION__:', {
+              existingIndex: existingSession.selected_proposal_index,
+              currentPhase: existingSession.mode,
+            });
+            // Set phase from DB so agent runs in correct phase context
+            requestContext.set('phase', existingSession.mode || 'build_edit');
+            // Fall through to agent without re-processing proposal selection
+            // (don't enter the selection block below)
+          }
+        }
+
         let selectedIndex: number | null = null;
 
-        if (actionMatch) {
+        // Only process selection if not already handled by idempotency guard above
+        const alreadySelected = actionMatch && requestContext.get('phase') !== 'propose' && requestContext.get('phase') !== undefined;
+
+        if (actionMatch && !alreadySelected) {
           selectedIndex = parseInt(actionMatch[1], 10);
           console.log(`[api/chat] 🎯 Proposal selection via __ACTION__: index=${selectedIndex}`);
-        } else {
+        } else if (!actionMatch) {
           const { classifyProposeIntent } = await import('@/lib/intent-classifier');
           const { data: propSession } = await supabase
             .from('journey_sessions')

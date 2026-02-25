@@ -95,16 +95,45 @@ const analyzeSchemaStep = createStep({
       throw new Error('CONNECTION_NOT_CONFIGURED');
     }
 
-    const result = await callTool(
-      analyzeSchema,
-      {
-        tenantId,
-        sourceId,
-        sampleSize,
-        platformType: requestContext.get('platformType') || 'make',
-      },
-      { requestContext }
-    );
+    // ── Bug 3 Fix: Cache analyzeSchema result in requestContext ──────
+    // The platformMappingMaster agent may have already called analyzeSchema
+    // before invoking this workflow. Reuse the cached result if available.
+    const cacheKey = `analyzeSchema_${tenantId}_${sourceId}`;
+    const cachedResult = requestContext.get(cacheKey) as string | undefined;
+    let result: any;
+
+    if (cachedResult) {
+      try {
+        result = JSON.parse(cachedResult);
+        console.log('[generatePreview] analyzeSchema CACHE HIT — skipping redundant call:', {
+          fieldsCount: result.fields?.length || 0,
+          eventTypesCount: result.eventTypes?.length || 0,
+        });
+      } catch {
+        console.warn('[generatePreview] analyzeSchema cache parse failed, re-executing');
+        result = null;
+      }
+    }
+
+    if (!result) {
+      result = await callTool(
+        analyzeSchema,
+        {
+          tenantId,
+          sourceId,
+          sampleSize,
+          platformType: requestContext.get('platformType') || 'make',
+        },
+        { requestContext }
+      );
+
+      // Cache for downstream steps and future calls in same request
+      try {
+        requestContext.set(cacheKey, JSON.stringify(result));
+      } catch {
+        // Non-fatal
+      }
+    }
 
     console.log('[generatePreview] analyzeSchema result:', {
       fieldsCount: result.fields?.length || 0,
@@ -173,14 +202,40 @@ const generateMappingStep = createStep({
       throw new Error('MAPPING_INCOMPLETE_REQUIRED_FIELDS');
     }
     
-    const result = await callTool(generateMapping, 
-      {
-        templateId,
-        fields: analyzeResult.fields,
-        platformType,
-      },
-      { requestContext }
-    );
+    const tenantId = (requestContext.get('tenantId') as string | undefined) || 'unknown';
+    const mappingCacheKey = `generateMapping_${tenantId}_${templateId}`;
+    const cachedMapping = requestContext.get(mappingCacheKey) as string | undefined;
+
+    let result: any;
+    if (cachedMapping) {
+      try {
+        result = JSON.parse(cachedMapping);
+        console.log('[generatePreview] generateMapping CACHE HIT — skipping redundant call:', {
+          mappingsCount: Object.keys(result.mappings || {}).length,
+          missingFieldsCount: result.missingFields?.length || 0,
+        });
+      } catch {
+        console.warn('[generatePreview] generateMapping cache parse failed, re-executing');
+        result = null;
+      }
+    }
+
+    if (!result) {
+      result = await callTool(generateMapping, 
+        {
+          templateId,
+          fields: analyzeResult.fields,
+          platformType,
+        },
+        { requestContext }
+      );
+
+      try {
+        requestContext.set(mappingCacheKey, JSON.stringify(result));
+      } catch {
+        // Non-fatal
+      }
+    }
     console.log('[generatePreview] generateMapping result:', {
       mappingsCount: Object.keys(result.mappings || {}).length,
       missingFieldsCount: result.missingFields?.length || 0,
@@ -362,7 +417,10 @@ const retrieveDesignPatternsStep = createStep({
               const domain = result.metadata?.domain || 'layout';
               const score = result.score ?? 0;
 
-              if (score > 4.0 && !designPatterns.some(p => p.content === content)) {
+              // BUG 2A FIX: Lowered threshold from 4.0 to 1.5.
+              // BM25 scores vary by query length and corpus size. 4.0 filtered
+              // out nearly all results, causing 0 patterns despite 247 indexed entries.
+              if (score > 1.5 && !designPatterns.some(p => p.content === content)) {
                 const pattern = {
                   content,
                   source: `bm25-direct-${domain}`,

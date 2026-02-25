@@ -80,8 +80,60 @@ DO NOT try to edit dashboard specs yourself — always delegate to this speciali
         },
       });
 
+      // ── BUG 1 FIX: Detect sub-agent tool failures instead of blindly returning success ──
+      // The sub-agent generates optimistic text ("I've applied the changes...")
+      // even when ALL applySpecPatch calls failed validation. Check actual tool results.
+      let hasSuccessfulPatch = false;
+      const patchErrors: string[] = [];
+
+      if (result.steps && Array.isArray(result.steps)) {
+        for (const step of result.steps) {
+          const stepData = step as any;
+          if (Array.isArray(stepData.toolResults)) {
+            for (const tr of stepData.toolResults) {
+              const toolResult = tr as any;
+              const toolName = toolResult.toolName ?? toolResult.payload?.toolName;
+              const toolOutput = toolResult.output ?? toolResult.payload?.result ?? toolResult.payload?.output;
+
+              if (toolName === 'applySpecPatch') {
+                if (toolOutput?.applied && Array.isArray(toolOutput.applied) && toolOutput.applied.length > 0) {
+                  hasSuccessfulPatch = true;
+                } else if (toolOutput?.error || toolResult.isError) {
+                  patchErrors.push(String(toolOutput?.error || toolResult.error || 'Unknown patch error'));
+                }
+              }
+              if (toolName === 'savePreviewVersion') {
+                if (toolOutput?.previewUrl || toolOutput?.versionId) {
+                  hasSuccessfulPatch = true;
+                }
+              }
+            }
+          }
+          // Also check toolCalls for validation failures (AI SDK v5 surfaces these)
+          if (Array.isArray(stepData.toolCalls)) {
+            for (const tc of stepData.toolCalls) {
+              const call = tc as any;
+              if ((call.toolName === 'applySpecPatch') && call.error) {
+                patchErrors.push(String(call.error));
+              }
+            }
+          }
+        }
+      }
+
+      // If the task was an edit request but no patch succeeded, report failure
+      const isEditTask = /edit|change|modify|update|add|remove|darker|lighter|color|font|layout|chart|pie|bar/i.test(input.task);
+      if (isEditTask && !hasSuccessfulPatch && patchErrors.length > 0) {
+        console.warn('[delegateToDashboardBuilder] Edit task failed - no successful patches:', patchErrors);
+        return {
+          success: false,
+          response: "",
+          error: `Dashboard edit failed. Patch errors: ${patchErrors.slice(0, 3).join('; ')}. The agent may need to call getCurrentSpec first to load the current spec before patching.`,
+        };
+      }
+
       return {
-        success: true,
+        success: hasSuccessfulPatch || !isEditTask,
         response: result.text || "Dashboard edits applied.",
       };
     } catch (error: any) {
@@ -94,4 +146,3 @@ DO NOT try to edit dashboard specs yourself — always delegate to this speciali
     }
   },
 });
-

@@ -158,6 +158,23 @@ DO NOT try to generate previews yourself — always delegate to this specialist.
       } else if (currentPhase === 'build_preview') {
         phaseDirective = `\n## PHASE CONTEXT: build_preview\nYou are in the BUILD PREVIEW phase. Check schema readiness, run data analysis, and generate the dashboard preview.`;
       }
+      // ═══════════════════════════════════════════════════════════════════
+      // LOOP GUARD: Prevent duplicate delegateToPlatformMapper calls
+      // Bug 2 fix: If this tool already completed successfully this turn,
+      // return the cached result instead of re-invoking the sub-agent.
+      // ═══════════════════════════════════════════════════════════════════
+      const loopKey = `delegateToPlatformMapper_completed_${threadId}`;
+      const previousResult = context?.requestContext?.get(loopKey) as string | undefined;
+      if (previousResult) {
+        console.log('[delegateToPlatformMapper] ⏭️ Loop guard: already completed this turn, returning cached result');
+        try {
+          return JSON.parse(previousResult);
+        } catch {
+          // If parse fails, continue with fresh execution
+          console.warn('[delegateToPlatformMapper] Loop guard: cached result parse failed, re-executing');
+        }
+      }
+
       const enhancedPrompt = [
         input.task,
         input.additionalContext ? `\nAdditional context: ${input.additionalContext}` : "",
@@ -324,13 +341,22 @@ DO NOT try to generate previews yourself — always delegate to this specialist.
         interfaceId,
         previewVersionId,
       });
-      return {
+      const responseText = result.text || "Platform mapping completed.";
+
+      // Cache successful result for loop guard (Bug 2 fix)
+      const successResult = {
         success: true,
-        response: result.text || "Platform mapping completed.",
+        response: responseText,
         previewUrl,
         previewVersionId,
         interfaceId,
       };
+      try {
+        context?.requestContext?.set(loopKey, JSON.stringify(successResult));
+      } catch {
+        // Non-fatal: requestContext may not support set
+      }
+      return successResult;
     } catch (error: any) {
       console.error("[delegateToPlatformMapper] Error:", error.message);
       return {
