@@ -193,7 +193,7 @@ export const analyzeSchema = createTool({
 
         // BUG 4 FIX: Also set interface_id if available from context
         // (covers re-generation on existing dashboards where interface already exists)
-        const contextInterfaceId = context?.requestContext?.get('interfaceId') as string | undefined;
+        const contextInterfaceId = (context?.requestContext as any)?.get?.('interfaceId') as string | undefined;
 
         const { error: updateErr } = await supabase
           .from('interface_schemas')
