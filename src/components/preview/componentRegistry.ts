@@ -1,7 +1,6 @@
 "use client";
 
 import type { DeviceMode } from "@/components/vibe/editor";
-import { sanitizeProps } from "@/lib/spec/propSchemas";
 
 // ============================================================================
 // Shared types for all component renderers
@@ -16,14 +15,6 @@ export interface ComponentSpec {
     row?: number;
     w?: number;
     h?: number;
-  };
-  meta?: {
-    reason?: string;
-    source?: 'workflow' | 'agent_edit' | 'interactive_edit' | 'skill_override' | 'heuristic' | 'manual';
-    fieldShape?: string;
-    fieldName?: string;
-    addedAt?: string;
-    skeletonSlot?: string;
   };
 }
 
@@ -116,11 +107,6 @@ export function resolveComponentType(rawType: string): string | null {
 export function isKnownType(resolvedType: string): boolean {
   return KNOWN_TYPES.has(resolvedType);
 }
-
-// ============================================================================
-// Prop sanitization (Phase 3)
-// ============================================================================
-export { sanitizeProps };
 
 // ============================================================================
 // Icon helper (shared across renderers)

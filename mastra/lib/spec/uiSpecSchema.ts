@@ -28,8 +28,9 @@ export const ComponentType = z.enum([
 
 export type ComponentType = z.infer<typeof ComponentType>;
 
-// Phase 3: Component type alias resolution during normalization
-// This map mirrors componentRegistry.ts TYPE_ALIASES (server-side copy for Mastra tools)
+// ── Phase 3: Component type alias resolution (server-side) ─────────────
+// Mirrors componentRegistry.ts TYPE_ALIASES so normalization resolves
+// aliases before strict ComponentType validation rejects them.
 const TYPE_ALIASES: Record<string, string> = {
   "kpi-card": "MetricCard", kpi_card: "MetricCard", kpi: "MetricCard",
   "metric-card": "MetricCard",
@@ -61,7 +62,7 @@ function resolveTypeAlias(rawType: string): string {
   for (const [alias, canonical] of Object.entries(TYPE_ALIASES)) {
     if (alias.toLowerCase().replace(/[-_\s]/g, "") === normalized) return canonical;
   }
-  return rawType;
+  return rawType; // Return as-is — validation will catch if truly unknown
 }
 
 // ── Layout schema ──────────────────────────────────────────────────────
@@ -73,24 +74,11 @@ export const LayoutSchema = z.object({
 });
 
 // ── Component schema ───────────────────────────────────────────────────
-// ── Phase 4: Explainability metadata ───────────────────────────────────
-export const ComponentMetaSchema = z.object({
-  reason: z.string().optional(),
-  source: z.enum(['workflow', 'agent_edit', 'interactive_edit', 'skill_override', 'heuristic', 'manual']).optional(),
-  fieldShape: z.string().optional(),
-  fieldName: z.string().optional(),
-  addedAt: z.string().optional(),
-  skeletonSlot: z.string().optional(),
-}).optional();
-
-export type ComponentMeta = z.infer<typeof ComponentMetaSchema>;
-
 export const ComponentSchema = z.object({
   id: z.string(),
   type: ComponentType, // Phase 3: strict allowlist enforcement
-  props: z.record(z.any()), // Phase 3: prop sanitization handled by propSchemas.ts at render/persist boundaries
+  props: z.record(z.any()), // Prop sanitization handled by propSchemas.ts at render/persist boundaries
   layout: LayoutSchema,
-  meta: ComponentMetaSchema, // Phase 4: explainability metadata
 });
 
 // ── Full UI Spec schema ────────────────────────────────────────────────

@@ -5,6 +5,10 @@
 // Design principle: allow-list only. If a prop isn't listed, it's removed.
 // Exception: "data" props are handled by transformDataForComponents at render time.
 
+// ============================================================================
+// Allowed props per component type
+// ============================================================================
+
 const UNIVERSAL_PROPS = new Set([
   "title", "subtitle", "description", "hidden", "dominant",
   "icon", "iconName", "className",
@@ -91,7 +95,7 @@ const ALLOWED_PROPS: Record<string, Set<string>> = {
   ]),
   FilterBar: new Set([
     ...UNIVERSAL_PROPS,
-    "filters", "onFilterChange", "layout",
+    "filters", "layout",
   ]),
   CRUDTable: new Set([
     ...UNIVERSAL_PROPS,
@@ -112,10 +116,14 @@ const ALLOWED_PROPS: Record<string, Set<string>> = {
   ]),
 };
 
+// ============================================================================
+// Props that are ALWAYS stripped (security: functions, scripts, dangerous keys)
+// ============================================================================
+
 const BLOCKED_PROP_PATTERNS = [
-  /^on[A-Z]/,
-  /^__/,
-  /^dangerously/i,
+  /^on[A-Z]/, // onClick, onChange, etc. — no event handlers from LLM
+  /^__/,       // __proto__, __internal, etc.
+  /^dangerously/i, // dangerouslySetInnerHTML
 ];
 
 function isBlockedProp(key: string): boolean {
@@ -131,6 +139,19 @@ function isUnsafeValue(value: unknown): boolean {
   return false;
 }
 
+// ============================================================================
+// Main sanitizer
+// ============================================================================
+
+/**
+ * Sanitize component props against the per-type allowlist.
+ * - Strips unknown props (not in allowlist for this component type)
+ * - Strips blocked props (event handlers, __proto__, dangerously*)
+ * - Strips unsafe values (functions, script injections)
+ * - Returns a clean props object. Unknown component types get universal props only.
+ *
+ * This is a pure function with no side effects.
+ */
 export function sanitizeProps(
   componentType: string,
   props: Record<string, unknown>,
@@ -139,24 +160,32 @@ export function sanitizeProps(
   const clean: Record<string, unknown> = {};
 
   for (const [key, value] of Object.entries(props)) {
+    // Block dangerous prop names
     if (isBlockedProp(key)) {
       console.warn(`[propSanitizer] 🚫 Blocked prop "${key}" on ${componentType}`);
       continue;
     }
 
+    // Block unsafe values
     if (isUnsafeValue(value)) {
       console.warn(`[propSanitizer] 🚫 Unsafe value for prop "${key}" on ${componentType}`);
       continue;
     }
 
+    // Allow only whitelisted props
     if (allowed.has(key)) {
       clean[key] = value;
     }
+    // Silently drop unknown props (no warning spam — expected for LLM output)
   }
 
   return clean;
 }
 
+/**
+ * Check if a component type has a registered prop schema.
+ * Useful for observability/debugging.
+ */
 export function hasPropSchema(componentType: string): boolean {
   return componentType in ALLOWED_PROPS;
 }
