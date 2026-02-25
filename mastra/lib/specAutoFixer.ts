@@ -54,6 +54,7 @@ const MIN_SIZES: Record<string, { w: number; h: number }> = {
   Pagination: { w: 12, h: 1 },
   AuthForm: { w: 4, h: 4 },
   BrandVisual: { w: 4, h: 4 },
+  EmptyStateCard: { w: 4, h: 2 },
 };
 
 // ============================================================================
@@ -365,6 +366,86 @@ export function autoFixSpec(
     }
   }
 
+
+
+  // ── Rule 11: Max 3 distinct chart types per view ────────────────────
+  // Premium dashboards never mix more than 3 chart types. Visual chaos
+  // from 5+ chart types is the #1 reason generated UIs look "AI-made."
+  // When exceeded, convert the least-used chart types to the dominant type.
+  const CHART_TYPES = new Set([
+    'TimeseriesChart', 'BarChart', 'PieChart', 'DonutChart', 'AreaChart', 'LineChart',
+  ]);
+  const MAX_CHART_TYPES = 3;
+
+  const chartComponents = spec.components.filter(
+    (c: any) => CHART_TYPES.has(c.type),
+  );
+
+  if (chartComponents.length > 0) {
+    // Count occurrences of each chart type
+    const typeCount = new Map<string, number>();
+    for (const c of chartComponents) {
+      typeCount.set(c.type, (typeCount.get(c.type) || 0) + 1);
+    }
+
+    if (typeCount.size > MAX_CHART_TYPES) {
+      // Sort by frequency descending — keep the top 3 most-used types
+      const sorted = [...typeCount.entries()].sort((a, b) => b[1] - a[1]);
+      const keepTypes = new Set(sorted.slice(0, MAX_CHART_TYPES).map(([t]) => t));
+
+      // The dominant type is the most-used one — least-used types convert to this
+      const dominantChartType = sorted[0][0];
+
+      // Convert least-used chart types to the dominant type
+      const convertedTypes: string[] = [];
+      for (const comp of spec.components) {
+        if (CHART_TYPES.has(comp.type) && !keepTypes.has(comp.type)) {
+          const oldType = comp.type;
+          comp.type = dominantChartType;
+          if (!comp.props) comp.props = {};
+
+          // Remap props if converting between incompatible chart types
+          // (e.g., PieChart uses categoryField, TimeseriesChart uses xAxisField)
+          if (dominantChartType === 'TimeseriesChart' || dominantChartType === 'LineChart' || dominantChartType === 'AreaChart') {
+            // Target is a time/axis chart — ensure xAxisField and yAxisField exist
+            if (!comp.props.xAxisField && comp.props.categoryField) {
+              comp.props.xAxisField = comp.props.categoryField;
+              delete comp.props.categoryField;
+            }
+            if (!comp.props.yAxisField) {
+              comp.props.yAxisField = comp.props.valueField || 'count';
+            }
+          } else if (dominantChartType === 'PieChart' || dominantChartType === 'DonutChart') {
+            // Target is a categorical chart — ensure categoryField and valueField exist
+            if (!comp.props.categoryField && comp.props.xAxisField) {
+              comp.props.categoryField = comp.props.xAxisField;
+              delete comp.props.xAxisField;
+            }
+            if (!comp.props.valueField) {
+              comp.props.valueField = comp.props.yAxisField || 'count';
+            }
+          } else if (dominantChartType === 'BarChart') {
+            // BarChart can work with either prop set — prefer xAxisField/yAxisField
+            if (!comp.props.xAxisField && comp.props.categoryField) {
+              comp.props.xAxisField = comp.props.categoryField;
+            }
+            if (!comp.props.yAxisField) {
+              comp.props.yAxisField = comp.props.valueField || 'count';
+            }
+          }
+
+          if (!convertedTypes.includes(oldType)) convertedTypes.push(oldType);
+        }
+      }
+
+      if (convertedTypes.length > 0) {
+        fixes.push(
+          `Rule 11 (Max chart types): ${typeCount.size} chart types exceeded max ${MAX_CHART_TYPES}. ` +
+          `Converted ${convertedTypes.join(', ')} → ${dominantChartType} (dominant by frequency).`,
+        );
+      }
+    }
+  }
   // ── Log summary ─────────────────────────────────────────────────────
   if (fixes.length > 0) {
     console.log(`[specAutoFixer] Applied ${fixes.length} fix(es):`, fixes);

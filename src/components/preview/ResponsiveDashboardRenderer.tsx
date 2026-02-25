@@ -12,6 +12,7 @@ import { LineChartRenderer } from "./components/LineChart";
 import { BarChartRenderer } from "./components/BarChart";
 import { PieChartRenderer, DonutChartRenderer } from "./components/PieChart";
 import { DataTableRenderer } from "./components/DataTable";
+import { EmptyStateCard } from './renderers/EmptyStateCard';
 
 // Product/Admin/Insight components (lazy-loaded via dynamic import)
 const InsightCardRenderer = dynamic(() => import("./components/InsightCard"), { ssr: false });
@@ -39,6 +40,7 @@ const RENDERER_MAP: Record<string, React.ComponentType<RendererProps>> = {
   PageHeader: PageHeaderRenderer as any, FilterBar: FilterBarRenderer as any,
   CRUDTable: CRUDTableRenderer as any, Pagination: FilterBarRenderer as any,
   AuthForm: AuthFormRenderer as any,
+  EmptyStateCard,
 };
 
 function getRenderer(resolvedType: string): React.ComponentType<RendererProps> {
@@ -137,8 +139,54 @@ export function ResponsiveDashboardRenderer({ spec, designTokens, deviceMode, is
   const fontsToLoad = [...new Set([headingFont, bodyFont].filter(Boolean))];
 
   // Skeleton breakpoints (Wolf V2)
-  const skeletonBreakpoints = spec?.metadata?.skeletonBreakpoints as SkeletonBreakpoints | undefined;
-  const visualHierarchy = spec?.metadata?.skeletonVisualHierarchy as string | undefined;
+  // Primary: from spec metadata (set by generateUISpec).
+  // Fallback: if metadata is missing breakpoints (null/undefined), try to resolve
+  // from the skeleton registry using layoutSkeletonId. This handles specs that were
+  // generated before the breakpoint serialization fix.
+  let skeletonBreakpoints = spec?.metadata?.skeletonBreakpoints as SkeletonBreakpoints | undefined;
+  const visualHierarchy = (spec?.metadata?.skeletonVisualHierarchy as string | undefined) ?? undefined;
+
+  if (!skeletonBreakpoints && spec?.metadata?.layoutSkeletonId) {
+    try {
+      // Dynamic import avoided — use inline fallback map for known dashboard skeletons.
+      // This is intentionally duplicated from skeletons.ts to avoid importing server-side
+      // code into the client-side renderer. Only dashboard skeletons need breakpoints here.
+      const FALLBACK_BREAKPOINTS: Record<string, SkeletonBreakpoints> = {
+        'executive-overview': {
+          mobile: { stackSections: true, columnOverrides: { 'breakdown-left': 12, 'breakdown-right': 12 } },
+          tablet: { stackSections: false, columnOverrides: { 'breakdown-left': 6, 'breakdown-right': 6 } },
+          desktop: {},
+        },
+        'operational-monitoring': {
+          mobile: { stackSections: true, hideSections: ['event-feed'], columnOverrides: { 'status-panel': 12, 'trend-chart': 12 } },
+          tablet: { stackSections: false, columnOverrides: { 'status-panel': 6, 'trend-chart': 6 } },
+          desktop: {},
+        },
+        'analytical-breakdown': {
+          mobile: { stackSections: true },
+          tablet: { stackSections: false },
+          desktop: {},
+        },
+        'table-first': {
+          mobile: { stackSections: true, hideSections: ['metadata-filters'] },
+          tablet: { stackSections: true },
+          desktop: {},
+        },
+        'storyboard-insight': {
+          mobile: { stackSections: true, hideSections: ['sidebar-context'] },
+          tablet: { stackSections: false },
+          desktop: {},
+        },
+      };
+      const skeletonId = spec.metadata.layoutSkeletonId as string;
+      skeletonBreakpoints = FALLBACK_BREAKPOINTS[skeletonId] ?? undefined;
+      if (skeletonBreakpoints) {
+        console.log(`[ResponsiveDashboardRenderer] Resolved breakpoints from fallback map for skeleton: ${skeletonId}`);
+      }
+    } catch {
+      // Silently continue without breakpoints — responsive will just stack everything
+    }
+  }
 
   // Filter: hide sections on mobile per skeleton breakpoints
   const visibleComponents = useMemo(() => {

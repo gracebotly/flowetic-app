@@ -160,6 +160,13 @@ export interface LayoutSkeleton {
   breakpoints: BreakpointBehavior;
   /** Spacing value in pixels (used by generateUISpec for gap calculation) */
   spacingPx: number;
+  /**
+   * Maximum number of secondary (non-dominant) chart components allowed.
+   * The builder will stop emitting chart sections after this count.
+   * Prevents chart spam on data-rich inputs.
+   * Set to 0 for non-dashboard skeletons that don't have chart sections.
+   */
+  maxSecondaryCharts: number;
 }
 
 // ============================================================================
@@ -221,6 +228,7 @@ const executiveOverview: LayoutSkeleton = {
   maxKPIs: 5,
   gridSystem: '12-column',
   spacingPx: 24,
+  maxSecondaryCharts: 2,  // 1 primary + 2 breakdowns (left/right) — 5-section skeleton
   breakpoints: {
     mobile: {
       stackSections: true,
@@ -303,6 +311,7 @@ const operationalMonitoring: LayoutSkeleton = {
   maxKPIs: 4,
   gridSystem: 'asymmetric-40-60',
   spacingPx: 16,
+  maxSecondaryCharts: 3,  // trend + 2 breakdowns + status distribution — 6-section skeleton
   breakpoints: {
     mobile: {
       stackSections: true,
@@ -381,6 +390,7 @@ const analyticalBreakdown: LayoutSkeleton = {
   maxKPIs: 4,
   gridSystem: '12-column',
   spacingPx: 20,
+  maxSecondaryCharts: 3,  // filter-dimension + breakdown charts — deep-dive has more chart budget
   breakpoints: {
     mobile: {
       stackSections: true,
@@ -447,6 +457,7 @@ const tableFirst: LayoutSkeleton = {
   maxKPIs: 3,
   gridSystem: 'table-optimized',
   spacingPx: 12,
+  maxSecondaryCharts: 1,  // 1 supporting chart only — table is dominant, charts are secondary context
   breakpoints: {
     mobile: {
       stackSections: true,
@@ -522,6 +533,7 @@ const storyboardInsight: LayoutSkeleton = {
   maxKPIs: 4,
   gridSystem: 'flexible',
   spacingPx: 28,
+  maxSecondaryCharts: 2,  // narrative chart + 1 comparison pair — story-first, not chart-first
   breakpoints: {
     mobile: {
       stackSections: true,
@@ -600,6 +612,7 @@ const saasLandingPage: LayoutSkeleton = {
   maxKPIs: 0,
   gridSystem: '12-column',
   spacingPx: 24,
+  maxSecondaryCharts: 0,  // No charts — product page, not dashboard
   breakpoints: {
     mobile: { stackSections: true },
     tablet: { stackSections: true },
@@ -645,6 +658,7 @@ const workflowInputForm: LayoutSkeleton = {
   maxKPIs: 0,
   gridSystem: '12-column',
   spacingPx: 24,
+  maxSecondaryCharts: 0,  // No charts — form wizard
   breakpoints: {
     mobile: { stackSections: true },
     tablet: { stackSections: true },
@@ -698,6 +712,7 @@ const resultsDisplay: LayoutSkeleton = {
   maxKPIs: 0,
   gridSystem: '12-column',
   spacingPx: 24,
+  maxSecondaryCharts: 0,  // No charts — results are cards/hero, not charts
   breakpoints: {
     mobile: { stackSections: true },
     tablet: { stackSections: true },
@@ -754,6 +769,7 @@ const adminCrudPanel: LayoutSkeleton = {
   maxKPIs: 0,
   gridSystem: 'table-optimized',
   spacingPx: 12,
+  maxSecondaryCharts: 0,  // No charts — CRUD panel, table-dominant
   breakpoints: {
     mobile: { stackSections: true },
     tablet: { stackSections: true },
@@ -798,6 +814,7 @@ const settingsDashboard: LayoutSkeleton = {
   maxKPIs: 0,
   gridSystem: 'sidebar-content',
   spacingPx: 24,
+  maxSecondaryCharts: 0,  // No charts — settings forms
   breakpoints: {
     mobile: {
       stackSections: true,
@@ -848,6 +865,7 @@ const authenticationFlow: LayoutSkeleton = {
   maxKPIs: 0,
   gridSystem: 'split-40-60',
   spacingPx: 0, // No gap — full bleed split
+  maxSecondaryCharts: 0,  // No charts — auth page
   breakpoints: {
     mobile: {
       stackSections: true,

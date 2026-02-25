@@ -26,6 +26,7 @@ interface InteractiveEditPanelProps {
   isOpen: boolean;
   isMobile?: boolean;
   isLoading?: boolean;
+  docked?: boolean; // When true, renders as layout panel instead of floating overlay
 
   // Callbacks
   onClose: () => void;
@@ -179,6 +180,21 @@ function DesktopPanel({
   );
 }
 
+// ADD THIS — Docked panel for full edit mode (no fixed positioning, part of layout flow)
+function DockedPanel({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="h-full w-[300px] min-w-[300px] border-l border-gray-200 bg-white flex flex-col overflow-hidden">
+      <div className="flex-1 overflow-y-auto">
+        {children}
+      </div>
+    </div>
+  );
+}
+
 export function InteractiveEditPanel({
   interfaceId,
   widgets,
@@ -190,6 +206,7 @@ export function InteractiveEditPanel({
   isOpen,
   isMobile = false,
   isLoading = false,
+  docked = false,
   onClose,
   onToggleWidget,
   onRenameWidget,
@@ -344,12 +361,20 @@ export function InteractiveEditPanel({
     </>
   );
 
-  // Render mobile or desktop version
+  // Render mobile, docked, or floating desktop version
   if (isMobile) {
     return (
       <MobileSheet isOpen={isOpen} onClose={onClose}>
         {panelContent}
       </MobileSheet>
+    );
+  }
+
+  if (docked && isOpen) {
+    return (
+      <DockedPanel>
+        {panelContent}
+      </DockedPanel>
     );
   }
 

@@ -65,6 +65,8 @@ const TYPE_ALIASES: Record<string, string> = {
   // Insight/Status types
   "insight-card": "InsightCard", InsightCard: "InsightCard",
   "status-feed": "StatusFeed", StatusFeed: "StatusFeed",
+  "empty-state": "EmptyStateCard", EmptyStateCard: "EmptyStateCard",
+  "empty-state-card": "EmptyStateCard", empty_state: "EmptyStateCard",
   // Product types
   "hero-section": "HeroSection", HeroSection: "HeroSection",
   "feature-grid": "FeatureGrid", FeatureGrid: "FeatureGrid",
@@ -87,6 +89,7 @@ const KNOWN_TYPES = new Set([
   "HeroSection", "FeatureGrid", "PricingCards", "CTASection",
   "PageHeader", "FilterBar", "CRUDTable",
   "AuthForm",
+  "EmptyStateCard",
 ]);
 
 export function resolveComponentType(rawType: string): string {

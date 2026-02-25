@@ -24,6 +24,7 @@ import {
   PanelLeft,
   Plus,
   MessagesSquare,
+  MessageSquare,
   Sparkles,
   Share2,
 } from "lucide-react";
@@ -1427,10 +1428,34 @@ return (
 
       {/* Main content area */}
       <div className="flex flex-1 min-h-0 pl-20">
-        {/* Chat sidebar */}
-        <div className={`flex flex-col border-r border-gray-700 bg-white overflow-hidden transition-all duration-300 ${
-          isChatExpanded ? 'w-[720px]' : 'w-[480px]'
-        }`}>
+        {/* Left: Chat panel — collapses in edit mode */}
+        <div className={cn(
+          "flex flex-col border-r border-gray-200 bg-white transition-all duration-300",
+          view === "edit"
+            ? "w-[52px] min-w-[52px] overflow-hidden"
+            : isChatExpanded ? "w-[720px]" : "w-[480px]"
+        )}>
+          {/* Edit mode collapsed indicator */}
+          {view === "edit" && (
+            <div className="flex flex-col items-center py-4 gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setView("preview");
+                  setEditPanelOpen(false);
+                }}
+                className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
+                title="Back to chat"
+              >
+                <MessageSquare size={18} />
+              </button>
+              <div className="w-6 border-t border-gray-200" />
+              <div className="text-[9px] text-gray-300 rotate-90 tracking-widest mt-2 whitespace-nowrap">
+                EDIT MODE
+              </div>
+            </div>
+          )}
+
           {backendWarning && (
             <div className="border-b border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
               {backendWarning}
@@ -2026,266 +2051,239 @@ return (
           </div>
         </div>
 
-        {/* Right: Preview area */}
-        <div className="flex flex-1 flex-col min-w-0 bg-white">
-          <div className="flex items-center justify-between border-b border-gray-200 bg-white px-4 py-3">
-            <h2 className="text-sm font-semibold text-gray-900">
-              {view === "edit" ? "Edit Dashboard" : "Dashboard Preview"}
-            </h2>
-            
-            <div className="flex items-center gap-2">
-              {/* Share Button */}
-              <button
-                type="button"
-                onClick={() => setShowShareModal(true)}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100 transition-colors"
-                title="Export conversation"
-              >
-                <Share2 size={18} />
-              </button>
+        {/* Right: Preview / Edit area */}
+        <div className="flex flex-1 min-w-0 bg-white flex-col">
 
-              {/* Toggle bar: only visible after preview exists */}
-              {vibeContext?.previewUrl && (
-                <div
-                  className="inline-flex items-center gap-1 rounded-lg bg-gray-100 p-1"
-                  role="tablist"
-                  aria-label="Preview mode"
-                >
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={view === "preview"}
-                    aria-label="Preview mode"
-                    title="Preview"
-                    onClick={() => {
-                      setView("preview");
-                      setEditPanelOpen(false);
-                      // If we were in interactive_edit, go back to build_preview
-                      // so the iframe renders instead of ResponsiveDashboardRenderer
-                      if (journeyMode === "build_edit") {
-                        setJourneyMode("build_edit");
-                      }
-                    }}
-                    className={cn(
-                      "inline-flex h-9 w-9 items-center justify-center rounded-md cursor-pointer transition-colors duration-200",
-                      view === "preview"
-                        ? "bg-indigo-500 text-white"
-                        : "text-gray-600 hover:bg-white hover:text-gray-900"
-                    )}
-                  >
-                    <Eye size={18} />
-                  </button>
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={view === "edit"}
-                    aria-label="Edit mode"
-                    title="Edit Dashboard"
-                    onClick={() => {
-                      setView("edit");
-                      setJourneyMode("build_edit");
-                      setEditPanelOpen(true);
-                      setDeviceMode("desktop");
-                      // Auto-populate editWidgets from loadedSpec when user clicks Edit
-                      // (showInteractiveEditPanel tool only runs when LLM initiates edit mode)
-                      if (editWidgets.length === 0 && loadedSpec?.components?.length > 0) {
-                        const derived: WidgetConfig[] = loadedSpec.components.map((comp: any, idx: number) => ({
-                          id: comp.id || `widget-${idx}`,
-                          title: comp.props?.title || comp.type || `Widget ${idx + 1}`,
-                          kind: (
-                            comp.type === "MetricCard" || comp.type === "kpi-card" || comp.type === "kpi" || comp.type === "kpi_card" || comp.type === "metric-card" ? "metric" as const :
-                            comp.type === "LineChart" || comp.type === "BarChart" || comp.type === "PieChart" || comp.type === "DonutChart" || comp.type === "AreaChart" || comp.type === "TimeseriesChart" || comp.type === "line-chart" || comp.type === "bar-chart" || comp.type === "pie-chart" ? "chart" as const :
-                            comp.type === "DataTable" || comp.type === "data-table" || comp.type === "data_table" || comp.type === "table" || comp.type === "CRUDTable" || comp.type === "crud-table" ? "table" as const :
-                            "other" as const
-                          ),
-                          enabled: !comp.props?.hidden,
-                        }));
-                        setEditWidgets(derived);
-                      }
-                      // Auto-populate palettes from design tokens if empty
-                      if (editPalettes.length === 0 && loadedDesignTokens) {
-                        const colors = loadedDesignTokens?.colors || {};
-                        setEditPalettes([
-                          {
-                            id: "current",
-                            name: "Current",
-                            swatches: [
-                              { name: "Primary", hex: colors.primary || "#2563EB" },
-                              { name: "Secondary", hex: colors.secondary || "#64748B" },
-                              { name: "Accent", hex: colors.accent || "#14B8A6" },
-                              { name: "Background", hex: colors.background || "#F8FAFC" },
-                            ],
-                          },
-                          {
-                            id: "dark",
-                            name: "Dark Mode",
-                            swatches: [
-                              { name: "Primary", hex: "#60A5FA" },
-                              { name: "Secondary", hex: "#94A3B8" },
-                              { name: "Accent", hex: "#2DD4BF" },
-                              { name: "Background", hex: "#0F172A" },
-                            ],
-                          },
-                          {
-                            id: "vibrant",
-                            name: "Vibrant",
-                            swatches: [
-                              { name: "Primary", hex: "#8B5CF6" },
-                              { name: "Secondary", hex: "#EC4899" },
-                              { name: "Accent", hex: "#F59E0B" },
-                              { name: "Background", hex: "#FFFBEB" },
-                            ],
-                          },
-                        ]);
-                        setSelectedPaletteId("current");
-                      }
-                    }}
-                    className={cn(
-                      "inline-flex h-9 w-9 items-center justify-center rounded-md cursor-pointer transition-colors duration-200",
-                      view === "edit"
-                        ? "bg-indigo-500 text-white"
-                        : "text-gray-600 hover:bg-white hover:text-gray-900"
-                    )}
-                  >
-                    <Pencil size={18} />
-                  </button>
-                </div>
-              )}
-          </div>
-        </div>
-
-          {/* Right Panel - Preview Area */}
-          <div className="flex-1 overflow-hidden flex flex-col">
-            {/* Device preview toolbar - only show in edit mode */}
-            {(loadedSpec?.components?.length > 0 || journeyMode === "build_edit" || view === "edit") && (
-              <div className="p-2 border-b border-gray-200 bg-gray-50 flex justify-center">
-                <DevicePreviewToolbar
-                  value={deviceMode}
-                  onChange={setDeviceMode}
-                />
+          {/* Edit Mode Top Bar — only in edit mode */}
+          {view === "edit" ? (
+            <div className="flex items-center justify-between border-b border-gray-200 bg-white px-4 py-3 shrink-0">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-indigo-500" />
+                <h2 className="text-sm font-semibold text-gray-900">Edit Mode</h2>
+                <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+                  Manual or chat to edit
+                </span>
               </div>
-            )}
-            {/* Preview content */}
-            <div className="flex-1 overflow-auto bg-gray-100 p-4">
-              {journeyMode === 'propose' ? (
-                <ProposalGallery
-                  payload={proposals}
-                  isLoading={isProposalLoading}
-                  selectedIndex={selectedProposalIndex}
-                  onSelect={async (index) => {
-                    // Prevent double-fire with guard
-                    if (isSelectingProposal) {
-                      console.log('[ChatWorkspace] Proposal selection already in progress, ignoring duplicate click');
-                      return;
-                    }
-
-                    // If already selected, ignore
-                    if (selectedProposalIndex === index) {
-                      console.log('[ChatWorkspace] Proposal already selected, ignoring duplicate selection');
-                      return;
-                    }
-
-                    setIsSelectingProposal(true);
-                    setSelectedProposalIndex(index);
-
-                    try {
-                      await sendAi(`__ACTION__:select_proposal:${index}`, {});
-                    } finally {
-                      // Reset after 1 second to allow re-selection if needed
-                      setTimeout(() => setIsSelectingProposal(false), 1000);
-                    }
+              <div className="flex items-center gap-2">
+                {/* Share button */}
+                <button
+                  type="button"
+                  onClick={() => setShowShareModal(true)}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100 transition-colors"
+                  title="Export conversation"
+                >
+                  <Share2 size={18} />
+                </button>
+                {/* Done Editing — exits edit mode */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setView("preview");
+                    setEditPanelOpen(false);
                   }}
-                />
-              ) : loadedSpec?.components?.length > 0 ? (
-                <div className="h-full flex items-start justify-center py-4">
-                  {(() => {
-                    const dt = loadedDesignTokens || effectiveDesignTokens;
-                    const hf = (dt?.fonts?.heading as string)?.split(",")[0]?.trim();
-                    const bf = (dt?.fonts?.body as string)?.split(",")[0]?.trim();
-                    const fonts = [...new Set([hf, bf].filter(Boolean))];
-                    if (fonts.length === 0) return null;
-                    return (
-                      <link
-                        rel="stylesheet"
-                        href={`https://fonts.googleapis.com/css2?${fonts
-                          .map((f) => `family=${encodeURIComponent(f)}:wght@400;500;600;700`)
-                          .join("&")}&display=swap`}
-                      />
-                    );
-                  })()}
-                  <PreviewErrorBoundary>
-                    <ResponsiveDashboardRenderer
-                      spec={loadedSpec}
-                      designTokens={effectiveDesignTokens}
-                      deviceMode={deviceMode}
-                      isEditing={journeyMode === "build_edit"}
-                      onWidgetClick={(widgetId) => {
-                        console.log("Widget clicked:", widgetId);
-                      }}
-                    />
-                  </PreviewErrorBoundary>
-                </div>
-              ) : journeyMode === "build_edit" || vibeContext?.previewUrl ? (
-                <div className="flex items-center justify-center h-full">
-                  <div className="text-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                    <p className="text-gray-600">Generating your preview...</p>
-                  </div>
-                </div>
-              ) : (
-                <EmptyPreviewState
-                  journeyMode={journeyMode as any}
-                  entityName={vibeContext?.displayName}
-                />
-              )}
+                  className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 transition-colors cursor-pointer"
+                >
+                  <Eye size={15} />
+                  Done Editing
+                </button>
+              </div>
             </div>
-          </div>
+          ) : (
+            /* Preview Mode Header — same as current */
+            <div className="flex items-center justify-between border-b border-gray-200 bg-white px-4 py-3 shrink-0">
+              <h2 className="text-sm font-semibold text-gray-900">Dashboard Preview</h2>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowShareModal(true)}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100 transition-colors"
+                  title="Export conversation"
+                >
+                  <Share2 size={18} />
+                </button>
+                {vibeContext?.previewUrl && (
+                  <div
+                    className="inline-flex items-center gap-1 rounded-lg bg-gray-100 p-1"
+                    role="tablist"
+                    aria-label="Preview mode"
+                  >
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={true}
+                      aria-label="Preview mode"
+                      title="Preview"
+                      onClick={() => {
+                        setView("preview");
+                        setEditPanelOpen(false);
+                        if (journeyMode === "build_edit") {
+                          setJourneyMode("build_edit");
+                        }
+                      }}
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-md cursor-pointer transition-colors duration-200 bg-indigo-500 text-white"
+                    >
+                      <Eye size={18} />
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={false}
+                      aria-label="Edit mode"
+                      title="Edit Dashboard"
+                      onClick={() => {
+                        setView("edit");
+                        setJourneyMode("build_edit");
+                        setEditPanelOpen(true);
+                        setDeviceMode("desktop");
+                        if (editWidgets.length === 0 && loadedSpec?.components?.length > 0) {
+                          const derived: WidgetConfig[] = loadedSpec.components.map((comp: any, idx: number) => ({
+                            id: comp.id || `widget-${idx}`,
+                            title: comp.props?.title || comp.type || `Widget ${idx + 1}`,
+                            kind: (
+                              comp.type === "MetricCard" || comp.type === "kpi-card" || comp.type === "kpi" || comp.type === "kpi_card" || comp.type === "metric-card" ? "metric" as const :
+                              comp.type === "LineChart" || comp.type === "BarChart" || comp.type === "PieChart" || comp.type === "DonutChart" || comp.type === "AreaChart" || comp.type === "TimeseriesChart" || comp.type === "line-chart" || comp.type === "bar-chart" || comp.type === "pie-chart" ? "chart" as const :
+                              comp.type === "DataTable" || comp.type === "data-table" || comp.type === "data_table" || comp.type === "table" || comp.type === "CRUDTable" || comp.type === "crud-table" ? "table" as const :
+                              "list" as const
+                            ),
+                            enabled: true,
+                          }));
+                          setEditWidgets(derived);
+                        }
+                      }}
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-md cursor-pointer transition-colors duration-200 text-gray-600 hover:bg-white hover:text-gray-900"
+                    >
+                      <Pencil size={18} />
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
-          {/* Interactive Edit Panel */}
-          <InteractiveEditPanel
-            interfaceId={vibeContext?.interfaceId ?? ""}
-            widgets={editWidgets}
-            palettes={editPalettes}
-            selectedPaletteId={selectedPaletteId}
-            density={editDensity}
-            isOpen={editPanelOpen}
-            isMobile={isMobile}
-            isLoading={editActions.isLoading}
-            onClose={() => {
-              setEditPanelOpen(false);
-              setView("preview");
-              if (journeyMode === "build_edit") {
-                setJourneyMode("build_edit");
-              }
-            }}
-            onToggleWidget={(widgetId) => {
-              setEditWidgets((prev) =>
-                prev.map((w) => (w.id === widgetId ? { ...w, enabled: !w.enabled } : w))
-              );
-              editActions.toggleWidget(widgetId);
-            }}
-            onRenameWidget={(widgetId, title) => {
-              setEditWidgets((prev) =>
-                prev.map((w) => (w.id === widgetId ? { ...w, title } : w))
-              );
-              editActions.renameWidget(widgetId, title);
-            }}
-            onChartTypeChange={(widgetId, chartType) => {
-              setEditWidgets((prev) =>
-                prev.map((w) => (w.id === widgetId ? { ...w, chartType } : w))
-              );
-              editActions.changeChartType(widgetId, chartType);
-            }}
-            onReorderWidgets={handleReorderWidgets}
-            onDensityChange={(density) => {
-              setEditDensity(density);
-              editActions.setDensity(density);
-            }}
-            onPaletteChange={(paletteId) => {
-              setSelectedPaletteId(paletteId);
-              editActions.setPalette(paletteId);
-            }}
-          />
+          {/* Content area — split layout in edit mode, full canvas in preview */}
+          <div className="flex flex-1 overflow-hidden">
+
+            {/* Dashboard canvas */}
+            <div className="flex flex-col flex-1 overflow-hidden">
+              {/* Device toolbar */}
+              {(loadedSpec?.components?.length > 0 || journeyMode === "build_edit" || view === "edit") && (
+                <div className="p-2 border-b border-gray-200 bg-gray-50 flex justify-center shrink-0">
+                  <DevicePreviewToolbar
+                    value={deviceMode}
+                    onChange={setDeviceMode}
+                  />
+                </div>
+              )}
+              {/* Preview content */}
+              <div className="flex-1 overflow-auto bg-gray-100 p-4">
+                {journeyMode === 'propose' ? (
+                  <ProposalGallery
+                    payload={proposals}
+                    isLoading={isProposalLoading}
+                    selectedIndex={selectedProposalIndex}
+                    onSelect={async (index) => {
+                      if (isSelectingProposal) return;
+                      if (selectedProposalIndex === index) return;
+                      setIsSelectingProposal(true);
+                      setSelectedProposalIndex(index);
+                      try {
+                        await sendAi(`__ACTION__:select_proposal:${index}`, {});
+                      } finally {
+                        setTimeout(() => setIsSelectingProposal(false), 1000);
+                      }
+                    }}
+                  />
+                ) : loadedSpec?.components?.length > 0 ? (
+                  <div className="h-full flex items-start justify-center py-4">
+                    {(() => {
+                      const dt = loadedDesignTokens || effectiveDesignTokens;
+                      const hf = (dt?.fonts?.heading as string)?.split(",")[0]?.trim();
+                      const bf = (dt?.fonts?.body as string)?.split(",")[0]?.trim();
+                      const fonts = [...new Set([hf, bf].filter(Boolean))];
+                      if (fonts.length === 0) return null;
+                      return (
+                        <link
+                          rel="stylesheet"
+                          href={`https://fonts.googleapis.com/css2?${fonts
+                            .map((f) => `family=${encodeURIComponent(f)}:wght@400;500;600;700`)
+                            .join("&")}&display=swap`}
+                        />
+                      );
+                    })()}
+                    <PreviewErrorBoundary>
+                      <ResponsiveDashboardRenderer
+                        spec={loadedSpec}
+                        designTokens={effectiveDesignTokens}
+                        deviceMode={deviceMode}
+                        isEditing={journeyMode === "build_edit"}
+                        onWidgetClick={(widgetId) => {
+                          console.log("Widget clicked:", widgetId);
+                        }}
+                      />
+                    </PreviewErrorBoundary>
+                  </div>
+                ) : journeyMode === "build_edit" || vibeContext?.previewUrl ? (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="text-center">
+                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                      <p className="text-gray-600">Generating your preview...</p>
+                    </div>
+                  </div>
+                ) : (
+                  <EmptyPreviewState
+                    journeyMode={journeyMode as any}
+                    entityName={vibeContext?.displayName}
+                  />
+                )}
+              </div>
+            </div>
+
+            {/* Docked edit controls — only in edit mode */}
+            {view === "edit" && (
+              <InteractiveEditPanel
+                interfaceId={vibeContext?.interfaceId ?? ""}
+                widgets={editWidgets}
+                palettes={editPalettes}
+                selectedPaletteId={selectedPaletteId}
+                density={editDensity}
+                isOpen={editPanelOpen}
+                isMobile={isMobile}
+                isLoading={editActions.isLoading}
+                docked={true}
+                onClose={() => {
+                  setEditPanelOpen(false);
+                  setView("preview");
+                }}
+                onToggleWidget={(widgetId) => {
+                  setEditWidgets((prev) =>
+                    prev.map((w) => (w.id === widgetId ? { ...w, enabled: !w.enabled } : w))
+                  );
+                  editActions.toggleWidget(widgetId);
+                }}
+                onRenameWidget={(widgetId, title) => {
+                  setEditWidgets((prev) =>
+                    prev.map((w) => (w.id === widgetId ? { ...w, title } : w))
+                  );
+                  editActions.renameWidget(widgetId, title);
+                }}
+                onChartTypeChange={(widgetId, chartType) => {
+                  setEditWidgets((prev) =>
+                    prev.map((w) => (w.id === widgetId ? { ...w, chartType } : w))
+                  );
+                  editActions.changeChartType(widgetId, chartType);
+                }}
+                onReorderWidgets={handleReorderWidgets}
+                onDensityChange={(density) => {
+                  setEditDensity(density);
+                  editActions.setDensity(density);
+                }}
+                onPaletteChange={(paletteId) => {
+                  setSelectedPaletteId(paletteId);
+                  editActions.setPalette(paletteId);
+                }}
+              />
+            )}
+          </div>
         </div>
       </div>
 
