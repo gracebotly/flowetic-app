@@ -553,7 +553,8 @@ const generateUISpecStep = createStep({
 
     // ── Load proposal wireframe from DB ────────────────────────────────
     // The user selected a proposal that includes a designed wireframe layout.
-    // This wireframe is the PRIMARY layout source — skeletons are fallback only.
+    // Wireframe is loaded for reference but skeletons are the PRIMARY layout system.
+    // Wireframes are used for proposal card thumbnails; skeletons produce the premium build.
     let proposalWireframe:
       | {
           name?: string;
@@ -605,7 +606,7 @@ const generateUISpecStep = createStep({
         }
       }
     }
-    console.log(`[generateUISpecStep] Layout source: ${proposalWireframe ? 'proposal wireframe' : 'skeleton (fallback)'}`);
+    console.log(`[generateUISpecStep] Layout source: skeleton (primary) — wireframe ${proposalWireframe ? 'available but not preferred' : 'not present'}`);
 
     // Extract intent from journey session's selected proposal for skeleton selection
     const intentTenantId = initData.tenantId || requestContext.get('tenantId') as string;
@@ -693,6 +694,7 @@ const generateUISpecStep = createStep({
           return undefined;
         })(),
         proposalWireframe: proposalWireframe || undefined,
+        preferWireframe: false, // Skeletons are the premium build system; wireframes are for proposal thumbnails
         // ── Phase 2: Skeleton-aware inputs ──────────────────────────
         dataSignals: mappingDataSignals as any,
         // Phase 3: BM25 design patterns from retrieveDesignPatternsStep
