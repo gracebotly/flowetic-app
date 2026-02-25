@@ -115,28 +115,9 @@ export function ResponsiveDashboardRenderer({ spec, designTokens, deviceMode, is
   const columns = getResponsiveColumns(baseColumns, deviceMode);
   const gap = getResponsiveGap(baseGap, deviceMode);
 
-  // Phase 2: Read BM25 preferDarkMode hint from spec metadata
-  const preferDarkMode = spec?.metadata?.preferDarkMode || false;
-
-  // If BM25 patterns suggest dark mode but tokens have light background, invert
-  const effectiveTokens = useMemo(() => {
-    if (!preferDarkMode) return designTokens;
-
-    const bg = designTokens?.colors?.background || '#ffffff';
-    const isDarkAlready = bg.toLowerCase() < '#888888';
-    if (isDarkAlready) return designTokens;
-
-    return {
-      ...designTokens,
-      colors: {
-        ...designTokens?.colors,
-        background: '#0f172a',
-        surface: '#1e293b',
-        text: '#f1f5f9',
-        muted: '#94a3b8',
-      },
-    };
-  }, [designTokens, preferDarkMode]);
+  // Design tokens are authoritative — they come from the locked design system workflow.
+  // Never auto-invert based on BM25 hints. The user's selected design system is final.
+  const effectiveTokens = designTokens;
 
   // Design tokens
   const colors = effectiveTokens?.colors ?? {};
@@ -207,10 +188,15 @@ export function ResponsiveDashboardRenderer({ spec, designTokens, deviceMode, is
             {sortedComponents.map((comp: ComponentSpec, index: number) => {
               const resolved = resolveComponentType(comp.type);
               const Renderer = getRenderer(resolved);
+              // Tablet: wide components (w >= 7 out of 12) span full width
+              const tabletSpan = deviceMode === "tablet" && columns === 2
+                ? (comp.layout?.w ?? 4) >= 7 ? 2 : 1
+                : undefined;
               return (
                 <motion.div
                   key={comp.id}
                   className="@container"
+                  style={tabletSpan ? { gridColumn: `span ${tabletSpan}` } : undefined}
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{

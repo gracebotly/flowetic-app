@@ -264,15 +264,28 @@ function normalizeWireframeType(wireframeType: string): string {
   const map: Record<string, string> = {
     'kpi': 'MetricCard',
     'metric': 'MetricCard',
+    'metriccard': 'MetricCard',
     'line_chart': 'TimeseriesChart',
+    'linechart': 'TimeseriesChart',
+    'timeserieschart': 'TimeseriesChart',
+    'areachart': 'TimeseriesChart',
     'bar_chart': 'BarChart',
+    'barchart': 'BarChart',
     'pie_chart': 'PieChart',
+    'piechart': 'PieChart',
     'donut_chart': 'DonutChart',
+    'donutchart': 'DonutChart',
     'table': 'DataTable',
     'data_table': 'DataTable',
+    'datatable': 'DataTable',
+    // StatusFeed is a table-family component — match to table wireframe slots
+    'statusfeed': 'DataTable',
+    'status_feed': 'DataTable',
+    'feed': 'DataTable',
     'funnel': 'BarChart',
     'timeline': 'TimeseriesChart',
     'status_grid': 'DataTable',
+    'statusgrid': 'DataTable',
   };
   return map[wireframeType.toLowerCase()] || wireframeType;
 }
@@ -978,6 +991,26 @@ export const generateUISpec = createTool({
             h: slot.layout.h,
           };
         }
+      }
+    }
+
+    // ── Safety net: compact row gaps after wireframe override ─────────
+    // Sort by row, then recompute rows to eliminate gaps.
+    // This ensures no empty grid rows between components.
+    if (proposalWireframe?.components?.length) {
+      components.sort((a, b) => (a.layout?.row ?? 0) - (b.layout?.row ?? 0));
+      let nextRow = 0;
+      const rowMapping = new Map<number, number>(); // oldRow → newRow
+      for (const comp of components) {
+        const oldRow = comp.layout?.row ?? 0;
+        if (!rowMapping.has(oldRow)) {
+          rowMapping.set(oldRow, nextRow);
+        }
+        const mappedRow = rowMapping.get(oldRow)!;
+        comp.layout = { ...comp.layout!, row: mappedRow };
+        // Track highest row end for next iteration
+        const rowEnd = mappedRow + (comp.layout?.h ?? 1);
+        if (rowEnd > nextRow) nextRow = rowEnd;
       }
     }
 

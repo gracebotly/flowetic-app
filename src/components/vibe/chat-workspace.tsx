@@ -54,6 +54,7 @@ import {
   type Density,
 } from "@/components/vibe/editor";
 import { ResponsiveDashboardRenderer } from "@/components/preview/ResponsiveDashboardRenderer";
+import { PreviewErrorBoundary } from "@/components/preview/PreviewErrorBoundary";
 import { EmptyPreviewState } from './EmptyPreviewState';
 import { useEditActions } from "@/hooks/useEditActions";
 
@@ -2155,7 +2156,7 @@ return (
           {/* Right Panel - Preview Area */}
           <div className="flex-1 overflow-hidden flex flex-col">
             {/* Device preview toolbar - only show in edit mode */}
-            {(journeyMode === "build_edit" || view === "edit") && (
+            {(loadedSpec?.components?.length > 0 || journeyMode === "build_edit" || view === "edit") && (
               <div className="p-2 border-b border-gray-200 bg-gray-50 flex justify-center">
                 <DevicePreviewToolbar
                   value={deviceMode}
@@ -2175,16 +2176,7 @@ return (
                     void sendAi(`__ACTION__:select_proposal:${index}`, {});
                   }}
                 />
-              ) : vibeContext?.previewUrl && view !== "edit" && journeyMode !== "build_edit" ? (
-                <div className="h-full bg-white rounded-lg shadow-sm overflow-hidden">
-                  <iframe
-                    src={vibeContext.previewUrl}
-                    className="w-full h-full border-0"
-                    title="Dashboard Preview"
-                    sandbox="allow-scripts allow-same-origin"
-                  />
-                </div>
-              ) : journeyMode === "build_edit" && vibeContext?.previewUrl ? (
+              ) : loadedSpec?.components?.length > 0 ? (
                 <div className="h-full flex items-start justify-center py-4">
                   {(() => {
                     const dt = loadedDesignTokens || effectiveDesignTokens;
@@ -2201,27 +2193,19 @@ return (
                       />
                     );
                   })()}
-                  <ResponsiveDashboardRenderer
-                    spec={loadedSpec ?? {
-                      title: "Dashboard Preview",
-                      components: editWidgets.map((w) => ({
-                        id: w.id,
-                        type: w.kind === "chart" ? "LineChart" : w.kind === "metric" ? "MetricCard" : w.kind === "table" ? "DataTable" : "MetricCard",
-                        props: { title: w.title, hidden: !w.enabled },
-                        layout: { col: 0, row: 0, w: 4, h: 2 },
-                      })),
-                      layout: { columns: 12, gap: 16 },
-                    }}
-                    designTokens={effectiveDesignTokens}
-                    deviceMode={deviceMode}
-                    isEditing={true}
-                    onWidgetClick={(widgetId) => {
-                      // Could highlight widget in edit panel
-                      console.log("Widget clicked:", widgetId);
-                    }}
-                  />
+                  <PreviewErrorBoundary>
+                    <ResponsiveDashboardRenderer
+                      spec={loadedSpec}
+                      designTokens={effectiveDesignTokens}
+                      deviceMode={deviceMode}
+                      isEditing={journeyMode === "build_edit"}
+                      onWidgetClick={(widgetId) => {
+                        console.log("Widget clicked:", widgetId);
+                      }}
+                    />
+                  </PreviewErrorBoundary>
                 </div>
-              ) : journeyMode === "build_edit" ? (
+              ) : journeyMode === "build_edit" || vibeContext?.previewUrl ? (
                 <div className="flex items-center justify-center h-full">
                   <div className="text-center">
                     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
