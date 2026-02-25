@@ -1008,7 +1008,7 @@ export const generateUISpec = createTool({
     // Use them directly — no preset resolution needed.
     const customTokensJson = context?.requestContext?.get('designTokens') as string;
     let styleTokens: {
-      colors: { primary: string; secondary: string; success: string; warning: string; error: string; background: string; text: string };
+      colors: { primary: string; secondary: string; accent?: string; success: string; warning: string; error: string; background: string; surface?: string; text: string; muted?: string };
       fonts: { heading: string; body: string };
       spacing: { unit: number };
       radius: number;
@@ -1023,11 +1023,14 @@ export const generateUISpec = createTool({
           colors: {
             primary: custom.colors.primary,
             secondary: custom.colors.secondary ?? custom.colors.primary,
+            accent: custom.colors.accent ?? custom.colors.secondary ?? custom.colors.primary,
             success: custom.colors.success ?? '#10B981',
             warning: custom.colors.warning ?? '#F59E0B',
             error: custom.colors.error ?? '#EF4444',
             background: custom.colors.background,
+            surface: custom.colors.surface ?? undefined,
             text: custom.colors.text ?? '#0F172A',
+            muted: custom.colors.muted ?? undefined,
           },
           fonts: {
             heading: custom.fonts?.heading ?? 'Inter, sans-serif',
@@ -1296,7 +1299,12 @@ export const generateUISpec = createTool({
           skeletonCategory: skeleton?.category,
           skeletonSpacing: skeleton?.spacing,
           skeletonVisualHierarchy: skeleton?.visualHierarchy,
-          skeletonBreakpoints: skeleton?.breakpoints,
+          // Deep-clone breakpoints to guarantee clean JSON serialization.
+          // Without this, object references can serialize as null in some
+          // edge cases (e.g., when spec_json passes through Supabase JSONB round-trip).
+          skeletonBreakpoints: skeleton?.breakpoints
+            ? JSON.parse(JSON.stringify(skeleton.breakpoints))
+            : null,
           designPatternsUsed: inputData.designPatterns?.length || 0,
         } : {}),
         preferDarkMode: specLayoutHints.preferDarkMode || false,
