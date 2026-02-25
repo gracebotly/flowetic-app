@@ -42,11 +42,12 @@ const ARCHETYPE_SIGNALS: Record<Archetype, {
   },
   voice_analytics: {
     nameSignals: [
-      'voice', 'call', 'phone', 'ivr', 'agent', 'conversation', 'transcript',
+      'voice', 'call center', 'phone', 'ivr', 'call recording', 'transcript',
       'sentiment', 'speech', 'audio', 'dial', 'ring', 'sip', 'pbx',
-      'assistant', 'bot',
+      'voice agent', 'call analytics',
     ],
     platformSignals: ['vapi', 'retell'],
+    threshold: 2, // Require 2+ signals — single words like "call" alone shouldn't trigger voice
   },
   content_automation: {
     nameSignals: [
@@ -79,9 +80,10 @@ const ARCHETYPE_SIGNALS: Record<Archetype, {
       'ai service', 'ml pipeline', 'model training', 'inference',
       'embedding', 'vector search', 'prompt chain', 'ai workflow',
       'gpt', 'claude', 'gemini', 'openai', 'langchain', 'autogen',
+      'chatbot', 'bot', 'assistant',
     ],
     platformSignals: [],
-    threshold: 2,
+    threshold: 1, // 'chatbot' alone is enough; 'bot' + any other signal is enough
   },
   general: {
     nameSignals: [],
