@@ -263,7 +263,7 @@ const operationalMonitoring: LayoutSkeleton = {
       columns: 5,
       dominant: false,
       minHeight: 4,
-      description: 'Status distribution (40% width)',
+      description: 'Status distribution pie/donut (40% width)',
     },
     {
       id: 'trend-throughput',
@@ -272,6 +272,22 @@ const operationalMonitoring: LayoutSkeleton = {
       dominant: true,
       minHeight: 4,
       description: 'Trend/throughput chart (60% width)',
+    },
+    {
+      id: 'breakdown-left',
+      type: 'chart',
+      columns: 6,
+      dominant: false,
+      minHeight: 3,
+      description: 'Categorical breakdown chart (e.g., by workflow_name)',
+    },
+    {
+      id: 'breakdown-right',
+      type: 'chart',
+      columns: 6,
+      dominant: false,
+      minHeight: 3,
+      description: 'Secondary breakdown chart (e.g., by workflow_id)',
     },
     {
       id: 'event-stream',
@@ -293,6 +309,8 @@ const operationalMonitoring: LayoutSkeleton = {
       columnOverrides: {
         'status-distribution': 12,
         'trend-throughput': 12,
+        'breakdown-left': 12,
+        'breakdown-right': 12,
       },
     },
     tablet: {
@@ -300,6 +318,8 @@ const operationalMonitoring: LayoutSkeleton = {
       columnOverrides: {
         'status-distribution': 5,
         'trend-throughput': 7,
+        'breakdown-left': 6,
+        'breakdown-right': 6,
       },
     },
     desktop: {},

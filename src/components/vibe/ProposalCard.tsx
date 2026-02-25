@@ -117,16 +117,17 @@ export function ProposalCard({ proposal, isSelected, onSelect, animationDelay = 
 
         <button
           type="button"
+          disabled={isSelected}
           onClick={(e) => {
             e.stopPropagation();
-            onSelect();
+            if (!isSelected) onSelect();
           }}
           className={`
             w-full flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium
-            transition-colors duration-200 cursor-pointer
+            transition-colors duration-200
             ${isSelected
-              ? 'bg-indigo-600 text-white'
-              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              ? 'bg-indigo-600 text-white cursor-default'
+              : 'bg-gray-100 text-gray-700 hover:bg-gray-200 cursor-pointer'
             }
           `}
         >
