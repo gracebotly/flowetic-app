@@ -2,6 +2,7 @@
 
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
+import { normalizeSpec } from "../lib/spec/uiSpecSchema";
 
 const LayoutSchema = z.object({
   col: z.number().int().min(0),
@@ -100,7 +101,7 @@ export const applySpecPatch = createTool({
     applied: z.array(z.string()),
   }),
   execute: async (inputData, context) => {
-    const spec = deepClone(inputData.spec_json);
+    const spec = normalizeSpec(deepClone(inputData.spec_json)) as Record<string, any>;
     // Deep-merge: if existing_design_tokens is provided, use it as the base
     // and merge inputData.design_tokens on top. This prevents the LLM from
     // accidentally dropping tokens by passing a sparse design_tokens object.
@@ -188,7 +189,7 @@ export const applySpecPatch = createTool({
       throw new Error(`UNKNOWN_PATCH_OP:${String(_exhaustive)}`);
     }
 
-    return { spec_json: spec, design_tokens: tokens, applied };
+    const normalizedOutput = normalizeSpec(spec) as Record<string, any>;
+    return { spec_json: normalizedOutput, design_tokens: tokens, applied };
   },
 });
-

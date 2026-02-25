@@ -4,6 +4,7 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import type { EditAction } from "./types";
 import { InterfaceContextSchema } from "../../lib/REQUEST_CONTEXT_CONTRACT";
+import { normalizeSpec } from "../../lib/spec/uiSpecSchema";
 
 const densityToSpacingBase = (density: "compact" | "normal" | "relaxed") => {
   switch (density) {
@@ -53,7 +54,8 @@ export const applyInteractiveEdits = createTool({
       throw current;
     }
 
-    let nextSpec = (current as any).spec_json ?? {};
+    // Phase 2: Normalize spec from DB before applying interactive edits
+    let nextSpec = normalizeSpec((current as any).spec_json ?? {}) as Record<string, any>;
     let nextTokens = (current as any).design_tokens ?? {};
 
     // Note: reorder functionality removed due to non-existent import
