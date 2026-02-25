@@ -56,6 +56,9 @@ import {
 } from "@/components/vibe/editor";
 import { ResponsiveDashboardRenderer } from "@/components/preview/ResponsiveDashboardRenderer";
 import { PreviewErrorBoundary } from "@/components/preview/PreviewErrorBoundary";
+import { validateBeforeRender, type RenderValidationResult } from "@/lib/spec/validateBeforeRender";
+import { resolveComponentType } from "@/components/preview/componentRegistry";
+import { ValidationOverlay } from "@/components/preview/ValidationOverlay";
 import { EmptyPreviewState } from './EmptyPreviewState';
 import { useEditActions } from "@/hooks/useEditActions";
 
@@ -78,6 +81,16 @@ const LEGACY_JOURNEY_MAP: Record<string, JourneyMode> = {
 
 function normalizeJourneyMode(mode: string): JourneyMode {
   return (LEGACY_JOURNEY_MAP[mode] ?? mode) as JourneyMode;
+}
+
+/** Classify a raw component type into a widget kind using the canonical resolver. */
+function classifyWidgetKind(rawType: string): "metric" | "chart" | "table" | "other" {
+  const resolved = resolveComponentType(rawType);
+  if (!resolved) return "other";
+  if (resolved === "MetricCard") return "metric";
+  if (["LineChart", "BarChart", "PieChart", "DonutChart", "AreaChart", "TimeseriesChart"].includes(resolved)) return "chart";
+  if (["DataTable", "CRUDTable"].includes(resolved)) return "table";
+  return "other";
 }
 
 type ToolUiPayload =
@@ -784,6 +797,13 @@ export function ChatWorkspace({
   // Edit panel data (populated from interactive_edit_panel tool result)
   const [editWidgets, setEditWidgets] = useState<WidgetConfig[]>([]);
   const [loadedSpec, setLoadedSpec] = useState<any>(null);
+  // Phase 5: Validate loaded spec before render.
+  const validationResult = useMemo<RenderValidationResult | null>(() => {
+    if (!loadedSpec) return null;
+    return validateBeforeRender(loadedSpec);
+  }, [loadedSpec]);
+
+  const validatedSpec = validationResult?.spec ?? loadedSpec;
   const [loadedDesignTokens, setLoadedDesignTokens] = useState<any>(null);
   const [editPalettes, setEditPalettes] = useState<Palette[]>([]);
   const [editDensity, setEditDensity] = useState<Density>("comfortable");
@@ -1033,12 +1053,7 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
         const derived: WidgetConfig[] = loadedSpec.components.map((comp: any, idx: number) => ({
           id: comp.id || `widget-${idx}`,
           title: comp.props?.title || comp.type || `Widget ${idx + 1}`,
-          kind: (
-            comp.type === "MetricCard" || comp.type === "kpi-card" || comp.type === "kpi" || comp.type === "kpi_card" || comp.type === "metric-card" ? "metric" as const :
-            comp.type === "LineChart" || comp.type === "BarChart" || comp.type === "PieChart" || comp.type === "DonutChart" || comp.type === "AreaChart" || comp.type === "TimeseriesChart" || comp.type === "line-chart" || comp.type === "bar-chart" || comp.type === "pie-chart" ? "chart" as const :
-            comp.type === "DataTable" || comp.type === "data-table" || comp.type === "data_table" || comp.type === "table" || comp.type === "CRUDTable" || comp.type === "crud-table" ? "table" as const :
-            "other" as const
-          ),
+          kind: classifyWidgetKind(comp.type),
           enabled: !comp.props?.hidden,
         }));
         setEditWidgets(derived);
@@ -2139,12 +2154,7 @@ return (
                           const derived: WidgetConfig[] = loadedSpec.components.map((comp: any, idx: number) => ({
                             id: comp.id || `widget-${idx}`,
                             title: comp.props?.title || comp.type || `Widget ${idx + 1}`,
-                            kind: (
-                              comp.type === "MetricCard" || comp.type === "kpi-card" || comp.type === "kpi" || comp.type === "kpi_card" || comp.type === "metric-card" ? "metric" as const :
-                              comp.type === "LineChart" || comp.type === "BarChart" || comp.type === "PieChart" || comp.type === "DonutChart" || comp.type === "AreaChart" || comp.type === "TimeseriesChart" || comp.type === "line-chart" || comp.type === "bar-chart" || comp.type === "pie-chart" ? "chart" as const :
-                              comp.type === "DataTable" || comp.type === "data-table" || comp.type === "data_table" || comp.type === "table" || comp.type === "CRUDTable" || comp.type === "crud-table" ? "table" as const :
-                              "list" as const
-                            ),
+                            kind: classifyWidgetKind(comp.type),
                             enabled: true,
                           }));
                           setEditWidgets(derived);
@@ -2211,8 +2221,14 @@ return (
                       );
                     })()}
                     <PreviewErrorBoundary>
+                      {/* Phase 5: Dev-mode validation overlay */}
+                      {process.env.NODE_ENV === "development" && validationResult && (
+                        <div className="relative">
+                          <ValidationOverlay result={validationResult} />
+                        </div>
+                      )}
                       <ResponsiveDashboardRenderer
-                        spec={loadedSpec}
+                        spec={validatedSpec || loadedSpec}
                         designTokens={effectiveDesignTokens}
                         deviceMode={deviceMode}
                         isEditing={journeyMode === "build_edit"}

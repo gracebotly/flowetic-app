@@ -260,9 +260,19 @@ export function ResponsiveDashboardRenderer({ spec, designTokens, deviceMode, is
               const filledComponents = fillGridGaps(sortedComponents, baseColumns);
               return filledComponents.map((comp: ComponentSpec, index: number) => {
                 const resolved = resolveComponentType(comp.type);
-                if (!resolved) return null; // Phase 3: skip unknown component types
+                if (!resolved) {
+                  if (process.env.NODE_ENV === "development") {
+                    console.error(
+                      `[Renderer] 🛑 Skipped component id="${comp.id}" type="${comp.type}" — not in catalog. Fix upstream generation.`
+                    );
+                  }
+                  return null;
+                }
                 const Renderer = getRenderer(resolved);
-                if (!Renderer) return null; // Phase 3: skip unregistered renderers
+                if (!Renderer) {
+                  console.warn(`[Renderer] ⚠️ Skipped component id="${comp.id}" — no renderer registered for "${resolved}"`);
+                  return null;
+                }
                 // Tablet: wide components (w >= 7 out of 12) span full width
                 const tabletSpan = deviceMode === "tablet" && columns === 2
                   ? (comp.layout?.w ?? 4) >= 7 ? 2 : 1
@@ -376,9 +386,19 @@ export function ResponsiveDashboardRenderer({ spec, designTokens, deviceMode, is
             const filledComponents = fillGridGaps(sortedComponents, baseColumns);
             return filledComponents.map((comp: ComponentSpec, index: number) => {
               const resolved = resolveComponentType(comp.type);
-              if (!resolved) return null; // Phase 3: skip unknown component types
+              if (!resolved) {
+                if (process.env.NODE_ENV === "development") {
+                  console.error(
+                    `[Renderer] 🛑 Skipped component id="${comp.id}" type="${comp.type}" — not in catalog. Fix upstream generation.`
+                  );
+                }
+                return null;
+              }
               const Renderer = getRenderer(resolved);
-              if (!Renderer) return null; // Phase 3: skip unregistered renderers
+              if (!Renderer) {
+                console.warn(`[Renderer] ⚠️ Skipped component id="${comp.id}" — no renderer registered for "${resolved}"`);
+                return null;
+              }
               return (
                 <motion.div
                   key={comp.id}
