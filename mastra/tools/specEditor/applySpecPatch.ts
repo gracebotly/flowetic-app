@@ -3,6 +3,7 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { OptionalAuditContextSchema } from "../../lib/REQUEST_CONTEXT_CONTRACT";
+import { normalizeSpec } from "../../lib/spec/uiSpecSchema";
 
 const LayoutSchema = z.object({
   col: z.number().int().min(0),
@@ -81,41 +82,6 @@ function deepMerge(target: Record<string, any>, source: Record<string, any>): Re
 }
 
 /**
- * Normalize spec to ensure all required fields exist with valid defaults.
- * Prevents patch failures due to missing fields.
- */
-function normalizeSpecForPatch(raw: Record<string, unknown>): Record<string, unknown> {
-  const spec = { ...raw };
-
-  // Default version
-  if (!spec.version || typeof spec.version !== "string") {
-    spec.version = "1.0";
-  }
-
-  // Default templateId
-  if (!spec.templateId || typeof spec.templateId !== "string") {
-    spec.templateId = `agent-generated-${Date.now()}`;
-  }
-
-  // Default platformType
-  if (!spec.platformType || typeof spec.platformType !== "string") {
-    spec.platformType = "n8n";
-  }
-
-  // Normalize layout
-  if (spec.layout && typeof spec.layout === "object") {
-    const layoutObj = spec.layout as Record<string, unknown>;
-    if (!layoutObj.type) layoutObj.type = "grid";
-    if (typeof layoutObj.columns !== "number") layoutObj.columns = 12;
-    if (typeof layoutObj.gap !== "number") layoutObj.gap = 16;
-  } else {
-    spec.layout = { type: "grid", columns: 12, gap: 16 };
-  }
-
-  return spec;
-}
-
-/**
  * Validate that all component IDs in patch operations exist in the spec.
  * Returns array of invalid IDs if any are found.
  */
@@ -174,7 +140,7 @@ export const applySpecPatch = createTool({
   }),
   execute: async (inputData, context) => {
     const rawSpec = deepClone(inputData.spec_json);
-    const spec = normalizeSpecForPatch(rawSpec) as Record<string, any>;
+    const spec = normalizeSpec(rawSpec) as Record<string, any>;
     // Deep-merge: if existing_design_tokens is provided, use it as the base
     // and merge inputData.design_tokens on top. This prevents the LLM from
     // accidentally dropping tokens by passing a sparse design_tokens object.
@@ -271,7 +237,10 @@ export const applySpecPatch = createTool({
       throw new Error(`UNKNOWN_PATCH_OP:${String(_exhaustive)}`);
     }
 
-    return { spec_json: spec, design_tokens: tokens, applied };
+    // Phase 2: Re-normalize after all patches applied.
+    // Ensures newly added components have layout defaults (col/row/w/h)
+    // and any structural invariants are restored.
+    const normalizedOutput = normalizeSpec(spec) as Record<string, any>;
+    return { spec_json: normalizedOutput, design_tokens: tokens, applied };
   },
 });
-

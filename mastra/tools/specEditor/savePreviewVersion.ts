@@ -4,6 +4,7 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { persistPreviewVersion } from "../persistPreviewVersion";
 import { extractTenantContext } from "../../lib/tenant-verification";
+import { normalizeSpec } from "../../lib/spec/uiSpecSchema";
 // Wolf V2 Phase 3: STYLE_BUNDLE_TOKENS removed (was always empty).
 // Validation now uses known bundle ID allowlist + layoutSkeletonId check.
 import { InterfaceContextSchema } from "../../lib/REQUEST_CONTEXT_CONTRACT";
@@ -37,7 +38,10 @@ export const savePreviewVersion = createTool({
     previewUrl: z.string(),
   }),
   execute: async (inputData, context) => {
-    const { spec_json, interfaceId } = inputData;
+    const { interfaceId } = inputData;
+    // Phase 2: Normalize spec before any validation or persistence.
+    // Ensures layout defaults, component structure invariants are met.
+    const spec_json = normalizeSpec(inputData.spec_json) as Record<string, any>;
     let { design_tokens } = inputData;
 
     // ============================================================================
