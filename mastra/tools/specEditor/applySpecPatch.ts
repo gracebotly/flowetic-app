@@ -18,6 +18,7 @@ const ComponentSchema = z.object({
   type: z.string().min(1),
   props: z.record(z.any()),
   layout: LayoutSchema,
+  meta: z.record(z.any()).optional(),
 });
 
 const UISpecSchemaLoose = z.object({
@@ -201,7 +202,17 @@ export const applySpecPatch = createTool({
         }
         const exists = spec.components.some((c: any) => c?.id === op.component!.id);
         if (exists) throw new Error(`DUPLICATE_COMPONENT_ID:${op.component.id}`);
-        spec.components.push(op.component);
+        // Phase 4: Inject explainability metadata for agent-added components
+        const componentWithMeta = {
+          ...op.component,
+          meta: {
+            ...(op.component.meta || {}),
+            source: op.component.meta?.source || 'agent_edit',
+            addedAt: new Date().toISOString(),
+            reason: op.component.meta?.reason || `Added by agent via applySpecPatch`,
+          },
+        };
+        spec.components.push(componentWithMeta);
         applied.push(`addComponent:${op.component.id}`);
         continue;
       }
@@ -223,6 +234,11 @@ export const applySpecPatch = createTool({
         spec.components[idx] = {
           ...spec.components[idx],
           props: { ...(spec.components[idx]?.props ?? {}), ...op.propsPatch },
+          meta: {
+            ...(spec.components[idx]?.meta || {}),
+            lastEditedAt: new Date().toISOString(),
+            lastEditSource: 'agent_edit',
+          },
         };
         applied.push(`updateComponentProps:${op.componentId}`);
         continue;

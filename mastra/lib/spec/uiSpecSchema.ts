@@ -73,11 +73,24 @@ export const LayoutSchema = z.object({
 });
 
 // ── Component schema ───────────────────────────────────────────────────
+// ── Phase 4: Explainability metadata ───────────────────────────────────
+export const ComponentMetaSchema = z.object({
+  reason: z.string().optional(),
+  source: z.enum(['workflow', 'agent_edit', 'interactive_edit', 'skill_override', 'heuristic', 'manual']).optional(),
+  fieldShape: z.string().optional(),
+  fieldName: z.string().optional(),
+  addedAt: z.string().optional(),
+  skeletonSlot: z.string().optional(),
+}).optional();
+
+export type ComponentMeta = z.infer<typeof ComponentMetaSchema>;
+
 export const ComponentSchema = z.object({
   id: z.string(),
   type: ComponentType, // Phase 3: strict allowlist enforcement
   props: z.record(z.any()), // Phase 3: prop sanitization handled by propSchemas.ts at render/persist boundaries
   layout: LayoutSchema,
+  meta: ComponentMetaSchema, // Phase 4: explainability metadata
 });
 
 // ── Full UI Spec schema ────────────────────────────────────────────────

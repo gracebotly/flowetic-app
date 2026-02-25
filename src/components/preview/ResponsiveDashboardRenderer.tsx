@@ -269,7 +269,7 @@ export function ResponsiveDashboardRenderer({ spec, designTokens, deviceMode, is
                 return (
                   <motion.div
                     key={comp.id}
-                    className="@container"
+                    className="@container relative"
                     style={tabletSpan ? { gridColumn: `span ${tabletSpan}` } : undefined}
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -279,7 +279,19 @@ export function ResponsiveDashboardRenderer({ spec, designTokens, deviceMode, is
                       ease: [0.25, 0.1, 0.25, 1.0],
                     }}
                   >
+                    <>
                     <Renderer component={{ ...comp, type: resolved, props: sanitizeProps(resolved, comp.props ?? {}) }} designTokens={effectiveTokens} deviceMode={deviceMode} isEditing={isEditing} onClick={() => onWidgetClick?.(comp.id)} />
+                    {isEditing && comp.meta?.reason && (
+                      <div
+                        className="absolute top-1 right-1 z-10 group/meta"
+                        title={`${comp.meta.reason}${comp.meta.fieldName ? ` (field: ${comp.meta.fieldName})` : ''}${comp.meta.source ? ` [${comp.meta.source}]` : ''}`}
+                      >
+                        <div className="w-5 h-5 rounded-full bg-blue-500/20 text-blue-600 flex items-center justify-center text-xs cursor-help hover:bg-blue-500/40 transition-colors">
+                          ?
+                        </div>
+                      </div>
+                    )}
+                  </>
                   </motion.div>
                 );
               });
@@ -369,7 +381,7 @@ export function ResponsiveDashboardRenderer({ spec, designTokens, deviceMode, is
               return (
                 <motion.div
                   key={comp.id}
-                  className="@container min-w-0"
+                  className="@container min-w-0 relative"
                   style={{
                     gridColumn: `${(comp.layout?.col ?? 0) + 1} / span ${Math.min(comp.layout?.w ?? 4, baseColumns - (comp.layout?.col ?? 0))}`,
                     gridRow: `${(comp.layout?.row ?? 0) + 1} / span ${comp.layout?.h ?? 2}`,
@@ -383,7 +395,19 @@ export function ResponsiveDashboardRenderer({ spec, designTokens, deviceMode, is
                     ease: [0.25, 0.1, 0.25, 1.0],
                   }}
                 >
-                  <Renderer component={{ ...comp, type: resolved, props: sanitizeProps(resolved, comp.props ?? {}) }} designTokens={effectiveTokens} deviceMode={deviceMode} isEditing={isEditing} onClick={() => onWidgetClick?.(comp.id)} />
+                  <>
+                    <Renderer component={{ ...comp, type: resolved, props: sanitizeProps(resolved, comp.props ?? {}) }} designTokens={effectiveTokens} deviceMode={deviceMode} isEditing={isEditing} onClick={() => onWidgetClick?.(comp.id)} />
+                    {isEditing && comp.meta?.reason && (
+                      <div
+                        className="absolute top-1 right-1 z-10 group/meta"
+                        title={`${comp.meta.reason}${comp.meta.fieldName ? ` (field: ${comp.meta.fieldName})` : ''}${comp.meta.source ? ` [${comp.meta.source}]` : ''}`}
+                      >
+                        <div className="w-5 h-5 rounded-full bg-blue-500/20 text-blue-600 flex items-center justify-center text-xs cursor-help hover:bg-blue-500/40 transition-colors">
+                          ?
+                        </div>
+                      </div>
+                    )}
+                  </>
                 </motion.div>
               );
             });
