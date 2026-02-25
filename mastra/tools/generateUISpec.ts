@@ -503,6 +503,7 @@ function buildDashboardComponentsFromSkeleton(
   designPatterns?: Array<{ content: string; source: string; score: number }>,
 ): ComponentBlueprint[] {
   const components: ComponentBlueprint[] = [];
+  let secondaryChartCount = 0;  // Track secondary chart emissions for budget enforcement
   const entity = cleanEntityName(entityName);
   const allFields = Object.values(mappings);
   let row = 0;
@@ -577,6 +578,18 @@ function buildDashboardComponentsFromSkeleton(
         break;
       }
       case 'chart': {
+        // ── Budget enforcement: respect skeleton.maxSecondaryCharts ──
+        // The dominant chart section is always allowed (it's the primary viz).
+        // Non-dominant chart sections count against the secondary budget.
+        if (!section.dominant && secondaryChartCount >= skeleton.maxSecondaryCharts) {
+          console.log(
+            `[buildDashboardComponentsFromSkeleton] Skipping chart section "${section.id}" — ` +
+            `secondary chart budget exhausted (${secondaryChartCount}/${skeleton.maxSecondaryCharts})`,
+          );
+          // Don't increment row — section is completely skipped
+          break;
+        }
+
         // If this section is <12 columns, check if there's a companion section
         // on the same row. If not, expand to full width to avoid orphaned gaps.
         let width = section.columns || 12;
@@ -614,6 +627,7 @@ function buildDashboardComponentsFromSkeleton(
               }),
               layout: { col: colStart, row, w: width, h: sectionHeight > 2 ? sectionHeight : 3 },
             });
+            if (!section.dominant) secondaryChartCount++;
             assignedTrend = true;
             break;
           }
@@ -637,6 +651,7 @@ function buildDashboardComponentsFromSkeleton(
                 }),
                 layout: { col: colStart, row, w: width, h: sectionHeight > 2 ? sectionHeight : 3 },
               });
+              if (!section.dominant) secondaryChartCount++;
               assignedBreakdown = true;
               break;
             }
@@ -671,6 +686,7 @@ function buildDashboardComponentsFromSkeleton(
                   }),
                   layout: { col: colStart, row, w: width, h: sectionHeight > 2 ? sectionHeight : 3 },
                 });
+                if (!section.dominant) secondaryChartCount++;
                 assignedFromRec = true;
                 break;
               }
@@ -678,6 +694,20 @@ function buildDashboardComponentsFromSkeleton(
 
             if (!assignedFromRec) {
               console.log(`[buildDashboardComponentsFromSkeleton] Skipping chart section "${section.id}" at row ${row} — all chart fields exhausted`);
+
+              // ── Emit EmptyStateCard instead of blank gap ──
+              // Premium tools render designed empty states, not nothing.
+              components.push({
+                id: `empty-${section.id}-${row}`,
+                type: 'EmptyStateCard',
+                propsBuilder: () => ({
+                  title: 'No data yet',
+                  subtitle: 'Connect more events to populate this section',
+                  icon: section.dominant ? 'bar-chart-2' : 'pie-chart',
+                  sectionId: section.id,
+                }),
+                layout: { col: 0, row, w: section.columns || 12, h: section.minHeight || 3 },
+              });
 
               // ── Gap-fill: Expand companion component to fill the empty space ──
               // If this section was supposed to be side-by-side with another chart

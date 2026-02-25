@@ -12,6 +12,7 @@ import { LineChartRenderer } from "./components/LineChart";
 import { BarChartRenderer } from "./components/BarChart";
 import { PieChartRenderer, DonutChartRenderer } from "./components/PieChart";
 import { DataTableRenderer } from "./components/DataTable";
+import { EmptyStateCard } from './renderers/EmptyStateCard';
 
 // Product/Admin/Insight components (lazy-loaded via dynamic import)
 const InsightCardRenderer = dynamic(() => import("./components/InsightCard"), { ssr: false });
@@ -39,6 +40,7 @@ const RENDERER_MAP: Record<string, React.ComponentType<RendererProps>> = {
   PageHeader: PageHeaderRenderer as any, FilterBar: FilterBarRenderer as any,
   CRUDTable: CRUDTableRenderer as any, Pagination: FilterBarRenderer as any,
   AuthForm: AuthFormRenderer as any,
+  EmptyStateCard,
 };
 
 function getRenderer(resolvedType: string): React.ComponentType<RendererProps> {
