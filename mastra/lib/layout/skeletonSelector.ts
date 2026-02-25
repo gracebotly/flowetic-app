@@ -70,6 +70,110 @@ export interface SelectionContext {
 }
 
 // ============================================================================
+// Skeleton Capacity Requirements
+// ============================================================================
+
+/**
+ * Minimum data requirements for a skeleton to render well.
+ * If the data can't fill the skeleton, we downgrade to the fallback.
+ * This prevents the post-process expansion from destroying layouts
+ * when half the sections get skipped due to insufficient data.
+ */
+interface SkeletonCapacity {
+  /** Minimum fields that produce charts/cards (not table-only fields) */
+  minChartableFields: number;
+  /** Minimum total active (non-skipped) fields */
+  minActiveFields: number;
+  /** Minimum distinct data roles needed (hero, trend, breakdown) */
+  minDistinctRoles: number;
+  /** Skeleton to use if this one can't be filled */
+  fallback: SkeletonId;
+}
+
+const SKELETON_CAPACITY: Record<string, SkeletonCapacity> = {
+  'operational-monitoring': {
+    minChartableFields: 5,   // 3 KPIs + trend chart + breakdown + feed
+    minActiveFields: 6,
+    minDistinctRoles: 3,     // hero + trend + breakdown
+    fallback: 'executive-overview',
+  },
+  'analytical-breakdown': {
+    minChartableFields: 4,
+    minActiveFields: 6,
+    minDistinctRoles: 2,     // breakdown + at least one other
+    fallback: 'executive-overview',
+  },
+  'table-first': {
+    minChartableFields: 2,
+    minActiveFields: 8,
+    minDistinctRoles: 1,
+    fallback: 'executive-overview',
+  },
+  'storyboard-insight': {
+    minChartableFields: 3,
+    minActiveFields: 4,
+    minDistinctRoles: 2,
+    fallback: 'executive-overview',
+  },
+  'executive-overview': {
+    minChartableFields: 2,   // very forgiving — works with sparse data
+    minActiveFields: 3,
+    minDistinctRoles: 1,
+    fallback: 'executive-overview', // it IS the final fallback
+  },
+};
+
+/**
+ * Validate that the selected skeleton can actually be filled by the available data.
+ * If not, recursively downgrade to a simpler skeleton.
+ *
+ * This is the key architectural fix: the priority waterfall asks "what KIND of data?"
+ * but never asked "is there ENOUGH data?" — causing complex skeletons to be selected
+ * for sparse datasets, leading to half-empty layouts that the post-process expansion
+ * then destroys by blowing everything to w:12.
+ */
+function validateSkeletonCapacity(
+  candidate: SkeletonId,
+  dataShape: DataShapeSignals,
+): SkeletonId {
+  const capacity = SKELETON_CAPACITY[candidate];
+  if (!capacity) return candidate; // product/admin skeletons — no capacity check needed
+
+  // Count chartable fields (fields that produce charts/cards, not just table rows)
+  const chartableFields = Math.max(
+    1,
+    dataShape.fieldCount - Math.floor(dataShape.fieldCount * dataShape.tableSuitableRatio),
+  );
+
+  // Count distinct data roles
+  let distinctRoles = 0;
+  if (dataShape.fieldCount > 0) distinctRoles++;                                    // hero (any countable field)
+  if (dataShape.hasTimeSeries || dataShape.hasTimestamp) distinctRoles++;            // trend
+  if (dataShape.hasBreakdown || dataShape.categoricalFields > 0) distinctRoles++;   // breakdown
+
+  const meetsChartable = chartableFields >= capacity.minChartableFields;
+  const meetsActive = dataShape.fieldCount >= capacity.minActiveFields;
+  const meetsRoles = distinctRoles >= capacity.minDistinctRoles;
+
+  if (meetsChartable && meetsActive && meetsRoles) {
+    return candidate; // ✅ Data can fill this skeleton
+  }
+
+  // ❌ Data can't fill this skeleton — downgrade
+  console.log(
+    `[selectSkeleton] ⚠️ Capacity gate: "${candidate}" requires ` +
+    `${capacity.minChartableFields} chartable / ${capacity.minActiveFields} active / ${capacity.minDistinctRoles} roles, ` +
+    `but data has ${chartableFields} / ${dataShape.fieldCount} / ${distinctRoles}. ` +
+    `Downgrading → "${capacity.fallback}".`,
+  );
+
+  if (capacity.fallback !== candidate) {
+    return validateSkeletonCapacity(capacity.fallback, dataShape);
+  }
+  return candidate;
+}
+
+// ============================================================================
 // Selection Function
 // ============================================================================
 
@@ -78,10 +182,37 @@ export interface SelectionContext {
  *
  * This function is the ONLY place skeleton selection happens.
  * It uses a strict priority waterfall — first matching rule wins.
+ * After selection, a capacity gate validates that the data can actually
+ * fill the chosen skeleton. If not, it downgrades gracefully.
  *
  * @returns SkeletonId — one of the 11 skeleton identifiers
  */
 export function selectSkeleton(context: SelectionContext): SkeletonId {
+  const candidate = selectSkeletonCandidate(context);
+
+  // Capacity gate: can the data actually fill this skeleton?
+  // Product/admin skeletons skip this check (not data-driven).
+  const skipCapacityCheck = [
+    'saas-landing-page', 'workflow-input-form', 'results-display',
+    'admin-crud-panel', 'settings-dashboard', 'authentication-flow',
+  ].includes(candidate);
+
+  if (skipCapacityCheck) return candidate;
+
+  const validated = validateSkeletonCapacity(candidate, context.dataShape);
+  if (validated !== candidate) {
+    console.log(
+      `[selectSkeleton] Skeleton changed: "${candidate}" → "${validated}" (capacity gate)`,
+    );
+  }
+  return validated;
+}
+
+/**
+ * Priority waterfall — picks the ideal skeleton based on data semantics.
+ * This is the "what KIND of data?" question.
+ */
+function selectSkeletonCandidate(context: SelectionContext): SkeletonId {
   // ── PRIORITY 0: Explicit UI type (product pages + admin) ──────────
   if (context.uiType === 'landing-page') return 'saas-landing-page';
   if (context.uiType === 'form-wizard') return 'workflow-input-form';
@@ -94,21 +225,20 @@ export function selectSkeleton(context: SelectionContext): SkeletonId {
   if (context.mode === 'client-facing') return 'storyboard-insight';
 
   // ── PRIORITY 2: Operational monitoring signals ────────────────────
-  // Relaxed: workflow data with timestamps + status fields is operational
-  // monitoring regardless of event density or intent keywords.
-  // The old gate (density==='high' AND monitoring keywords) was too strict —
-  // real n8n/Make/Vapi data rarely hits 'high' density during initial setup.
   const intentLower = context.intent.toLowerCase();
+  // Tightened: only match genuine operational monitoring intent.
+  // Old list included 'pipeline', 'dashboard', 'workflow', 'track' which match
+  // basically every request and caused operational-monitoring to be selected
+  // for sparse datasets that can't fill its 8-section layout.
   const hasMonitoringIntent = intentLower.includes('monitor') ||
-    intentLower.includes('health') ||
+    intentLower.includes('health check') ||
     intentLower.includes('real-time') ||
     intentLower.includes('realtime') ||
-    intentLower.includes('track') ||
-    intentLower.includes('pipeline') ||
-    intentLower.includes('dashboard') ||
-    intentLower.includes('activity') ||
-    intentLower.includes('execution') ||
-    intentLower.includes('workflow');
+    intentLower.includes('uptime') ||
+    intentLower.includes('devops') ||
+    intentLower.includes('observability') ||
+    intentLower.includes('incident') ||
+    intentLower.includes('ops status');
   if (
     context.dataShape.hasTimestamp &&
     context.dataShape.statusFields > 0 &&
@@ -126,8 +256,6 @@ export function selectSkeleton(context: SelectionContext): SkeletonId {
   }
 
   // ── PRIORITY 4: High categorical diversity ────────────────────────
-  // Relaxed: 2+ categorical fields with breakdown data is enough.
-  // Intent keywords are helpful but not required if data shape is clear.
   if (
     context.dataShape.categoricalFields >= 2 &&
     context.dataShape.fieldCount >= 6 &&
@@ -176,7 +304,7 @@ export function getSelectionReason(context: SelectionContext, selectedId: Skelet
       return `Analytical: categoricalFields=${context.dataShape.categoricalFields}, fieldCount=${context.dataShape.fieldCount}, intent includes analysis keywords`;
 
     case 'executive-overview':
-      return 'Default: no special signals matched → clean executive overview';
+      return `Executive overview: clean layout for ${context.dataShape.fieldCount} fields (${context.dataShape.eventDensity} density)`;
 
     default:
       return `Selected: ${selectedId}`;

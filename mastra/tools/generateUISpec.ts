@@ -803,10 +803,20 @@ function buildDashboardComponentsFromSkeleton(
     }
   }
 
-  // ── Post-process: Fill any remaining row gaps ──────────────────────
-  // If a row has only one component that doesn't start at col 0 or doesn't
-  // span full width, expand it. This catches cases where a companion was
-  // skipped after its partner was already placed.
+  // ── Post-process: skeleton-aware gap handling ─────────────────────
+  // When a paired section's companion is missing (skipped due to insufficient
+  // data), we DON'T blindly expand to w:12. Instead:
+  //
+  // 1. Chart components in a pair: the remaining chart expands to fill
+  //    the pair's combined width (preserves the skeleton's row structure).
+  // 2. KPI grids: already span full width, no adjustment needed.
+  // 3. Tables/feeds: already span full width, no adjustment needed.
+  // 4. Two components in a row that don't sum to 12: the wider one absorbs
+  //    the gap (preserves asymmetric intent).
+  //
+  // CRITICAL: We ONLY expand charts to 8 columns max (not 12) when they were
+  // part of a side-by-side pair. A 12-col chart looks like a bland full-width
+  // block — an 8-col chart with whitespace looks intentional and premium.
   const rowMap = new Map<number, ComponentBlueprint[]>();
   for (const c of components) {
     const r = c.layout.row;
@@ -817,9 +827,29 @@ function buildDashboardComponentsFromSkeleton(
     if (rowComps.length === 1) {
       const comp = rowComps[0];
       if (comp.layout.w < 12) {
-        console.log(`[buildDashboardComponentsFromSkeleton] Post-process: expanding lone component "${comp.id}" from col:${comp.layout.col} w:${comp.layout.w} → col:0 w:12`);
-        comp.layout.col = 0;
-        comp.layout.w = 12;
+        // Determine if this is a chart that was part of a skeleton pair
+        const isChart = comp.type === 'TimeseriesChart' || comp.type === 'BarChart' ||
+                        comp.type === 'PieChart' || comp.type === 'LineChart' ||
+                        comp.type === 'DonutChart' || comp.type === 'AreaChart';
+        const isSmallChart = isChart && comp.layout.w <= 6;
+
+        if (isSmallChart) {
+          // Expand to 8 cols (not 12) — leaves intentional whitespace for premium feel
+          const newW = Math.min(8, 12);
+          console.log(`[buildDashboardComponentsFromSkeleton] Post-process: expanding lone chart "${comp.id}" from col:${comp.layout.col} w:${comp.layout.w} → col:0 w:${newW} (capped, not full-width)`);
+          comp.layout.col = 0;
+          comp.layout.w = newW;
+        } else if (isChart && comp.layout.w >= 7) {
+          // Already a dominant chart (7+ cols) — expand to full width is OK
+          console.log(`[buildDashboardComponentsFromSkeleton] Post-process: expanding dominant chart "${comp.id}" from col:${comp.layout.col} w:${comp.layout.w} → col:0 w:12`);
+          comp.layout.col = 0;
+          comp.layout.w = 12;
+        } else {
+          // Non-chart (StatusFeed, InsightCard, etc.) — expand to full width
+          console.log(`[buildDashboardComponentsFromSkeleton] Post-process: expanding lone component "${comp.id}" from col:${comp.layout.col} w:${comp.layout.w} → col:0 w:12`);
+          comp.layout.col = 0;
+          comp.layout.w = 12;
+        }
       }
     } else if (rowComps.length === 2) {
       // Two components in a row — ensure they fill the full 12 columns
