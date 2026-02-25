@@ -283,6 +283,204 @@ function shortEntityNoun(cleanedEntity: string): string {
  * designSystemWorkflow BM25 path), falls back to the old behavior.
  */
 // ============================================================================
+// Wireframe-Based Component Builder
+// Uses the proposal wireframe (user's selected layout) as the grid template.
+// Each wireframe component slot is matched to real data via field analysis
+// and chart recommendations.
+// ============================================================================
+
+function buildComponentsFromWireframe(
+  wireframe: { name?: string; components: Array<{ id: string; type: string; label?: string; layout: { col: number; row: number; w: number; h: number } }> },
+  mappings: Record<string, string>,
+  chartRecs: Array<{ type: string; bestFor: string; fieldName?: string }>,
+  entityName: string,
+  fieldAnalysis?: Array<{
+    name: string; type: string; shape: string; component: string;
+    aggregation: string; role: string; uniqueValues: number;
+    totalRows: number; skip: boolean; skipReason?: string;
+  }>,
+): ComponentBlueprint[] {
+  const blueprints: ComponentBlueprint[] = [];
+  const allFields = Object.keys(mappings);
+  const usedFields = new Set<string>();
+
+  // Classify fields from fieldAnalysis
+  const active = (fieldAnalysis || []).filter(f => !f.skip);
+  const heroes = active.filter(f => f.role === 'hero' || f.shape === 'duration' || f.shape === 'money' || f.shape === 'rate');
+  const trends = active.filter(f => f.shape === 'timestamp' || f.component === 'TimeseriesChart');
+  const breakdowns = active.filter(f => f.shape === 'label' || f.shape === 'status' || f.component === 'PieChart' || f.component === 'BarChart');
+
+  let kpiIndex = 0;
+  let trendIndex = 0;
+  let breakdownIndex = 0;
+  let chartRecIndex = 0;
+
+  for (const slot of wireframe.components) {
+    const normalizedType = slot.type.toLowerCase().replace(/[-_\s]/g, '');
+    const layout = { ...slot.layout };
+
+    if (normalizedType === 'kpi' || normalizedType === 'metriccard' || normalizedType === 'kpicard') {
+      // ── KPI slot: match to hero field or use fallback ──
+      const heroField = heroes[kpiIndex];
+      kpiIndex++;
+
+      if (heroField && !usedFields.has(heroField.name)) {
+        usedFields.add(heroField.name);
+        blueprints.push({
+          id: slot.id,
+          type: 'MetricCard',
+          propsBuilder: (m) => ({
+            title: slot.label || humanizeFieldName(heroField.name),
+            valueField: m[heroField.name] || heroField.name,
+            aggregation: heroField.aggregation || 'count',
+            icon: heroField.shape === 'duration' ? 'clock' : heroField.shape === 'status' ? 'check-circle' : 'activity',
+          }),
+          layout,
+        });
+      } else {
+        // Fallback KPI from common patterns
+        const fallbacks = [
+          { title: `Total ${pluralizeEntity(shortEntityNoun(cleanEntityName(entityName)))}`, field: pickField(mappings, ['execution_id', 'run_id', 'id', 'call_id'], 'id'), agg: 'count', icon: 'activity' },
+          { title: 'Success Rate', field: pickField(mappings, ['status', 'result', 'outcome'], 'status'), agg: 'percentage', icon: 'check-circle' },
+          { title: 'Avg Duration', field: pickField(mappings, ['duration', 'duration_ms', 'execution_time', 'elapsed'], 'duration_ms'), agg: 'avg', icon: 'clock' },
+          { title: 'Runs Over Time', field: pickField(mappings, ['timestamp', 'created_at', 'started_at'], 'timestamp'), agg: 'count', icon: 'trending' },
+        ];
+        const fb = fallbacks[(kpiIndex - 1) % fallbacks.length];
+        blueprints.push({
+          id: slot.id,
+          type: 'MetricCard',
+          propsBuilder: () => ({
+            title: slot.label || fb.title,
+            valueField: fb.field,
+            aggregation: fb.agg,
+            icon: fb.icon,
+          }),
+          layout,
+        });
+      }
+
+    } else if (normalizedType === 'linechart' || normalizedType === 'timeserieschart' || normalizedType === 'areachart') {
+      // ── Timeseries slot ──
+      const trendField = trends[trendIndex];
+      trendIndex++;
+      const dateField = pickField(mappings, ['timestamp', 'created_at', 'started_at', 'ended_at', 'time', 'date'], 'timestamp');
+
+      blueprints.push({
+        id: slot.id,
+        type: 'TimeseriesChart',
+        propsBuilder: () => ({
+          title: slot.label || (trendField ? `${humanizeFieldName(trendField.name)} Over Time` : 'Activity Over Time'),
+          xAxisField: dateField,
+          yAxisField: 'count',
+          aggregation: 'count_per_interval',
+          dateField,
+          valueField: 'count',
+        }),
+        layout,
+      });
+
+    } else if (normalizedType === 'barchart') {
+      // ── Bar chart slot ──
+      const bdField = breakdowns[breakdownIndex] || null;
+      if (bdField) {
+        breakdownIndex++;
+        usedFields.add(bdField.name);
+      }
+      const catField = bdField
+        ? (mappings[bdField.name] || bdField.name)
+        : pickField(mappings, ['workflow_name', 'workflow_id', 'status', 'type'], 'status');
+
+      blueprints.push({
+        id: slot.id,
+        type: 'BarChart',
+        propsBuilder: () => ({
+          title: slot.label || (bdField ? `${humanizeFieldName(bdField.name)} Breakdown` : 'Breakdown by Type'),
+          categoryField: catField,
+          valueField: 'count',
+          aggregation: 'count',
+        }),
+        layout,
+      });
+
+    } else if (normalizedType === 'piechart' || normalizedType === 'donutchart') {
+      // ── Pie/Donut chart slot ──
+      const bdField = breakdowns[breakdownIndex] || null;
+      if (bdField) {
+        breakdownIndex++;
+        usedFields.add(bdField.name);
+      }
+      const catField = bdField
+        ? (mappings[bdField.name] || bdField.name)
+        : pickField(mappings, ['status', 'workflow_name', 'type'], 'status');
+
+      blueprints.push({
+        id: slot.id,
+        type: 'PieChart',
+        propsBuilder: () => ({
+          title: slot.label || (bdField ? `${humanizeFieldName(bdField.name)} Distribution` : 'Status Distribution'),
+          categoryField: catField,
+          valueField: 'count',
+          aggregation: 'count',
+        }),
+        layout,
+      });
+
+    } else if (normalizedType === 'table' || normalizedType === 'datatable' || normalizedType === 'statusgrid') {
+      // ── Table/grid slot ──
+      const tableColumns = active.length > 0
+        ? active.slice(0, 8).map(f => ({ key: f.name, label: humanizeFieldName(f.name) }))
+        : allFields.slice(0, 6).map(f => ({ key: f, label: humanizeFieldName(f) }));
+
+      blueprints.push({
+        id: slot.id,
+        type: slot.type.toLowerCase().includes('status') ? 'StatusFeed' : 'DataTable',
+        propsBuilder: (m) => ({
+          title: slot.label || `${shortEntityNoun(cleanEntityName(entityName))} Details`,
+          columns: tableColumns,
+          pageSize: 15,
+          sortable: true,
+          defaultSort: { field: pickField(m, ['timestamp', 'created_at', 'time'], 'timestamp'), direction: 'desc' },
+        }),
+        layout,
+      });
+
+    } else {
+      // ── Unknown type: try chart recommendations ──
+      const rec = chartRecs[chartRecIndex];
+      if (rec) {
+        chartRecIndex++;
+        const chartType = mapChartRecType(rec.type);
+        blueprints.push({
+          id: slot.id,
+          type: chartType,
+          propsBuilder: (m) => ({
+            title: slot.label || rec.bestFor || 'Chart',
+            ...(chartType === 'TimeseriesChart'
+              ? {
+                  xAxisField: pickField(m, ['timestamp', 'created_at', 'time', 'date'], 'timestamp'),
+                  yAxisField: 'count',
+                  aggregation: 'count_per_interval',
+                  dateField: pickField(m, ['timestamp', 'created_at', 'time', 'date'], 'timestamp'),
+                  valueField: 'count',
+                }
+              : {
+                  categoryField: rec.fieldName ? (m[rec.fieldName] || rec.fieldName) : pickField(m, ['status', 'type'], 'status'),
+                  valueField: 'count',
+                  aggregation: 'count',
+                }),
+          }),
+          layout,
+        });
+      } else {
+        console.log(`[buildComponentsFromWireframe] Unknown slot type "${slot.type}" and no chart recs left — skipping ${slot.id}`);
+      }
+    }
+  }
+
+  return blueprints;
+}
+
+// ============================================================================
 // Skeleton-Aware Dashboard Component Builder (Phase 2)
 // Replaces the fixed layout with 11 deterministic skeletons.
 // Wolf V2 Phase 4: buildComponentsFromDesignTokens() deleted.
@@ -480,6 +678,38 @@ function buildDashboardComponentsFromSkeleton(
 
             if (!assignedFromRec) {
               console.log(`[buildDashboardComponentsFromSkeleton] Skipping chart section "${section.id}" at row ${row} — all chart fields exhausted`);
+
+              // ── Gap-fill: Expand companion component to fill the empty space ──
+              // If this section was supposed to be side-by-side with another chart
+              // (e.g., status-distribution[5] + trend-throughput[7]), and we're
+              // skipping this one, find the companion component on the same row
+              // and expand it to full width so there's no half-empty row.
+              if (width < 12) {
+                const companionOnSameRow = components.find(
+                  c => c.layout.row === row && c.id !== `chart-trend-${row}` && c.id !== `chart-breakdown-${row}` && c.id !== `chart-rec-${row}`
+                );
+                if (companionOnSameRow) {
+                  console.log(`[buildDashboardComponentsFromSkeleton] Expanding companion "${companionOnSameRow.id}" to full width (was col:${companionOnSameRow.layout.col} w:${companionOnSameRow.layout.w})`);
+                  companionOnSameRow.layout.col = 0;
+                  companionOnSameRow.layout.w = 12;
+                } else {
+                  // Check if the NEXT section is a companion that hasn't been built yet.
+                  // Mark this row as needing full-width expansion for the next chart section.
+                  const sIdx = skeleton.sections.indexOf(section);
+                  const nxtSection = skeleton.sections[sIdx + 1];
+                  if (nxtSection && nxtSection.type === 'chart' && (section.columns + (nxtSection.columns || 12)) <= 12) {
+                    // The next section will be built on the same row — it should go full width.
+                    // We signal this by NOT incrementing row, so the next section reuses this row.
+                    // Also override its width by storing a flag.
+                    console.log(`[buildDashboardComponentsFromSkeleton] Next section "${nxtSection.id}" will expand to fill row ${row}`);
+                    // Don't increment row — let the companion section reuse it
+                    // The companion will detect hasCompanion=true but since we skipped,
+                    // we need to mark that this section was empty.
+                    // Simplest fix: just skip row increment and let companion take full row
+                    break; // exit case — don't increment row
+                  }
+                }
+              }
             }
           }
         }
@@ -570,6 +800,43 @@ function buildDashboardComponentsFromSkeleton(
       }
       lastHeight = comp.layout.h;
       comp.layout.row = currentRow;
+    }
+  }
+
+  // ── Post-process: Fill any remaining row gaps ──────────────────────
+  // If a row has only one component that doesn't start at col 0 or doesn't
+  // span full width, expand it. This catches cases where a companion was
+  // skipped after its partner was already placed.
+  const rowMap = new Map<number, ComponentBlueprint[]>();
+  for (const c of components) {
+    const r = c.layout.row;
+    if (!rowMap.has(r)) rowMap.set(r, []);
+    rowMap.get(r)!.push(c);
+  }
+  for (const [, rowComps] of rowMap) {
+    if (rowComps.length === 1) {
+      const comp = rowComps[0];
+      if (comp.layout.w < 12) {
+        console.log(`[buildDashboardComponentsFromSkeleton] Post-process: expanding lone component "${comp.id}" from col:${comp.layout.col} w:${comp.layout.w} → col:0 w:12`);
+        comp.layout.col = 0;
+        comp.layout.w = 12;
+      }
+    } else if (rowComps.length === 2) {
+      // Two components in a row — ensure they fill the full 12 columns
+      const totalW = rowComps.reduce((sum, c) => sum + c.layout.w, 0);
+      if (totalW < 12) {
+        // Expand the dominant (wider) component to fill the gap
+        const sorted = [...rowComps].sort((a, b) => b.layout.w - a.layout.w);
+        const gap = 12 - totalW;
+        sorted[0].layout.w += gap;
+        // Recalculate col positions
+        rowComps.sort((a, b) => a.layout.col - b.layout.col);
+        let col = 0;
+        for (const c of rowComps) {
+          c.layout.col = col;
+          col += c.layout.w;
+        }
+      }
     }
   }
 
@@ -683,7 +950,20 @@ export const generateUISpec = createTool({
       'dashboard', 'landing-page', 'form-wizard',
       'results-display', 'admin-crud', 'settings', 'auth',
     ]).optional(),
-    // proposalWireframe removed from schema
+    proposalWireframe: z.object({
+      name: z.string().optional(),
+      components: z.array(z.object({
+        id: z.string(),
+        type: z.string(),
+        label: z.string().optional(),
+        layout: z.object({
+          col: z.number(),
+          row: z.number(),
+          w: z.number(),
+          h: z.number(),
+        }),
+      })),
+    }).optional(),
   }),
   outputSchema: z.object({
     spec_json: z.record(z.any()),
@@ -808,29 +1088,95 @@ export const generateUISpec = createTool({
     const resolvedEntityName = entityName || platformType || templateId;
     const fieldNames = Object.keys(mappings);
 
-    // ── Wolf V2 Phase 4: Skeleton-aware component building ──────────
-    // Skeletons are the ONLY path. Feature flag removed.
-    // The legacy buildComponentsFromDesignTokens() function has been deleted.
-    const useSkeletons = true;
+    // ── Layout Priority: Proposal Wireframe > Skeleton ──────────────
+    // If the user selected a proposal with a wireframe, use that wireframe
+    // as the layout grid. The wireframe was designed for this specific data
+    // and the user chose it. Skeletons are the fallback when no wireframe exists.
     let blueprints: ComponentBlueprint[];
     let skeletonId: SkeletonId | null = null;
+    let usedWireframe = false;
 
-    if (useSkeletons && inputData.dataSignals) {
-      // Select skeleton deterministically from data signals
-      const selectionContext: SelectionContext = {
-        uiType: (inputData.uiType || 'dashboard') as UIType,
-        dataShape: inputData.dataSignals as DataSignals,
-        mode: inputData.mode || 'internal',
-        platform: platformType,
-        intent: inputData.intent || '',
-      };
-      skeletonId = selectSkeleton(selectionContext);
-      const skeleton = getSkeleton(skeletonId);
+    if (inputData.proposalWireframe?.components?.length) {
+      // ── PRIMARY PATH: Build from proposal wireframe ────────────────
+      const wireframe = inputData.proposalWireframe;
+      console.log(`[generateUISpec] Using proposal wireframe "${wireframe.name}" with ${wireframe.components.length} components as layout source`);
 
-      console.log(`[generateUISpec] Skeleton selected: "${skeletonId}" (${skeleton.name}) for ${platformType}`);
+      blueprints = buildComponentsFromWireframe(
+        wireframe,
+        mappings,
+        chartRecs as Array<{ type: string; bestFor: string; fieldName?: string }>,
+        resolvedEntityName,
+        inputData.fieldAnalysis,
+      );
+      usedWireframe = true;
+      console.log(`[generateUISpec] Wireframe produced ${blueprints.length} component blueprints`);
 
-      // Route to the correct builder based on skeleton category
-      if (skeleton.category === 'dashboard') {
+    } else {
+      // ── FALLBACK PATH: Skeleton selection ──────────────────────────
+      console.log('[generateUISpec] No proposal wireframe — falling back to skeleton selection');
+      const useSkeletons = true;
+      if (useSkeletons && inputData.dataSignals) {
+        // Select skeleton deterministically from data signals
+        const selectionContext: SelectionContext = {
+          uiType: (inputData.uiType || 'dashboard') as UIType,
+          dataShape: inputData.dataSignals as DataSignals,
+          mode: inputData.mode || 'internal',
+          platform: platformType,
+          intent: inputData.intent || '',
+        };
+        skeletonId = selectSkeleton(selectionContext);
+        const skeleton = getSkeleton(skeletonId);
+
+        console.log(`[generateUISpec] Skeleton selected: "${skeletonId}" (${skeleton.name}) for ${platformType}`);
+
+        // Route to the correct builder based on skeleton category
+        if (skeleton.category === 'dashboard') {
+          blueprints = buildDashboardComponentsFromSkeleton(
+            skeleton,
+            mappings,
+            chartRecs as Array<{ type: string; bestFor: string; fieldName?: string }>,
+            resolvedEntityName,
+            inputData.fieldAnalysis,
+            (inputData.designPatterns ?? []) as Array<{ content: string; source: string; score: number }>,
+          );
+        } else if (skeleton.category === 'product') {
+          blueprints = buildProductComponentsFromSkeleton(skeleton, {
+            entityName: resolvedEntityName,
+            platformType,
+            designPatterns: (inputData.designPatterns ?? []) as Array<{ content: string; source: string; score: number }>,
+          });
+        } else {
+          blueprints = buildAdminComponentsFromSkeleton(skeleton, {
+            entityName: resolvedEntityName,
+            platformType,
+            designPatterns: (inputData.designPatterns ?? []) as Array<{ content: string; source: string; score: number }>,
+          });
+        }
+      } else {
+        // Wolf V2 Phase 4: Legacy path removed. Skeletons are required.
+        // If dataSignals is missing, use a default executive-overview skeleton.
+        const fallbackContext: SelectionContext = {
+          uiType: (inputData.uiType || 'dashboard') as UIType,
+          dataShape: {
+            fieldCount: Object.keys(mappings).length,
+            hasTimestamp: false,
+            hasTimeSeries: false,
+            hasBreakdown: false,
+            statusFields: 0,
+            categoricalFields: 0,
+            tableSuitableRatio: 1,
+            eventDensity: 'low',
+            dataStory: 'unknown',
+            layoutQuery: 'executive overview',
+            summary: 'Fallback skeleton context due to missing dataSignals.',
+          } as DataSignals,
+          mode: inputData.mode || 'internal',
+          platform: platformType,
+          intent: inputData.intent || '',
+        };
+        skeletonId = selectSkeleton(fallbackContext);
+        const skeleton = getSkeleton(skeletonId);
+        console.log(`[generateUISpec] Fallback skeleton selected: "${skeletonId}" (no dataSignals provided)`);
         blueprints = buildDashboardComponentsFromSkeleton(
           skeleton,
           mappings,
@@ -839,53 +1185,8 @@ export const generateUISpec = createTool({
           inputData.fieldAnalysis,
           (inputData.designPatterns ?? []) as Array<{ content: string; source: string; score: number }>,
         );
-      } else if (skeleton.category === 'product') {
-        blueprints = buildProductComponentsFromSkeleton(skeleton, {
-          entityName: resolvedEntityName,
-          platformType,
-          designPatterns: (inputData.designPatterns ?? []) as Array<{ content: string; source: string; score: number }>,
-        });
-      } else {
-        blueprints = buildAdminComponentsFromSkeleton(skeleton, {
-          entityName: resolvedEntityName,
-          platformType,
-          designPatterns: (inputData.designPatterns ?? []) as Array<{ content: string; source: string; score: number }>,
-        });
       }
-    } else {
-      // Wolf V2 Phase 4: Legacy path removed. Skeletons are required.
-      // If dataSignals is missing, use a default executive-overview skeleton.
-      const fallbackContext: SelectionContext = {
-        uiType: (inputData.uiType || 'dashboard') as UIType,
-        dataShape: {
-          fieldCount: Object.keys(mappings).length,
-          hasTimestamp: false,
-          hasTimeSeries: false,
-          hasBreakdown: false,
-          statusFields: 0,
-          categoricalFields: 0,
-          tableSuitableRatio: 1,
-          eventDensity: 'low',
-          dataStory: 'unknown',
-          layoutQuery: 'executive overview',
-          summary: 'Fallback skeleton context due to missing dataSignals.',
-        } as DataSignals,
-        mode: inputData.mode || 'internal',
-        platform: platformType,
-        intent: inputData.intent || '',
-      };
-      skeletonId = selectSkeleton(fallbackContext);
-      const skeleton = getSkeleton(skeletonId);
-      console.log(`[generateUISpec] Fallback skeleton selected: "${skeletonId}" (no dataSignals provided)`);
-      blueprints = buildDashboardComponentsFromSkeleton(
-        skeleton,
-        mappings,
-        chartRecs as Array<{ type: string; bestFor: string; fieldName?: string }>,
-        resolvedEntityName,
-        inputData.fieldAnalysis,
-        (inputData.designPatterns ?? []) as Array<{ content: string; source: string; score: number }>,
-      );
-    }
+    } // end of skeleton fallback else-block
 
     const rawComponents = blueprints.map(bp => ({
       id: bp.id,
@@ -912,9 +1213,7 @@ export const generateUISpec = createTool({
       return true;
     });
 
-    // Wireframe override removed — skeleton layouts are now authoritative
-    // Components use layout positions generated by buildDashboardComponentsFromSkeleton()
-    console.log(`[generateUISpec] Using skeleton-native layout (no wireframe override)`);
+    console.log(`[generateUISpec] Layout source: ${usedWireframe ? 'proposal wireframe' : 'skeleton'}`);
 
     const specLayoutHints = extractLayoutHints(
       (inputData.designPatterns ?? []) as Array<{ content: string; source: string; score: number }>

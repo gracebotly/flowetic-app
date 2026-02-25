@@ -551,8 +551,61 @@ const generateUISpecStep = createStep({
       }
     }
 
-    // Wireframe system removed — skeletons provide all layout intelligence
-    console.log('[generateUISpecStep] Using skeleton-native layouts (wireframe system deprecated)');
+    // ── Load proposal wireframe from DB ────────────────────────────────
+    // The user selected a proposal that includes a designed wireframe layout.
+    // This wireframe is the PRIMARY layout source — skeletons are fallback only.
+    let proposalWireframe:
+      | {
+          name?: string;
+          components?: Array<{
+            id: string;
+            type: string;
+            label?: string;
+            layout: { col: number; row: number; w: number; h: number };
+          }>;
+        }
+      | undefined = undefined;
+    const wireframeFromRC = requestContext.get('proposalWireframe') as string;
+    if (wireframeFromRC) {
+      try {
+        proposalWireframe = JSON.parse(wireframeFromRC);
+        console.log('[generateUISpecStep] ✅ Loaded wireframe from RequestContext:', {
+          name: proposalWireframe?.name,
+          componentCount: proposalWireframe?.components?.length,
+        });
+      } catch {
+        console.warn('[generateUISpecStep] Failed to parse wireframe from RequestContext');
+      }
+    }
+    if (!proposalWireframe) {
+      const wfThreadId = requestContext.get('journeyThreadId') as string;
+      const wfToken = requestContext.get('supabaseAccessToken') as string;
+      const wfTenantId = initData.tenantId || requestContext.get('tenantId') as string;
+      if (wfThreadId && wfToken && wfTenantId) {
+        try {
+          const { createAuthenticatedClient } = await import('../lib/supabase');
+          const supabase = createAuthenticatedClient(wfToken);
+          const { data: wfSession } = await supabase
+            .from('journey_sessions')
+            .select('selected_wireframe')
+            .eq('thread_id', wfThreadId)
+            .eq('tenant_id', wfTenantId)
+            .maybeSingle();
+          if (wfSession?.selected_wireframe) {
+            proposalWireframe = wfSession.selected_wireframe;
+            console.log('[generateUISpecStep] ✅ Loaded wireframe from DB:', {
+              name: proposalWireframe?.name,
+              componentCount: proposalWireframe?.components?.length,
+            });
+          } else {
+            console.log('[generateUISpecStep] No wireframe in DB — skeleton will be used as fallback');
+          }
+        } catch (wfErr) {
+          console.warn('[generateUISpecStep] Failed to load wireframe from DB:', wfErr);
+        }
+      }
+    }
+    console.log(`[generateUISpecStep] Layout source: ${proposalWireframe ? 'proposal wireframe' : 'skeleton (fallback)'}`);
 
     // Extract intent from journey session's selected proposal for skeleton selection
     const intentTenantId = initData.tenantId || requestContext.get('tenantId') as string;
@@ -639,7 +692,7 @@ const generateUISpecStep = createStep({
 
           return undefined;
         })(),
-        // proposalWireframe input removed — no longer used
+        proposalWireframe: proposalWireframe || undefined,
         // ── Phase 2: Skeleton-aware inputs ──────────────────────────
         dataSignals: mappingDataSignals as any,
         // Phase 3: BM25 design patterns from retrieveDesignPatternsStep
