@@ -1104,7 +1104,7 @@ export const generateUISpec = createTool({
 
     if (preferWireframe && hasWireframe) {
       // ── OPT-IN PATH: Build from proposal wireframe (only when explicitly requested) ──
-      const wireframe = inputData.proposalWireframe;
+      const wireframe = inputData.proposalWireframe!;
       console.log(`[generateUISpec] preferWireframe=true — using proposal wireframe "${wireframe.name}" with ${wireframe.components.length} components as layout source`);
 
       blueprints = buildComponentsFromWireframe(
