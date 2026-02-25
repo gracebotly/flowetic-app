@@ -860,7 +860,7 @@ async function handleDeterministicBuildPreview(params: {
     // Read session data for workflow context
     const { data: session } = await supabase
       .from('journey_sessions')
-      .select('source_id, selected_entities, selected_outcome, design_tokens')
+      .select('source_id, entity_id, selected_entities, selected_outcome, design_tokens')
       .eq('thread_id', journeyThreadId)
       .eq('tenant_id', tenantId)
       .maybeSingle();
@@ -870,22 +870,55 @@ async function handleDeterministicBuildPreview(params: {
       return null;
     }
 
-    // Get the source info for platform type
-    const { data: source } = await supabase
-      .from('source_entities')
-      .select('id, platform_type, name')
+    // ─── FIX: Use BOTH sources table and source_entities table ───────
+    // journey_sessions.source_id → sources table (has platform type as 'type')
+    // journey_sessions.entity_id → source_entities table (has workflow name)
+    //
+    // Previous bug: queried source_entities with source_id UUID, which belongs
+    // to the sources table. Columns were also wrong (platform_type doesn't exist,
+    // it's 'type'). Result was always null → "Source not found, falling back to agent".
+
+    // Step 1: Get platform type from sources table
+    const { data: sourceRow } = await supabase
+      .from('sources')
+      .select('id, type, name')
       .eq('id', session.source_id)
       .eq('tenant_id', tenantId)
       .maybeSingle();
 
-    if (!source) {
-      console.log('[deterministic-build-preview] Source not found, falling back to agent');
+    if (!sourceRow) {
+      console.log('[deterministic-build-preview] Source not found in sources table, falling back to agent');
       return null;
     }
 
-    const sourceId = source.id;
-    const platformType = source.platform_type || 'other';
-    const workflowName = source.name || 'Dashboard';
+    const sourceId = sourceRow.id;
+    const platformType = sourceRow.type || 'other';
+    let workflowName = sourceRow.name || 'Dashboard';
+
+    // Step 2: Get workflow display name from source_entities table (if entity_id exists)
+    if (session.entity_id) {
+      const { data: entityRow } = await supabase
+        .from('source_entities')
+        .select('id, display_name, entity_kind')
+        .eq('id', session.entity_id)
+        .eq('tenant_id', tenantId)
+        .maybeSingle();
+
+      if (entityRow?.display_name) {
+        workflowName = entityRow.display_name;
+        console.log('[deterministic-build-preview] Resolved entity:', {
+          entityId: entityRow.id,
+          displayName: entityRow.display_name,
+          entityKind: entityRow.entity_kind,
+        });
+      }
+    }
+
+    console.log('[deterministic-build-preview] Resolved source + entity:', {
+      sourceId,
+      platformType,
+      workflowName: workflowName.substring(0, 60),
+    });
 
     // Set up RequestContext for the workflow
     requestContext.set('sourceId', sourceId);
@@ -2347,20 +2380,39 @@ export async function POST(req: Request) {
       }
     }
 
-    // ─── DETERMINISTIC BUILD_PREVIEW BYPASS ─────────────────────────
-    // If phase is build_preview AND no preview exists in DB, auto-generate
-    // the dashboard via platform workflow, bypassing the agent loop entirely.
+    // ─── DETERMINISTIC BUILD_EDIT / BUILD_PREVIEW BYPASS ─────────────
+    // If phase is build_edit or build_preview AND no preview exists in DB,
+    // auto-generate the dashboard via platform workflow, bypassing the agent loop.
     // This ensures the user NEVER has to ask "where is my dashboard?"
-    if (finalPhase === 'build_preview') {
+    //
+    // In the 2-phase journey (propose → build_edit → deploy), there is no
+    // separate build_preview phase. Preview generation must trigger on first
+    // entry to build_edit. Without this, the LLM agent is responsible for
+    // calling delegateToPlatformMapper, which it does non-deterministically
+    // (sometimes it hallucinates missing sources instead of generating).
+    if (finalPhase === 'build_edit' || finalPhase === 'build_preview') {
       const { data: previewCheckSession } = await supabase
         .from('journey_sessions')
-        .select('preview_interface_id, preview_version_id, source_id, design_tokens')
+        .select('preview_interface_id, preview_version_id, source_id, design_tokens, selected_proposal_index')
         .eq('thread_id', cleanJourneyThreadId)
         .eq('tenant_id', tenantId)
         .maybeSingle();
 
-      if (previewCheckSession && !previewCheckSession.preview_interface_id) {
-        console.log('[api/chat] 🚀 build_preview phase with no preview — auto-generating');
+      // For build_edit: only auto-generate if a proposal was selected (meaning we just
+      // transitioned from propose) AND no preview exists yet. This prevents re-triggering
+      // on subsequent build_edit messages (edit requests should go to the agent).
+      const shouldAutoGenerate = previewCheckSession
+        && !previewCheckSession.preview_interface_id
+        && previewCheckSession.source_id
+        && (finalPhase === 'build_preview' || previewCheckSession.selected_proposal_index != null);
+
+      if (shouldAutoGenerate) {
+        console.log('[api/chat] 🚀 Auto-generating preview on build_edit entry:', {
+          phase: finalPhase,
+          hasProposal: previewCheckSession.selected_proposal_index != null,
+          hasDesignTokens: !!previewCheckSession.design_tokens,
+          sourceId: previewCheckSession.source_id,
+        });
         try {
           const buildPreviewStream = await handleDeterministicBuildPreview({
             mastra,
@@ -2372,13 +2424,13 @@ export async function POST(req: Request) {
             requestContext,
           });
           if (buildPreviewStream) {
-            console.log('[api/chat] 🚀 Using deterministic build_preview bypass');
+            console.log('[api/chat] 🚀 Using deterministic build_edit preview bypass');
             return createUIMessageStreamResponse({
               stream: buildPreviewStream,
             });
           }
         } catch (buildErr: any) {
-          console.warn('[api/chat] Deterministic build_preview failed, falling through to agent:', buildErr?.message);
+          console.warn('[api/chat] Deterministic build_edit preview failed, falling through to agent:', buildErr?.message);
         }
       }
     }
