@@ -608,10 +608,18 @@ function buildWireframeLayout(
   entities: string[],
   proposalIndex: number,
   dataAvailability?: DataAvailability | null,
+  goalChartTypes?: Array<'kpi' | 'line_chart' | 'bar_chart' | 'pie_chart' | 'table' | 'funnel' | 'timeline' | 'status_grid'>,
+  goalFocusMetrics?: string[],
 ): WireframeLayout {
   const components: WireframeComponent[] = [];
   let entityLabels: string[];
-  if (dataAvailability && dataAvailability.usableFieldCount > 0) {
+
+  // Priority 1: Use Goal Explorer's focusMetrics as labels (LLM chose these for this specific proposal)
+  if (goalFocusMetrics && goalFocusMetrics.length > 0) {
+    entityLabels = goalFocusMetrics.map(m => humanizeLabel(m));
+  }
+  // Priority 2: Derive from actual data field shapes (fallback path)
+  else if (dataAvailability && dataAvailability.usableFieldCount > 0) {
     const shapes = dataAvailability.fieldShapes;
     const labels: string[] = [];
     const statusField = dataAvailability.availableFields.find(f => shapes[f] === 'status');
@@ -625,13 +633,99 @@ function buildWireframeLayout(
     if (numericField) labels.push(humanizeLabel(numericField));
     if (labels.length === 0) labels.push('Total Events');
 
-    // BUG 2B ISSUE C FIX: Do NOT pad with fake "Metric N" labels.
-    // If the data only supports 1 real metric, show 1 KPI, not 3 empty ones.
     entityLabels = labels;
-  } else {
+  }
+  // Priority 3: Use raw entity names from user selection
+  else {
     entityLabels = entities.length > 0
       ? entities
       : ['Metric 1', 'Metric 2', 'Metric 3'];
+  }
+
+  // ── Goal-aware chart type selection ─────────────────────────────────
+  // When the Goal Explorer specified chartTypes, use them to override the
+  // dominant-emphasis-based layout pattern. This ensures each proposal has
+  // a distinct layout structure, not just different colors on the same grid.
+  if (goalChartTypes && goalChartTypes.length > 0) {
+    // Build components directly from goal's chart type list
+    const components: WireframeComponent[] = [];
+    let currentRow = 0;
+
+    // Separate KPIs from other chart types
+    const kpiTypes = goalChartTypes.filter(ct => ct === 'kpi');
+    const chartOnlyTypes = goalChartTypes.filter(ct => ct !== 'kpi');
+
+    // Row 0: KPIs (if any)
+    if (kpiTypes.length > 0 || entityLabels.length > 0) {
+      const kpiCount = Math.min(Math.max(kpiTypes.length, 1), Math.min(entityLabels.length, 4));
+      const kpiWidth = Math.floor(12 / kpiCount);
+      for (let i = 0; i < kpiCount; i++) {
+        components.push({
+          id: `kpi-${i}`,
+          type: 'kpi',
+          label: entityLabels[i] || `KPI ${i + 1}`,
+          layout: { col: i * kpiWidth, row: currentRow, w: kpiWidth, h: 1 },
+        });
+      }
+      currentRow += 1;
+    }
+
+    // Remaining rows: one or two charts per row from goalChartTypes
+    for (let i = 0; i < chartOnlyTypes.length; i += 2) {
+      const first = chartOnlyTypes[i];
+      const second = chartOnlyTypes[i + 1];
+
+      if (second) {
+        // Two charts side by side
+        components.push({
+          id: `chart-${i}`,
+          type: first,
+          label: entityLabels[0] ? `${entityLabels[0]} ${first.replace('_', ' ')}` : humanizeLabel(first),
+          layout: { col: 0, row: currentRow, w: 7, h: 2 },
+        });
+        components.push({
+          id: `chart-${i + 1}`,
+          type: second,
+          label: second === 'table' ? 'Recent Activity' : humanizeLabel(second),
+          layout: { col: 7, row: currentRow, w: 5, h: 2 },
+        });
+      } else {
+        // Single chart full width
+        components.push({
+          id: `chart-${i}`,
+          type: first,
+          label: first === 'table' ? 'Detailed Records' : `${entityLabels[0] || 'Primary'} ${humanizeLabel(first)}`,
+          layout: { col: 0, row: currentRow, w: 12, h: 2 },
+        });
+      }
+      currentRow += 2;
+    }
+
+    // If no charts were specified but we have data, add a table as catch-all
+    if (chartOnlyTypes.length === 0) {
+      components.push({
+        id: 'data-table',
+        type: 'table',
+        label: 'Recent Activity',
+        layout: { col: 0, row: currentRow, w: 12, h: 2 },
+      });
+    }
+
+    // Name the layout based on the goal's chart mix
+    const hasTimeseries = goalChartTypes.includes('line_chart') || goalChartTypes.includes('timeline');
+    const hasBreakdown = goalChartTypes.includes('bar_chart') || goalChartTypes.includes('pie_chart');
+    const hasGrid = goalChartTypes.includes('status_grid');
+    const layoutName = hasTimeseries && hasBreakdown
+      ? 'Trend & Breakdown'
+      : hasTimeseries
+        ? 'Time-Series Focus'
+        : hasGrid
+          ? 'Status Grid'
+          : hasBreakdown
+            ? 'Categorical Analysis'
+            : 'Overview';
+
+    return { name: layoutName, components };
   }
 
   // Dominant emphasis determines the layout pattern
@@ -1024,11 +1118,11 @@ export async function generateProposals(
         proposals.push({
           index,
           title,
-          pitch: generatePitch(blend, goalResult.category),
+          pitch: goal?.pitch || generatePitch(blend, goalResult.category),
           archetype: goalResult.category,
           emphasisBlend: blend,
           designSystem: normalizeDesignSystem(data.designSystem),
-          wireframeLayout: buildWireframeLayout(blend, entities, index, dataAvailability),
+          wireframeLayout: buildWireframeLayout(blend, entities, index, dataAvailability, goal?.chartTypes, goal?.focusMetrics),
           reasoning: data.reasoning || '',
         });
       } else {
@@ -1036,11 +1130,11 @@ export async function generateProposals(
         proposals.push({
           index,
           title,
-          pitch: generatePitch(blend, goalResult.category),
+          pitch: goal?.pitch || generatePitch(blend, goalResult.category),
           archetype: goalResult.category,
           emphasisBlend: blend,
           designSystem: normalizeDesignSystem({}),
-          wireframeLayout: buildWireframeLayout(blend, entities, index, dataAvailability),
+          wireframeLayout: buildWireframeLayout(blend, entities, index, dataAvailability, goal?.chartTypes, goal?.focusMetrics),
           reasoning: 'Design system generation encountered an error. Please try regenerating.',
         });
       }
@@ -1050,11 +1144,11 @@ export async function generateProposals(
       proposals.push({
         index,
         title,
-        pitch: generatePitch(blend, goalResult.category),
+        pitch: goal?.pitch || generatePitch(blend, goalResult.category),
         archetype: goalResult.category,
         emphasisBlend: blend,
         designSystem: normalizeDesignSystem({}),
-        wireframeLayout: buildWireframeLayout(blend, entities, index, dataAvailability),
+        wireframeLayout: buildWireframeLayout(blend, entities, index, dataAvailability, goal?.chartTypes, goal?.focusMetrics),
         reasoning: 'Design system generation encountered an error. Please try regenerating.',
       });
     }
@@ -1073,6 +1167,14 @@ export async function generateProposals(
       selectedEntities: input.selectedEntities,
       archetype: goalResult.category,
       dataAvailability: dataAvailability || undefined,
+      goalExplorer: {
+        source: goalResult.source,
+        reasoning: goalResult.reasoning,
+        explorerMs: goalResult.explorerMs,
+        dataSummary: goalResult.dataSummary,
+        goalCount: goalResult.goals.length,
+        goalTitles: goalResult.goals.map(g => g.title),
+      },
     },
   };
 
