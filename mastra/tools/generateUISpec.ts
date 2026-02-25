@@ -256,41 +256,6 @@ function shortEntityNoun(cleanedEntity: string): string {
 
 
 /**
- * Normalize wireframe component types to match skeleton builder types.
- * Wireframe uses lowercase like 'kpi', 'line_chart', 'pie_chart', 'table'.
- * Skeleton builder uses PascalCase like 'MetricCard', 'TimeseriesChart', 'PieChart', 'DataTable'.
- */
-function normalizeWireframeType(wireframeType: string): string {
-  const map: Record<string, string> = {
-    'kpi': 'MetricCard',
-    'metric': 'MetricCard',
-    'metriccard': 'MetricCard',
-    'line_chart': 'TimeseriesChart',
-    'linechart': 'TimeseriesChart',
-    'timeserieschart': 'TimeseriesChart',
-    'areachart': 'TimeseriesChart',
-    'bar_chart': 'BarChart',
-    'barchart': 'BarChart',
-    'pie_chart': 'PieChart',
-    'piechart': 'PieChart',
-    'donut_chart': 'DonutChart',
-    'donutchart': 'DonutChart',
-    'table': 'DataTable',
-    'data_table': 'DataTable',
-    'datatable': 'DataTable',
-    // StatusFeed is a table-family component — match to table wireframe slots
-    'statusfeed': 'DataTable',
-    'status_feed': 'DataTable',
-    'feed': 'DataTable',
-    'funnel': 'BarChart',
-    'timeline': 'TimeseriesChart',
-    'status_grid': 'DataTable',
-    'statusgrid': 'DataTable',
-  };
-  return map[wireframeType.toLowerCase()] || wireframeType;
-}
-
-/**
  * Map a design system chart recommendation type to a renderer component type.
  * Handles compound types like "Pie Chart or Donut" and "Bar Chart (Horizontal or Vertical)"
  * by checking for partial keyword matches when exact match fails.
@@ -718,21 +683,7 @@ export const generateUISpec = createTool({
       'dashboard', 'landing-page', 'form-wizard',
       'results-display', 'admin-crud', 'settings', 'auth',
     ]).optional(),
-    // Bug 2 fix: Wireframe from selected proposal — used as layout template
-    proposalWireframe: z.object({
-      name: z.string().optional(),
-      components: z.array(z.object({
-        id: z.string(),
-        type: z.string(),
-        label: z.string().optional(),
-        layout: z.object({
-          col: z.number(),
-          row: z.number(),
-          w: z.number(),
-          h: z.number(),
-        }),
-      })),
-    }).optional(),
+    // proposalWireframe removed from schema
   }),
   outputSchema: z.object({
     spec_json: z.record(z.any()),
@@ -961,58 +912,9 @@ export const generateUISpec = createTool({
       return true;
     });
 
-    // ── Bug 2 Fix: Override layout positions from proposal wireframe ────
-    // If the user selected a proposal with a wireframe, use those positions
-    // as the component grid layout instead of the skeleton-generated positions.
-    const proposalWireframe = inputData.proposalWireframe;
-    if (proposalWireframe?.components?.length) {
-      console.log(`[generateUISpec] Applying proposal wireframe layout: "${proposalWireframe.name}" (${proposalWireframe.components.length} wireframe slots)`);
-
-      // Build a map from wireframe component type → wireframe layout
-      // Match skeleton-generated components to wireframe slots by type
-      const wireframeSlots = [...proposalWireframe.components];
-      const typeMap: Record<string, typeof wireframeSlots> = {};
-      for (const slot of wireframeSlots) {
-        // Normalize wireframe types to match component types
-        const normalizedType = normalizeWireframeType(slot.type);
-        if (!typeMap[normalizedType]) typeMap[normalizedType] = [];
-        typeMap[normalizedType].push(slot);
-      }
-
-      for (const comp of components) {
-        const normalizedCompType = normalizeWireframeType(comp.type);
-        const matchingSlots = typeMap[normalizedCompType];
-        if (matchingSlots && matchingSlots.length > 0) {
-          const slot = matchingSlots.shift()!; // consume the slot
-          comp.layout = {
-            col: slot.layout.col,
-            row: slot.layout.row,
-            w: slot.layout.w,
-            h: slot.layout.h,
-          };
-        }
-      }
-    }
-
-    // ── Safety net: compact row gaps after wireframe override ─────────
-    // Sort by row, then recompute rows to eliminate gaps.
-    // This ensures no empty grid rows between components.
-    if (proposalWireframe?.components?.length) {
-      components.sort((a, b) => (a.layout?.row ?? 0) - (b.layout?.row ?? 0));
-      let nextRow = 0;
-      const rowMapping = new Map<number, number>(); // oldRow → newRow
-      for (const comp of components) {
-        const oldRow = comp.layout?.row ?? 0;
-        if (!rowMapping.has(oldRow)) {
-          rowMapping.set(oldRow, nextRow);
-        }
-        const mappedRow = rowMapping.get(oldRow)!;
-        comp.layout = { ...comp.layout!, row: mappedRow };
-        // Track highest row end for next iteration
-        const rowEnd = mappedRow + (comp.layout?.h ?? 1);
-        if (rowEnd > nextRow) nextRow = rowEnd;
-      }
-    }
+    // Wireframe override removed — skeleton layouts are now authoritative
+    // Components use layout positions generated by buildDashboardComponentsFromSkeleton()
+    console.log(`[generateUISpec] Using skeleton-native layout (no wireframe override)`);
 
     const specLayoutHints = extractLayoutHints(
       (inputData.designPatterns ?? []) as Array<{ content: string; source: string; score: number }>
