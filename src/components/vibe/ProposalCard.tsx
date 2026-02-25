@@ -9,7 +9,7 @@ import { WireframeThumbnail } from './WireframeThumbnail';
 interface ProposalCardProps {
   proposal: Proposal;
   isSelected: boolean;
-  onSelect: () => void;
+  onSelect: () => Promise<void> | void;
   animationDelay?: number;
 }
 
@@ -31,6 +31,7 @@ function getEmphasisLabel(blend: Proposal['emphasisBlend']): string {
 
 export function ProposalCard({ proposal, isSelected, onSelect, animationDelay = 0 }: ProposalCardProps) {
   const [showReasoning, setShowReasoning] = React.useState(false);
+  const [isProcessing, setIsProcessing] = React.useState(false);
   const ds = proposal.designSystem;
   const colors = ds.colors;
   const primaryText = getContrastText(colors.primary);
@@ -117,22 +118,31 @@ export function ProposalCard({ proposal, isSelected, onSelect, animationDelay = 
 
         <button
           type="button"
-          disabled={isSelected}
-          onClick={(e) => {
+          disabled={isSelected || isProcessing}
+          onClick={async (e) => {
             e.stopPropagation();
-            if (!isSelected) onSelect();
+
+            if (isSelected || isProcessing) return;
+
+            setIsProcessing(true);
+            try {
+              await onSelect();
+            } finally {
+              // Keep processing state for 500ms to prevent double-clicks
+              setTimeout(() => setIsProcessing(false), 500);
+            }
           }}
           className={`
             w-full flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium
             transition-colors duration-200
-            ${isSelected
-              ? 'bg-indigo-600 text-white cursor-default'
+            ${isSelected || isProcessing
+              ? 'bg-indigo-600 text-white cursor-default opacity-90'
               : 'bg-gray-100 text-gray-700 hover:bg-gray-200 cursor-pointer'
             }
           `}
         >
           <Check size={14} />
-          {isSelected ? 'Selected' : 'Choose This'}
+          {isSelected ? 'Selected' : isProcessing ? 'Selecting...' : 'Choose This'}
         </button>
       </div>
     </motion.div>
