@@ -3,6 +3,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { notFound } from "next/navigation";
 import { ResponsiveDashboardRenderer } from "@/components/preview/ResponsiveDashboardRenderer";
 import { transformDataForComponents } from "@/lib/dashboard/transformDataForComponents";
+import { validateBeforeRender } from "@/lib/spec/validateBeforeRender";
 
 export const dynamic = "force-dynamic";
 
@@ -198,13 +199,17 @@ export default async function PreviewPage({ params }: PreviewPageProps) {
     resolvedEvents
   );
 
+  // Phase 5: Validation gate — normalize + catalog-filter + prop-sanitize before render.
+  const validationResult = validateBeforeRender(enrichedSpec);
+  const safeSpec = validationResult.spec ?? enrichedSpec;
+
   // Extract font names for Google Fonts loading
   const headingFont = (version.design_tokens?.fonts?.heading as string | undefined)?.split(',')[0]?.trim();
   const bodyFont = (version.design_tokens?.fonts?.body as string | undefined)?.split(',')[0]?.trim();
   const fontsToLoad = [...new Set([headingFont, bodyFont].filter(Boolean))] as string[];
 
-  const dashboardTitle = enrichedSpec?.metadata?.title || enrichedSpec?.title || null;
-  const styleName = (version.design_tokens as any)?.style?.name || enrichedSpec?.metadata?.styleName || null;
+  const dashboardTitle = safeSpec?.metadata?.title || safeSpec?.title || null;
+  const styleName = (version.design_tokens as any)?.style?.name || safeSpec?.metadata?.styleName || null;
   const headingFontForTitle = (version.design_tokens?.fonts?.heading as string | undefined)?.split(',')[0]?.trim();
   const titleTextColor = (version.design_tokens?.colors?.text as string) || '#111827';
   const subtitleColor = (version.design_tokens?.colors?.secondary as string) || '#64748B';
@@ -236,7 +241,7 @@ export default async function PreviewPage({ params }: PreviewPageProps) {
         </div>
       )}
       <ResponsiveDashboardRenderer
-        spec={enrichedSpec}
+        spec={safeSpec}
         designTokens={{
           colors:
             version.design_tokens?.colors ??

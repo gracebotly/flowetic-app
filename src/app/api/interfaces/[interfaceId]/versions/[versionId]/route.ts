@@ -1,6 +1,7 @@
 // src/app/api/interfaces/[interfaceId]/versions/[versionId]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { normalizeSpec } from '@/mastra/lib/spec/uiSpecSchema';
 
 export async function GET(
   req: NextRequest,
@@ -70,13 +71,17 @@ export async function GET(
       );
     }
 
+    const normalizedSpec = normalizeSpec(data.spec_json ?? {});
+
     console.log('[GET /versions] Success:', {
       versionId: data.id,
-      componentCount: data.spec_json?.components?.length ?? 0,
+      componentCount: Array.isArray((normalizedSpec as { components?: unknown }).components)
+        ? (normalizedSpec as { components: unknown[] }).components.length
+        : 0,
     });
 
     return NextResponse.json({
-      spec_json: data.spec_json,
+      spec_json: normalizedSpec,
       design_tokens: data.design_tokens,
     });
   } catch (err: any) {
