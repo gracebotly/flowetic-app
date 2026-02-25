@@ -202,8 +202,7 @@ const generateMappingStep = createStep({
       throw new Error('MAPPING_INCOMPLETE_REQUIRED_FIELDS');
     }
     
-    const initData = getInitData();
-    const tenantId = initData?.tenantId || (requestContext.get('tenantId') as string | undefined) || 'unknown';
+    const tenantId = (requestContext.get('tenantId') as string | undefined) || 'unknown';
     const mappingCacheKey = `generateMapping_${tenantId}_${templateId}`;
     const cachedMapping = requestContext.get(mappingCacheKey) as string | undefined;
 
