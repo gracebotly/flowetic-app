@@ -170,7 +170,7 @@ export function getLucideIconName(iconName: string): string {
  * For light themes: slightly lighter or white-shifted from background.
  * For dark themes: slightly lighter from background.
  */
-function deriveSurface(bg: string, surface?: string): string {
+export function deriveSurface(bg: string, surface?: string): string {
   if (surface) return surface;
   // If background is a light color, use white with slight transparency
   // If dark, lighten slightly
@@ -182,12 +182,12 @@ function deriveSurface(bg: string, surface?: string): string {
   return "rgba(255, 255, 255, 0.7)";
 }
 
-function deriveMuted(text: string, muted?: string): string {
+export function deriveMuted(text: string, muted?: string): string {
   if (muted) return muted;
   return `${text}66`; // 40% opacity of text color
 }
 
-function isColorDark(hex: string): boolean {
+export function isColorDark(hex: string): boolean {
   const c = hex.replace("#", "");
   if (c.length < 6) return false;
   const r = parseInt(c.slice(0, 2), 16);
