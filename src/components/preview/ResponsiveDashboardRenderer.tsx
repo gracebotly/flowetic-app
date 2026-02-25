@@ -201,30 +201,35 @@ export function ResponsiveDashboardRenderer({ spec, designTokens, deviceMode, is
             </motion.h1>
           )}
           <div className="grid" style={{ gridTemplateColumns: `repeat(${columns}, 1fr)`, gap: `${gap}px` }}>
-            {sortedComponents.map((comp: ComponentSpec, index: number) => {
-              const resolved = resolveComponentType(comp.type);
-              const Renderer = getRenderer(resolved);
-              // Tablet: wide components (w >= 7 out of 12) span full width
-              const tabletSpan = deviceMode === "tablet" && columns === 2
-                ? (comp.layout?.w ?? 4) >= 7 ? 2 : 1
-                : undefined;
-              return (
-                <motion.div
-                  key={comp.id}
-                  className="@container"
-                  style={tabletSpan ? { gridColumn: `span ${tabletSpan}` } : undefined}
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{
-                    duration: 0.3,
-                    delay: index * 0.04,
-                    ease: [0.25, 0.1, 0.25, 1.0],
-                  }}
-                >
-                  <Renderer component={{ ...comp, type: resolved }} designTokens={effectiveTokens} deviceMode={deviceMode} isEditing={isEditing} onClick={() => onWidgetClick?.(comp.id)} />
-                </motion.div>
-              );
-            })}
+            {(() => {
+              // Apply fillGridGaps to fix orphaned components (e.g., col:7 w:5 with no left partner)
+              // Uses baseColumns (12) not responsive columns (1 or 2) so gap detection works correctly
+              const filledComponents = fillGridGaps(sortedComponents, baseColumns);
+              return filledComponents.map((comp: ComponentSpec, index: number) => {
+                const resolved = resolveComponentType(comp.type);
+                const Renderer = getRenderer(resolved);
+                // Tablet: wide components (w >= 7 out of 12) span full width
+                const tabletSpan = deviceMode === "tablet" && columns === 2
+                  ? (comp.layout?.w ?? 4) >= 7 ? 2 : 1
+                  : undefined;
+                return (
+                  <motion.div
+                    key={comp.id}
+                    className="@container"
+                    style={tabletSpan ? { gridColumn: `span ${tabletSpan}` } : undefined}
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{
+                      duration: 0.3,
+                      delay: index * 0.04,
+                      ease: [0.25, 0.1, 0.25, 1.0],
+                    }}
+                  >
+                    <Renderer component={{ ...comp, type: resolved }} designTokens={effectiveTokens} deviceMode={deviceMode} isEditing={isEditing} onClick={() => onWidgetClick?.(comp.id)} />
+                  </motion.div>
+                );
+              });
+            })()}
           </div>
         </div>
       </div>
