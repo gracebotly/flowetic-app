@@ -4,7 +4,7 @@ import React, { useMemo } from "react";
 import dynamic from "next/dynamic";
 import { motion } from "framer-motion";
 import type { DeviceMode } from "@/components/vibe/editor";
-import { resolveComponentType, type ComponentSpec, type DesignTokens, type RendererProps } from "./componentRegistry";
+import { deriveMuted, deriveSurface, isColorDark, resolveComponentType, type ComponentSpec, type DesignTokens, type RendererProps } from "./componentRegistry";
 
 // Dashboard components (always loaded — 90% of renders)
 import { MetricCardRenderer } from "./components/MetricCard";
@@ -69,20 +69,27 @@ function getDeviceContainerStyle(deviceMode: DeviceMode, bgColor: string): React
 function generateTokenCSS(designTokens: DesignTokens): React.CSSProperties {
   const colors = designTokens?.colors ?? {};
   const fonts = designTokens?.fonts ?? {};
+  const bg = colors.background ?? '#ffffff';
+  const isDark = isColorDark(bg);
+  const surface = deriveSurface(bg, colors.surface);
+  const muted = deriveMuted(colors.text ?? '#111827', colors.muted);
 
   return {
     '--gf-primary': colors.primary ?? '#3b82f6',
     '--gf-secondary': colors.secondary ?? '#64748B',
     '--gf-accent': colors.accent ?? '#14B8A6',
-    '--gf-background': colors.background ?? '#ffffff',
-    '--gf-surface': colors.surface ?? '#f8fafc',
+    '--gf-background': bg,
+    '--gf-surface': surface,
     '--gf-text': colors.text ?? '#111827',
-    '--gf-muted': colors.muted ?? '#6b7280',
+    '--gf-muted': muted,
+    '--gf-border': isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
     '--gf-radius': `${designTokens?.borderRadius ?? 8}px`,
     '--gf-shadow': designTokens?.shadow ?? '0 1px 3px rgba(0,0,0,0.08)',
     '--gf-font-heading': fonts?.heading ?? 'Inter, sans-serif',
     '--gf-font-body': fonts?.body ?? 'Inter, sans-serif',
     '--gf-spacing': '8px',
+    '--gf-is-dark': isDark ? '1' : '0',
+    colorScheme: isDark ? 'dark' : 'light',
   } as React.CSSProperties;
 }
 
@@ -159,9 +166,18 @@ export function ResponsiveDashboardRenderer({ spec, designTokens, deviceMode, is
     });
   }, [visibleComponents, deviceMode, visualHierarchy]);
 
-  const fontLink = fontsToLoad.length > 0
-    ? <link rel="stylesheet" href={`https://fonts.googleapis.com/css2?${fontsToLoad.map(f => `family=${encodeURIComponent(f!)}:wght@400;500;600;700`).join("&")}&display=swap`} />
+  const fontUrl = fontsToLoad.length > 0
+    ? `https://fonts.googleapis.com/css2?${fontsToLoad.map(f => `family=${encodeURIComponent(f!)}:wght@400;500;600;700`).join("&")}&display=swap`
     : null;
+
+  const fontLink = fontUrl ? (
+    <>
+      <link rel="preconnect" href="https://fonts.googleapis.com" />
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+      <link rel="preload" as="style" href={fontUrl} />
+      <link rel="stylesheet" href={fontUrl} />
+    </>
+  ) : null;
 
   if (sortedComponents.length === 0) {
     return (<div className="flex items-center justify-center h-64 text-gray-400" style={containerStyle}>{fontLink}<p>No components in this dashboard spec.</p></div>);
