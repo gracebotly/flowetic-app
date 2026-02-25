@@ -29,6 +29,8 @@ export async function POST(req: NextRequest) {
       platformType,
       interfaceId,
       instructions,
+      design_tokens,
+      selected_outcome,
     } = body;
 
     // Validate required fields
@@ -44,6 +46,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Serialize design_tokens to JSON string — generateUISpec reads it
+    // via context.requestContext.get('designTokens') and JSON.parse()s it.
+    const designTokensJson = design_tokens ? JSON.stringify(design_tokens) : undefined;
+
     const runtimeContext = {
       get: (key: string) => {
         switch (key) {
@@ -51,10 +57,20 @@ export async function POST(req: NextRequest) {
           case "userId": return userId;
           case "sourceId": return sourceId;
           case "platformType": return platformType;
+          case "designTokens": return designTokensJson;
+          case "selectedOutcome": return selected_outcome;
           default: return undefined;
         }
       }
     } as any;
+
+    console.log('[api/agent/platform] Context setup:', {
+      tenantId: tenantId?.substring(0, 8) + '...',
+      sourceId: sourceId?.substring(0, 8) + '...',
+      platformType,
+      hasDesignTokens: !!designTokensJson,
+      selectedOutcome: selected_outcome,
+    });
 
     // Step 1: analyze schema
     const analyzeResult = await callTool(
