@@ -83,7 +83,7 @@ export async function POST(req: Request) {
   let cursor: string | null = null;
 
   do {
-    const url = cursor
+    const url: string = cursor
       ? `${baseUrl}/api/v1/workflows?limit=100&cursor=${encodeURIComponent(cursor)}`
       : `${baseUrl}/api/v1/workflows?limit=100`;
 
