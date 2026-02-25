@@ -54,7 +54,7 @@ const MIN_SIZES: Record<string, { w: number; h: number }> = {
   Pagination: { w: 12, h: 1 },
   AuthForm: { w: 4, h: 4 },
   BrandVisual: { w: 4, h: 4 },
-  EmptyStateCard: { w: 4, h: 2 },
+  EmptyStateCard: { w: 4, h: 3 },
 };
 
 // ============================================================================
