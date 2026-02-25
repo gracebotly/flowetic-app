@@ -21,7 +21,8 @@ import type {
   WireframeComponent,
   WireframeLayout,
 } from '@/types/proposal';
-import { classifyArchetype, ARCHETYPE_TITLE_TEMPLATES } from './classifyArchetype';
+import { exploreGoals } from './goalExplorer';
+import type { GoalExplorerResult } from '@/types/proposal';
 
 // ─── Data Availability Assessment ─────────────────────────────────────────
 // Queries actual event data BEFORE generating proposals to ensure
@@ -868,53 +869,40 @@ export async function generateProposals(
 ): Promise<GenerateProposalsResult> {
   const totalStart = Date.now();
 
-  // Step 1: Classify archetype (pure logic, <1ms)
-  const classifyStart = Date.now();
-  const classification = classifyArchetype(
-    input.workflowName,
-    input.platformType,
-    input.selectedEntities,
-  );
-  const classifyMs = Date.now() - classifyStart;
-
-  console.log('[generateProposals] Archetype:', {
-    archetype: classification.archetype,
-    confidence: classification.confidence,
-    signals: classification.matchedSignals,
-  });
-
+  // Step 1a: Assess data availability (DB query, ~50ms)
   let dataAvailability: DataAvailability | null = null;
-  let proposalCount = 3;
-
   if (input.supabase) {
     dataAvailability = await assessDataAvailability(
       input.supabase,
       input.tenantId,
       input.sourceId,
     );
-
     console.log(`[generateProposals] Data availability: ${dataAvailability.dataRichness} — ${dataAvailability.totalEvents} events, ${dataAvailability.usableFieldCount} usable fields, types: [${dataAvailability.eventTypes.join(', ')}]`);
-    console.log(`[generateProposals] Insights: [${dataAvailability.insights.map(i => `${i.label}: ${i.value}${i.unit || ''}`).join(', ')}]`);
-    console.log(`[generateProposals] Supported goals: [${dataAvailability.supportedGoals.join(', ')}]`);
-    console.log(`[generateProposals] Natural summary: ${dataAvailability.naturalSummary}`);
-
-    switch (dataAvailability.dataRichness) {
-      case 'minimal':
-        proposalCount = 1;
-        break;
-      case 'sparse':
-        proposalCount = 2;
-        break;
-      case 'moderate':
-        proposalCount = Math.min(3, dataAvailability.eventTypes.length >= 2 ? 3 : 2);
-        break;
-      case 'rich':
-        proposalCount = 3;
-        break;
-    }
-
-    console.log(`[generateProposals] Will generate ${proposalCount} proposals (data richness: ${dataAvailability.dataRichness})`);
   }
+
+  // Step 1b: LLM Goal Explorer — replaces classifyArchetype as primary brain.
+  // Sends actual data profile to LLM: "Given THIS data, what proposals make sense?"
+  // Falls back to keyword classifier if LLM fails or data is minimal.
+  const classifyStart = Date.now();
+  const goalResult: GoalExplorerResult = await exploreGoals(
+    input.workflowName,
+    input.platformType,
+    input.selectedEntities,
+    dataAvailability,
+  );
+  const classifyMs = Date.now() - classifyStart;
+
+  console.log('[generateProposals] Goal Explorer:', {
+    source: goalResult.source,
+    category: goalResult.category,
+    confidence: goalResult.confidence,
+    proposalCount: goalResult.proposalCount,
+    goals: goalResult.goals.map(g => g.title),
+    explorerMs: goalResult.explorerMs,
+  });
+
+  // Derive values that downstream code expects
+  const proposalCount = goalResult.proposalCount;
 
   // Step 2: Get the design system workflow
   const workflow = input.mastra?.getWorkflow?.('designSystemWorkflow');
@@ -929,10 +917,10 @@ export async function generateProposals(
           workflowName: input.workflowName,
           platformType: input.platformType,
           selectedEntities: input.selectedEntities,
-          archetype: classification.archetype,
+          archetype: goalResult.category,
         },
       },
-      archetype: classification.archetype,
+      archetype: goalResult.category,
       error: 'designSystemWorkflow not found in Mastra registry',
       timing: { classifyMs, designSystemMs: 0, totalMs: Date.now() - totalStart },
     };
@@ -945,15 +933,12 @@ export async function generateProposals(
     .map((e) => e.trim())
     .filter(Boolean);
 
-  // BUG 2B ISSUE C FIX: Derive feedback hints from ACTUAL data capabilities.
-  // Previously these were hardcoded ("monitoring operations professional")
-  // which made every proposal look like it could do everything regardless of data.
-  // Now: hints describe what the data can actually support.
-  const feedbackHints = buildDataAwareFeedbackHints(
-    classification.archetype,
-    dataAvailability,
-    proposalCount,
-  );
+  // Build feedback hints using Goal Explorer output.
+  // When source is 'llm', the goals already contain data-aware pitches.
+  // When source is 'fallback', use the existing data-aware hint builder.
+  const feedbackHints = goalResult.source === 'llm'
+    ? goalResult.goals.map(g => `${goalResult.category} ${g.focusMetrics.join(' ')} ${g.title}`)
+    : buildDataAwareFeedbackHints(goalResult.category, dataAvailability, proposalCount);
 
   // ── Run 3 design system workflows SEQUENTIALLY ──────────────────────
   //
@@ -972,7 +957,6 @@ export async function generateProposals(
   // (LLM). Run 3 gathers in parallel, then 3 syntheses sequentially.
 
   const proposals: Proposal[] = [];
-  const titles = classification.titleTemplates;
 
   // Accumulators for REAL exclusion values (not feedback hints).
   // After each successful proposal, we extract the actual style name
@@ -982,9 +966,11 @@ export async function generateProposals(
   const usedColorHexValues: string[] = [];
   const usedHeadingFonts: string[] = [];
 
-  for (let index = 0; index < Math.min(classification.blendPresets.length, proposalCount); index++) {
-    const blend = classification.blendPresets[index];
-    const title = titles[index] || `Proposal ${index + 1}`;
+  for (let index = 0; index < proposalCount; index++) {
+    // Use Goal Explorer blend + title when available, fall back to archetype presets
+    const goal = goalResult.goals[index];
+    const blend = goal?.emphasis || { dashboard: 0.5, product: 0.3, analytics: 0.2 };
+    const title = goal?.title || `Proposal ${index + 1}`;
     const workflowStart = Date.now();
 
     try {
@@ -1038,8 +1024,8 @@ export async function generateProposals(
         proposals.push({
           index,
           title,
-          pitch: generatePitch(blend, classification.archetype),
-          archetype: classification.archetype,
+          pitch: generatePitch(blend, goalResult.category),
+          archetype: goalResult.category,
           emphasisBlend: blend,
           designSystem: normalizeDesignSystem(data.designSystem),
           wireframeLayout: buildWireframeLayout(blend, entities, index, dataAvailability),
@@ -1050,8 +1036,8 @@ export async function generateProposals(
         proposals.push({
           index,
           title,
-          pitch: generatePitch(blend, classification.archetype),
-          archetype: classification.archetype,
+          pitch: generatePitch(blend, goalResult.category),
+          archetype: goalResult.category,
           emphasisBlend: blend,
           designSystem: normalizeDesignSystem({}),
           wireframeLayout: buildWireframeLayout(blend, entities, index, dataAvailability),
@@ -1064,8 +1050,8 @@ export async function generateProposals(
       proposals.push({
         index,
         title,
-        pitch: generatePitch(blend, classification.archetype),
-        archetype: classification.archetype,
+        pitch: generatePitch(blend, goalResult.category),
+        archetype: goalResult.category,
         emphasisBlend: blend,
         designSystem: normalizeDesignSystem({}),
         wireframeLayout: buildWireframeLayout(blend, entities, index, dataAvailability),
@@ -1085,7 +1071,7 @@ export async function generateProposals(
       workflowName: input.workflowName,
       platformType: input.platformType,
       selectedEntities: input.selectedEntities,
-      archetype: classification.archetype,
+      archetype: goalResult.category,
       dataAvailability: dataAvailability || undefined,
     },
   };
@@ -1097,7 +1083,7 @@ export async function generateProposals(
     success: true,
     proposals,
     payload,
-    archetype: classification.archetype,
+    archetype: goalResult.category,
     timing: { classifyMs, designSystemMs: dsMs, totalMs },
   };
 }
