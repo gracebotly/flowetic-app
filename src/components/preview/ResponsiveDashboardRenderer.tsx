@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { motion } from "framer-motion";
 import type { DeviceMode } from "@/components/vibe/editor";
 import { deriveMuted, deriveSurface, isColorDark, resolveComponentType, type ComponentSpec, type DesignTokens, type RendererProps } from "./componentRegistry";
+import { sanitizeProps } from "@/lib/spec/propSchemas";
 
 // Dashboard components (always loaded — 90% of renders)
 import { MetricCardRenderer } from "./components/MetricCard";
@@ -25,7 +26,6 @@ const PageHeaderRenderer = dynamic(() => import("./components/PageHeader"), { ss
 const FilterBarRenderer = dynamic(() => import("./components/FilterBar"), { ssr: false });
 const CRUDTableRenderer = dynamic(() => import("./components/CRUDTable"), { ssr: false });
 const AuthFormRenderer = dynamic(() => import("./components/AuthForm"), { ssr: false });
-const FallbackCardRenderer = dynamic(() => import("./components/FallbackCard"), { ssr: false });
 
 // ── Renderer map ──
 const RENDERER_MAP: Record<string, React.ComponentType<RendererProps>> = {
@@ -43,8 +43,13 @@ const RENDERER_MAP: Record<string, React.ComponentType<RendererProps>> = {
   EmptyStateCard,
 };
 
-function getRenderer(resolvedType: string): React.ComponentType<RendererProps> {
-  return RENDERER_MAP[resolvedType] || (FallbackCardRenderer as any);
+function getRenderer(resolvedType: string): React.ComponentType<RendererProps> | null {
+  const renderer = RENDERER_MAP[resolvedType];
+  if (!renderer) {
+    console.warn(`[ResponsiveDashboardRenderer] ⚠️ No renderer registered for type: "${resolvedType}"`);
+    return null;
+  }
+  return renderer;
 }
 
 // ── Responsive helpers (preserved from original) ──
@@ -255,7 +260,9 @@ export function ResponsiveDashboardRenderer({ spec, designTokens, deviceMode, is
               const filledComponents = fillGridGaps(sortedComponents, baseColumns);
               return filledComponents.map((comp: ComponentSpec, index: number) => {
                 const resolved = resolveComponentType(comp.type);
+                if (!resolved) return null; // Phase 3: skip unknown component types
                 const Renderer = getRenderer(resolved);
+                if (!Renderer) return null; // Phase 3: skip unregistered renderers
                 // Tablet: wide components (w >= 7 out of 12) span full width
                 const tabletSpan = deviceMode === "tablet" && columns === 2
                   ? (comp.layout?.w ?? 4) >= 7 ? 2 : 1
@@ -263,7 +270,7 @@ export function ResponsiveDashboardRenderer({ spec, designTokens, deviceMode, is
                 return (
                   <motion.div
                     key={comp.id}
-                    className="@container"
+                    className="@container relative"
                     style={tabletSpan ? { gridColumn: `span ${tabletSpan}` } : undefined}
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -273,7 +280,19 @@ export function ResponsiveDashboardRenderer({ spec, designTokens, deviceMode, is
                       ease: [0.25, 0.1, 0.25, 1.0],
                     }}
                   >
-                    <Renderer component={{ ...comp, type: resolved }} designTokens={effectiveTokens} deviceMode={deviceMode} isEditing={isEditing} onClick={() => onWidgetClick?.(comp.id)} />
+                    <>
+                    <Renderer component={{ ...comp, type: resolved, props: sanitizeProps(resolved, comp.props ?? {}) }} designTokens={effectiveTokens} deviceMode={deviceMode} isEditing={isEditing} onClick={() => onWidgetClick?.(comp.id)} />
+                    {isEditing && comp.meta?.reason && (
+                      <div
+                        className="absolute top-1 right-1 z-10"
+                        title={String(comp.meta.reason || '').slice(0, 300) + (comp.meta.fieldName ? ` (field: ${String(comp.meta.fieldName).slice(0, 50)})` : '') + (comp.meta.source ? ` [${comp.meta.source}]` : '')}
+                      >
+                        <div className="w-5 h-5 rounded-full bg-blue-500/20 text-blue-600 flex items-center justify-center text-xs cursor-help hover:bg-blue-500/40 transition-colors">
+                          ?
+                        </div>
+                      </div>
+                    )}
+                  </>
                   </motion.div>
                 );
               });
@@ -357,11 +376,13 @@ export function ResponsiveDashboardRenderer({ spec, designTokens, deviceMode, is
             const filledComponents = fillGridGaps(sortedComponents, baseColumns);
             return filledComponents.map((comp: ComponentSpec, index: number) => {
               const resolved = resolveComponentType(comp.type);
+              if (!resolved) return null; // Phase 3: skip unknown component types
               const Renderer = getRenderer(resolved);
+              if (!Renderer) return null; // Phase 3: skip unregistered renderers
               return (
                 <motion.div
                   key={comp.id}
-                  className="@container min-w-0"
+                  className="@container min-w-0 relative"
                   style={{
                     gridColumn: `${(comp.layout?.col ?? 0) + 1} / span ${Math.min(comp.layout?.w ?? 4, baseColumns - (comp.layout?.col ?? 0))}`,
                     gridRow: `${(comp.layout?.row ?? 0) + 1} / span ${comp.layout?.h ?? 2}`,
@@ -375,7 +396,19 @@ export function ResponsiveDashboardRenderer({ spec, designTokens, deviceMode, is
                     ease: [0.25, 0.1, 0.25, 1.0],
                   }}
                 >
-                  <Renderer component={{ ...comp, type: resolved }} designTokens={effectiveTokens} deviceMode={deviceMode} isEditing={isEditing} onClick={() => onWidgetClick?.(comp.id)} />
+                  <>
+                    <Renderer component={{ ...comp, type: resolved, props: sanitizeProps(resolved, comp.props ?? {}) }} designTokens={effectiveTokens} deviceMode={deviceMode} isEditing={isEditing} onClick={() => onWidgetClick?.(comp.id)} />
+                    {isEditing && comp.meta?.reason && (
+                      <div
+                        className="absolute top-1 right-1 z-10"
+                        title={String(comp.meta.reason || '').slice(0, 300) + (comp.meta.fieldName ? ` (field: ${String(comp.meta.fieldName).slice(0, 50)})` : '') + (comp.meta.source ? ` [${comp.meta.source}]` : '')}
+                      >
+                        <div className="w-5 h-5 rounded-full bg-blue-500/20 text-blue-600 flex items-center justify-center text-xs cursor-help hover:bg-blue-500/40 transition-colors">
+                          ?
+                        </div>
+                      </div>
+                    )}
+                  </>
                 </motion.div>
               );
             });

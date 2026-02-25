@@ -24,6 +24,13 @@ interface ComponentBlueprint {
   type: string;
   propsBuilder: (mappings: Record<string, string>, fields: string[]) => Record<string, unknown>;
   layout: { col: number; row: number; w: number; h: number };
+  meta?: {
+    reason?: string;
+    source?: string;
+    fieldShape?: string;
+    fieldName?: string;
+    skeletonSlot?: string;
+  };
 }
 
 /**
@@ -336,6 +343,13 @@ function buildComponentsFromWireframe(
             aggregation: heroField.aggregation || 'count',
             icon: heroField.shape === 'duration' ? 'clock' : heroField.shape === 'status' ? 'check-circle' : 'activity',
           }),
+          meta: {
+            reason: `Hero metric from field "${heroField.name}" (${heroField.shape})`,
+            source: 'workflow',
+            fieldShape: heroField.shape,
+            fieldName: heroField.name,
+            skeletonSlot: slot.id,
+          },
           layout,
         });
       } else {
@@ -356,6 +370,12 @@ function buildComponentsFromWireframe(
             aggregation: fb.agg,
             icon: fb.icon,
           }),
+          meta: {
+            reason: 'Fallback KPI metric (no hero field matched)',
+            source: 'workflow',
+            fieldName: fb.field,
+            skeletonSlot: slot.id,
+          },
           layout,
         });
       }
@@ -377,6 +397,13 @@ function buildComponentsFromWireframe(
           dateField,
           valueField: 'count',
         }),
+        meta: {
+          reason: trendField ? `Time series from field "${trendField.name}"` : 'Trend chart from chart recommendation',
+          source: 'workflow',
+          fieldShape: trendField?.shape || 'timestamp',
+          fieldName: trendField?.name,
+          skeletonSlot: slot.id,
+        },
         layout,
       });
 
@@ -400,6 +427,13 @@ function buildComponentsFromWireframe(
           valueField: 'count',
           aggregation: 'count',
         }),
+        meta: {
+          reason: bdField ? `Breakdown of "${bdField.name}" (${bdField.shape})` : 'Category breakdown',
+          source: 'workflow',
+          fieldShape: bdField?.shape || 'label',
+          fieldName: bdField?.name,
+          skeletonSlot: slot.id,
+        },
         layout,
       });
 
@@ -423,6 +457,13 @@ function buildComponentsFromWireframe(
           valueField: 'count',
           aggregation: 'count',
         }),
+        meta: {
+          reason: bdField ? `Distribution of "${bdField.name}"` : 'Status distribution',
+          source: 'workflow',
+          fieldShape: bdField?.shape || 'status',
+          fieldName: bdField?.name,
+          skeletonSlot: slot.id,
+        },
         layout,
       });
 
@@ -442,6 +483,12 @@ function buildComponentsFromWireframe(
           sortable: true,
           defaultSort: { field: pickField(m, ['timestamp', 'created_at', 'time'], 'timestamp'), direction: 'desc' },
         }),
+        meta: {
+          reason: `Detail view for ${cleanEntityName(entityName)} records`,
+          source: 'workflow',
+          fieldShape: 'tabular',
+          skeletonSlot: slot.id,
+        },
         layout,
       });
 
@@ -470,6 +517,12 @@ function buildComponentsFromWireframe(
                   aggregation: 'count',
                 }),
           }),
+          meta: {
+            reason: rec ? `Chart recommendation: ${rec.bestFor}` : `Fallback chart for slot "${slot.id}"`,
+            source: 'workflow',
+            fieldName: rec?.fieldName,
+            skeletonSlot: slot.id,
+          },
           layout,
         });
       } else {
@@ -562,6 +615,11 @@ function buildDashboardComponentsFromSkeleton(
                 showTrend: layoutHints.realTimeUpdates || false,
               }),
               layout: { col: idx * kpiWidth, row, w: kpiWidth, h: 2 },
+              meta: {
+                reason: `Skeleton section: ${section.type}`,
+                source: 'workflow',
+                skeletonSlot: section.type,
+              },
             });
           });
         } else {
@@ -577,6 +635,11 @@ function buildDashboardComponentsFromSkeleton(
               type: 'MetricCard',
               propsBuilder: () => ({ title: kpi.title, valueField: kpi.field, aggregation: kpi.agg, icon: kpi.icon }),
               layout: { col: idx * kpiWidth, row, w: kpiWidth, h: 2 },
+              meta: {
+                reason: `Skeleton section: ${section.type}`,
+                source: 'workflow',
+                skeletonSlot: section.type,
+              },
             });
           });
         }
@@ -632,6 +695,11 @@ function buildDashboardComponentsFromSkeleton(
                 showLiveIndicator: layoutHints.realTimeUpdates || false,
               }),
               layout: { col: colStart, row, w: width, h: sectionHeight > 2 ? sectionHeight : 3 },
+              meta: {
+                reason: `Skeleton section: ${section.type}`,
+                source: 'workflow',
+                skeletonSlot: section.type,
+              },
             });
             if (!section.dominant) secondaryChartCount++;
             assignedTrend = true;
@@ -656,6 +724,11 @@ function buildDashboardComponentsFromSkeleton(
                   aggregation: 'count',
                 }),
                 layout: { col: colStart, row, w: width, h: sectionHeight > 2 ? sectionHeight : 3 },
+                meta: {
+                  reason: `Skeleton section: ${section.type}`,
+                  source: 'workflow',
+                  skeletonSlot: section.type,
+                },
               });
               if (!section.dominant) secondaryChartCount++;
               assignedBreakdown = true;
@@ -691,6 +764,11 @@ function buildDashboardComponentsFromSkeleton(
                         }),
                   }),
                   layout: { col: colStart, row, w: width, h: sectionHeight > 2 ? sectionHeight : 3 },
+                  meta: {
+                    reason: `Skeleton section: ${section.type}`,
+                    source: 'workflow',
+                    skeletonSlot: section.type,
+                  },
                 });
                 if (!section.dominant) secondaryChartCount++;
                 assignedFromRec = true;
@@ -713,6 +791,11 @@ function buildDashboardComponentsFromSkeleton(
                   sectionId: section.id,
                 }),
                 layout: { col: 0, row, w: section.columns || 12, h: section.minHeight || 3 },
+                meta: {
+                  reason: `Skeleton section: ${section.type}`,
+                  source: 'workflow',
+                  skeletonSlot: section.type,
+                },
               });
 
               // ── Gap-fill: Expand companion component to fill the empty space ──
@@ -768,6 +851,11 @@ function buildDashboardComponentsFromSkeleton(
             sortable: true,
           }),
           layout: { col: 0, row, w: 12, h: tableHeight },
+          meta: {
+            reason: `Skeleton section: ${section.type}`,
+            source: 'workflow',
+            skeletonSlot: section.type,
+          },
         });
         row += tableHeight;
         break;
@@ -786,6 +874,11 @@ function buildDashboardComponentsFromSkeleton(
             pollingInterval: layoutHints.realTimeUpdates ? 30000 : undefined,
           }),
           layout: { col: 0, row, w: 12, h: 4 },
+          meta: {
+            reason: `Skeleton section: ${section.type}`,
+            source: 'workflow',
+            skeletonSlot: section.type,
+          },
         });
         row += 4;
         break;
@@ -802,6 +895,11 @@ function buildDashboardComponentsFromSkeleton(
             narrative: true,
           }),
           layout: { col: 0, row, w: 12, h: 3 },
+          meta: {
+            reason: `Skeleton section: ${section.type}`,
+            source: 'workflow',
+            skeletonSlot: section.type,
+          },
         });
         row += 3;
         break;
@@ -812,6 +910,11 @@ function buildDashboardComponentsFromSkeleton(
           type: 'MetricCard',
           propsBuilder: () => ({ title: 'Filters', valueField: 'filter_placeholder', aggregation: 'count', variant: 'filter-bar' }),
           layout: { col: 0, row, w: 12, h: 1 },
+          meta: {
+            reason: `Skeleton section: ${section.type}`,
+            source: 'workflow',
+            skeletonSlot: section.type,
+          },
         });
         row += 1;
         break;
@@ -937,7 +1040,7 @@ function buildProductComponentsFromSkeleton(
   let row = 0;
   for (const section of skeleton.sections) {
     if (section.type === 'hero') {
-      components.push({ id: `hero-${row}`, type: 'HeroSection', propsBuilder: () => ({ headline: `${entity}`, subheadline: 'Powered by AI automation', ctaText: 'Get Started', ctaLink: '#pricing' }), layout: { col: 0, row, w: 12, h: 3 } });
+      components.push({ id: `hero-${row}`, type: 'HeroSection', propsBuilder: () => ({ headline: `${entity}`, subheadline: 'Powered by AI automation', ctaText: 'Get Started', ctaLink: '#pricing' }), layout: { col: 0, row, w: 12, h: 3 }, meta: { reason: `Skeleton section: ${section.type}`, source: 'workflow', skeletonSlot: section.type } });
       row += 3;
     }
   }
@@ -953,7 +1056,7 @@ function buildAdminComponentsFromSkeleton(
   let row = 0;
   for (const section of skeleton.sections) {
     if (section.type === 'page-header') {
-      components.push({ id: `header-${row}`, type: 'PageHeader', propsBuilder: () => ({ title: entity }), layout: { col: 0, row, w: 12, h: 1 } });
+      components.push({ id: `header-${row}`, type: 'PageHeader', propsBuilder: () => ({ title: entity }), layout: { col: 0, row, w: 12, h: 1 }, meta: { reason: `Skeleton section: ${section.type}`, source: 'workflow', skeletonSlot: section.type } });
       row += 1;
     }
   }
@@ -1271,6 +1374,17 @@ export const generateUISpec = createTool({
       type: bp.type,
       props: bp.propsBuilder(mappings, fieldNames),
       layout: bp.layout,
+      ...(bp.meta ? {
+        meta: {
+          ...bp.meta,
+          addedAt: new Date().toISOString(),
+        },
+      } : {
+        meta: {
+          source: 'workflow',
+          addedAt: new Date().toISOString(),
+        },
+      }),
     }));
 
     // ── Bug 3 Fix: Final deduplication safety net ──────────────────
