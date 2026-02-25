@@ -94,12 +94,28 @@ export function selectSkeleton(context: SelectionContext): SkeletonId {
   if (context.mode === 'client-facing') return 'storyboard-insight';
 
   // ── PRIORITY 2: Operational monitoring signals ────────────────────
+  // Relaxed: workflow data with timestamps + status fields is operational
+  // monitoring regardless of event density or intent keywords.
+  // The old gate (density==='high' AND monitoring keywords) was too strict —
+  // real n8n/Make/Vapi data rarely hits 'high' density during initial setup.
   const intentLower = context.intent.toLowerCase();
+  const hasMonitoringIntent = intentLower.includes('monitor') ||
+    intentLower.includes('health') ||
+    intentLower.includes('real-time') ||
+    intentLower.includes('realtime') ||
+    intentLower.includes('track') ||
+    intentLower.includes('pipeline') ||
+    intentLower.includes('dashboard') ||
+    intentLower.includes('activity') ||
+    intentLower.includes('execution') ||
+    intentLower.includes('workflow');
   if (
     context.dataShape.hasTimestamp &&
     context.dataShape.statusFields > 0 &&
-    context.dataShape.eventDensity === 'high' &&
-    (intentLower.includes('monitor') || intentLower.includes('health') || intentLower.includes('real-time') || intentLower.includes('realtime'))
+    (
+      context.dataShape.eventDensity === 'high' ||
+      (context.dataShape.hasTimeSeries && (context.dataShape.eventDensity === 'medium' || hasMonitoringIntent))
+    )
   ) {
     return 'operational-monitoring';
   }
@@ -110,10 +126,17 @@ export function selectSkeleton(context: SelectionContext): SkeletonId {
   }
 
   // ── PRIORITY 4: High categorical diversity ────────────────────────
+  // Relaxed: 2+ categorical fields with breakdown data is enough.
+  // Intent keywords are helpful but not required if data shape is clear.
   if (
-    context.dataShape.categoricalFields >= 3 &&
-    context.dataShape.fieldCount >= 8 &&
-    (intentLower.includes('analyze') || intentLower.includes('compare') || intentLower.includes('breakdown') || intentLower.includes('segment'))
+    context.dataShape.categoricalFields >= 2 &&
+    context.dataShape.fieldCount >= 6 &&
+    context.dataShape.hasBreakdown &&
+    (
+      intentLower.includes('analyze') || intentLower.includes('compare') ||
+      intentLower.includes('breakdown') || intentLower.includes('segment') ||
+      context.dataShape.categoricalFields >= 3
+    )
   ) {
     return 'analytical-breakdown';
   }
@@ -144,7 +167,7 @@ export function getSelectionReason(context: SelectionContext, selectedId: Skelet
       return 'Client-facing mode → narrative storyboard layout';
 
     case 'operational-monitoring':
-      return `Operational signals: hasTimestamp=${context.dataShape.hasTimestamp}, statusFields=${context.dataShape.statusFields}, eventDensity=${context.dataShape.eventDensity}, intent includes monitoring keywords`;
+      return `Operational signals: hasTimestamp=${context.dataShape.hasTimestamp}, statusFields=${context.dataShape.statusFields}, hasTimeSeries=${context.dataShape.hasTimeSeries}, eventDensity=${context.dataShape.eventDensity}`;
 
     case 'table-first':
       return `Data-heavy: tableSuitableRatio=${context.dataShape.tableSuitableRatio.toFixed(2)}, fieldCount=${context.dataShape.fieldCount}${context.dataShape.fieldCount > 15 ? ' (>15)' : ''}`;
