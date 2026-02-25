@@ -378,7 +378,7 @@ function buildDashboardComponentsFromSkeleton(
                 variant: layoutHints.statusIndicators && field.shape === 'status' ? 'status-indicator' : 'default',
                 showTrend: layoutHints.realTimeUpdates || false,
               }),
-              layout: { col: idx * kpiWidth, row, w: kpiWidth, h: section.compact ? 1 : 2 },
+              layout: { col: idx * kpiWidth, row, w: kpiWidth, h: 2 },
             });
           });
         } else {
@@ -393,16 +393,26 @@ function buildDashboardComponentsFromSkeleton(
               id: `kpi-${idx}`,
               type: 'MetricCard',
               propsBuilder: () => ({ title: kpi.title, valueField: kpi.field, aggregation: kpi.agg, icon: kpi.icon }),
-              layout: { col: idx * kpiWidth, row, w: kpiWidth, h: section.compact ? 1 : 2 },
+              layout: { col: idx * kpiWidth, row, w: kpiWidth, h: 2 },
             });
           });
         }
-        row += section.compact ? 1 : 2;
+        row += 2; // KPIs always h:2 minimum for readable labels
         break;
       }
       case 'chart': {
-        const width = section.columns || 12;
-        const colStart = section.columns < 12 ? (section.dominant ? 0 : (12 - section.columns)) : 0;
+        // If this section is <12 columns, check if there's a companion section
+        // on the same row. If not, expand to full width to avoid orphaned gaps.
+        let width = section.columns || 12;
+        const sectionIdx = skeleton.sections.indexOf(section);
+        const nextSection = skeleton.sections[sectionIdx + 1];
+        const prevSection = sectionIdx > 0 ? skeleton.sections[sectionIdx - 1] : undefined;
+        const hasCompanion = (nextSection && nextSection.type === 'chart' && (section.columns + (nextSection.columns || 12)) <= 12) ||
+                             (prevSection && prevSection.type === 'chart' && (section.columns + (prevSection.columns || 12)) <= 12);
+        if (!hasCompanion && width < 12) {
+          width = 12; // Expand to full width when no side-by-side companion
+        }
+        const colStart = width < 12 ? (section.dominant ? 0 : (12 - width)) : 0;
 
         // ── Bug 3 Fix: Try to find an UNUSED trend or breakdown field ──
         let assignedTrend = false;
@@ -564,6 +574,24 @@ function buildDashboardComponentsFromSkeleton(
       }
       default:
         break;
+    }
+  }
+
+
+  // ── Row compaction: eliminate gaps from unused skeleton sections ──
+  // Sort by row, then reassign rows sequentially
+  if (components.length > 0) {
+    components.sort((a, b) => a.layout.row - b.layout.row || a.layout.col - b.layout.col);
+    let currentRow = 0;
+    let lastSeenRow = components[0].layout.row;
+    let lastHeight = 0;
+    for (const comp of components) {
+      if (comp.layout.row !== lastSeenRow) {
+        currentRow += lastHeight;
+        lastSeenRow = comp.layout.row;
+      }
+      lastHeight = comp.layout.h;
+      comp.layout.row = currentRow;
     }
   }
 

@@ -394,8 +394,8 @@ const tableFirst: LayoutSkeleton = {
       dominant: false,
       maxItems: 3,
       compact: true,
-      minHeight: 1,
-      description: '3 compact horizontal KPI strip',
+      minHeight: 2,
+      description: '3 compact horizontal KPI strip (h:2 min for readable labels)',
     },
     {
       id: 'primary-table',

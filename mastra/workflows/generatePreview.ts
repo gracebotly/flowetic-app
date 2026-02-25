@@ -525,6 +525,36 @@ const generateUISpecStep = createStep({
       }
     }
 
+    // Extract intent from journey session's selected proposal for skeleton selection
+    const intentTenantId = initData.tenantId || requestContext.get('tenantId') as string;
+    const intentSupabaseToken = requestContext.get('supabaseAccessToken') as string;
+    let intent = (inputData as { intent?: string }).intent || (requestContext.get('intent') as string) || '';
+    if (!intent && intentTenantId && intentSupabaseToken) {
+      try {
+        const { createAuthenticatedClient } = await import('../lib/supabase');
+        const supabase = createAuthenticatedClient(intentSupabaseToken);
+        const { data: session } = await supabase
+          .from('journey_sessions')
+          .select('proposals')
+          .eq('tenant_id', intentTenantId)
+          .not('proposals', 'is', null)
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (session?.proposals && Array.isArray(session.proposals)) {
+          // Use the first proposal's description as intent signal
+          const selectedProposal = session.proposals[0] as { description?: string };
+          if (selectedProposal?.description) {
+            intent = selectedProposal.description;
+            console.log(`[generateUISpecStep] Extracted intent from proposal: "${intent.slice(0, 80)}..."`);
+          }
+        }
+      } catch (err) {
+        // Non-fatal: intent enrichment is optional
+        console.warn('[generateUISpecStep] Could not extract intent from proposals:', err);
+      }
+    }
+
     const result = await callTool(generateUISpec,
       {
         templateId,
@@ -577,7 +607,7 @@ const generateUISpecStep = createStep({
         // Phase 3: BM25 design patterns from retrieveDesignPatternsStep
         designPatterns: inputData.designPatterns,
         mode: (requestContext.get('mode') || 'internal') as 'internal' | 'client-facing',
-        intent: (requestContext.get('intent') || '') as string,
+        intent,
       },
       { requestContext }
     );
@@ -592,13 +622,38 @@ const generateUISpecStep = createStep({
       if (tenantId && interfaceId && supabaseToken) {
         const { createAuthenticatedClient } = await import('../lib/supabase');
         const supabase = createAuthenticatedClient(supabaseToken);
-        const { data: events } = await supabase
+        let events: any[] | null = null;
+
+        // Primary: query by interface_id
+        const { data: primaryEvents } = await supabase
           .from('events')
           .select('*')
           .eq('tenant_id', tenantId)
           .eq('interface_id', interfaceId)
+          .not('type', 'in', '("state","tool_event")')
           .order('created_at', { ascending: false })
           .limit(500);
+
+        events = primaryEvents;
+
+        // Fallback: if interface_id yields 0 events, try source_id
+        // This handles the common case where events were ingested before
+        // the interface was created (they still have old/null interface_id)
+        if ((!events || events.length === 0)) {
+          const sourceId = requestContext.get('sourceId') as string | undefined;
+          if (sourceId) {
+            console.log(`[generateUISpecStep] No events for interface_id=${interfaceId}, falling back to source_id=${sourceId}`);
+            const { data: sourceEvents } = await supabase
+              .from('events')
+              .select('*')
+              .eq('tenant_id', tenantId)
+              .eq('source_id', sourceId)
+              .not('type', 'in', '("state","tool_event")')
+              .order('created_at', { ascending: false })
+              .limit(500);
+            events = sourceEvents;
+          }
+        }
 
         if (events && events.length > 0) {
           const flatEvents = events.map((evt: any) => {
