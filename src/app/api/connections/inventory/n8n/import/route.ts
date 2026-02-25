@@ -78,19 +78,31 @@ export async function POST(req: Request) {
   if ((secret.authMode ?? "bearer") === "header") headers["X-N8N-API-KEY"] = secret.apiKey!;
   else headers["Authorization"] = `Bearer ${secret.apiKey}`;
 
-  // 1. Fetch all workflows
-  const res = await fetch(`${baseUrl}/api/v1/workflows`, { method: "GET", headers });
+  // 1. Fetch all workflows (paginated)
+  let workflows: any[] = [];
+  let cursor: string | null = null;
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    return NextResponse.json(
-      { ok: false, code: "N8N_API_FAILED", message: `n8n API request failed (${res.status}). ${text}`.trim() },
-      { status: 400 },
-    );
-  }
+  do {
+    const url = cursor
+      ? `${baseUrl}/api/v1/workflows?limit=100&cursor=${encodeURIComponent(cursor)}`
+      : `${baseUrl}/api/v1/workflows?limit=100`;
 
-  const raw = await res.json().catch(() => null);
-  const workflows = extractWorkflows(raw);
+    const res = await fetch(url, { method: "GET", headers });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      return NextResponse.json(
+        { ok: false, code: "N8N_API_FAILED", message: `n8n API request failed (${res.status}). ${text}`.trim() },
+        { status: 400 },
+      );
+    }
+
+    const raw = await res.json().catch(() => null);
+    const page = extractWorkflows(raw);
+    workflows = workflows.concat(page);
+
+    cursor = raw?.nextCursor ?? null;
+  } while (cursor);
 
   if (workflows.length === 0) {
     return NextResponse.json({
