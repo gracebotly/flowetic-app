@@ -47,6 +47,8 @@ interface ClassifiedField {
   sample: unknown;
   skip: boolean;
   skipReason?: string;
+  /** If this field is an identifier, points to the human-readable companion field */
+  references?: string;
 }
 
 const DURATION_PATTERNS = /duration|time|elapsed|_ms$|_sec$|runtime|run_time|latency/i;
@@ -255,6 +257,105 @@ function resolveCanonicalName(fieldName: string): string | null {
 }
 
 // ============================================================================
+// Semantic Identifier Resolution (Semantic Data Contract)
+//
+// After individual field classification, resolve identifier→label relationships.
+// This prevents opaque machine IDs (workflow_id, execution_id) from being
+// assigned to chart slots. Only human-readable companion fields get charts.
+//
+// Known pairs:
+//   workflow_id → workflow_name    (foreign key → display name)
+//   execution_id → (surrogate key, count-only, never chart)
+//   call_id → (surrogate key, count-only)
+//   session_id → (surrogate key, count-only)
+// ============================================================================
+
+/** Known identifier → human-readable label field pairs */
+const IDENTIFIER_LABEL_PAIRS: Record<string, string> = {
+  workflow_id: 'workflow_name',
+  scenario_id: 'scenario_name',
+  flow_id: 'workflow_name',
+  agent_id: 'agent_name',
+};
+
+/** Surrogate keys that should ONLY be used for count aggregation, never charted */
+const SURROGATE_KEYS = new Set([
+  'execution_id',
+  'call_id',
+  'session_id',
+  'message_id',
+  'run_id',
+  'conversation_id',
+]);
+
+function resolveSemanticIdentifiers(fields: ClassifiedField[]): ClassifiedField[] {
+  const fieldNames = new Set(fields.map(f => f.name));
+
+  return fields.map(field => {
+    const canonicalName = resolveCanonicalName(field.name) || field.name;
+
+    // 1. Check if this is a known identifier with a companion label field
+    const labelField = IDENTIFIER_LABEL_PAIRS[canonicalName];
+    if (labelField && fieldNames.has(labelField)) {
+      // The companion label field exists → skip this identifier
+      return {
+        ...field,
+        skip: true,
+        skipReason: `Identifier field — use '${labelField}' for display instead`,
+        references: labelField,
+        // Keep shape as 'id' and role as 'hero' for count-only MetricCard if needed
+        component: 'MetricCard',
+        aggregation: 'count',
+      };
+    }
+
+    // 2. Check if this is a surrogate key (execution_id, call_id, etc.)
+    if (SURROGATE_KEYS.has(canonicalName)) {
+      return {
+        ...field,
+        shape: 'id' as FieldShape,
+        component: 'MetricCard',
+        aggregation: 'count',
+        role: 'hero' as const,
+        // Surrogate keys CAN be counted (hero KPI) but NEVER charted as categories
+        // Only skip if they somehow got assigned to a chart
+        skip: field.component !== 'MetricCard',
+        skipReason: field.component !== 'MetricCard'
+          ? 'Surrogate key — use for count only, not as chart category'
+          : undefined,
+      };
+    }
+
+    // 3. Check if this field matches ID_PATTERNS but has LOW cardinality
+    //    (e.g., workflow_id with 3 unique values across 64 rows)
+    //    This catches the case where workflow_id falls through to 'label' shape
+    if (ID_PATTERNS.test(field.name) && field.shape === 'label') {
+      // This is an ID field misclassified as label due to low cardinality
+      const possibleLabel = IDENTIFIER_LABEL_PAIRS[canonicalName];
+      if (possibleLabel && fieldNames.has(possibleLabel)) {
+        return {
+          ...field,
+          skip: true,
+          skipReason: `ID field with low cardinality — use '${possibleLabel}' for chart labels`,
+          references: possibleLabel,
+        };
+      }
+      // No companion found — still an ID, force to count-only MetricCard
+      return {
+        ...field,
+        shape: 'id' as FieldShape,
+        component: 'MetricCard',
+        aggregation: 'count',
+        role: 'hero' as const,
+        skip: false,
+      };
+    }
+
+    return field;
+  });
+}
+
+// ============================================================================
 // Chart Recommendation Builder (Skill Section 7)
 // Replaces BM25-random chart selection with data-shape-driven selection
 // ============================================================================
@@ -381,11 +482,14 @@ export const generateMapping = createTool({
       avgLength: f.avgLength,
     }));
 
+    // Semantic resolution: resolve identifier→label pairs and surrogate keys
+    const resolvedFields = resolveSemanticIdentifiers(classified);
+
     // ── Step 2: Build mappings — ALL fields pass through ───────────────
     // Canonical name resolution for well-known fields
     // EVERY field gets a mapping entry. Nothing is dropped.
     const mappings: Record<string, string> = {};
-    for (const field of classified) {
+    for (const field of resolvedFields) {
       const canonical = resolveCanonicalName(field.name);
       if (canonical && !mappings[canonical]) {
         mappings[canonical] = field.name;
@@ -397,10 +501,10 @@ export const generateMapping = createTool({
     }
 
     // ── Step 3: Build data-driven chart recommendations ────────────────
-    const chartRecommendations = buildChartRecommendations(classified);
+    const chartRecommendations = buildChartRecommendations(resolvedFields);
 
     // ── Step 4: Determine confidence ───────────────────────────────────
-    const activeFields = classified.filter(f => !f.skip);
+    const activeFields = resolvedFields.filter(f => !f.skip);
     const hasHero = activeFields.some(f => f.role === 'hero');
     const hasTrend = activeFields.some(f => f.role === 'trend');
     const hasBreakdown = activeFields.some(f => f.role === 'breakdown');
@@ -422,7 +526,7 @@ export const generateMapping = createTool({
       platformType,
       totalFields: fields.length,
       activeFields: activeFields.length,
-      skippedFields: classified.filter(f => f.skip).length,
+      skippedFields: resolvedFields.filter(f => f.skip).length,
       mappingsCount: Object.keys(mappings).length,
       chartRecommendations: chartRecommendations.map(r => `${r.type}(${r.fieldName})`),
       roles: {
@@ -436,7 +540,7 @@ export const generateMapping = createTool({
     });
 
     // ── Step 5: Compute data signals for skeleton selection (Phase 2) ──
-    const fieldAnalysisOutput = classified.map(f => ({
+    const fieldAnalysisOutput = resolvedFields.map(f => ({
       name: f.name,
       type: f.type,
       shape: f.shape,
