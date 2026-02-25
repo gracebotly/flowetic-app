@@ -161,6 +161,31 @@ export const persistPreviewVersion = createTool({
       // NOTE: Event backfill removed — the auto_link_event_interface trigger
       // (migration 20260215130000) handles interface_id assignment at INSERT time.
       // Verified: 0/67 events have interface_id IS NULL (2025-02-20).
+      // BUG 4 FIX: Link orphaned interface_schemas rows to this interface.
+      // analyzeSchema backfills schema_summary but doesn't know the interfaceId yet.
+      // Now that we have a definitive interfaceId, set it on any matching schema rows.
+      const sourceId = (context?.requestContext as any)?.get?.('sourceId') as string | undefined;
+      if (finalInterfaceId && sourceId) {
+        const { error: schemaLinkErr, count: schemaLinkCount } = await supabase
+          .from('interface_schemas')
+          .update({
+            interface_id: finalInterfaceId,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('source_id', sourceId)
+          .eq('tenant_id', tenantId)
+          .is('interface_id', null);
+        if (schemaLinkErr) {
+          console.warn('[persistPreviewVersion] Failed to link interface_schemas:', schemaLinkErr.message);
+        } else if (schemaLinkCount && schemaLinkCount > 0) {
+          console.log('[persistPreviewVersion] ✅ Linked interface_schemas to interface:', {
+            interfaceId: finalInterfaceId,
+            sourceId,
+            rowsLinked: schemaLinkCount,
+          });
+        }
+      }
+
       return {
         interfaceId: finalInterfaceId,
         versionId: rpcResult.version_id,
@@ -274,6 +299,31 @@ export const persistPreviewVersion = createTool({
     }
 
     // NOTE: Event backfill removed — handled by auto_link_event_interface trigger.
+
+    // BUG 4 FIX: Link orphaned interface_schemas rows to this interface.
+    // analyzeSchema backfills schema_summary but doesn't know the interfaceId yet.
+    // Now that we have a definitive interfaceId, set it on any matching schema rows.
+    const sourceId = (context?.requestContext as any)?.get?.('sourceId') as string | undefined;
+    if (finalInterfaceId && sourceId) {
+      const { error: schemaLinkErr, count: schemaLinkCount } = await supabase
+        .from('interface_schemas')
+        .update({
+          interface_id: finalInterfaceId,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('source_id', sourceId)
+        .eq('tenant_id', tenantId)
+        .is('interface_id', null);
+      if (schemaLinkErr) {
+        console.warn('[persistPreviewVersion] Failed to link interface_schemas:', schemaLinkErr.message);
+      } else if (schemaLinkCount && schemaLinkCount > 0) {
+        console.log('[persistPreviewVersion] ✅ Linked interface_schemas to interface:', {
+          interfaceId: finalInterfaceId,
+          sourceId,
+          rowsLinked: schemaLinkCount,
+        });
+      }
+    }
 
     return {
       interfaceId: finalInterfaceId,
