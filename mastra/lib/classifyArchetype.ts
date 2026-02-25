@@ -73,6 +73,16 @@ const ARCHETYPE_SIGNALS: Record<Archetype, {
     ],
     platformSignals: [],
   },
+  ai_automation: {
+    nameSignals: [
+      'ai research', 'llm agent', 'rag pipeline', 'chatbot builder',
+      'ai service', 'ml pipeline', 'model training', 'inference',
+      'embedding', 'vector search', 'prompt chain', 'ai workflow',
+      'gpt', 'claude', 'gemini', 'openai', 'langchain', 'autogen',
+    ],
+    platformSignals: [],
+    threshold: 2,
+  },
   general: {
     nameSignals: [],
     platformSignals: [],
@@ -114,6 +124,11 @@ const ARCHETYPE_BLEND_PRESETS: Record<Archetype, EmphasisBlend[]> = {
     { dashboard: 0.1, product: 0.8, analytics: 0.1 },   // White-label portal
     { dashboard: 0.4, product: 0.1, analytics: 0.5 },   // Executive analytics
   ],
+  ai_automation: [
+    { dashboard: 0.6, product: 0.2, analytics: 0.2 },   // AI ops monitor
+    { dashboard: 0.2, product: 0.6, analytics: 0.2 },   // AI product portal
+    { dashboard: 0.3, product: 0.1, analytics: 0.6 },   // AI performance analytics
+  ],
   general: [
     { dashboard: 0.6, product: 0.2, analytics: 0.2 },   // Balanced overview
     { dashboard: 0.2, product: 0.6, analytics: 0.2 },   // Client-facing
@@ -130,6 +145,7 @@ export const ARCHETYPE_TITLE_TEMPLATES: Record<Archetype, string[]> = {
   content_automation: ['Content Calendar', 'Publishing Portal', 'Engagement Analytics'],
   data_integration: ['Sync Status Board', 'Data Portal', 'Pipeline Analytics'],
   client_reporting: ['Client Dashboard', 'White-Label Portal', 'Executive Analytics'],
+  ai_automation: ['AI Ops Monitor', 'AI Product Portal', 'AI Performance Analytics'],
   general: ['Workflow Overview', 'Client Portal', 'Data Analytics'],
 };
 

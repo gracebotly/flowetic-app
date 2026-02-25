@@ -1,32 +1,34 @@
 'use client';
 
 import React from 'react';
+import { Plus, Database, BarChart3, PieChart, Table, Activity } from 'lucide-react';
 import type { RendererProps } from '../componentRegistry';
 
 /**
- * EmptyStateCard — rendered when a skeleton slot can't be filled by available data.
+ * EmptyStateCard — CTA card rendered when a skeleton slot has no data.
  *
- * Designed to look intentional, not broken. Uses the design token accent color
- * and a contextual icon + message. This is what makes premium tools feel
- * polished even with sparse data — Vercel, Linear, and Stripe all do this.
- *
- * Supported across ALL 11 skeleton categories (dashboard, product, admin).
+ * Instead of a dead "No data yet" placeholder, this shows a contextual
+ * call-to-action that guides the user to connect data. Styled with
+ * design tokens so it matches the dashboard theme.
  */
 export function EmptyStateCard({ component, designTokens, deviceMode }: RendererProps) {
   const props = component.props || {};
-  const title = (props.title as string) || 'No data yet';
-  const subtitle = (props.subtitle as string) || 'Connect more events to populate this section';
-  const iconName = (props.icon as string) || 'inbox';
+  const sectionId = (props.sectionId as string) || '';
+  const iconName = (props.icon as string) || 'database';
 
-  const accentColor = designTokens?.colors?.accent || designTokens?.colors?.primary || '#6366F1';
+  // Contextual CTA text based on what section is empty
+  const { title, subtitle, actionLabel } = getCTACopy(sectionId);
+
+  const primary = designTokens?.colors?.primary || '#6366F1';
   const surfaceColor = designTokens?.colors?.surface || '#F8FAFC';
+  const textColor = designTokens?.colors?.text || '#1E293B';
   const mutedColor = designTokens?.colors?.muted || '#94A3B8';
   const borderRadius = designTokens?.borderRadius ?? 12;
+  const headingFont = designTokens?.fonts?.heading || 'inherit';
+  const bodyFont = designTokens?.fonts?.body || 'inherit';
 
   const isMobile = deviceMode === 'mobile';
-
-  // Simple icon map — covers the common section types
-  const iconSvg = getIconSvg(iconName, accentColor);
+  const IconComponent = ICON_MAP[iconName] || Database;
 
   return (
     <div
@@ -35,38 +37,40 @@ export function EmptyStateCard({ component, designTokens, deviceMode }: Renderer
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: isMobile ? 8 : 12,
-        padding: isMobile ? 16 : 24,
+        gap: isMobile ? 10 : 14,
+        padding: isMobile ? 16 : 28,
         minHeight: isMobile ? 80 : 120,
         height: '100%',
-        background: surfaceColor,
-        border: `1px dashed ${mutedColor}40`,
+        background: `linear-gradient(135deg, ${surfaceColor}, ${primary}06)`,
+        border: `1px solid ${primary}18`,
         borderRadius,
         textAlign: 'center',
+        transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
       }}
     >
-      {/* Icon circle */}
+      {/* Icon */}
       <div
         style={{
-          width: isMobile ? 40 : 56,
-          height: isMobile ? 40 : 56,
+          width: isMobile ? 36 : 44,
+          height: isMobile ? 36 : 44,
           borderRadius: '50%',
-          background: `${accentColor}15`,
+          background: `${primary}12`,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
         }}
-        dangerouslySetInnerHTML={{ __html: iconSvg }}
-      />
+      >
+        <IconComponent size={isMobile ? 16 : 20} color={primary} strokeWidth={1.5} />
+      </div>
 
       {/* Title */}
       <p
         style={{
           margin: 0,
-          fontSize: isMobile ? 13 : 15,
+          fontSize: isMobile ? 12 : 14,
           fontWeight: 600,
-          color: designTokens?.colors?.text || '#1E293B',
-          fontFamily: designTokens?.fonts?.heading || 'inherit',
+          color: textColor,
+          fontFamily: headingFont,
         }}
       >
         {title}
@@ -76,40 +80,99 @@ export function EmptyStateCard({ component, designTokens, deviceMode }: Renderer
       <p
         style={{
           margin: 0,
-          fontSize: isMobile ? 11 : 13,
+          fontSize: isMobile ? 10 : 12,
           color: mutedColor,
-          fontFamily: designTokens?.fonts?.body || 'inherit',
-          maxWidth: 280,
+          fontFamily: bodyFont,
+          maxWidth: 260,
           lineHeight: 1.4,
         }}
       >
         {subtitle}
       </p>
+
+      {/* CTA Button */}
+      <button
+        type="button"
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 6,
+          padding: isMobile ? '6px 12px' : '8px 16px',
+          fontSize: isMobile ? 11 : 12,
+          fontWeight: 600,
+          fontFamily: bodyFont,
+          color: '#ffffff',
+          background: `linear-gradient(135deg, ${primary}, ${primary}dd)`,
+          border: 'none',
+          borderRadius: Math.max(6, (borderRadius as number) - 4),
+          cursor: 'pointer',
+          transition: 'opacity 0.15s ease, transform 0.15s ease',
+          letterSpacing: '0.01em',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.opacity = '0.9';
+          e.currentTarget.style.transform = 'translateY(-1px)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.opacity = '1';
+          e.currentTarget.style.transform = 'translateY(0)';
+        }}
+        onClick={() => {
+          // In preview mode this is non-functional — but in the future
+          // this can trigger the data source connection flow
+          console.log(`[CTA] Add data source clicked for section: ${sectionId}`);
+        }}
+      >
+        <Plus size={14} strokeWidth={2.5} />
+        {actionLabel}
+      </button>
     </div>
   );
 }
 
-function getIconSvg(name: string, color: string): string {
-  const size = 24;
-  const stroke = color;
-  const common = `width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${stroke}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"`;
+// ── Icon map ──
+const ICON_MAP: Record<string, typeof Database> = {
+  'bar-chart-2': BarChart3,
+  'bar-chart': BarChart3,
+  'pie-chart': PieChart,
+  activity: Activity,
+  database: Database,
+  table: Table,
+  inbox: Database,
+};
 
-  switch (name) {
-    case 'bar-chart-2':
-      return `<svg ${common}><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>`;
-    case 'pie-chart':
-      return `<svg ${common}><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>`;
-    case 'activity':
-      return `<svg ${common}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>`;
-    case 'inbox':
-      return `<svg ${common}><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>`;
-    case 'trending-up':
-      return `<svg ${common}><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>`;
-    case 'table':
-      return `<svg ${common}><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/></svg>`;
-    default:
-      return `<svg ${common}><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>`;
+// ── Contextual CTA copy based on section type ──
+function getCTACopy(sectionId: string): { title: string; subtitle: string; actionLabel: string } {
+  const lower = sectionId.toLowerCase();
+
+  if (lower.includes('chart') || lower.includes('trend') || lower.includes('breakdown')) {
+    return {
+      title: 'Chart section ready',
+      subtitle: 'Connect a data source to visualize trends and breakdowns here.',
+      actionLabel: 'Add chart data',
+    };
   }
+  if (lower.includes('table') || lower.includes('feed') || lower.includes('activity')) {
+    return {
+      title: 'Table section ready',
+      subtitle: 'Link event data to populate this table with live records.',
+      actionLabel: 'Connect events',
+    };
+  }
+  if (lower.includes('kpi') || lower.includes('metric') || lower.includes('hero')) {
+    return {
+      title: 'Metrics ready',
+      subtitle: 'Add a data source to surface key performance indicators.',
+      actionLabel: 'Add metrics',
+    };
+  }
+
+  // Generic fallback
+  return {
+    title: 'Section ready',
+    subtitle: 'This section will come alive once you connect a data source.',
+    actionLabel: 'Add data source',
+  };
 }
 
 export default EmptyStateCard;

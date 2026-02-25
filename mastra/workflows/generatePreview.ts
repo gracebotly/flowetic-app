@@ -606,7 +606,32 @@ const generateUISpecStep = createStep({
         }
       }
     }
-    console.log(`[generateUISpecStep] Layout source: skeleton (primary) — wireframe ${proposalWireframe ? 'available but not preferred' : 'not present'}`);
+    console.log(`[generateUISpecStep] Layout source: wireframe=${proposalWireframe ? 'available' : 'not present'}, outcome="${requestContext.get('selectedOutcome') || 'none'}"`);
+
+    // ── Map selected_outcome → uiType for skeleton selector ──────────
+    // When the user selects a product proposal (selected_outcome = 'product'),
+    // the skeleton selector needs uiType = 'landing-page' to hit Priority 0
+    // and select a product skeleton instead of defaulting to a dashboard skeleton.
+    const selectedOutcomeForUI = requestContext.get('selectedOutcome') as string;
+    let resolvedUiType: string = 'dashboard';
+    if (selectedOutcomeForUI === 'product') {
+      resolvedUiType = 'landing-page';
+      console.log('[generateUISpecStep] selectedOutcome=product → uiType=landing-page');
+    } else if (selectedOutcomeForUI === 'admin') {
+      resolvedUiType = 'admin-crud';
+      console.log('[generateUISpecStep] selectedOutcome=admin → uiType=admin-crud');
+    } else {
+      console.log(`[generateUISpecStep] selectedOutcome="${selectedOutcomeForUI || 'none'}" → uiType=dashboard (default)`);
+    }
+
+    // ── Determine wireframe preference ───────────────────────────────
+    // Product outcomes should prefer the proposal wireframe (it IS the layout
+    // the user chose). Dashboard outcomes continue using skeletons (they produce
+    // richer data-driven layouts with responsive breakpoints).
+    const shouldPreferWireframe = resolvedUiType !== 'dashboard' && !!proposalWireframe?.components?.length;
+    if (shouldPreferWireframe) {
+      console.log(`[generateUISpecStep] Product outcome with wireframe → preferWireframe=true`);
+    }
 
     // Extract intent from journey session's selected proposal for skeleton selection
     const intentTenantId = initData.tenantId || requestContext.get('tenantId') as string;
@@ -694,7 +719,8 @@ const generateUISpecStep = createStep({
           return undefined;
         })(),
         proposalWireframe: proposalWireframe || undefined,
-        preferWireframe: false, // Skeletons are the premium build system; wireframes are for proposal thumbnails
+        preferWireframe: shouldPreferWireframe,
+        uiType: resolvedUiType,
         // ── Phase 2: Skeleton-aware inputs ──────────────────────────
         dataSignals: mappingDataSignals as any,
         // Phase 3: BM25 design patterns from retrieveDesignPatternsStep

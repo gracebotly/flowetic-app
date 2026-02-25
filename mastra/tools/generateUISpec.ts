@@ -707,9 +707,9 @@ function buildDashboardComponentsFromSkeleton(
                 id: `empty-${section.id}-${row}`,
                 type: 'EmptyStateCard',
                 propsBuilder: () => ({
-                  title: 'No data yet',
-                  subtitle: 'Connect more events to populate this section',
-                  icon: section.dominant ? 'bar-chart-2' : 'pie-chart',
+                  title: '',
+                  subtitle: '',
+                  icon: section.type === 'table' ? 'table' : section.type === 'kpi-grid' ? 'activity' : section.dominant ? 'bar-chart-2' : 'pie-chart',
                   sectionId: section.id,
                 }),
                 layout: { col: 0, row, w: section.columns || 12, h: section.minHeight || 3 },
