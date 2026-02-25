@@ -212,7 +212,63 @@ function enrichCategoryChart(component: ComponentSpec, events: FlatEvent[]): Com
 }
 
 function enrichBarChart(component: ComponentSpec, events: FlatEvent[]): ComponentSpec {
-  return enrichCategoryChart(component, events);
+  const { props } = component;
+  if (!props) return component;
+
+  const categoryField = props.categoryField || props.xField;
+  const valueField = props.valueField || props.yField || "count";
+
+  // Try to compute real data from events
+  if (categoryField && events.length > 0) {
+    const grouped = new Map<string, number>();
+    for (const e of events) {
+      const key = String(e[categoryField] ?? "unknown");
+      if (valueField === "count") {
+        grouped.set(key, (grouped.get(key) ?? 0) + 1);
+      } else {
+        const val = Number(e[valueField]);
+        if (!isNaN(val)) {
+          grouped.set(key, (grouped.get(key) ?? 0) + val);
+        }
+      }
+    }
+
+    if (grouped.size > 0) {
+      const data = Array.from(grouped.entries())
+        .map(([name, value]) => ({ name, value }))
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 15);
+      return { ...component, props: { ...props, data } };
+    }
+  }
+
+  // If we couldn't compute from events, check if baked-in data looks hallucinated
+  if (props.data && Array.isArray(props.data)) {
+    const looksHallucinated = props.data.some((d: any) => {
+      const name = String(d?.name ?? "");
+      // Hallucination signals: random mixed case + numbers + spaces with no real words
+      // Real labels: "success", "error", "workflow_123", "Template 1: Lead..."
+      // Hallucinated: "7hr IRDrb WBA3w D3z", "Gtqf94ORx Y3yt6hy"
+      const hasRandomMixedCase = /[a-z][A-Z]|[A-Z]{2,}[a-z]/.test(name) && /\d/.test(name);
+      const tooManySpaces = (name.match(/\s/g) || []).length >= 2 && name.length < 25;
+      const noCommonWords = !/^(success|error|failed|active|pending|complete|total|unknown|other|workflow|template|run)/i.test(name);
+      return hasRandomMixedCase && tooManySpaces && noCommonWords;
+    });
+
+    if (looksHallucinated) {
+      // Strip the garbage data — renderer will show empty/placeholder state
+      return {
+        ...component,
+        props: {
+          ...props,
+          data: [],
+          _enrichmentNote: "Original data appeared hallucinated and was stripped",
+        },
+      };
+    }
+  }
+
+  return component;
 }
 
 function enrichDataTable(component: ComponentSpec, events: FlatEvent[]): ComponentSpec {

@@ -103,6 +103,45 @@ export const savePreviewVersion = createTool({
       }
     }
 
+    // ============================================================================
+    // SANITIZE BAKED-IN DATA FROM COMPONENTS
+    // ============================================================================
+    // The renderer computes component data from real events at render time via
+    // transformDataForComponents. LLM-baked props.data arrays are unreliable
+    // (hallucinated labels, stale values). Strip them so the renderer always
+    // uses fresh event data.
+    if (spec_json.components && Array.isArray(spec_json.components)) {
+      const CHART_TYPES_TO_STRIP = new Set([
+        'BarChart', 'bar_chart', 'bar-chart',
+        'PieChart', 'pie_chart', 'pie-chart',
+        'DonutChart', 'donut_chart', 'donut-chart',
+        'LineChart', 'line_chart', 'line-chart',
+        'TimeseriesChart', 'timeseries-chart',
+        'AreaChart', 'area-chart',
+      ]);
+
+      let strippedCount = 0;
+      spec_json.components = spec_json.components.map((comp: any) => {
+        const compType = comp.type || '';
+        if (CHART_TYPES_TO_STRIP.has(compType) && comp.props?.data && Array.isArray(comp.props.data)) {
+          strippedCount++;
+          const { data: _stripped, ...cleanProps } = comp.props;
+          return { ...comp, props: cleanProps };
+        }
+        // Also strip feedItems from StatusFeed (same issue — LLM bakes stale feed data)
+        if ((compType === 'StatusFeed' || compType === 'status-feed') && comp.props?.feedItems && Array.isArray(comp.props.feedItems)) {
+          strippedCount++;
+          const { feedItems: _stripped, ...cleanProps } = comp.props;
+          return { ...comp, props: cleanProps };
+        }
+        return comp;
+      });
+
+      if (strippedCount > 0) {
+        console.log(`[savePreviewVersion] 🧹 Stripped baked-in data from ${strippedCount} chart/feed components (renderer will compute from real events)`);
+      }
+    }
+
     console.log('[savePreviewVersion] ✅ Validation passed, style bundle:', styleBundleId);
 
     // ============================================================================
@@ -172,4 +211,3 @@ export const savePreviewVersion = createTool({
     };
   },
 });
-

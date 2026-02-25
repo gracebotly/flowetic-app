@@ -290,7 +290,7 @@ export function ResponsiveDashboardRenderer({ spec, designTokens, deviceMode, is
 
   // Desktop: Full grid with positioning + container queries + staggered animations
   return (
-    <div style={{ ...containerStyle, ...generateTokenCSS(effectiveTokens), fontFamily: bodyFont || undefined }}>
+    <div style={{ ...containerStyle, ...generateTokenCSS(effectiveTokens), fontFamily: bodyFont || undefined }} className="overflow-hidden">
       {fontLink}
       <div className="p-6">
         {spec?.title && (
@@ -313,10 +313,11 @@ export function ResponsiveDashboardRenderer({ spec, designTokens, deviceMode, is
               return (
                 <motion.div
                   key={comp.id}
-                  className="@container"
+                  className="@container min-w-0"
                   style={{
-                    gridColumn: `${(comp.layout?.col ?? 0) + 1} / span ${comp.layout?.w ?? 4}`,
+                    gridColumn: `${(comp.layout?.col ?? 0) + 1} / span ${Math.min(comp.layout?.w ?? 4, baseColumns - (comp.layout?.col ?? 0))}`,
                     gridRow: `${(comp.layout?.row ?? 0) + 1} / span ${comp.layout?.h ?? 2}`,
+                    overflow: 'hidden',
                   }}
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
