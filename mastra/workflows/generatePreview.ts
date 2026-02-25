@@ -819,6 +819,7 @@ const validateSpecStep = createStep({
     valid: z.boolean(),
     errors: z.array(z.string()),
     score: z.number(),
+    fixed_spec: z.record(z.any()).optional(),
   }),
   async execute({ inputData, requestContext, getStepResult, getInitData, suspend, runId }) {
     const spec_json = inputData.spec_json;
@@ -850,7 +851,9 @@ const persistPreviewVersionStep = createStep({
   async execute({ inputData, requestContext, getStepResult, getInitData, suspend, runId }) {
     const initData = getInitData() as GeneratePreviewInput;
     const specResult = getStepResult(generateUISpecStep);
-    const spec_json = specResult?.spec_json || {};
+    const validationResult = getStepResult(validateSpecStep);
+    // Phase 1: Use auto-fixed spec from validation if available, otherwise fall back to raw
+    const spec_json = validationResult?.fixed_spec || specResult?.spec_json || {};
     const design_tokens = specResult?.design_tokens || {};
     
     const tenantId = initData.tenantId;
