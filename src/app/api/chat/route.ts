@@ -929,6 +929,11 @@ async function handleDeterministicBuildPreview(params: {
       sourceId,
       platformType,
       workflowName: workflowName.substring(0, 50),
+      hasDesignTokens: !!session.design_tokens,
+      designTokenColors: session.design_tokens?.colors ? {
+        primary: session.design_tokens.colors.primary,
+        background: session.design_tokens.colors.background,
+      } : 'NONE',
     });
 
     // Call the platform API endpoint directly (same as delegateToPlatformMapper)
@@ -945,6 +950,8 @@ async function handleDeterministicBuildPreview(params: {
         platformType,
         task: 'Generate dashboard preview',
         interfaceId: sourceId, // Use sourceId as interfaceId for new dashboards
+        design_tokens: session.design_tokens || null,
+        selected_outcome: session.selected_outcome || 'dashboard',
       }),
     });
 

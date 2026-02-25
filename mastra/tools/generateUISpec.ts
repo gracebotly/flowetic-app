@@ -964,6 +964,7 @@ export const generateUISpec = createTool({
         }),
       })),
     }).optional(),
+    preferWireframe: z.boolean().optional().describe('When true, use the proposal wireframe instead of skeletons for layout. Default: false (skeletons are preferred for premium layouts).'),
   }),
   outputSchema: z.object({
     spec_json: z.record(z.any()),
@@ -1088,18 +1089,23 @@ export const generateUISpec = createTool({
     const resolvedEntityName = entityName || platformType || templateId;
     const fieldNames = Object.keys(mappings);
 
-    // ── Layout Priority: Proposal Wireframe > Skeleton ──────────────
-    // If the user selected a proposal with a wireframe, use that wireframe
-    // as the layout grid. The wireframe was designed for this specific data
-    // and the user chose it. Skeletons are the fallback when no wireframe exists.
+    // ── Layout Priority: Skeleton > Proposal Wireframe ──────────────
+    // Skeletons are the premium build system (11 deterministic layouts with
+    // responsive breakpoints, visual hierarchy, and 8-12 components).
+    // Wireframes are lightweight sketches used for proposal card thumbnails.
+    // Always use skeletons for the actual dashboard build unless explicitly
+    // opted out via preferWireframe flag.
     let blueprints: ComponentBlueprint[];
     let skeletonId: SkeletonId | null = null;
     let usedWireframe = false;
 
-    if (inputData.proposalWireframe?.components?.length) {
-      // ── PRIMARY PATH: Build from proposal wireframe ────────────────
-      const wireframe = inputData.proposalWireframe;
-      console.log(`[generateUISpec] Using proposal wireframe "${wireframe.name}" with ${wireframe.components.length} components as layout source`);
+    const preferWireframe = inputData.preferWireframe === true;
+    const hasWireframe = !!inputData.proposalWireframe?.components?.length;
+
+    if (preferWireframe && hasWireframe) {
+      // ── OPT-IN PATH: Build from proposal wireframe (only when explicitly requested) ──
+      const wireframe = inputData.proposalWireframe!;
+      console.log(`[generateUISpec] preferWireframe=true — using proposal wireframe "${wireframe.name}" with ${wireframe.components.length} components as layout source`);
 
       blueprints = buildComponentsFromWireframe(
         wireframe,
@@ -1112,6 +1118,9 @@ export const generateUISpec = createTool({
       console.log(`[generateUISpec] Wireframe produced ${blueprints.length} component blueprints`);
 
     } else {
+      if (hasWireframe && !preferWireframe) {
+        console.log('[generateUISpec] Proposal wireframe exists but preferWireframe=false — using skeleton system for premium layout');
+      }
       // ── FALLBACK PATH: Skeleton selection ──────────────────────────
       console.log('[generateUISpec] No proposal wireframe — falling back to skeleton selection');
       const useSkeletons = true;
