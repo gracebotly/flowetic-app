@@ -121,14 +121,42 @@ DO NOT try to edit dashboard specs yourself — always delegate to this speciali
         }
       }
 
+      // ── Fallback: scan top-level toolResults (AI SDK v5 may surface results here) ──
+      if (!hasSuccessfulPatch && patchErrors.length === 0) {
+        const topLevelResults = (result as any).toolResults;
+        if (Array.isArray(topLevelResults)) {
+          for (const tr of topLevelResults) {
+            const toolResult = tr as any;
+            const toolName = toolResult.toolName ?? toolResult.name;
+            const toolOutput = toolResult.output ?? toolResult.result;
+
+            if (toolName === 'applySpecPatch') {
+              if (toolOutput?.applied && Array.isArray(toolOutput.applied) && toolOutput.applied.length > 0) {
+                hasSuccessfulPatch = true;
+              } else {
+                patchErrors.push(String(toolOutput?.error || toolResult.error || 'applySpecPatch returned no applied operations'));
+              }
+            }
+            if (toolName === 'savePreviewVersion') {
+              if (toolOutput?.previewUrl || toolOutput?.versionId) {
+                hasSuccessfulPatch = true;
+              }
+            }
+          }
+        }
+      }
+
       // If the task was an edit request but no patch succeeded, report failure
       const isEditTask = /edit|change|modify|update|add|remove|darker|lighter|color|font|layout|chart|pie|bar/i.test(input.task);
-      if (isEditTask && !hasSuccessfulPatch && patchErrors.length > 0) {
+      if (isEditTask && !hasSuccessfulPatch) {
+        const errorDetail = patchErrors.length > 0
+          ? `Patch errors: ${patchErrors.slice(0, 3).join('; ')}.`
+          : 'No applySpecPatch calls succeeded (the sub-agent may not have called the tool, or all calls failed validation).';
         console.warn('[delegateToDashboardBuilder] Edit task failed - no successful patches:', patchErrors);
         return {
           success: false,
           response: "",
-          error: `Dashboard edit failed. Patch errors: ${patchErrors.slice(0, 3).join('; ')}. The agent may need to call getCurrentSpec first to load the current spec before patching.`,
+          error: `Dashboard edit failed. ${errorDetail} The agent should call getCurrentSpec first to load the current spec, then apply small incremental patches (≤5 operations each).`,
         };
       }
 

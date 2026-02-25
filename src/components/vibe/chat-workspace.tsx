@@ -219,6 +219,7 @@ export function ChatWorkspace({
   const [proposals, setProposals] = useState<import('@/types/proposal').ProposalsPayload | null>(null);
   const [isProposalLoading, setIsProposalLoading] = useState(false);
   const [selectedProposalIndex, setSelectedProposalIndex] = useState<number | null>(null);
+  const [isSelectingProposal, setIsSelectingProposal] = useState(false);
 
 
   // Guard against concurrent init + user sends
@@ -2171,9 +2172,28 @@ return (
                   payload={proposals}
                   isLoading={isProposalLoading}
                   selectedIndex={selectedProposalIndex}
-                  onSelect={(index) => {
+                  onSelect={async (index) => {
+                    // Prevent double-fire with guard
+                    if (isSelectingProposal) {
+                      console.log('[ChatWorkspace] Proposal selection already in progress, ignoring duplicate click');
+                      return;
+                    }
+
+                    // If already selected, ignore
+                    if (selectedProposalIndex === index) {
+                      console.log('[ChatWorkspace] Proposal already selected, ignoring duplicate selection');
+                      return;
+                    }
+
+                    setIsSelectingProposal(true);
                     setSelectedProposalIndex(index);
-                    void sendAi(`__ACTION__:select_proposal:${index}`, {});
+
+                    try {
+                      await sendAi(`__ACTION__:select_proposal:${index}`, {});
+                    } finally {
+                      // Reset after 1 second to allow re-selection if needed
+                      setTimeout(() => setIsSelectingProposal(false), 1000);
+                    }
                   }}
                 />
               ) : loadedSpec?.components?.length > 0 ? (

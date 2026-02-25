@@ -1919,12 +1919,28 @@ export async function POST(req: Request) {
 
         let selectedIndex: number | null = null;
 
-        // Only process selection if not already handled by idempotency guard above
-        const alreadySelected = actionMatch && requestContext.get('phase') !== 'propose' && requestContext.get('phase') !== undefined;
+        // Idempotency check: prevent duplicate selection processing
+        const currentPhase = requestContext.get('phase');
+        const alreadySelected = currentPhase !== 'propose' && currentPhase !== undefined;
 
         if (actionMatch && !alreadySelected) {
-          selectedIndex = parseInt(actionMatch[1], 10);
-          console.log(`[api/chat] 🎯 Proposal selection via __ACTION__: index=${selectedIndex}`);
+          // Additional check: verify this proposal hasn't already been selected in DB
+          const { data: existingSelection } = await supabase
+            .from('journey_sessions')
+            .select('selected_proposal_index')
+            .eq('thread_id', cleanJourneyThreadId)
+            .eq('tenant_id', tenantId)
+            .maybeSingle();
+
+          const proposalIndex = parseInt(actionMatch[1], 10);
+
+          if (existingSelection?.selected_proposal_index === proposalIndex) {
+            console.log(`[api/chat] 🛡️ Idempotency: Proposal ${proposalIndex} already selected, skipping duplicate`);
+            selectedIndex = null; // Skip processing
+          } else {
+            selectedIndex = proposalIndex;
+            console.log(`[api/chat] 🎯 Proposal selection via __ACTION__: index=${selectedIndex}`);
+          }
         } else if (!actionMatch) {
           const { classifyProposeIntent } = await import('@/lib/intent-classifier');
           const { data: propSession } = await supabase

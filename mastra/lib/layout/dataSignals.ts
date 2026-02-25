@@ -155,11 +155,45 @@ export function computeDataSignals(
   }
 
   // ── Data story (narrative health assessment) ──────────────────────
+  // Priority 1: Use explicit errorRate from eventStats if available
+  // Priority 2: Infer from field shapes and names (heuristic)
   let dataStory: 'healthy' | 'warning' | 'critical' | 'unknown' = 'unknown';
   if (eventStats?.errorRate !== undefined) {
     if (eventStats.errorRate < 0.05) dataStory = 'healthy';
     else if (eventStats.errorRate < 0.20) dataStory = 'warning';
     else dataStory = 'critical';
+  } else {
+    // Heuristic: infer data story from field characteristics
+    const hasErrorField = active.some(
+      f => /error|fail|exception|fault/i.test(f.name),
+    );
+    const hasStatusField = active.some(
+      f => f.shape === 'status' || f.shape === 'binary',
+    );
+    const hasDurationField = active.some(
+      f => f.shape === 'duration',
+    );
+    const hasMoneyField = active.some(
+      f => f.shape === 'money' || f.shape === 'rate',
+    );
+
+    if (hasErrorField && hasStatusField) {
+      // Error monitoring pattern (e.g., n8n workflow executions with error_message + status)
+      dataStory = 'warning';
+    } else if (hasStatusField && hasDurationField) {
+      // Operational monitoring (status + duration = performance tracking)
+      dataStory = 'healthy';
+    } else if (hasMoneyField) {
+      // Financial/ROI tracking
+      dataStory = 'healthy';
+    } else if (hasTimeSeries && statusFields > 0) {
+      // Time-series with status = operational monitoring
+      dataStory = 'healthy';
+    } else if (hasTimeSeries) {
+      // Pure time-series without status = trend analysis (neutral)
+      dataStory = 'healthy';
+    }
+    // else: stays 'unknown' — genuinely unclassifiable data
   }
 
   // ── BM25 layout query ─────────────────────────────────────────────
