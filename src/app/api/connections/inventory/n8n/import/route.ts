@@ -183,21 +183,42 @@ export async function POST(req: Request) {
           error: e.data?.resultData?.error?.message,
         }));
 
-        // Store sample events
+        // Store sample events — MUST include `state` JSONB for events_flat view,
+        // and `platform_event_id` for upsert deduplication.
         for (const exec of executions.slice(0, 10)) {
+          const isError = exec.status === 'error' || exec.status === 'crashed';
+          const startedAt = exec.startedAt || exec.createdAt || now;
+          const endedAt = exec.stoppedAt || '';
+          const durationMs = (startedAt && endedAt)
+            ? Math.max(0, new Date(endedAt).getTime() - new Date(startedAt).getTime())
+            : undefined;
+
           eventRows.push({
             tenant_id: membership.tenant_id,
             source_id: sourceId,
+            platform_event_id: String(exec.id),
             type: 'workflow_execution',
             name: `n8n:${wf.name || wfId}:execution`,
-            value: (exec.status === 'error' || exec.status === 'crashed') ? 0 : 1, // 1 = success, 0 = failure
+            value: isError ? 0 : 1,
+            state: {
+              workflow_id: wfId,
+              workflow_name: wf.name || wfId,
+              execution_id: String(exec.id),
+              status: isError ? 'error' : 'success',
+              started_at: startedAt,
+              ended_at: endedAt,
+              duration_ms: durationMs,
+              error_message: isError ? (exec.data?.resultData?.error?.message || '') : undefined,
+              platform: 'n8n',
+            },
             labels: {
               workflow_id: wfId,
               workflow_name: wf.name,
-              execution_id: exec.id,
-              status: (exec.status === 'error' || exec.status === 'crashed') ? 'error' : 'success',
+              execution_id: String(exec.id),
+              status: isError ? 'error' : 'success',
+              platformType: 'n8n',
             },
-            timestamp: exec.startedAt || exec.createdAt || now,
+            timestamp: startedAt,
             created_at: now,
           });
         }

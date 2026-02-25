@@ -153,9 +153,20 @@ export async function POST(req: Request) {
           eventRows.push({
             tenant_id: membership.tenant_id,
             source_id: sourceId,
+            platform_event_id: String(call.call_id),
             type: 'agent_call',
             name: `retell:${agent.agent_name || agentId}:call`,
             value: call.call_status === 'ended' || call.call_status === 'completed' ? 1 : 0,
+            state: {
+              workflow_id: String(call.agent_id || ''),
+              workflow_name: call.agent_name || '',
+              execution_id: String(call.call_id),
+              status: call.call_status === 'ended' ? 'success' : call.call_status || 'unknown',
+              started_at: call.start_timestamp || '',
+              ended_at: call.end_timestamp || '',
+              duration_ms: call.duration_ms || undefined,
+              platform: 'retell',
+            },
             labels: {
               agent_id: agentId,
               agent_name: agent.agent_name,

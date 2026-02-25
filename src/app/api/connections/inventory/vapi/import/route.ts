@@ -151,9 +151,20 @@ export async function POST(req: Request) {
           eventRows.push({
             tenant_id: membership.tenant_id,
             source_id: sourceId,
+            platform_event_id: String(call.id),
             type: 'assistant_call',
             name: `vapi:${assistant.name || assistantId}:call`,
             value: call.status === 'completed' || call.status === 'ended' ? 1 : 0,
+            state: {
+              workflow_id: String(call.assistant_id || ''),
+              workflow_name: call.assistant?.name || '',
+              execution_id: String(call.id),
+              status: call.status === 'ended' ? 'success' : call.status || 'unknown',
+              started_at: call.startedAt || call.createdAt || '',
+              ended_at: call.endedAt || '',
+              duration_ms: call.duration || undefined,
+              platform: 'vapi',
+            },
             labels: {
               assistant_id: assistantId,
               assistant_name: assistant.name,

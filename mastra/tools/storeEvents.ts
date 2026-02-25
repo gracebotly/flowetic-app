@@ -37,12 +37,56 @@ export const storeEvents = createTool({
     const supabase = createAuthenticatedClient(accessToken);
     const rows = inputData.events ?? [];
 
-    if (!rows.length) {
-      return { stored: 0, skipped: 0, errors: [], status: 'success' as const };
+    // ── Ghost event guard ──────────────────────────────────────────
+    // Reject events that would create ghost rows (no state, or state with
+    // all empty string values). These pollute counts and produce garbage UIs.
+    const validRows = rows.filter((r: Record<string, unknown>) => {
+      const state = r.state as Record<string, unknown> | null | undefined;
+
+      // If state is missing or not an object, this event will be a ghost
+      if (!state || typeof state !== 'object') {
+        console.warn(
+          `[storeEvents] Rejecting ghost event — no state. name="${r.name}" platform_event_id="${r.platform_event_id}"`,
+        );
+        return false;
+      }
+
+      // If all meaningful state fields are empty strings, also a ghost
+      const hasData = ['status', 'workflow_id', 'execution_id'].some(
+        (k) => state[k] && String(state[k]).trim() !== '',
+      );
+      if (!hasData) {
+        console.warn(
+          `[storeEvents] Rejecting ghost event — state has no meaningful data. name="${r.name}"`,
+        );
+        return false;
+      }
+
+      const platformEventId = String(r.platform_event_id ?? '');
+      if (/^[a-z0-9_-]+-\d+$/i.test(platformEventId)) {
+        console.warn(
+          `[storeEvents] Rejecting unstable platform_event_id fallback. name="${r.name}" platform_event_id="${platformEventId}"`,
+        );
+        return false;
+      }
+
+      return true;
+    });
+
+    const ghostCount = rows.length - validRows.length;
+    if (ghostCount > 0) {
+      console.warn(`[storeEvents] Filtered out ${ghostCount} ghost events (no state data)`);
+    }
+
+    // Replace rows with validated rows for the rest of the function
+    const filteredRows = validRows;
+
+    if (!filteredRows.length) {
+      return { stored: 0, skipped: rows.length, errors: ghostCount > 0 ? [`Rejected ${ghostCount} ghost events with no state data`] : [], status: 'success' as const };
     }
 
     // Ensure all rows have tenant_id and interface_id set
-    const enrichedRows = rows.map((r: Record<string, unknown>) => ({
+    const enrichedRows = filteredRows.map((r: Record<string, unknown>) => ({
       ...r,
       tenant_id: r.tenant_id || tenantId,
       // BUG 4 FIX: Propagate interface_id to events when available.
@@ -69,7 +113,7 @@ export const storeEvents = createTool({
         // Return graceful failure with data preserved
         return {
           stored: 0,
-          skipped: rows.length,
+          skipped: filteredRows.length,
           errors: [error.message],
           status: 'failed' as const,
         };
@@ -78,7 +122,7 @@ export const storeEvents = createTool({
       const results = data as Array<{ id: string; is_new: boolean }> | null;
       const stored = results?.filter(r => r.is_new).length ?? 0;
       const updated = results?.filter(r => !r.is_new).length ?? 0;
-      const skipped = rows.length - (stored + updated);
+      const skipped = filteredRows.length - (stored + updated);
 
       console.log(`[storeEvents] Stored ${stored} new, updated ${updated}, skipped ${skipped}`);
 
@@ -95,7 +139,7 @@ export const storeEvents = createTool({
       // NEVER throw - return graceful failure so workflow can continue
       return {
         stored: 0,
-        skipped: rows.length,
+        skipped: filteredRows.length,
         errors: [errorMessage],
         status: 'failed' as const,
       };

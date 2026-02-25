@@ -37,18 +37,30 @@ export const normalizeEvents = createTool({
     const normalizer = getNormalizer(platformType);
 
     const normalized = (rawEvents ?? []).map((e: Record<string, unknown>, idx: number) => {
-      // Extract a stable platform event ID for idempotency
-      const platformEventId = String(
+      // Extract a stable platform event ID for idempotency.
+      // fetchPlatformEvents puts execution_id inside labels{}, so check there FIRST.
+      // The fallback to `${platformType}-${idx}` is dangerous (creates non-deduplicable IDs)
+      // so we add a warning log when it triggers.
+      const labelsObj = (e?.labels && typeof e.labels === 'object')
+        ? e.labels as Record<string, unknown>
+        : {};
+      const candidateId =
+        labelsObj.execution_id ??
+        labelsObj.call_id ??
+        e?.execution_id ??
         e?.id ??
         e?.eventId ??
         e?.executionId ??
         e?.callId ??
-        (e?.labels && typeof e.labels === 'object'
-          ? (e.labels as Record<string, unknown>).execution_id ??
-            (e.labels as Record<string, unknown>).call_id
-          : undefined) ??
-        `${platformType}-${idx}`
-      );
+        undefined;
+
+      if (!candidateId) {
+        console.warn(
+          `[normalizeEvents] ⚠️ Event ${idx} has no stable ID — will use index fallback. Keys: [${Object.keys(e).join(', ')}]`,
+        );
+      }
+
+      const platformEventId = String(candidateId ?? `${platformType}-${idx}`);
 
       // Best-effort timestamp
       const ts = String(
