@@ -6,15 +6,15 @@ import type { RendererProps } from "../componentRegistry";
 import { buildCardStyle, buildCardHoverStyle } from "../componentRegistry";
 
 export function BarChartRenderer({ component, designTokens: dt, deviceMode, isEditing, onClick }: RendererProps) {
+  const { props, id } = component;
   const primary = dt.colors?.primary ?? "#3b82f6";
-  const secondary = dt.colors?.secondary ?? "#64748B";
+  const emphasisColor = (props?.emphasisColor as string) ?? primary;
   const textColor = dt.colors?.text ?? "#111827";
   const headingFont = dt.fonts?.heading;
   const bodyFont = dt.fonts?.body;
   const cardStyle = buildCardStyle(dt);
   const cardHoverStyle = buildCardHoverStyle(dt);
   const [isHovered, setIsHovered] = React.useState(false);
-  const { props, id } = component;
   const title = props?.title ?? id;
   const chartData = props?.data ?? [{ name: "A", value: 40 }, { name: "B", value: 65 }, { name: "C", value: 50 }, { name: "D", value: 80 }];
   const isSparseData = chartData.length <= 2;
@@ -52,7 +52,7 @@ export function BarChartRenderer({ component, designTokens: dt, deviceMode, isEd
           </div>
         ) : (
           <div className="min-h-[200px]">
-            <BarChart className="h-full" data={chartData} index="name" categories={["value"]} colors={[primary, secondary]} showLegend={false} showGridLines={false} />
+            <BarChart className="h-full" data={chartData} index="name" categories={["value"]} colors={[emphasisColor]} showLegend={false} showGridLines={false} />
           </div>
         )}
       </div>

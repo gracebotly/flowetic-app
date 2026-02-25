@@ -43,8 +43,9 @@ function AnimatedValue({ value, textColor, font }: { value: string; textColor: s
 }
 
 export function MetricCardRenderer({ component, designTokens: dt, isEditing, onClick }: RendererProps) {
+  const { props, id } = component;
   const primary = dt.colors?.primary ?? "#3b82f6";
-  const accent = dt.colors?.accent ?? primary;
+  const accent = (props?.accentColor as string) ?? dt.colors?.accent ?? primary;
   const textColor = dt.colors?.text ?? "#111827";
   const headingFont = dt.fonts?.heading;
   const bodyFont = dt.fonts?.body;
@@ -52,7 +53,6 @@ export function MetricCardRenderer({ component, designTokens: dt, isEditing, onC
   const cardHoverStyle = buildCardHoverStyle(dt);
   const [isHovered, setIsHovered] = useState(false);
 
-  const { props, id } = component;
   const title = (props?.title as string) ?? id;
   const value = String(props?.value ?? "—");
   const subtitle = (props?.subtitle as string) ?? (props?.label as string) ?? null;
@@ -95,8 +95,8 @@ export function MetricCardRenderer({ component, designTokens: dt, isEditing, onC
           <div
             className="w-9 h-9 rounded-xl flex items-center justify-center"
             style={{
-              background: `linear-gradient(135deg, ${primary}18, ${primary}08)`,
-              border: `1px solid ${primary}15`,
+              background: `linear-gradient(135deg, ${accent}22, ${primary}10)`,
+              border: `1px solid ${accent}20`,
             }}
           >
             {React.createElement(icon, { size: 16, color: primary, strokeWidth: 2 })}

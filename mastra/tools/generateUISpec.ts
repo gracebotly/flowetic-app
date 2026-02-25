@@ -816,10 +816,18 @@ function buildDashboardComponentsFromSkeleton(
   for (const [, rowComps] of rowMap) {
     if (rowComps.length === 1) {
       const comp = rowComps[0];
-      if (comp.layout.w < 12) {
-        console.log(`[buildDashboardComponentsFromSkeleton] Post-process: expanding lone component "${comp.id}" from col:${comp.layout.col} w:${comp.layout.w} → col:0 w:12`);
+      // Only expand truly narrow orphans (< 5 cols ≈ less than 40% of grid).
+      // Charts at 5+ cols were placed by the skeleton for side-by-side layout.
+      // Stretching them to w:12 destroys the skeleton's visual hierarchy.
+      // Instead, center medium-width components to preserve proportions.
+      if (comp.layout.w < 5) {
+        console.log(`[buildDashboardComponentsFromSkeleton] Post-process: expanding narrow orphan "${comp.id}" from col:${comp.layout.col} w:${comp.layout.w} → col:0 w:12`);
         comp.layout.col = 0;
         comp.layout.w = 12;
+      } else if (comp.layout.w < 12) {
+        const margin = Math.floor((12 - comp.layout.w) / 2);
+        console.log(`[buildDashboardComponentsFromSkeleton] Post-process: centering lone component "${comp.id}" at col:${margin} w:${comp.layout.w} (preserving skeleton proportions)`);
+        comp.layout.col = margin;
       }
     } else if (rowComps.length === 2) {
       // Two components in a row — ensure they fill the full 12 columns
@@ -1197,12 +1205,54 @@ export const generateUISpec = createTool({
       }
     } // end of skeleton fallback else-block
 
-    const rawComponents = blueprints.map(bp => ({
-      id: bp.id,
-      type: bp.type,
-      props: bp.propsBuilder(mappings, fieldNames),
-      layout: bp.layout,
-    }));
+    const rawComponents = blueprints.map(bp => {
+      const baseProps = bp.propsBuilder(mappings, fieldNames);
+
+      // ── Inject design token accent colors into component props ──────
+      // Without this, charts and cards render with Tremor/library defaults
+      // instead of the custom design system colors (e.g. "Revenue Prism"
+      // blues and ambers never appear). The renderer reads these props
+      // to apply brand colors.
+      const accentProps: Record<string, unknown> = {};
+      const paletteColors = styleTokens.colors as Record<string, string | undefined>;
+
+      if (['TimeseriesChart', 'LineChart', 'AreaChart', 'BarChart'].includes(bp.type)) {
+        if (!baseProps.emphasisColor) {
+          accentProps.emphasisColor = styleTokens.colors.primary;
+        }
+        if (!baseProps.secondaryColor && styleTokens.colors.secondary) {
+          accentProps.secondaryColor = styleTokens.colors.secondary;
+        }
+      }
+
+      if (['PieChart', 'DonutChart'].includes(bp.type)) {
+        if (!baseProps.emphasisColor) {
+          accentProps.emphasisColor = styleTokens.colors.primary;
+        }
+        if (!baseProps.colorPalette) {
+          accentProps.colorPalette = [
+            styleTokens.colors.primary,
+            styleTokens.colors.secondary,
+            paletteColors.accent,
+            paletteColors.success,
+            paletteColors.warning,
+          ].filter(Boolean);
+        }
+      }
+
+      if (bp.type === 'MetricCard') {
+        if (!baseProps.accentColor) {
+          accentProps.accentColor = paletteColors.accent || styleTokens.colors.primary;
+        }
+      }
+
+      return {
+        id: bp.id,
+        type: bp.type,
+        props: { ...baseProps, ...accentProps },
+        layout: bp.layout,
+      };
+    });
 
     // ── Bug 3 Fix: Final deduplication safety net ──────────────────
     // Remove any components that ended up with identical (type, primary-field) tuples

@@ -6,7 +6,9 @@ import type { RendererProps } from "../componentRegistry";
 import { buildCardStyle, buildCardHoverStyle } from "../componentRegistry";
 
 export function LineChartRenderer({ component, designTokens: dt, deviceMode, isEditing, onClick }: RendererProps) {
+  const { props, id } = component;
   const primary = dt.colors?.primary ?? "#3b82f6";
+  const emphasisColor = (props?.emphasisColor as string) ?? primary;
   const textColor = dt.colors?.text ?? "#111827";
   const headingFont = dt.fonts?.heading;
   const bodyFont = dt.fonts?.body;
@@ -14,7 +16,6 @@ export function LineChartRenderer({ component, designTokens: dt, deviceMode, isE
   const cardHoverStyle = buildCardHoverStyle(dt);
   const [isHovered, setIsHovered] = useState(false);
 
-  const { props, id } = component;
   const title = props?.title ?? id;
   const chartData = props?.data ?? [
     { date: "Jan", value: 100 },
@@ -93,7 +94,7 @@ export function LineChartRenderer({ component, designTokens: dt, deviceMode, isE
               data={chartData}
               index="date"
               categories={["value"]}
-              colors={[primary]}
+              colors={[emphasisColor]}
               showLegend={false}
               showGridLines={false}
               showYAxis={deviceMode !== "mobile"}
