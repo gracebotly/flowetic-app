@@ -115,8 +115,8 @@ export function ResponsiveDashboardRenderer({ spec, designTokens, deviceMode, is
   const columns = getResponsiveColumns(baseColumns, deviceMode);
   const gap = getResponsiveGap(baseGap, deviceMode);
 
-  // Design tokens are authoritative — they come from the locked design system workflow.
-  // Never auto-invert based on BM25 hints. The user's selected design system is final.
+  // Design tokens are authoritative — no auto-inversion.
+  // The locked design system workflow produces the correct tokens.
   const effectiveTokens = designTokens;
 
   // Design tokens
@@ -215,6 +215,58 @@ export function ResponsiveDashboardRenderer({ spec, designTokens, deviceMode, is
     );
   }
 
+  // ── Grid gap filler: expand components to fill empty space in their row ──
+  function fillGridGaps(comps: ComponentSpec[], totalCols: number): ComponentSpec[] {
+    if (comps.length === 0) return comps;
+
+    // Group components by row
+    const rowMap = new Map<number, ComponentSpec[]>();
+    for (const c of comps) {
+      const row = c.layout?.row ?? 0;
+      if (!rowMap.has(row)) rowMap.set(row, []);
+      rowMap.get(row)!.push(c);
+    }
+
+    const result: ComponentSpec[] = [];
+
+    for (const rowComps of rowMap.values()) {
+      // Calculate total width used in this row
+      const totalWidth = rowComps.reduce((sum, c) => sum + (c.layout?.w ?? 4), 0);
+      const gap = totalCols - totalWidth;
+
+      if (gap > 0 && rowComps.length === 1) {
+        // Single component in row with empty space: expand to full width
+        const comp = rowComps[0];
+        result.push({
+          ...comp,
+          layout: { ...comp.layout, w: totalCols, col: 0 },
+        });
+      } else if (gap > 0 && rowComps.length > 1) {
+        // Multiple components with gap: distribute extra space proportionally
+        // Give extra to the widest component
+        const sorted = [...rowComps].sort((a, b) => (b.layout?.w ?? 4) - (a.layout?.w ?? 4));
+        const widest = sorted[0];
+        let colOffset = 0;
+        for (const comp of rowComps) {
+          const extraW = comp === widest ? gap : 0;
+          result.push({
+            ...comp,
+            layout: {
+              ...comp.layout,
+              w: (comp.layout?.w ?? 4) + extraW,
+              col: colOffset,
+            },
+          });
+          colOffset += (comp.layout?.w ?? 4) + extraW;
+        }
+      } else {
+        result.push(...rowComps);
+      }
+    }
+
+    return result;
+  }
+
   // Desktop: Full grid with positioning + container queries + staggered animations
   return (
     <div style={{ ...containerStyle, ...generateTokenCSS(effectiveTokens), fontFamily: bodyFont || undefined }}>
@@ -232,29 +284,32 @@ export function ResponsiveDashboardRenderer({ spec, designTokens, deviceMode, is
           </motion.h1>
         )}
         <div className="grid" style={{ gridTemplateColumns: `repeat(${baseColumns}, 1fr)`, gap: `${gap}px` }}>
-          {sortedComponents.map((comp: ComponentSpec, index: number) => {
-            const resolved = resolveComponentType(comp.type);
-            const Renderer = getRenderer(resolved);
-            return (
-              <motion.div
-                key={comp.id}
-                className="@container"
-                style={{
-                  gridColumn: `${(comp.layout?.col ?? 0) + 1} / span ${comp.layout?.w ?? 4}`,
-                  gridRow: `${(comp.layout?.row ?? 0) + 1} / span ${comp.layout?.h ?? 2}`,
-                }}
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{
-                  duration: 0.3,
-                  delay: index * 0.05,
-                  ease: [0.25, 0.1, 0.25, 1.0],
-                }}
-              >
-                <Renderer component={{ ...comp, type: resolved }} designTokens={effectiveTokens} deviceMode={deviceMode} isEditing={isEditing} onClick={() => onWidgetClick?.(comp.id)} />
-              </motion.div>
-            );
-          })}
+          {(() => {
+            const filledComponents = fillGridGaps(sortedComponents, baseColumns);
+            return filledComponents.map((comp: ComponentSpec, index: number) => {
+              const resolved = resolveComponentType(comp.type);
+              const Renderer = getRenderer(resolved);
+              return (
+                <motion.div
+                  key={comp.id}
+                  className="@container"
+                  style={{
+                    gridColumn: `${(comp.layout?.col ?? 0) + 1} / span ${comp.layout?.w ?? 4}`,
+                    gridRow: `${(comp.layout?.row ?? 0) + 1} / span ${comp.layout?.h ?? 2}`,
+                  }}
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{
+                    duration: 0.3,
+                    delay: index * 0.05,
+                    ease: [0.25, 0.1, 0.25, 1.0],
+                  }}
+                >
+                  <Renderer component={{ ...comp, type: resolved }} designTokens={effectiveTokens} deviceMode={deviceMode} isEditing={isEditing} onClick={() => onWidgetClick?.(comp.id)} />
+                </motion.div>
+              );
+            });
+          })()}
         </div>
       </div>
     </div>
