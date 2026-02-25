@@ -167,21 +167,36 @@ export async function POST(req: Request) {
           error: e.error?.message,
         }));
 
-        // Store sample events
+        // Store sample events — MUST include `state` JSONB for events_flat view
         for (const exec of executions.slice(0, 10)) {
+          const isSuccess = exec.status === 'success' || exec.status === 1;
+          const startedAt = exec.createdAt || exec.startedAt || now;
+
           eventRows.push({
             tenant_id: membership.tenant_id,
             source_id: sourceId,
+            platform_event_id: String(exec.id || exec.executionId),
             type: 'scenario_execution',
             name: `make:${scenario.name || scenarioId}:execution`,
-            value: exec.status === 'success' || exec.status === 1 ? 1 : 0,
+            value: isSuccess ? 1 : 0,
+            state: {
+              workflow_id: scenarioId,
+              workflow_name: scenario.name || scenarioId,
+              execution_id: String(exec.id || exec.executionId),
+              status: isSuccess ? 'success' : 'error',
+              started_at: startedAt,
+              ended_at: '',
+              duration_ms: exec.duration || undefined,
+              platform: 'make',
+            },
             labels: {
               scenario_id: scenarioId,
               scenario_name: scenario.name,
-              execution_id: exec.id,
-              status: exec.status === 'success' || exec.status === 1 ? 'success' : 'error',
+              execution_id: String(exec.id || exec.executionId),
+              status: isSuccess ? 'success' : 'error',
+              platformType: 'make',
             },
-            timestamp: exec.createdAt || now,
+            timestamp: startedAt,
             created_at: now,
           });
         }

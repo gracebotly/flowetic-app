@@ -633,6 +633,14 @@ export async function generateProposals(
   const proposals: Proposal[] = [];
   const titles = classification.titleTemplates;
 
+  // Accumulators for REAL exclusion values (not feedback hints).
+  // After each successful proposal, we extract the actual style name
+  // and primary color hex that the LLM chose, and exclude them from
+  // subsequent proposals to guarantee visual variety.
+  const usedStyleNames: string[] = [];
+  const usedColorHexValues: string[] = [];
+  const usedHeadingFonts: string[] = [];
+
   for (let index = 0; index < Math.min(classification.blendPresets.length, proposalCount); index++) {
     const blend = classification.blendPresets[index];
     const title = titles[index] || `Proposal ${index + 1}`;
@@ -649,9 +657,14 @@ export async function generateProposals(
           tenantId: input.tenantId,
           userId: input.userId,
           userFeedback: feedbackHints[index],
-          // Exclude previous results to ensure variety
-          excludeStyleNames: index > 0
-            ? feedbackHints.slice(0, index)
+          // Exclude ACTUAL style names and color hex values from previous proposals.
+          // Before this fix, feedbackHints (BM25 query strings) were passed as
+          // excludeStyleNames which never matched any CSV "Style Category" value.
+          excludeStyleNames: usedStyleNames.length > 0
+            ? [...usedStyleNames]
+            : undefined,
+          excludeColorHexValues: usedColorHexValues.length > 0
+            ? [...usedColorHexValues]
             : undefined,
         },
         requestContext: input.requestContext,
@@ -662,6 +675,25 @@ export async function generateProposals(
       if (result.status === 'success' && result.result) {
         const data = result.result as any;
         console.log(`[generateProposals] Workflow ${index} ✅ completed in ${elapsed}ms — "${data.designSystem?.style?.name || 'unnamed'}"`);
+
+        // ── Accumulate real exclusion values for next proposal ────────
+        const ds = data.designSystem;
+        if (ds?.style?.name) {
+          usedStyleNames.push(ds.style.name);
+          // Also exclude the style type/category if present
+          if (ds.style.type) usedStyleNames.push(ds.style.type);
+        }
+        if (ds?.colors?.primary) {
+          usedColorHexValues.push(ds.colors.primary.toUpperCase());
+          // Also exclude secondary to prevent "same palette, swapped order"
+          if (ds.colors?.secondary) usedColorHexValues.push(ds.colors.secondary.toUpperCase());
+        }
+        if (ds?.typography?.headingFont) {
+          usedHeadingFonts.push(ds.typography.headingFont);
+        }
+
+        console.log(`[generateProposals] Excluding for next proposal: styles=[${usedStyleNames.join(', ')}], colors=[${usedColorHexValues.join(', ')}], fonts=[${usedHeadingFonts.join(', ')}]`);
+
         proposals.push({
           index,
           title,

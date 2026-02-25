@@ -78,19 +78,31 @@ export async function POST(req: Request) {
   if ((secret.authMode ?? "bearer") === "header") headers["X-N8N-API-KEY"] = secret.apiKey!;
   else headers["Authorization"] = `Bearer ${secret.apiKey}`;
 
-  // 1. Fetch all workflows
-  const res = await fetch(`${baseUrl}/api/v1/workflows`, { method: "GET", headers });
+  // 1. Fetch all workflows (paginated)
+  let workflows: any[] = [];
+  let cursor: string | null = null;
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    return NextResponse.json(
-      { ok: false, code: "N8N_API_FAILED", message: `n8n API request failed (${res.status}). ${text}`.trim() },
-      { status: 400 },
-    );
-  }
+  do {
+    const url: string = cursor
+      ? `${baseUrl}/api/v1/workflows?limit=100&cursor=${encodeURIComponent(cursor)}`
+      : `${baseUrl}/api/v1/workflows?limit=100`;
 
-  const raw = await res.json().catch(() => null);
-  const workflows = extractWorkflows(raw);
+    const res = await fetch(url, { method: "GET", headers });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      return NextResponse.json(
+        { ok: false, code: "N8N_API_FAILED", message: `n8n API request failed (${res.status}). ${text}`.trim() },
+        { status: 400 },
+      );
+    }
+
+    const raw = await res.json().catch(() => null);
+    const page = extractWorkflows(raw);
+    workflows = workflows.concat(page);
+
+    cursor = raw?.nextCursor ?? null;
+  } while (cursor);
 
   if (workflows.length === 0) {
     return NextResponse.json({
@@ -183,21 +195,42 @@ export async function POST(req: Request) {
           error: e.data?.resultData?.error?.message,
         }));
 
-        // Store sample events
+        // Store sample events — MUST include `state` JSONB for events_flat view,
+        // and `platform_event_id` for upsert deduplication.
         for (const exec of executions.slice(0, 10)) {
+          const isError = exec.status === 'error' || exec.status === 'crashed';
+          const startedAt = exec.startedAt || exec.createdAt || now;
+          const endedAt = exec.stoppedAt || '';
+          const durationMs = (startedAt && endedAt)
+            ? Math.max(0, new Date(endedAt).getTime() - new Date(startedAt).getTime())
+            : undefined;
+
           eventRows.push({
             tenant_id: membership.tenant_id,
             source_id: sourceId,
+            platform_event_id: String(exec.id),
             type: 'workflow_execution',
             name: `n8n:${wf.name || wfId}:execution`,
-            value: (exec.status === 'error' || exec.status === 'crashed') ? 0 : 1, // 1 = success, 0 = failure
+            value: isError ? 0 : 1,
+            state: {
+              workflow_id: wfId,
+              workflow_name: wf.name || wfId,
+              execution_id: String(exec.id),
+              status: isError ? 'error' : 'success',
+              started_at: startedAt,
+              ended_at: endedAt,
+              duration_ms: durationMs,
+              error_message: isError ? (exec.data?.resultData?.error?.message || '') : undefined,
+              platform: 'n8n',
+            },
             labels: {
               workflow_id: wfId,
               workflow_name: wf.name,
-              execution_id: exec.id,
-              status: (exec.status === 'error' || exec.status === 'crashed') ? 'error' : 'success',
+              execution_id: String(exec.id),
+              status: isError ? 'error' : 'success',
+              platformType: 'n8n',
             },
-            timestamp: exec.startedAt || exec.createdAt || now,
+            timestamp: startedAt,
             created_at: now,
           });
         }
