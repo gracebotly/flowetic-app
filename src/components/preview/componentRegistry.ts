@@ -16,6 +16,16 @@ export interface ComponentSpec {
     w?: number;
     h?: number;
   };
+  meta?: {
+    reason?: string;
+    source?: 'workflow' | 'agent_edit' | 'interactive_edit' | 'skill_override' | 'heuristic' | 'manual';
+    fieldShape?: string;
+    fieldName?: string;
+    addedAt?: string;
+    lastEditedAt?: string;
+    lastEditSource?: string;
+    skeletonSlot?: string;
+  };
 }
 
 export interface DesignTokens {

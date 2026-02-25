@@ -371,7 +371,7 @@ function buildComponentsFromWireframe(
             icon: fb.icon,
           }),
           meta: {
-            reason: `Hero metric fallback for slot "${slot.id}"`,
+            reason: 'Fallback KPI metric (no hero field matched)',
             source: 'workflow',
             fieldName: fb.field,
             skeletonSlot: slot.id,
