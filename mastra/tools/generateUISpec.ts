@@ -298,6 +298,7 @@ function buildComponentsFromWireframe(
     name: string; type: string; shape: string; component: string;
     aggregation: string; role: string; uniqueValues: number;
     totalRows: number; skip: boolean; skipReason?: string;
+    semanticSource?: string; references?: string; displayName?: string;
   }>,
 ): ComponentBlueprint[] {
   const blueprints: ComponentBlueprint[] = [];
@@ -499,6 +500,7 @@ function buildDashboardComponentsFromSkeleton(
     name: string; type: string; shape: string; component: string;
     aggregation: string; role: string; uniqueValues: number;
     totalRows: number; skip: boolean; skipReason?: string;
+    semanticSource?: string; references?: string; displayName?: string;
   }>,
   designPatterns?: Array<{ content: string; source: string; score: number }>,
 ): ComponentBlueprint[] {
@@ -519,8 +521,12 @@ function buildDashboardComponentsFromSkeleton(
   const usedChartFields = new Set<string>();
   let trendIndex = 0;
   let breakdownIndex = 0;
+  // Filter out chart recommendations for fields that semantic overrides marked as skip
+  const skippedFieldNames = new Set(
+    (fieldAnalysis || []).filter(f => f.skip).map(f => f.name)
+  );
   const chartRecQueue = (chartRecs || [])
-    .filter(r => r.fieldName)
+    .filter(r => r.fieldName && !skippedFieldNames.has(r.fieldName))
     .map(r => ({ ...r }));
   let chartRecIndex = 0;
 
@@ -548,7 +554,7 @@ function buildDashboardComponentsFromSkeleton(
               id: `kpi-${idx}`,
               type: 'MetricCard',
               propsBuilder: (m) => ({
-                title: humanizeFieldName(field.name),
+                title: (field as { displayName?: string }).displayName || humanizeFieldName(field.name),
                 valueField: m[field.name] || field.name,
                 aggregation: safeAggregation,
                 icon: idx === 0 ? 'activity' : idx === 1 ? 'check-circle' : 'clock',

@@ -15,6 +15,7 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { computeDataSignals } from '../lib/layout/dataSignals';
+import { applySemanticOverrides, type SemanticClassifiedField } from '../lib/semantics';
 
 // ============================================================================
 // Field Shape Classification (Skill Section 1)
@@ -47,6 +48,12 @@ interface ClassifiedField {
   sample: unknown;
   skip: boolean;
   skipReason?: string;
+  /** Where this classification came from */
+  semanticSource?: 'heuristic' | 'skill_override';
+  /** If identifier, points to human-readable companion field */
+  references?: string;
+  /** Human-readable display name from skill config */
+  displayName?: string;
 }
 
 const DURATION_PATTERNS = /duration|time|elapsed|_ms$|_sec$|runtime|run_time|latency/i;
@@ -345,6 +352,9 @@ export const generateMapping = createTool({
       totalRows: z.number(),
       skip: z.boolean(),
       skipReason: z.string().optional(),
+      semanticSource: z.enum(['heuristic', 'skill_override']).optional(),
+      references: z.string().optional(),
+      displayName: z.string().optional(),
     })),
     chartRecommendations: z.array(z.object({
       type: z.string(),
@@ -370,8 +380,8 @@ export const generateMapping = createTool({
   execute: async (inputData, context) => {
     const { templateId, fields, platformType } = inputData;
 
-    // ── Step 1: Classify every field using skill rules ──────────────────
-    const classified = fields.map(f => classifyField({
+    // ── Step 1: Classify every field using heuristic rules ─────────────
+    const heuristicClassified = fields.map(f => classifyField({
       name: f.name,
       type: f.type,
       sample: f.sample,
@@ -380,6 +390,12 @@ export const generateMapping = createTool({
       totalRows: f.totalRows ?? 1,
       avgLength: f.avgLength,
     }));
+
+    // ── Step 1.5: Apply semantic overrides from field-semantics.yaml ───
+    // This is where skills become executable. The YAML config for this
+    // platform overrides heuristic classifications with semantic rules.
+    // Precedence: heuristic → skill override → safety guard
+    const classified = applySemanticOverrides(heuristicClassified, platformType) as ClassifiedField[];
 
     // ── Step 2: Build mappings — ALL fields pass through ───────────────
     // Canonical name resolution for well-known fields
@@ -417,12 +433,18 @@ export const generateMapping = createTool({
     if (!hasHero) missingFields.push('_no_hero_stat (no countable ID or binary status field)');
     if (!hasTrend) missingFields.push('_no_trend_data (no timestamp field with ≥5 data points)');
 
+    const semanticOverrides = classified.filter(
+      f => (f as SemanticClassifiedField).semanticSource === 'skill_override'
+    );
+
     console.log('[generateMapping] Skill-driven mapping complete:', {
       templateId,
       platformType,
       totalFields: fields.length,
       activeFields: activeFields.length,
       skippedFields: classified.filter(f => f.skip).length,
+      semanticOverrides: semanticOverrides.length,
+      semanticOverrideFields: semanticOverrides.map(f => f.name),
       mappingsCount: Object.keys(mappings).length,
       chartRecommendations: chartRecommendations.map(r => `${r.type}(${r.fieldName})`),
       roles: {
@@ -447,6 +469,9 @@ export const generateMapping = createTool({
       totalRows: f.totalRows,
       skip: f.skip,
       skipReason: f.skipReason,
+      semanticSource: (f as SemanticClassifiedField).semanticSource,
+      references: (f as SemanticClassifiedField).references,
+      displayName: (f as SemanticClassifiedField).displayName,
     }));
 
     const dataSignals = computeDataSignals(fieldAnalysisOutput, mappings);
