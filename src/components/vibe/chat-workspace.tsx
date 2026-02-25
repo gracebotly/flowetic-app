@@ -219,7 +219,7 @@ export function ChatWorkspace({
   const [proposals, setProposals] = useState<import('@/types/proposal').ProposalsPayload | null>(null);
   const [isProposalLoading, setIsProposalLoading] = useState(false);
   const [selectedProposalIndex, setSelectedProposalIndex] = useState<number | null>(null);
-  const [isSelectingProposal, setIsSelectingProposal] = React.useState(false);
+  const [isSelectingProposal, setIsSelectingProposal] = useState(false);
 
 
   // Guard against concurrent init + user sends
