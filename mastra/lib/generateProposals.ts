@@ -27,6 +27,27 @@ import { classifyArchetype, ARCHETYPE_TITLE_TEMPLATES } from './classifyArchetyp
 // Queries actual event data BEFORE generating proposals to ensure
 // proposals only promise what the data can deliver.
 
+interface DataInsight {
+  /** e.g. "success_rate", "avg_duration", "top_error", "event_frequency" */
+  metric: string;
+  /** Human-readable label, e.g. "Success Rate" */
+  label: string;
+  /** Computed value, e.g. 0.87, 4200, "timeout" */
+  value: string | number;
+  /** Optional unit, e.g. "%", "ms", "per day" */
+  unit?: string;
+}
+
+type SupportedGoal =
+  | 'success_rate_tracking'
+  | 'duration_performance'
+  | 'error_analysis'
+  | 'execution_timeline'
+  | 'volume_trends'
+  | 'status_breakdown'
+  | 'multi_type_comparison'
+  | 'simple_event_count';
+
 interface DataAvailability {
   totalEvents: number;
   eventTypes: string[];
@@ -36,6 +57,14 @@ interface DataAvailability {
   canSupportTimeseries: boolean;
   canSupportBreakdowns: boolean;
   usableFieldCount: number;
+  /** NEW Phase A: Computed statistics from actual event values */
+  insights: DataInsight[];
+  /** NEW Phase A: What visualization goals the data can actually support */
+  supportedGoals: SupportedGoal[];
+  /** NEW Phase A: Natural language summary for LLM grounding (Phase B) */
+  naturalSummary: string;
+  /** NEW Phase A: Time span of the data in hours */
+  timeSpanHours: number;
 }
 
 function inferFieldShape(fieldName: string, sampleValue: unknown): DataAvailability['fieldShapes'][string] {
@@ -60,6 +89,21 @@ async function assessDataAvailability(
   tenantId: string,
   sourceId?: string,
 ): Promise<DataAvailability> {
+  const empty: DataAvailability = {
+    totalEvents: 0,
+    eventTypes: [],
+    availableFields: [],
+    fieldShapes: {},
+    dataRichness: 'minimal',
+    canSupportTimeseries: false,
+    canSupportBreakdowns: false,
+    usableFieldCount: 0,
+    insights: [],
+    supportedGoals: [],
+    naturalSummary: 'No event data available yet.',
+    timeSpanHours: 0,
+  };
+
   try {
     let query = supabase
       .from('events')
@@ -76,18 +120,10 @@ async function assessDataAvailability(
     const totalEvents = typeof count === 'number' ? count : (events?.length ?? 0);
 
     if (!events || events.length === 0) {
-      return {
-        totalEvents: 0,
-        eventTypes: [],
-        availableFields: [],
-        fieldShapes: {},
-        dataRichness: 'minimal',
-        canSupportTimeseries: false,
-        canSupportBreakdowns: false,
-        usableFieldCount: 0,
-      };
+      return empty;
     }
 
+    // ── Step 1: Field discovery (existing logic) ─────────────────────
     const eventTypes = [...new Set(events.map((e: any) => e.type).filter(Boolean))] as string[];
     const fieldSet = new Set<string>();
     const fieldSamples: Record<string, unknown> = {};
@@ -131,6 +167,220 @@ async function assessDataAvailability(
       dataRichness = 'minimal';
     }
 
+    // ── Step 2: NEW — Compute actual statistics from values ──────────
+    const insights: DataInsight[] = [];
+    const supportedGoals: SupportedGoal[] = [];
+
+    // Helper: extract a field value from event's labels or state
+    const getFieldValue = (event: any, fieldName: string): unknown => {
+      return event?.state?.[fieldName] ?? event?.labels?.[fieldName] ?? undefined;
+    };
+
+    // 2a: Status/success rate computation
+    const statusFieldName = availableFields.find(f => fieldShapes[f] === 'status');
+    if (statusFieldName) {
+      const statusValues: string[] = [];
+      for (const event of events) {
+        const val = getFieldValue(event, statusFieldName);
+        if (val !== undefined && val !== null) {
+          statusValues.push(String(val).toLowerCase());
+        }
+      }
+
+      if (statusValues.length > 0) {
+        // Count by status value
+        const statusCounts: Record<string, number> = {};
+        for (const v of statusValues) {
+          statusCounts[v] = (statusCounts[v] || 0) + 1;
+        }
+
+        // Success rate: count values matching success-like patterns
+        const successPatterns = /^(success|succeeded|completed|ok|passed|done|finished|active|running)$/i;
+        const failPatterns = /^(error|failed|failure|crashed|timeout|aborted|cancelled|rejected)$/i;
+
+        let successCount = 0;
+        let failCount = 0;
+        for (const [val, cnt] of Object.entries(statusCounts)) {
+          if (successPatterns.test(val)) successCount += cnt;
+          if (failPatterns.test(val)) failCount += cnt;
+        }
+
+        const totalWithStatus = statusValues.length;
+        if (successCount + failCount > 0) {
+          const successRate = successCount / (successCount + failCount);
+          insights.push({
+            metric: 'success_rate',
+            label: 'Success Rate',
+            value: Math.round(successRate * 100),
+            unit: '%',
+          });
+          insights.push({
+            metric: 'fail_count',
+            label: 'Failed Executions',
+            value: failCount,
+          });
+          supportedGoals.push('success_rate_tracking');
+        }
+
+        // Status distribution (top 5 statuses)
+        const sortedStatuses = Object.entries(statusCounts)
+          .sort(([, a], [, b]) => b - a)
+          .slice(0, 5);
+        insights.push({
+          metric: 'status_distribution',
+          label: 'Status Breakdown',
+          value: sortedStatuses.map(([k, v]) => `${k}: ${v}`).join(', '),
+        });
+        supportedGoals.push('status_breakdown');
+      }
+    }
+
+    // 2b: Duration statistics
+    const durationFieldName = availableFields.find(f => fieldShapes[f] === 'duration');
+    if (durationFieldName) {
+      const durationValues: number[] = [];
+      for (const event of events) {
+        const val = getFieldValue(event, durationFieldName);
+        const num = typeof val === 'number' ? val : parseFloat(String(val));
+        if (!isNaN(num) && num >= 0) {
+          durationValues.push(num);
+        }
+      }
+
+      if (durationValues.length > 0) {
+        const sorted = [...durationValues].sort((a, b) => a - b);
+        const avg = Math.round(sorted.reduce((s, v) => s + v, 0) / sorted.length);
+        const median = sorted[Math.floor(sorted.length / 2)];
+        const min = sorted[0];
+        const max = sorted[sorted.length - 1];
+
+        // Detect if values are milliseconds or seconds
+        const isMs = durationFieldName.includes('_ms') || avg > 500;
+        const unit = isMs ? 'ms' : 's';
+
+        insights.push({ metric: 'avg_duration', label: 'Avg Duration', value: avg, unit });
+        insights.push({ metric: 'median_duration', label: 'Median Duration', value: median, unit });
+        insights.push({ metric: 'min_duration', label: 'Min Duration', value: min, unit });
+        insights.push({ metric: 'max_duration', label: 'Max Duration', value: max, unit });
+        supportedGoals.push('duration_performance');
+      }
+    }
+
+    // 2c: Error message analysis
+    const errorFieldName = availableFields.find(f =>
+      /error_message|error_msg|error_text|error_detail/i.test(f)
+    );
+    if (errorFieldName) {
+      const errorMessages: string[] = [];
+      for (const event of events) {
+        const val = getFieldValue(event, errorFieldName);
+        if (val && typeof val === 'string' && val.trim().length > 0) {
+          errorMessages.push(val.trim());
+        }
+      }
+
+      if (errorMessages.length > 0) {
+        // Count unique errors
+        const errorCounts: Record<string, number> = {};
+        for (const msg of errorMessages) {
+          // Normalize: take first 100 chars to group similar errors
+          const key = msg.slice(0, 100);
+          errorCounts[key] = (errorCounts[key] || 0) + 1;
+        }
+
+        const topErrors = Object.entries(errorCounts)
+          .sort(([, a], [, b]) => b - a)
+          .slice(0, 3);
+
+        insights.push({
+          metric: 'error_count',
+          label: 'Events With Errors',
+          value: errorMessages.length,
+        });
+        insights.push({
+          metric: 'unique_errors',
+          label: 'Unique Error Types',
+          value: Object.keys(errorCounts).length,
+        });
+        if (topErrors.length > 0) {
+          insights.push({
+            metric: 'top_error',
+            label: 'Most Common Error',
+            value: `${topErrors[0][0].slice(0, 80)} (${topErrors[0][1]}x)`,
+          });
+        }
+        supportedGoals.push('error_analysis');
+      }
+    }
+
+    // 2d: Time span and frequency
+    const timestamps: Date[] = [];
+    for (const event of events) {
+      if (event.timestamp) {
+        const d = new Date(event.timestamp);
+        if (!isNaN(d.getTime())) {
+          timestamps.push(d);
+        }
+      }
+    }
+
+    let timeSpanHours = 0;
+    if (timestamps.length >= 2) {
+      const sorted = [...timestamps].sort((a, b) => a.getTime() - b.getTime());
+      const earliest = sorted[0];
+      const latest = sorted[sorted.length - 1];
+      timeSpanHours = Math.round((latest.getTime() - earliest.getTime()) / (1000 * 60 * 60) * 10) / 10;
+
+      insights.push({
+        metric: 'time_span',
+        label: 'Data Time Span',
+        value: timeSpanHours < 24
+          ? `${timeSpanHours} hours`
+          : `${Math.round(timeSpanHours / 24 * 10) / 10} days`,
+      });
+
+      if (timeSpanHours > 0) {
+        const eventsPerDay = Math.round(totalEvents / (timeSpanHours / 24) * 10) / 10;
+        insights.push({
+          metric: 'event_frequency',
+          label: 'Event Frequency',
+          value: eventsPerDay,
+          unit: 'per day',
+        });
+      }
+
+      supportedGoals.push('execution_timeline');
+      if (totalEvents >= 5) {
+        supportedGoals.push('volume_trends');
+      }
+    }
+
+    // 2e: Multi-type comparison
+    if (eventTypes.length > 1) {
+      supportedGoals.push('multi_type_comparison');
+    }
+
+    // 2f: Fallback goal — always have at least one
+    if (supportedGoals.length === 0) {
+      supportedGoals.push('simple_event_count');
+      insights.push({
+        metric: 'total_events',
+        label: 'Total Events',
+        value: totalEvents,
+      });
+    }
+
+    // ── Step 3: NEW — Build natural language summary ─────────────────
+    const naturalSummary = buildNaturalSummary(
+      totalEvents,
+      eventTypes,
+      availableFields,
+      fieldShapes,
+      insights,
+      supportedGoals,
+      timeSpanHours,
+    );
+
     return {
       totalEvents,
       eventTypes,
@@ -140,20 +390,108 @@ async function assessDataAvailability(
       canSupportTimeseries,
       canSupportBreakdowns,
       usableFieldCount,
+      insights,
+      supportedGoals,
+      naturalSummary,
+      timeSpanHours,
     };
   } catch (err) {
     console.error('[assessDataAvailability] Error querying events:', err);
-    return {
-      totalEvents: 0,
-      eventTypes: [],
-      availableFields: [],
-      fieldShapes: {},
-      dataRichness: 'minimal',
-      canSupportTimeseries: false,
-      canSupportBreakdowns: false,
-      usableFieldCount: 0,
-    };
+    return empty;
   }
+}
+
+// ─── Natural Language Summary Builder ─────────────────────────────────────
+// Produces a LIDA-style compact summary paragraph that describes what the
+// data ACTUALLY contains. This string is the grounding context for Phase B
+// (LLM Goal Explorer) and for data-aware feedback hints.
+
+function buildNaturalSummary(
+  totalEvents: number,
+  eventTypes: string[],
+  availableFields: string[],
+  fieldShapes: Record<string, string>,
+  insights: DataInsight[],
+  supportedGoals: SupportedGoal[],
+  timeSpanHours: number,
+): string {
+  const parts: string[] = [];
+
+  // Opening: volume + time span
+  const timeDesc = timeSpanHours < 24
+    ? `over ${Math.round(timeSpanHours * 10) / 10} hours`
+    : `over ${Math.round(timeSpanHours / 24 * 10) / 10} days`;
+  const typeDesc = eventTypes.length === 1
+    ? `Single event type: ${eventTypes[0]}`
+    : `${eventTypes.length} event types: ${eventTypes.join(', ')}`;
+  parts.push(`${totalEvents} events ${timeSpanHours > 0 ? timeDesc : '(no time range)'}. ${typeDesc}.`);
+
+  // Fields summary grouped by shape
+  const shapeGroups: Record<string, string[]> = {};
+  for (const field of availableFields) {
+    const shape = fieldShapes[field] || 'text';
+    if (shape === 'identifier') continue; // skip IDs
+    if (!shapeGroups[shape]) shapeGroups[shape] = [];
+    shapeGroups[shape].push(field);
+  }
+  const fieldParts: string[] = [];
+  for (const [shape, fields] of Object.entries(shapeGroups)) {
+    fieldParts.push(`${shape}: ${fields.join(', ')}`);
+  }
+  if (fieldParts.length > 0) {
+    parts.push(`Fields — ${fieldParts.join('; ')}.`);
+  }
+
+  // Key insights
+  const successInsight = insights.find(i => i.metric === 'success_rate');
+  const failInsight = insights.find(i => i.metric === 'fail_count');
+  const avgDuration = insights.find(i => i.metric === 'avg_duration');
+  const topError = insights.find(i => i.metric === 'top_error');
+  const frequency = insights.find(i => i.metric === 'event_frequency');
+
+  if (successInsight) {
+    let statusLine = `Success rate: ${successInsight.value}%`;
+    if (failInsight && typeof failInsight.value === 'number' && failInsight.value > 0) {
+      statusLine += ` (${failInsight.value} failures)`;
+    }
+    parts.push(statusLine + '.');
+  }
+
+  if (avgDuration) {
+    parts.push(`Avg duration: ${avgDuration.value}${avgDuration.unit || ''}.`);
+  }
+
+  if (topError) {
+    parts.push(`Top error: ${topError.value}.`);
+  }
+
+  if (frequency) {
+    parts.push(`Frequency: ~${frequency.value} ${frequency.unit || ''}.`);
+  }
+
+  // Capabilities statement
+  const canDo: string[] = [];
+  const cantDo: string[] = [];
+
+  if (supportedGoals.includes('success_rate_tracking')) canDo.push('success/fail tracking');
+  if (supportedGoals.includes('duration_performance')) canDo.push('duration analysis');
+  if (supportedGoals.includes('error_analysis')) canDo.push('error drill-down');
+  if (supportedGoals.includes('execution_timeline')) canDo.push('time-series trends');
+  if (supportedGoals.includes('volume_trends')) canDo.push('volume trends');
+  if (supportedGoals.includes('multi_type_comparison')) canDo.push('multi-type comparisons');
+
+  if (!supportedGoals.includes('multi_type_comparison')) cantDo.push('multi-type comparisons');
+  if (!supportedGoals.includes('duration_performance')) cantDo.push('duration analysis');
+  if (totalEvents < 20) cantDo.push('statistically significant trends');
+
+  if (canDo.length > 0) {
+    parts.push(`Data supports: ${canDo.join(', ')}.`);
+  }
+  if (cantDo.length > 0) {
+    parts.push(`NOT supported: ${cantDo.join(', ')}.`);
+  }
+
+  return parts.join(' ');
 }
 
 // ─── Data-Aware Feedback Hints ────────────────────────────────────────────
@@ -556,6 +894,9 @@ export async function generateProposals(
     );
 
     console.log(`[generateProposals] Data availability: ${dataAvailability.dataRichness} — ${dataAvailability.totalEvents} events, ${dataAvailability.usableFieldCount} usable fields, types: [${dataAvailability.eventTypes.join(', ')}]`);
+    console.log(`[generateProposals] Insights: [${dataAvailability.insights.map(i => `${i.label}: ${i.value}${i.unit || ''}`).join(', ')}]`);
+    console.log(`[generateProposals] Supported goals: [${dataAvailability.supportedGoals.join(', ')}]`);
+    console.log(`[generateProposals] Natural summary: ${dataAvailability.naturalSummary}`);
 
     switch (dataAvailability.dataRichness) {
       case 'minimal':

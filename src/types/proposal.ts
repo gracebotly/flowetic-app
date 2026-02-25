@@ -136,6 +136,10 @@ export interface ProposalsPayload {
       canSupportTimeseries: boolean;
       canSupportBreakdowns: boolean;
       usableFieldCount: number;
+      insights?: Array<{ metric: string; label: string; value: string | number; unit?: string }>;
+      supportedGoals?: string[];
+      naturalSummary?: string;
+      timeSpanHours?: number;
     };
   };
 }
