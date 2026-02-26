@@ -86,6 +86,12 @@ export const getEventSamples = createSupaTool<z.infer<typeof outputSchema>>({
     if (sourceId) query = query.eq('source_id', sourceId);
     if (type) query = query.eq('type', type);
 
+    // ✅ FIX: Scope to selected workflow
+    const selectedWorkflowName = context.requestContext?.get('selectedWorkflowName') as string | undefined;
+    if (selectedWorkflowName) {
+      query = query.eq('state->>workflow_name', selectedWorkflowName);
+    }
+
     if (sinceDays) {
       const sinceDate = new Date();
       sinceDate.setUTCDate(sinceDate.getUTCDate() - sinceDays);

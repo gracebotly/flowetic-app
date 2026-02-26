@@ -92,6 +92,12 @@ export const getEventStats = createSupaTool<z.infer<typeof outputSchema>>({
 
     if (sourceId) query = query.eq('source_id', sourceId);
 
+    // ✅ FIX: Scope to selected workflow to avoid cross-workflow contamination
+    const selectedWorkflowName = context.requestContext?.get('selectedWorkflowName') as string | undefined;
+    if (selectedWorkflowName) {
+      query = query.eq('state->>workflow_name', selectedWorkflowName);
+    }
+
     const { data, error, count } = await query;
     if (error) throw new Error(`Failed to fetch event stats: ${error.message}`);
 

@@ -11,7 +11,10 @@ export const analyzeSchema = createTool({
   description: 'Analyzes event schema from a data source to detect field types and patterns. Inspects both labels and state columns.',
   requestContextSchema: AuthenticatedContextSchema,
   inputSchema: z.object({
-    sourceId: z.string().uuid(),
+    sourceId: z.string().uuid().optional(),
+    workflowName: z.string().optional().describe(
+      'Filter events to a specific workflow name. Used when a source contains executions from multiple workflows.'
+    ),
     sampleSize: z.number().default(100),
   }),
   outputSchema: z.object({
@@ -29,7 +32,7 @@ export const analyzeSchema = createTool({
     confidence: z.number().min(0).max(1),
   }),
   execute: async (inputData, context) => {
-    const { sourceId, sampleSize } = inputData;
+    const { sourceId, workflowName, sampleSize } = inputData;
 
     // Get access token and tenant context
     const accessToken = context?.requestContext?.get('supabaseAccessToken') as string;
@@ -40,13 +43,23 @@ export const analyzeSchema = createTool({
     const supabase = createAuthenticatedClient(accessToken);
 
     // Fetch sample events
-    const { data: events, error } = await supabase
+    let query = supabase
       .from('events')
       .select('*')
       .eq('tenant_id', tenantId)
-      .eq('source_id', sourceId)
       .order('created_at', { ascending: false })
       .limit(sampleSize ?? 50);
+
+    if (sourceId) query = query.eq('source_id', sourceId);
+
+    // ✅ FIX: Scope to workflow when provided — prevents cross-workflow data contamination
+    const selectedWorkflowName = workflowName || ((context.requestContext as any)?.get('selectedWorkflowName') as string | undefined);
+    if (selectedWorkflowName) {
+      query = query.eq('state->>workflow_name', selectedWorkflowName);
+      console.log(`[analyzeSchema] Scoping to workflow: "${selectedWorkflowName}"`);
+    }
+
+    const { data: events, error } = await query;
 
     if (error || !events || events.length === 0) {
       throw new Error('NO_EVENTS_AVAILABLE');
