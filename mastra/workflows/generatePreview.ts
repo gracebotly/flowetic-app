@@ -439,6 +439,39 @@ const retrieveDesignPatternsStep = createStep({
               `[retrieveDesignPatterns] Direct BM25 search added ${newPatterns.length} patterns from layoutQuery: "${dataSignals.layoutQuery.substring(0, 60)}..."`
             );
           }
+
+          // ── Targeted ui-reasoning search for must_have/if_ layout rules ──
+          // The general BM25 search returns results from all 11 CSV domains.
+          // ui-reasoning rows (must_have, if_ conditional rules) get drowned
+          // out by style/color rows with higher term frequency. This targeted
+          // search specifically looks for layout reasoning rules.
+          try {
+            const reasoningQuery = `must_have ${dataSignals.dataStory || ''} ${dataSignals.eventDensity || ''} layout dashboard`.trim();
+            const reasoningResults = await workspace.search(reasoningQuery, {
+              topK: 10,
+              mode: 'bm25',
+            });
+
+            let reasoningCount = 0;
+            for (const result of reasoningResults) {
+              const domain = result.metadata?.domain || '';
+              const content = result.content || '';
+              // Only accept results from ui-reasoning domain
+              if ((domain === 'ui-reasoning' || domain === 'reasoning' || result.id?.includes('uiux-reasoning')) && content.length > 0) {
+                if (!designPatterns.some(p => p.content === content)) {
+                  designPatterns.push({
+                    content,
+                    source: 'ui-reasoning-targeted',
+                    score: result.score ?? 0,
+                  });
+                  reasoningCount++;
+                }
+              }
+            }
+            console.log(`[retrieveDesignPatterns] Targeted ui-reasoning search added ${reasoningCount} layout rules`);
+          } catch (reasoningErr) {
+            console.warn('[retrieveDesignPatterns] Targeted ui-reasoning search failed (non-fatal):', reasoningErr);
+          }
         }
       } catch (bm25Err) {
         console.warn('[retrieveDesignPatterns] Direct BM25 search failed (non-fatal):', bm25Err);
@@ -606,15 +639,18 @@ const generateUISpecStep = createStep({
     }
 
     // ── Determine wireframe preference ───────────────────────────────
-    // ALWAYS prefer the proposal wireframe when the user selected a proposal.
-    // The wireframe IS the layout they chose — overriding it with a generic
-    // skeleton defeats the purpose of the proposal system.
-    // Skeleton is the FALLBACK for when no proposal wireframe exists.
-    const shouldPreferWireframe = !!proposalWireframe?.components?.length;
-    if (shouldPreferWireframe) {
-      console.log(`[generateUISpecStep] Proposal wireframe available (${proposalWireframe!.components!.length} components) → preferWireframe=true`);
+    // Skeleton system is the PRIMARY layout engine for all builds.
+    // It produces premium 8-12 component layouts with UIHeader, SectionHeaders,
+    // expanded KPI strips, properly-wired charts, and DataTables.
+    // Wireframes are lightweight proposal card thumbnails (3-4 slots).
+    // The wireframe data is still passed to generateUISpec for reference
+    // (preserved in proposalWireframe), but preferWireframe=false ensures
+    // the skeleton path is always used for the actual dashboard build.
+    const shouldPreferWireframe = false;
+    if (proposalWireframe?.components?.length) {
+      console.log(`[generateUISpecStep] Proposal wireframe loaded (${proposalWireframe.components.length} components) but skeleton system will be used for premium layout`);
     } else {
-      console.log(`[generateUISpecStep] No proposal wireframe — skeleton system will be used as fallback`);
+      console.log(`[generateUISpecStep] No proposal wireframe — skeleton system will be used`);
     }
 
     // Extract intent from journey session's selected proposal for skeleton selection

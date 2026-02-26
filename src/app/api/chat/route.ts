@@ -2097,9 +2097,20 @@ export async function POST(req: Request) {
 
           if (proposalSession) {
             const selectedProposal = proposalSession.proposals?.proposals?.[selectedIndex];
-            const designTokens = selectedProposal?.designSystem || null;
+            const designSystemBase = selectedProposal?.designSystem || null;
             const selectedOutcome = selectedProposal?.emphasisBlend?.product >= 0.5 ? 'product' : 'dashboard';
             const selectedWireframe = selectedProposal?.wireframeLayout || null;
+
+            // Preserve rawPatterns from designSystemWorkflow output so
+            // retrieveDesignPatternsStep can load them during build phase.
+            // rawPatterns contains style, ux, and product BM25 results that
+            // were generated during proposal creation.
+            const proposalRawPatterns = selectedProposal?.rawPatterns
+              || designSystemBase?.rawPatterns
+              || null;
+            const designTokens = designSystemBase
+              ? { ...designSystemBase, ...(proposalRawPatterns ? { rawPatterns: proposalRawPatterns } : {}) }
+              : null;
 
             // Extract selected_entities from proposal context
             // In 2-phase journey, entities are embedded in the proposal generation context
