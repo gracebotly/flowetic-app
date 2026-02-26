@@ -606,15 +606,18 @@ const generateUISpecStep = createStep({
     }
 
     // ── Determine wireframe preference ───────────────────────────────
-    // ALWAYS prefer the proposal wireframe when the user selected a proposal.
-    // The wireframe IS the layout they chose — overriding it with a generic
-    // skeleton defeats the purpose of the proposal system.
-    // Skeleton is the FALLBACK for when no proposal wireframe exists.
-    const shouldPreferWireframe = !!proposalWireframe?.components?.length;
-    if (shouldPreferWireframe) {
-      console.log(`[generateUISpecStep] Proposal wireframe available (${proposalWireframe!.components!.length} components) → preferWireframe=true`);
+    // Skeleton system is the PRIMARY layout engine for all builds.
+    // It produces premium 8-12 component layouts with UIHeader, SectionHeaders,
+    // expanded KPI strips, properly-wired charts, and DataTables.
+    // Wireframes are lightweight proposal card thumbnails (3-4 slots).
+    // The wireframe data is still passed to generateUISpec for reference
+    // (preserved in proposalWireframe), but preferWireframe=false ensures
+    // the skeleton path is always used for the actual dashboard build.
+    const shouldPreferWireframe = false;
+    if (proposalWireframe?.components?.length) {
+      console.log(`[generateUISpecStep] Proposal wireframe loaded (${proposalWireframe.components.length} components) but skeleton system will be used for premium layout`);
     } else {
-      console.log(`[generateUISpecStep] No proposal wireframe — skeleton system will be used as fallback`);
+      console.log(`[generateUISpecStep] No proposal wireframe — skeleton system will be used`);
     }
 
     // Extract intent from journey session's selected proposal for skeleton selection
