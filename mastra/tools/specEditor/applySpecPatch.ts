@@ -128,7 +128,9 @@ export const applySpecPatch = createTool({
     "to prevent token loss when using setDesignToken operations. " +
     "Returns updated spec_json + design_tokens.",
   inputSchema: z.object({
-    spec_json: z.record(z.any()),
+    spec_json: z.record(z.any()).optional().describe(
+      "Full spec_json from getCurrentSpec. If omitted, the tool will auto-load the latest spec from the database using interfaceId from RequestContext."
+    ),
     design_tokens: z.record(z.any()).default({}),
     existing_design_tokens: z.record(z.any()).optional().describe(
       "Full design tokens from getCurrentSpec. When provided, design_tokens is deep-merged onto this base to prevent token loss."
@@ -141,14 +143,75 @@ export const applySpecPatch = createTool({
     applied: z.array(z.string()),
   }),
   execute: async (inputData, context) => {
-    const rawSpec = deepClone(inputData.spec_json);
+    // ── Auto-load spec if not provided ────────────────────────────────
+    // The agent SHOULD call getCurrentSpec first, but frequently doesn't.
+    // Instead of failing with "spec_json: Required", load it ourselves.
+    // This matches the pattern used by Linear/Notion plugin APIs where
+    // mutation endpoints auto-resolve the current state.
+    let rawSpecInput = inputData.spec_json;
+    let autoLoadedTokens: Record<string, any> | undefined;
+
+    if (!rawSpecInput || Object.keys(rawSpecInput).length === 0) {
+      const interfaceId = context?.requestContext?.get('interfaceId') as string;
+      const accessToken = context?.requestContext?.get('supabaseAccessToken') as string;
+
+      if (!interfaceId || !accessToken) {
+        throw new Error(
+          'SPEC_NOT_PROVIDED: spec_json was not passed and cannot be auto-loaded. ' +
+          'Either pass spec_json directly or ensure interfaceId is in RequestContext. ' +
+          'Call getCurrentSpec first to load the current spec.'
+        );
+      }
+
+      try {
+        const { createClient } = await import('@supabase/supabase-js');
+        const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+        const supabase = createClient(supabaseUrl, accessToken);
+
+        const { data: versions, error: versionError } = await supabase
+          .from('interface_versions')
+          .select('id, spec_json, design_tokens')
+          .eq('interface_id', interfaceId)
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (versionError) {
+          throw new Error(`SPEC_AUTO_LOAD_FAILED: ${versionError.message}`);
+        }
+
+        if (!versions || versions.length === 0 || !versions[0].spec_json) {
+          throw new Error(
+            'SPEC_NOT_FOUND: No spec exists for this interface yet. ' +
+            'Call generateUISpec first to create the initial dashboard spec.'
+          );
+        }
+
+        rawSpecInput = versions[0].spec_json as Record<string, any>;
+        autoLoadedTokens = versions[0].design_tokens as Record<string, any>;
+        console.log('[applySpecPatch] Auto-loaded spec from DB:', {
+          interfaceId,
+          versionId: versions[0].id,
+          componentCount: Array.isArray(rawSpecInput?.components) ? rawSpecInput.components.length : 0,
+        });
+      } catch (autoLoadErr: any) {
+        if (autoLoadErr.message?.startsWith('SPEC_')) throw autoLoadErr;
+        throw new Error(
+          `SPEC_AUTO_LOAD_FAILED: Could not load spec from database. ${autoLoadErr.message}. ` +
+          'Call getCurrentSpec first, then pass the spec_json to applySpecPatch.'
+        );
+      }
+    }
+
+    const rawSpec = deepClone(rawSpecInput);
     const spec = normalizeSpec(rawSpec) as Record<string, any>;
     // Deep-merge: if existing_design_tokens is provided, use it as the base
     // and merge inputData.design_tokens on top. This prevents the LLM from
     // accidentally dropping tokens by passing a sparse design_tokens object.
     const baseTokens = inputData.existing_design_tokens
       ? deepClone(inputData.existing_design_tokens)
-      : {};
+      : autoLoadedTokens
+        ? deepClone(autoLoadedTokens)
+        : {};
     const incomingTokens = deepClone(inputData.design_tokens ?? {});
     const tokens = Object.keys(baseTokens).length > 0
       ? deepMerge(baseTokens, incomingTokens)

@@ -916,7 +916,16 @@ async function handleDeterministicBuildPreview(params: {
         .maybeSingle();
 
       if (entityRow?.display_name) {
-        workflowName = entityRow.display_name;
+        workflowName = entityRow.display_name
+          .replace(/^Template\s*\d+:\s*/i, '')
+          .replace(/^n8n:/i, '')
+          .replace(/^make:/i, '')
+          .replace(/^vapi:/i, '')
+          .replace(/^retell:/i, '')
+          .replace(/:execution$/i, '')
+          .replace(/:operation$/i, '')
+          .replace(/:call$/i, '')
+          .trim();
         console.log('[deterministic-build-preview] Resolved entity:', {
           entityId: entityRow.id,
           displayName: entityRow.display_name,
@@ -1251,10 +1260,24 @@ export async function POST(req: Request) {
       'selectedModel',
     ];
 
-    // Map displayName to workflowName for agent instructions
-    const workflowName = clientData.displayName || clientData.externalId;
+    // Map displayName to workflowName for agent instructions.
+    // Clean template prefixes and platform slugs BEFORE setting on context,
+    // so all downstream consumers (agent prompts, tools, workflows) see clean names.
+    // Previously, cleaning only happened inside generateUISpecStep, so the agent
+    // system prompt showed "Template 3: AI Research Agent..." to users.
+    let workflowName = clientData.displayName || clientData.externalId;
     if (workflowName) {
-      requestContext.set('workflowName', String(workflowName));
+      workflowName = String(workflowName)
+        .replace(/^Template\s*\d+:\s*/i, '')
+        .replace(/^n8n:/i, '')
+        .replace(/^make:/i, '')
+        .replace(/^vapi:/i, '')
+        .replace(/^retell:/i, '')
+        .replace(/:execution$/i, '')
+        .replace(/:operation$/i, '')
+        .replace(/:call$/i, '')
+        .trim();
+      requestContext.set('workflowName', workflowName);
     }
 
     // Also preserve skillMD for platform-specific knowledge
