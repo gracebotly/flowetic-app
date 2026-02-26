@@ -1061,6 +1061,7 @@ interface PremiumLayoutHints {
   statusIndicators: boolean;
   preferDarkMode: boolean;
   emphasisColor?: string;
+  insightHeadline?: string;
   // NEW: Skill-driven premium config
   showUIHeader: boolean;
   showSectionHeaders: boolean;
@@ -1127,6 +1128,15 @@ function extractLayoutHints(
   if (hints.mustHaveRules.includes('real-time-updates')) {
     hints.realTimeUpdates = true;
     hints.showTrends = true;
+  }
+
+  // Extract insight headline from design pattern content (if present)
+  const headlineMatch = designPatterns?.find(p =>
+    p.content.toLowerCase().includes('headline') || p.content.toLowerCase().includes('insight')
+  );
+  if (headlineMatch) {
+    const match = headlineMatch.content.match(/headline[:\s]*["']?([^"'\n,]+)/i);
+    if (match?.[1]) hints.insightHeadline = match[1].trim();
   }
 
   return hints;
