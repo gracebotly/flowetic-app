@@ -1635,18 +1635,24 @@ export async function POST(req: Request) {
                 // The current session's interface is authoritative.
                 // Old behavior: .is('interface_id', null) — failed because events were
                 // already claimed by old interfaces. Result: 0 events backfilled every time.
-                const { count: backfilledCount, error: backfillErr } = await supabase
+                const { error: backfillErr } = await supabase
                   .from('events')
                   .update({ interface_id: newInterface.id })
                   .eq('tenant_id', tenantId)
                   .eq('source_id', sessionRow.source_id)
-                  .neq('interface_id', newInterface.id)
-                  .select('id', { count: 'exact', head: true });
+                  .neq('interface_id', newInterface.id);
 
                 if (backfillErr) {
                   console.warn('[api/chat] Events backfill failed (non-fatal):', backfillErr.message);
                 } else {
-                  console.log(`[api/chat] ✅ Backfilled ${backfilledCount ?? 0} events with interface_id=${newInterface.id}`);
+                  // Count how many were updated (separate query for logging)
+                  const { count } = await supabase
+                    .from('events')
+                    .select('id', { count: 'exact', head: true })
+                    .eq('tenant_id', tenantId)
+                    .eq('source_id', sessionRow.source_id)
+                    .eq('interface_id', newInterface.id);
+                  console.log(`[api/chat] ✅ Backfilled events with interface_id=${newInterface.id}, count=${count ?? 'unknown'}`);
                 }
               } catch (bfErr) {
                 console.warn('[api/chat] Events backfill error (non-fatal):', bfErr);
