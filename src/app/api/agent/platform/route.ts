@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
     // via context.requestContext.get('designTokens') and JSON.parse()s it.
     const designTokensJson = design_tokens ? JSON.stringify(design_tokens) : undefined;
 
-    const runtimeContext = {
+    const requestContext = {
       get: (key: string) => {
         switch (key) {
           case "tenantId": return tenantId;
@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
     const analyzeResult = await callTool(
       analyzeSchema,
       { tenantId, sourceId, sampleSize: 100 },
-      { requestContext: runtimeContext }
+      { requestContext }
     );
 
     // Step 2: select template
@@ -87,7 +87,7 @@ export async function POST(req: NextRequest) {
         eventTypes: analyzeResult.eventTypes,
         fields: analyzeResult.fields,
       },
-      { requestContext: runtimeContext }
+      { requestContext }
     );
 
     // Step 3: generate mapping
@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
         fields: analyzeResult.fields,
         platformType,
       },
-      { requestContext: runtimeContext }
+      { requestContext }
     );
 
     // Step 4: generate UI spec
@@ -109,15 +109,21 @@ export async function POST(req: NextRequest) {
         mappings: mappingResult.mappings,
         platformType,
       },
-      { requestContext: runtimeContext }
+      { requestContext }
     );
 
     // Step 5: validate spec
     const validationResult = await callTool(
       validateSpec,
       { spec_json: uiSpecResult.spec_json },
-      { requestContext: runtimeContext }
+      { requestContext }
     );
+    console.log('[platform/route] validateSpec result:', JSON.stringify({
+      valid: validationResult.valid,
+      score: validationResult.score,
+      errors: validationResult.errors?.slice(0, 5),
+      threshold: 0.8,
+    }));
     if (!validationResult.valid || validationResult.score < 0.8) {
       return new Response(
         JSON.stringify({
@@ -142,7 +148,7 @@ export async function POST(req: NextRequest) {
         design_tokens: uiSpecResult.design_tokens,
         platformType,
       },
-      { requestContext: runtimeContext }
+      { requestContext }
     );
 
     return new Response(

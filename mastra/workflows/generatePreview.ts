@@ -831,8 +831,25 @@ const validateSpecStep = createStep({
       { spec_json },
       { requestContext }
     );
+
+    console.log('[validateSpecStep] Gate check:', JSON.stringify({
+      valid: result.valid,
+      score: result.score,
+      threshold: 0.8,
+      errorCount: result.errors?.length ?? 0,
+      errors: result.errors?.slice(0, 5) ?? [],
+      hasFixedSpec: !!result.fixed_spec,
+      fixedSpecComponentCount: result.fixed_spec?.components?.length ?? 'N/A',
+      inputSpecComponentCount: (spec_json as any)?.components?.length ?? 'N/A',
+      decision: (!result.valid || result.score < 0.8) ? 'REJECT' : 'PASS',
+    }));
+
     if (!result.valid || result.score < 0.8) {
-      throw new Error('SCORING_HARD_GATE_FAILED');
+      throw new Error(
+        `SCORING_HARD_GATE_FAILED: score=${result.score?.toFixed(3) ?? '?'}, ` +
+        `valid=${result.valid}, errors=[${(result.errors || []).slice(0, 3).join('; ')}], ` +
+        `components=${(spec_json as any)?.components?.length ?? '?'}`
+      );
     }
     return result;
   },

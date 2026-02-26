@@ -89,9 +89,31 @@ export const validateSpec = createTool({
       const fixPenalty = fixCount * 0.02; // Small penalty per fix
       const score = Math.max(0, Math.min(1, baseScore - fixPenalty));
 
+      console.log('[validateSpec] 📊 Score breakdown:', JSON.stringify({
+        valid,
+        score: parseFloat(score.toFixed(4)),
+        baseScore: parseFloat(baseScore.toFixed(4)),
+        fixPenalty: parseFloat(fixPenalty.toFixed(4)),
+        fixCount,
+        componentCount: components?.length ?? 0,
+        errorCount: errors.length,
+        errors: errors.slice(0, 5),
+        threshold: 0.8,
+        wouldPass: score >= 0.8,
+      }));
+
       return { valid, errors, score, fixed_spec: valid ? fixed : undefined };
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
+      console.error('[validateSpec] ❌ Validation threw (score=0):', {
+        errorType: error instanceof Error ? error.constructor.name : typeof error,
+        message: message.substring(0, 500),
+        isZodError: error instanceof Error && 'issues' in error,
+        zodIssueCount: (error as any)?.issues?.length ?? 0,
+        zodIssues: (error as any)?.issues?.slice(0, 5)?.map((i: any) =>
+          `${i.path?.join('.')}: ${i.message}`
+        ) ?? [],
+      });
       return {
         valid: false,
         errors: [message],
