@@ -22,7 +22,73 @@ import type {
   WireframeLayout,
 } from '@/types/proposal';
 import { exploreGoals } from './goalExplorer';
+import { isDarkBackground } from '../tools/uiux/mapCSVToTokens';
 import type { GoalExplorerResult } from '@/types/proposal';
+
+/**
+ * Compute a simplified perceptual color distance across multiple color slots.
+ * Uses weighted Euclidean distance in RGB space (not full CIEDE2000,
+ * but sufficient for "are these two palettes visually distinct?").
+ *
+ * Returns a number 0-100+. Below 25 = too similar for distinct proposals.
+ */
+function computeSimpleDeltaE(
+  primary1: string, primary2: string,
+  accent1: string, accent2: string,
+  bg1: string, bg2: string,
+): number {
+  const dist = (a: string, b: string) => {
+    const ca = a.replace('#', '');
+    const cb = b.replace('#', '');
+    if (ca.length !== 6 || cb.length !== 6) return 0;
+    const dr = parseInt(ca.substring(0, 2), 16) - parseInt(cb.substring(0, 2), 16);
+    const dg = parseInt(ca.substring(2, 4), 16) - parseInt(cb.substring(2, 4), 16);
+    const db = parseInt(ca.substring(4, 6), 16) - parseInt(cb.substring(4, 6), 16);
+    // Weighted: human eye is most sensitive to green, least to blue
+    return Math.sqrt(2 * dr * dr + 4 * dg * dg + 3 * db * db);
+  };
+  // Primary has highest weight (0.5), accent (0.3), background (0.2)
+  return dist(primary1, primary2) * 0.5 + dist(accent1, accent2) * 0.3 + dist(bg1, bg2) * 0.2;
+}
+
+function shiftHueHex(hex: string, degrees: number): string {
+  const clean = hex.replace('#', '');
+  if (clean.length !== 6) return hex;
+  let r = parseInt(clean.substring(0, 2), 16) / 255;
+  let g = parseInt(clean.substring(2, 4), 16) / 255;
+  let b = parseInt(clean.substring(4, 6), 16) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  let h = 0, s = 0;
+  const l = (max + min) / 2;
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+    else if (max === g) h = ((b - r) / d + 2) / 6;
+    else h = ((r - g) / d + 4) / 6;
+  }
+  h = ((h * 360 + degrees) % 360) / 360;
+  if (h < 0) h += 1;
+  const hue2rgb = (p: number, q: number, t: number) => {
+    if (t < 0) t += 1;
+    if (t > 1) t -= 1;
+    if (t < 1 / 6) return p + (q - p) * 6 * t;
+    if (t < 1 / 2) return q;
+    if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+    return p;
+  };
+  if (s === 0) {
+    r = g = b = l;
+  } else {
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    const p = 2 * l - q;
+    r = hue2rgb(p, q, h + 1 / 3);
+    g = hue2rgb(p, q, h);
+    b = hue2rgb(p, q, h - 1 / 3);
+  }
+  const toHex = (c: number) => Math.round(c * 255).toString(16).padStart(2, '0');
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`.toUpperCase();
+}
 
 // ─── Data Availability Assessment ─────────────────────────────────────────
 // Queries actual event data BEFORE generating proposals to ensure
@@ -953,6 +1019,7 @@ function normalizeDesignSystem(raw: any): ProposalDesignSystem {
     spacing: raw.spacing || { unit: 8 },
     radius: raw.radius ?? 8,
     shadow: raw.shadow || '0 1px 3px rgba(0,0,0,0.1)',
+    rawPatterns: raw.rawPatterns || undefined,
   };
 }
 
@@ -1106,14 +1173,55 @@ export async function generateProposals(
         }
         if (ds?.colors?.primary) {
           usedColorHexValues.push(ds.colors.primary.toUpperCase());
-          // Also exclude secondary to prevent "same palette, swapped order"
           if (ds.colors?.secondary) usedColorHexValues.push(ds.colors.secondary.toUpperCase());
+          if (ds.colors?.accent) usedColorHexValues.push(ds.colors.accent.toUpperCase());
+          if (ds.colors?.background) usedColorHexValues.push(ds.colors.background.toUpperCase());
         }
         if (ds?.typography?.headingFont) {
           usedHeadingFonts.push(ds.typography.headingFont);
         }
 
         console.log(`[generateProposals] Excluding for next proposal: styles=[${usedStyleNames.join(', ')}], colors=[${usedColorHexValues.join(', ')}], fonts=[${usedHeadingFonts.join(', ')}]`);
+
+        // ── Premium: Perceptual color distance enforcement ──────────────
+        // If this proposal's colors are too close to a previous one,
+        // force-shift the palette. Stripe, Linear, and Vercel all ensure
+        // their theme variants are perceptually distinct (ΔE > 25).
+        if (proposals.length > 0 && ds?.colors) {
+          const prevColors = proposals[proposals.length - 1].designSystem.colors;
+          const deltaE = computeSimpleDeltaE(
+            prevColors.primary,
+            ds.colors.primary,
+            prevColors.accent,
+            ds.colors.accent,
+            prevColors.background,
+            ds.colors.background,
+          );
+          console.log(`[generateProposals] Color distance ΔE=${deltaE.toFixed(1)} (threshold: 25)`);
+          if (deltaE < 25) {
+            console.log('[generateProposals] ⚠️ Proposals too similar — applying hue rotation');
+            // Rotate primary by 120° (triadic harmony), accent by 90°
+            ds.colors.primary = shiftHueHex(ds.colors.primary, 120);
+            ds.colors.secondary = shiftHueHex(ds.colors.secondary, 120);
+            ds.colors.accent = shiftHueHex(ds.colors.accent, 90);
+            // Re-derive background: if both were dark, make this one light (or vice versa)
+            const prevIsDark = isDarkBackground(prevColors.background);
+            if (prevIsDark && isDarkBackground(ds.colors.background)) {
+              ds.colors.background = '#FAFBFC';
+              ds.colors.text = '#0F172A';
+            } else if (!prevIsDark && !isDarkBackground(ds.colors.background)) {
+              ds.colors.background = '#0F172A';
+              ds.colors.text = '#F8FAFC';
+            }
+            // Re-derive semantics with new primary
+            const { deriveSemanticColors } = await import('../tools/uiux/mapCSVToTokens');
+            const newSemantics = deriveSemanticColors(ds.colors.background, ds.colors.primary);
+            ds.colors.success = newSemantics.success;
+            ds.colors.warning = newSemantics.warning;
+            ds.colors.error = newSemantics.error;
+            console.log(`[generateProposals] After hue rotation: primary=${ds.colors.primary}, bg=${ds.colors.background}`);
+          }
+        }
 
         proposals.push({
           index,
