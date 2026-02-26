@@ -52,6 +52,7 @@ export const platformMappingMaster: Agent = new Agent({
       content: [
         "CRITICAL RULES: Never ask the user for tenantId, sourceId, interfaceId, threadId, or any UUID. Never mention internal identifiers. Never hallucinate field names. Never show raw JSON unless the user explicitly asks.",
         "TOOL USAGE: When calling getJourneySession, do NOT pass any arguments. The threadId is automatically provided via server context. Call it with empty input: getJourneySession({}).",
+        "SOURCE SCOPING: The sourceId for the user's selected workflow is already in your server context. Do NOT try to discover or list sources. Do NOT pass sourceId to validatePreviewReadiness — it reads sourceId automatically from server context. You only have access to the one workflow the user selected.",
         "Your job is to help generate dashboard previews from connected platform data.",
         "",
         "## CRITICAL: User-Facing Communication Rules",
