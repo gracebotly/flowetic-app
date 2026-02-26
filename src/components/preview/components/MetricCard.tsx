@@ -11,6 +11,17 @@ import {
 import type { LucideIcon } from "lucide-react";
 import type { RendererProps } from "../componentRegistry";
 import { buildCardStyle, buildCardHoverStyle } from "../componentRegistry";
+import { isColorDark } from "../componentRegistry";
+
+
+function lightenHex(hex: string, amount: number): string {
+  const c = hex.replace("#", "");
+  if (c.length < 6) return hex;
+  const r = Math.min(255, parseInt(c.slice(0, 2), 16) + amount);
+  const g = Math.min(255, parseInt(c.slice(2, 4), 16) + amount);
+  const b = Math.min(255, parseInt(c.slice(4, 6), 16) + amount);
+  return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
+}
 
 // Lucide icon lookup
 const ICON_MAP: Record<string, LucideIcon> = {
@@ -63,10 +74,34 @@ export function MetricCardRenderer({ component, designTokens: dt, isEditing, onC
   const trend = props?.trend;
   const trendDelta = props?.trendDelta;
 
+  // ── Variant-aware styling ──
+  const variant = (props?.variant as string) ?? 'default';
+
+  const variantStyles: React.CSSProperties = (() => {
+    switch (variant) {
+      case 'solid':
+        return { ...cardStyle, backgroundColor: `${primary}12`, borderColor: `${primary}25` };
+      case 'dark-inset':
+        return {
+          ...cardStyle,
+          backgroundColor: isColorDark(cardStyle.backgroundColor as string || '#fff')
+            ? lightenHex(cardStyle.backgroundColor as string || '#1a1a2e', 8) : '#1a1a2e',
+          borderColor: 'rgba(255,255,255,0.08)',
+        };
+      case 'accent-border':
+        return { ...cardStyle, borderLeft: `3px solid ${primary}` };
+      default:
+        return cardStyle;
+    }
+  })();
+
+  const effectiveTextColor = variant === 'dark-inset' && !isColorDark(dt.colors?.background ?? '#fff')
+    ? '#F1F5F9' : textColor;
+
   return (
     <motion.div
       className={`h-full ${isEditing ? "cursor-pointer" : ""}`}
-      style={{ ...cardStyle, ...(isHovered ? cardHoverStyle : {}) }}
+      style={{ ...variantStyles, ...(isHovered ? cardHoverStyle : {}) }}
       data-component-type="MetricCard"
       onClick={isEditing ? onClick : undefined}
       onMouseEnter={() => setIsHovered(true)}
@@ -76,64 +111,57 @@ export function MetricCardRenderer({ component, designTokens: dt, isEditing, onC
       aria-label={isEditing ? `Edit ${title}` : undefined}
       whileTap={isEditing ? { scale: 0.98 } : undefined}
     >
-      <div
-        style={{
-          height: "3px",
-          background: `linear-gradient(90deg, ${primary}, ${accent}cc)`,
-          borderRadius: `${dt.borderRadius ?? 8}px ${dt.borderRadius ?? 8}px 0 0`,
-        }}
-      />
-
+      {variant !== 'accent-border' && (
+        <div
+          style={{
+            height: "3px",
+            background: `linear-gradient(90deg, ${primary}, ${accent}cc)`,
+            borderRadius: `${dt.borderRadius ?? 8}px ${dt.borderRadius ?? 8}px 0 0`,
+          }}
+        />
+      )}
       <div className="p-4 @[300px]:p-5 flex flex-col justify-between h-[calc(100%-3px)]">
         <div className="flex items-center justify-between mb-3">
           <span
-            className="text-[11px] font-semibold uppercase tracking-wider"
-            style={{ color: `${textColor}70`, fontFamily: bodyFont || undefined, letterSpacing: "0.06em" }}
+            className="text-xs font-semibold uppercase tracking-wider"
+            style={{ color: `${effectiveTextColor}70`, fontFamily: bodyFont || undefined, letterSpacing: "0.05em" }}
           >
             {title}
           </span>
           <div
-            className="w-9 h-9 rounded-xl flex items-center justify-center"
+            className="w-10 h-10 rounded-xl flex items-center justify-center"
             style={{
-              background: `linear-gradient(135deg, ${primary}18, ${primary}08)`,
-              border: `1px solid ${primary}15`,
+              background: variant === 'solid'
+                ? `linear-gradient(135deg, ${primary}30, ${primary}15)`
+                : `linear-gradient(135deg, ${primary}18, ${primary}08)`,
+              border: `1px solid ${primary}20`,
             }}
           >
-            {React.createElement(icon, { size: 16, color: primary, strokeWidth: 2 })}
+            {React.createElement(icon, { size: 18, color: primary, strokeWidth: 1.8 })}
           </div>
         </div>
-
-        <div className="text-3xl @[300px]:text-4xl font-bold tracking-tight mb-1">
+        <div className="text-3xl @[300px]:text-4xl font-bold tracking-tight mb-1" style={{ lineHeight: 1.1 }}>
           {hasRealValue ? (
-            <AnimatedValue value={value} textColor={textColor} font={headingFont} />
+            <AnimatedValue value={value} textColor={effectiveTextColor} font={headingFont} />
           ) : (
-            <span style={{ color: `${textColor}30`, fontFamily: headingFont || undefined }}>—</span>
+            <span style={{ color: `${effectiveTextColor}30`, fontFamily: headingFont || undefined }}>—</span>
           )}
         </div>
-
         <div className="flex items-center justify-between mt-auto pt-2">
           {subtitle && (
-            <span className="text-xs" style={{ color: `${textColor}55`, fontFamily: bodyFont || undefined }}>
+            <span className="text-xs" style={{ color: `${effectiveTextColor}55`, fontFamily: bodyFont || undefined }}>
               {subtitle}
             </span>
           )}
-          {props?.showTrend && trend && (
+          {trend && (
             <div
               className="flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full"
               style={{
-                backgroundColor:
-                  trend === "up" ? "#22c55e12" : trend === "down" ? "#ef444412" : `${textColor}08`,
-                color:
-                  trend === "up" ? "#16a34a" : trend === "down" ? "#dc2626" : `${textColor}55`,
+                backgroundColor: trend === "up" ? "#22c55e12" : trend === "down" ? "#ef444412" : `${effectiveTextColor}08`,
+                color: trend === "up" ? "#16a34a" : trend === "down" ? "#dc2626" : `${effectiveTextColor}55`,
               }}
             >
-              {trend === "up" ? (
-                <ArrowUp size={12} />
-              ) : trend === "down" ? (
-                <ArrowDown size={12} />
-              ) : (
-                <Minus size={12} />
-              )}
+              {trend === "up" ? <ArrowUp size={12} /> : trend === "down" ? <ArrowDown size={12} /> : <Minus size={12} />}
               <span>{String(trendDelta ?? "")}</span>
             </div>
           )}

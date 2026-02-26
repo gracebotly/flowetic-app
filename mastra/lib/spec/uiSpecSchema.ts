@@ -21,6 +21,8 @@ export const ComponentType = z.enum([
   "PageHeader",
   "FilterBar",
   "CRUDTable",
+  "UIHeader",
+  "SectionHeader",
   "Pagination",
   "AuthForm",
   "EmptyStateCard",
@@ -52,6 +54,8 @@ const TYPE_ALIASES: Record<string, string> = {
   "page-header": "PageHeader",
   "filter-bar": "FilterBar",
   "crud-table": "CRUDTable",
+  "ui-header": "UIHeader",
+  "section-header": "SectionHeader",
   "auth-form": "AuthForm",
   "brand-visual": "BrandVisual",
 };

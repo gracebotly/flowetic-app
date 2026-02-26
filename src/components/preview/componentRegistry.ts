@@ -87,6 +87,8 @@ const TYPE_ALIASES: Record<string, string> = {
   "page-header": "PageHeader", PageHeader: "PageHeader",
   "filter-bar": "FilterBar", FilterBar: "FilterBar",
   "crud-table": "CRUDTable", CRUDTable: "CRUDTable",
+  "ui-header": "UIHeader", UIHeader: "UIHeader",
+  "section-header": "SectionHeader", SectionHeader: "SectionHeader",
   // Auth types
   "auth-form": "AuthForm", AuthForm: "AuthForm",
   "brand-visual": "BrandVisual", BrandVisual: "BrandVisual",
@@ -98,6 +100,7 @@ const KNOWN_TYPES = new Set([
   "InsightCard", "StatusFeed",
   "HeroSection", "FeatureGrid", "PricingCards", "CTASection",
   "PageHeader", "FilterBar", "CRUDTable",
+  "UIHeader", "SectionHeader",
   "AuthForm",
   "EmptyStateCard",
 ]);

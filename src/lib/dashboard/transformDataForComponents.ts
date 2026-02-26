@@ -53,6 +53,10 @@ export function transformDataForComponents(
       return enrichCRUDTable(component, events);
     }
 
+    if (normalizedType === "UIHeader" || normalizedType === "SectionHeader") {
+      return component;
+    }
+
     return component;
   });
 
@@ -380,22 +384,37 @@ function normalizeType(rawType: string): string {
     "insight-card": "InsightCard", InsightCard: "InsightCard",
     "status-feed": "StatusFeed", StatusFeed: "StatusFeed",
     "crud-table": "CRUDTable", CRUDTable: "CRUDTable",
+    "ui-header": "UIHeader", UIHeader: "UIHeader",
+    "section-header": "SectionHeader", SectionHeader: "SectionHeader",
   };
   return map[rawType] || rawType;
 }
 
 function formatMetricValue(value: number, fieldName?: string): string {
-  if (fieldName?.includes("duration") || fieldName?.includes("_ms")) {
+  // Duration — smart unit conversion
+  if (fieldName?.includes("duration") || fieldName?.includes("_ms") || fieldName?.includes("elapsed") || fieldName?.includes("time_")) {
     if (value > 86400000) return `${(value / 86400000).toFixed(1)}d`;
     if (value > 3600000) return `${(value / 3600000).toFixed(1)}h`;
     if (value > 60000) return `${(value / 60000).toFixed(1)}m`;
     if (value > 1000) return `${(value / 1000).toFixed(1)}s`;
     return `${Math.round(value)}ms`;
   }
+  // Money — currency
+  if (fieldName?.includes("cost") || fieldName?.includes("amount") || fieldName?.includes("price") || fieldName?.includes("revenue") || fieldName?.includes("spend")) {
+    if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
+    if (value >= 1000) return `$${(value / 1000).toFixed(1)}K`;
+    return `$${value.toFixed(2)}`;
+  }
+  // Rate — percentage
+  if (fieldName?.includes("rate") || fieldName?.includes("ratio") || fieldName?.includes("percent") || fieldName?.includes("score")) {
+    if (value <= 1) return `${(value * 100).toFixed(1)}%`;
+    return `${value.toFixed(1)}%`;
+  }
+  // Large numbers
   if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
   if (value >= 1000) return `${(value / 1000).toFixed(1)}K`;
   if (!Number.isInteger(value)) return value.toFixed(2);
-  return String(value);
+  return value.toLocaleString();
 }
 
 function humanizeLabel(raw: string): string {

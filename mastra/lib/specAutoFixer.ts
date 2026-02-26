@@ -51,6 +51,8 @@ const MIN_SIZES: Record<string, { w: number; h: number }> = {
   PageHeader: { w: 12, h: 1 },
   FilterBar: { w: 12, h: 1 },
   CRUDTable: { w: 6, h: 3 },
+  UIHeader: { w: 12, h: 1 },
+  SectionHeader: { w: 12, h: 1 },
   Pagination: { w: 12, h: 1 },
   AuthForm: { w: 4, h: 4 },
   BrandVisual: { w: 4, h: 4 },
