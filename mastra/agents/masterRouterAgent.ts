@@ -203,7 +203,12 @@ The system retrieves patterns from 6 knowledge domains during generation:
 These patterns are applied automatically during generateUISpec. Reference them when explaining design choices to users.
 
 NEVER invent design tokens from memory. NEVER hallucinate color values.
-All colors must come from the selected style bundle via generateUISpec or BM25 search results.`
+All colors must come from the selected style bundle via generateUISpec or BM25 search results.
+
+MANDATORY PRE-BUILD CHECK: Before calling delegateToPlatformMapper or any build tool,
+you MUST call searchSkillKnowledge(domain: "design", query: "<entity> <archetype> layout")
+at least once. SkillCompliance monitoring flags ungrounded generations.
+If searchSkillKnowledge returns 0 results, proceed with skeleton defaults but log it.`
       : "";
 
     // Load Data Dashboard Intelligence for phases that need component/mapping intelligence

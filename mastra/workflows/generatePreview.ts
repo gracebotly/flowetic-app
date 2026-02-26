@@ -683,6 +683,54 @@ const generateUISpecStep = createStep({
       }
     }
 
+    const resolvedEntityName = (() => {
+      // Priority 1: selectedEntities from RequestContext
+      const entitiesRaw = requestContext.get('selectedEntities') as string;
+      if (entitiesRaw) {
+        // selectedEntities can be:
+        // 1. A JSON array: [{"name":"n8n:Template 2:...","display_name":"..."}]
+        // 2. A plain string: "n8n:Template 2: Website Chatbot Analytics Aggregator:execution"
+        // 3. Comma-separated: "entity1,entity2"
+        try {
+          const parsed = JSON.parse(entitiesRaw);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            const resolved = parsed[0]?.display_name || parsed[0]?.name;
+            if (resolved) return resolved;
+          } else if (typeof parsed === 'object' && parsed !== null) {
+            const resolved = (parsed as any).display_name || (parsed as any).name;
+            if (resolved) return resolved;
+          }
+        } catch {
+          // Not JSON — treat as plain string
+          const firstEntity = entitiesRaw.split(',')[0].trim();
+          if (firstEntity) return firstEntity;
+        }
+      }
+
+      // Priority 2: workflowName from RequestContext (set in chat/route.ts from displayName)
+      // This is the most reliable source — it's set server-side from the client's entity selection
+      const workflowName = requestContext.get('workflowName') as string;
+      if (workflowName) {
+        console.log(`[generateUISpecStep] entityName resolved from workflowName: "${workflowName}"`);
+        return workflowName;
+      }
+
+      // Priority 3: displayName from RequestContext
+      const displayName = requestContext.get('displayName') as string;
+      if (displayName) {
+        console.log(`[generateUISpecStep] entityName resolved from displayName: "${displayName}"`);
+        return displayName;
+      }
+
+      return undefined;
+    })();
+
+    const entityName = (resolvedEntityName || '')
+      .replace(/^Template\s*\d+:\s*/i, '')
+      .replace(/^n8n:/i, '')
+      .replace(/:execution$/i, '')
+      .trim() || resolvedEntityName;
+
     const result = await callTool(generateUISpec,
       {
         templateId,
@@ -697,47 +745,7 @@ const generateUISpecStep = createStep({
           }
           return undefined;
         })(),
-        entityName: (() => {
-          // Priority 1: selectedEntities from RequestContext
-          const entitiesRaw = requestContext.get('selectedEntities') as string;
-          if (entitiesRaw) {
-            // selectedEntities can be:
-            // 1. A JSON array: [{"name":"n8n:Template 2:...","display_name":"..."}]
-            // 2. A plain string: "n8n:Template 2: Website Chatbot Analytics Aggregator:execution"
-            // 3. Comma-separated: "entity1,entity2"
-            try {
-              const parsed = JSON.parse(entitiesRaw);
-              if (Array.isArray(parsed) && parsed.length > 0) {
-                const resolved = parsed[0]?.display_name || parsed[0]?.name;
-                if (resolved) return resolved;
-              } else if (typeof parsed === 'object' && parsed !== null) {
-                const resolved = (parsed as any).display_name || (parsed as any).name;
-                if (resolved) return resolved;
-              }
-            } catch {
-              // Not JSON — treat as plain string
-              const firstEntity = entitiesRaw.split(',')[0].trim();
-              if (firstEntity) return firstEntity;
-            }
-          }
-
-          // Priority 2: workflowName from RequestContext (set in chat/route.ts from displayName)
-          // This is the most reliable source — it's set server-side from the client's entity selection
-          const workflowName = requestContext.get('workflowName') as string;
-          if (workflowName) {
-            console.log(`[generateUISpecStep] entityName resolved from workflowName: "${workflowName}"`);
-            return workflowName;
-          }
-
-          // Priority 3: displayName from RequestContext
-          const displayName = requestContext.get('displayName') as string;
-          if (displayName) {
-            console.log(`[generateUISpecStep] entityName resolved from displayName: "${displayName}"`);
-            return displayName;
-          }
-
-          return undefined;
-        })(),
+        entityName,
         proposalWireframe: proposalWireframe || undefined,
         preferWireframe: shouldPreferWireframe,
         uiType: resolvedUiType,
