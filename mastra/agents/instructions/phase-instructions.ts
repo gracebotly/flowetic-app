@@ -215,11 +215,11 @@ export const PHASE_TOOL_ALLOWLIST: Record<FloweticPhase, string[]> = {
     'delegateToDesignAdvisor',
     // Editor
     'showInteractiveEditPanel',
-    // Sources CRUD
-    'createSource',
-    'listSources',
-    'updateSource',
-    'deleteSource',
+    // Sources CRUD — REMOVED from build_edit.
+    // During build_edit, the agent is locked to the selected workflow's source
+    // (from RequestContext). Discovery/CRUD tools caused the agent to see all
+    // tenant sources and get confused (passing wrong sourceId, listing Make + n8n).
+    // Source management belongs in propose phase or a dedicated settings phase.
     // Projects CRUD
     'createProject',
     'listProjects',

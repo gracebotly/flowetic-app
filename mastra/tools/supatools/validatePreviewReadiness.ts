@@ -6,7 +6,6 @@ import { createAuthenticatedClient } from '../../lib/supabase';
 import { z } from 'zod';
 
 const inputSchema = z.object({
-  sourceId: z.string().uuid().optional(),
   requireMinEvents: z.number().min(1).default(2),
   requireSchemaReady: z.boolean().default(true),
 });
@@ -28,7 +27,7 @@ const outputSchema = z.object({
 
 export const validatePreviewReadiness = createSupaTool<z.infer<typeof outputSchema>>({
   id: 'validatePreviewReadiness',
-  description: 'Validate all prerequisites before preview generation. Checks source, events, schema readiness, and event type coverage. Returns blockers and warnings. Use before Phase 4 to prevent failed workflows.',
+  description: 'Validate all prerequisites before preview generation. Checks source, events, schema readiness, and event type coverage. Returns blockers and warnings. sourceId is read automatically from server context — do NOT pass any IDs.',
   inputSchema,
   outputSchema,
   execute: async (rawInput: unknown, context) => {
@@ -47,24 +46,35 @@ export const validatePreviewReadiness = createSupaTool<z.infer<typeof outputSche
       throw new Error('validatePreviewReadiness: tenantId missing from request context');
     }
 
-    const { sourceId, requireMinEvents, requireSchemaReady } = input;
+    const { requireMinEvents, requireSchemaReady } = input;
+
+    // ✅ SECURITY: sourceId comes from RequestContext (server-validated), NEVER from LLM input.
+    // The agent previously passed tenantId as sourceId, causing false "No active source" failures.
+    // RequestContext.sourceId is set in api/chat/route.ts from the journey_session DB record.
+    const sourceId = context.requestContext?.get('sourceId') as string | undefined;
+
+    if (!sourceId) {
+      throw new Error(
+        'validatePreviewReadiness: sourceId missing from RequestContext. ' +
+        'The journey session must have a source_id set before preview readiness can be checked. ' +
+        'This is set during entity selection in the propose phase.'
+      );
+    }
+
+    console.log('[validatePreviewReadiness] Using sourceId from RequestContext:', sourceId);
 
     const supabase = createAuthenticatedClient(accessToken);
     const blockers: string[] = [];
     const warnings: string[] = [];
 
-    // Build source query - if sourceId provided, look up that specific source.
-    // If not, find any active source for this tenant.
+    // Source query — always scoped to the specific sourceId from RequestContext.
+    // No fallback to "find any active source" — that path caused the agent to discover
+    // unrelated sources and get confused.
     let sourceQuery = supabase
       .from('sources')
       .select('id, name, status')
-      .eq('tenant_id', tenantId);
-
-    if (sourceId) {
-      sourceQuery = sourceQuery.eq('id', sourceId);
-    } else {
-      sourceQuery = sourceQuery.eq('status', 'active');
-    }
+      .eq('tenant_id', tenantId)
+      .eq('id', sourceId);
 
     const { data: sources, error: sourceError } = await sourceQuery.limit(1);
 
@@ -77,14 +87,12 @@ export const validatePreviewReadiness = createSupaTool<z.infer<typeof outputSche
     }
     
     // Check 2: Has minimum events
+    // Events always scoped to the specific sourceId — no tenant-wide fallback
     let eventsQuery = supabase
       .from('events')
       .select('id, type')
-      .eq('tenant_id', tenantId);
-    
-    if (sourceId) {
-      eventsQuery = eventsQuery.eq('source_id', sourceId);
-    }
+      .eq('tenant_id', tenantId)
+      .eq('source_id', sourceId);
     
     const { data: events, error: eventsError } = await eventsQuery;
 
