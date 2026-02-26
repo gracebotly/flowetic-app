@@ -2,7 +2,7 @@
 
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
-import { OptionalAuditContextSchema } from "../../lib/REQUEST_CONTEXT_CONTRACT";
+import { InterfaceContextSchema } from "../../lib/REQUEST_CONTEXT_CONTRACT";
 import { normalizeSpec } from "../../lib/spec/uiSpecSchema";
 import { ComponentType } from "../../lib/spec/uiSpecSchema";
 
@@ -121,7 +121,7 @@ function validateComponentIds(
 
 export const applySpecPatch = createTool({
   id: "applySpecPatch",
-  requestContextSchema: OptionalAuditContextSchema,
+  requestContextSchema: InterfaceContextSchema,
   description:
     "Apply a small, deterministic patch to a dashboard UI spec and/or design tokens. " +
     "IMPORTANT: Always pass existing_design_tokens (the full tokens from getCurrentSpec) " +
