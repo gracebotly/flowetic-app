@@ -11,39 +11,11 @@
 // Every override is logged with source attribution for observability.
 
 import { loadFieldSemantics, getFieldRule, type FieldSemanticsConfig } from './fieldSemantics';
+import type { DashboardField, BaseClassifiedField } from '../types/dashboardField';
 
-// ============================================================================
-// Extended ClassifiedField (adds semantic layer fields)
-// ============================================================================
-
-export interface SemanticClassifiedField {
-  name: string;
-  type: string;
-  shape: string;
-  component: string;
-  aggregation: string;
-  role: 'hero' | 'supporting' | 'trend' | 'breakdown' | 'detail';
-  uniqueValues: number;
-  totalRows: number;
-  nullable: boolean;
-  sample: unknown;
-  skip: boolean;
-  skipReason?: string;
-
-  // ── Semantic layer additions ──
-  /** Where this classification came from */
-  semanticSource: 'heuristic' | 'skill_override';
-  /** If this field is an identifier, points to the human-readable companion */
-  references?: string;
-  /** Human-readable display name from skill config */
-  displayName?: string;
-  /** The skill rule that was applied (for audit trail) */
-  appliedRule?: {
-    semantic_type: string;
-    reason?: string;
-    version: number;
-  };
-}
+// Re-export DashboardField as SemanticClassifiedField for backwards compatibility.
+// All new code should import DashboardField directly from types/dashboardField.
+export type SemanticClassifiedField = DashboardField;
 
 // ============================================================================
 // Override Logic
@@ -61,20 +33,7 @@ export interface SemanticClassifiedField {
  * @returns Fields with semantic overrides applied + observability metadata
  */
 export function applySemanticOverrides(
-  classified: Array<{
-    name: string;
-    type: string;
-    shape: string;
-    component: string;
-    aggregation: string;
-    role: 'hero' | 'supporting' | 'trend' | 'breakdown' | 'detail';
-    uniqueValues: number;
-    totalRows: number;
-    nullable: boolean;
-    sample: unknown;
-    skip: boolean;
-    skipReason?: string;
-  }>,
+  classified: BaseClassifiedField[],
   platformType: string,
 ): SemanticClassifiedField[] {
   let config: FieldSemanticsConfig | null = null;
@@ -97,6 +56,7 @@ export function applySemanticOverrides(
       return {
         ...field,
         semanticSource: 'heuristic' as const,
+        policyActions: [],
       };
     }
 
@@ -111,6 +71,7 @@ export function applySemanticOverrides(
         reason: rule.reason,
         version: config!.version,
       },
+      policyActions: [],
     };
 
     // Role override
@@ -209,6 +170,7 @@ export function applySemanticOverrides(
     return classified.map(f => ({
       ...f,
       semanticSource: 'heuristic' as const,
+      policyActions: [],
     }));
   }
 

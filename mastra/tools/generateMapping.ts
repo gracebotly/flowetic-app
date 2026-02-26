@@ -15,46 +15,13 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { computeDataSignals } from '../lib/layout/dataSignals';
-import { applySemanticOverrides, type SemanticClassifiedField } from '../lib/semantics';
+import { applySemanticOverrides } from '../lib/semantics';
+import { enforceDashboardPolicies, sortByStoryOrder, POLICY_VERSION } from '../lib/policies';
+import type { DashboardField, FieldShape, BaseClassifiedField } from '../lib/types/dashboardField';
 
 // ============================================================================
 // Field Shape Classification (Skill Section 1)
 // ============================================================================
-
-type FieldShape =
-  | 'id'
-  | 'status'
-  | 'binary'
-  | 'timestamp'
-  | 'duration'
-  | 'money'
-  | 'rate'
-  | 'label'
-  | 'high_cardinality_text'
-  | 'long_text'
-  | 'numeric'
-  | 'unknown';
-
-interface ClassifiedField {
-  name: string;
-  type: string;
-  shape: FieldShape;
-  component: string;
-  aggregation: string;
-  role: 'hero' | 'supporting' | 'trend' | 'breakdown' | 'detail';
-  uniqueValues: number;
-  totalRows: number;
-  nullable: boolean;
-  sample: unknown;
-  skip: boolean;
-  skipReason?: string;
-  /** Where this classification came from */
-  semanticSource?: 'heuristic' | 'skill_override';
-  /** If identifier, points to human-readable companion field */
-  references?: string;
-  /** Human-readable display name from skill config */
-  displayName?: string;
-}
 
 const DURATION_PATTERNS = /duration|time|elapsed|_ms$|_sec$|runtime|run_time|latency/i;
 const MONEY_PATTERNS = /cost|amount|price|spend|revenue|fee|charge|total_cost/i;
@@ -77,7 +44,7 @@ function classifyField(field: {
   uniqueValues: number;
   totalRows: number;
   avgLength?: number;
-}): ClassifiedField {
+}): BaseClassifiedField {
   const { name, type, sample, nullable, uniqueValues, totalRows } = field;
   const avgLength = field.avgLength ?? 0;
   const cardinalityRatio = totalRows > 0 ? uniqueValues / totalRows : 0;
@@ -85,7 +52,7 @@ function classifyField(field: {
   let shape: FieldShape = 'unknown';
   let component = 'DataTable';
   let aggregation = 'count';
-  let role: ClassifiedField['role'] = 'detail';
+  let role: DashboardField['role'] = 'detail';
   let skip = false;
   let skipReason: string | undefined;
 
@@ -267,7 +234,7 @@ function resolveCanonicalName(fieldName: string): string | null {
 // ============================================================================
 
 function buildChartRecommendations(
-  classified: ClassifiedField[],
+  classified: DashboardField[],
 ): Array<{ type: string; bestFor: string; fieldName: string }> {
   const recs: Array<{ type: string; bestFor: string; fieldName: string }> = [];
   const activeFields = classified.filter(f => !f.skip);
@@ -355,6 +322,7 @@ export const generateMapping = createTool({
       semanticSource: z.enum(['heuristic', 'skill_override']).optional(),
       references: z.string().optional(),
       displayName: z.string().optional(),
+      policyActions: z.array(z.string()).optional(),
     })),
     chartRecommendations: z.array(z.object({
       type: z.string(),
@@ -376,6 +344,17 @@ export const generateMapping = createTool({
     }).optional(),
     missingFields: z.array(z.string()),
     confidence: z.number().min(0).max(1),
+    policy: z.object({
+      version: z.number(),
+      violations: z.array(z.object({
+        field: z.string(),
+        rule: z.string(),
+        severity: z.enum(['error', 'warning']),
+        action: z.string(),
+      })),
+      autoFixCount: z.number(),
+      statsWarnings: z.array(z.string()),
+    }).optional(),
   }),
   execute: async (inputData, context) => {
     const { templateId, fields, platformType } = inputData;
@@ -395,7 +374,17 @@ export const generateMapping = createTool({
     // This is where skills become executable. The YAML config for this
     // platform overrides heuristic classifications with semantic rules.
     // Precedence: heuristic → skill override → safety guard
-    const classified = applySemanticOverrides(heuristicClassified, platformType) as ClassifiedField[];
+    const semanticClassified = applySemanticOverrides(heuristicClassified, platformType) as DashboardField[];
+
+    // ── Step 1.75: Policy enforcement (OPA-lite) ──────────────────────
+    // Validates upstream stats, then enforces dashboard governance rules.
+    // Does NOT mutate semanticClassified — returns new array.
+    const policyResult = enforceDashboardPolicies(semanticClassified);
+
+    // ── Step 1.85: Story ordering ─────────────────────────────────────
+    // Sort fields by dashboard story order (hero → trend → breakdown → supporting → detail)
+    // so downstream UI builders receive them in render-ready progressive-reveal order.
+    const classified = sortByStoryOrder(policyResult.fields);
 
     // ── Step 2: Build mappings — ALL fields pass through ───────────────
     // Canonical name resolution for well-known fields
@@ -434,7 +423,7 @@ export const generateMapping = createTool({
     if (!hasTrend) missingFields.push('_no_trend_data (no timestamp field with ≥5 data points)');
 
     const semanticOverrides = classified.filter(
-      f => (f as SemanticClassifiedField).semanticSource === 'skill_override'
+      f => f.semanticSource === 'skill_override'
     );
 
     console.log('[generateMapping] Skill-driven mapping complete:', {
@@ -445,6 +434,10 @@ export const generateMapping = createTool({
       skippedFields: classified.filter(f => f.skip).length,
       semanticOverrides: semanticOverrides.length,
       semanticOverrideFields: semanticOverrides.map(f => f.name),
+      policyVersion: policyResult.version,
+      policyVersionExpected: POLICY_VERSION,
+      policyViolations: policyResult.violations.length,
+      policyStatsWarnings: policyResult.statsWarnings.length,
       mappingsCount: Object.keys(mappings).length,
       chartRecommendations: chartRecommendations.map(r => `${r.type}(${r.fieldName})`),
       roles: {
@@ -469,9 +462,10 @@ export const generateMapping = createTool({
       totalRows: f.totalRows,
       skip: f.skip,
       skipReason: f.skipReason,
-      semanticSource: (f as SemanticClassifiedField).semanticSource,
-      references: (f as SemanticClassifiedField).references,
-      displayName: (f as SemanticClassifiedField).displayName,
+      semanticSource: f.semanticSource,
+      references: f.references,
+      displayName: f.displayName,
+      policyActions: f.policyActions,
     }));
 
     const dataSignals = computeDataSignals(fieldAnalysisOutput, mappings);
@@ -495,6 +489,17 @@ export const generateMapping = createTool({
       dataSignals,
       missingFields,
       confidence,
+      policy: {
+        version: policyResult.version,
+        violations: policyResult.violations.map(v => ({
+          field: v.field,
+          rule: v.rule,
+          severity: v.severity,
+          action: v.action,
+        })),
+        autoFixCount: policyResult.autoFixCount,
+        statsWarnings: policyResult.statsWarnings,
+      },
     };
   },
 });
