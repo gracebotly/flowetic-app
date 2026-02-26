@@ -163,6 +163,8 @@ export async function POST(req: Request) {
               started_at: call.startedAt || call.createdAt || '',
               ended_at: call.endedAt || '',
               duration_ms: call.duration || undefined,
+              ended_reason: call.endedReason || undefined,
+              cost: typeof call.cost === 'number' ? call.cost : undefined,
               platform: 'vapi',
             },
             labels: {

@@ -1,0 +1,138 @@
+# Semantic field rules for Vapi voice AI platform events.
+#
+# Read by the deterministic generateMapping pipeline via applySemanticOverrides().
+# Field names here MUST match what the Vapi import route puts into event.state and event.labels.
+# Source of truth for field names: src/app/api/connections/inventory/vapi/import/route.ts
+#
+# Schema validated by: mastra/lib/semantics/fieldSemantics.ts (Zod)
+# Consumed by: mastra/tools/generateMapping.ts → applySemanticOverrides()
+
+version: 1
+entity_type: assistant_call
+platform: vapi
+
+field_rules:
+  call_id:
+    semantic_type: surrogate_key
+    chart_eligible: false
+    aggregation: count
+    role: hero
+    display_name: Total Calls
+    reason: "Surrogate key — count for KPI card, never chart as category"
+
+  assistant_id:
+    semantic_type: identifier
+    references: assistant_name
+    chart_eligible: false
+    aggregation: count
+    role: hero
+    display_name: Total Assistants
+    reason: "FK to assistant — use assistant_name for display labels"
+
+  assistant_name:
+    semantic_type: dimension
+    chart_eligible: true
+    component_preference: PieChart
+    max_pie_cardinality: 6
+    aggregation: count_per_category
+    role: breakdown
+    display_name: Assistant
+    reason: "Human-readable assistant label — primary breakdown dimension"
+
+  workflow_id:
+    semantic_type: identifier
+    references: workflow_name
+    chart_eligible: false
+    aggregation: count
+    role: hero
+    display_name: Total Assistants
+    reason: "Vapi import maps assistant_id to workflow_id in state — identifier"
+
+  workflow_name:
+    semantic_type: dimension
+    chart_eligible: true
+    component_preference: PieChart
+    max_pie_cardinality: 6
+    aggregation: count_per_category
+    role: breakdown
+    display_name: Assistant
+    reason: "Vapi import maps assistant name to workflow_name in state"
+
+  execution_id:
+    semantic_type: surrogate_key
+    chart_eligible: false
+    aggregation: count
+    role: hero
+    display_name: Total Calls
+    reason: "Vapi import maps call.id to execution_id in state — surrogate key"
+
+  status:
+    semantic_type: dimension
+    chart_eligible: true
+    component_preference: MetricCard
+    aggregation: percentage
+    role: hero
+    display_name: Success Rate
+    reason: "Call outcome (success/unknown) — best as percentage metric"
+
+  duration_ms:
+    semantic_type: measure
+    chart_eligible: false
+    aggregation: avg
+    unit: ms
+    role: supporting
+    display_name: Avg Duration
+    reason: "Call length — average is most meaningful"
+
+  started_at:
+    semantic_type: time_dimension
+    chart_eligible: true
+    component_preference: TimeseriesChart
+    aggregation: count_per_interval
+    role: trend
+    display_name: Started
+    reason: "Primary time axis for trend charts"
+
+  ended_at:
+    semantic_type: time_dimension
+    chart_eligible: false
+    aggregation: none
+    role: detail
+    display_name: Ended
+    reason: "Secondary time field — detail only, not trend axis"
+
+  platform:
+    semantic_type: constant
+    chart_eligible: false
+    aggregation: none
+    role: detail
+    display_name: Platform
+    reason: "Constant value 'vapi' in single-platform context — no information content"
+
+  error_message:
+    semantic_type: detail
+    chart_eligible: false
+    aggregation: none
+    role: detail
+    display_name: Error
+    reason: "Free-text error detail — table column only"
+
+  ended_reason:
+    semantic_type: dimension
+    chart_eligible: true
+    component_preference: PieChart
+    max_pie_cardinality: 8
+    aggregation: count_per_category
+    role: breakdown
+    display_name: Ended Reason
+    reason: "Why the call ended (hangup, voicemail, error, etc) — breakdown dimension for quality analysis"
+
+  cost:
+    semantic_type: measure
+    chart_eligible: true
+    component_preference: MetricCard
+    aggregation: sum
+    unit: usd
+    role: supporting
+    display_name: Total Cost
+    reason: "Per-call cost in USD — sum for total spend, useful as supporting metric"

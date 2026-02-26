@@ -1,8 +1,11 @@
-# Semantic field rules for n8n platform events.
+# Semantic field rules for n8n workflow automation platform events.
 #
 # This file is read by the deterministic generateMapping pipeline —
 # NOT by the conversational agent. It defines which fields are identifiers,
 # which are dimensions, which are measures, and how they relate.
+#
+# Field names here MUST match what the n8n import route puts into event.state and event.labels.
+# Source of truth for field names: src/app/api/connections/inventory/n8n/import/route.ts
 #
 # Schema validated by: mastra/lib/semantics/fieldSemantics.ts (Zod)
 # Consumed by: mastra/tools/generateMapping.ts → applySemanticOverrides()
@@ -89,74 +92,3 @@ field_rules:
     role: detail
     display_name: Error
     reason: "Free-text error detail — table column only"
-
-  call_id:
-    semantic_type: surrogate_key
-    chart_eligible: false
-    aggregation: count
-    role: hero
-    display_name: Total Calls
-    reason: "Surrogate key for voice platforms — count only"
-
-  session_id:
-    semantic_type: surrogate_key
-    chart_eligible: false
-    aggregation: count
-    role: hero
-    display_name: Total Sessions
-    reason: "Surrogate key — count only"
-
-  conversation_id:
-    semantic_type: surrogate_key
-    chart_eligible: false
-    aggregation: count
-    role: hero
-    display_name: Total Conversations
-    reason: "Surrogate key — count only"
-
-  scenario_id:
-    semantic_type: identifier
-    references: scenario_name
-    chart_eligible: false
-    aggregation: count
-    role: hero
-    display_name: Total Scenarios
-    reason: "Make.com identifier — use scenario_name for display"
-
-  scenario_name:
-    semantic_type: dimension
-    chart_eligible: true
-    component_preference: PieChart
-    max_pie_cardinality: 6
-    aggregation: count_per_category
-    role: breakdown
-    display_name: Scenario
-    reason: "Human-readable Make.com scenario label"
-
-  flow_id:
-    semantic_type: identifier
-    references: workflow_name
-    chart_eligible: false
-    aggregation: count
-    role: hero
-    display_name: Total Flows
-    reason: "Generic flow identifier — use workflow_name for display"
-
-  agent_id:
-    semantic_type: identifier
-    references: agent_name
-    chart_eligible: false
-    aggregation: count
-    role: hero
-    display_name: Total Agents
-    reason: "Agent identifier — use agent_name for display"
-
-  agent_name:
-    semantic_type: dimension
-    chart_eligible: true
-    component_preference: PieChart
-    max_pie_cardinality: 6
-    aggregation: count_per_category
-    role: breakdown
-    display_name: Agent
-    reason: "Human-readable agent label"

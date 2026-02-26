@@ -1,0 +1,128 @@
+# Semantic field rules for Make.com (Integromat) platform events.
+#
+# Read by the deterministic generateMapping pipeline via applySemanticOverrides().
+# Field names here MUST match what the Make import route puts into event.state and event.labels.
+# Source of truth for field names: src/app/api/connections/inventory/make/import/route.ts
+#
+# Schema validated by: mastra/lib/semantics/fieldSemantics.ts (Zod)
+# Consumed by: mastra/tools/generateMapping.ts → applySemanticOverrides()
+
+version: 1
+entity_type: scenario_execution
+platform: make
+
+field_rules:
+  scenario_id:
+    semantic_type: identifier
+    references: scenario_name
+    chart_eligible: false
+    aggregation: count
+    role: hero
+    display_name: Total Scenarios
+    reason: "FK to scenario — use scenario_name for display labels"
+
+  scenario_name:
+    semantic_type: dimension
+    chart_eligible: true
+    component_preference: PieChart
+    max_pie_cardinality: 6
+    aggregation: count_per_category
+    role: breakdown
+    display_name: Scenario
+    reason: "Human-readable scenario label — primary breakdown dimension"
+
+  workflow_id:
+    semantic_type: identifier
+    references: workflow_name
+    chart_eligible: false
+    aggregation: count
+    role: hero
+    display_name: Total Scenarios
+    reason: "Make import maps scenario_id to workflow_id in state — identifier"
+
+  workflow_name:
+    semantic_type: dimension
+    chart_eligible: true
+    component_preference: PieChart
+    max_pie_cardinality: 6
+    aggregation: count_per_category
+    role: breakdown
+    display_name: Scenario
+    reason: "Make import maps scenario_name to workflow_name in state"
+
+  execution_id:
+    semantic_type: surrogate_key
+    chart_eligible: false
+    aggregation: count
+    role: hero
+    display_name: Total Runs
+    reason: "Surrogate key — count for KPI card, never chart as category"
+
+  status:
+    semantic_type: dimension
+    chart_eligible: true
+    component_preference: MetricCard
+    aggregation: percentage
+    role: hero
+    display_name: Success Rate
+    reason: "Binary status (success/error) — best as percentage metric"
+
+  duration_ms:
+    semantic_type: measure
+    chart_eligible: false
+    aggregation: avg
+    unit: ms
+    role: supporting
+    display_name: Avg Duration
+    reason: "Execution time — average is most meaningful"
+
+  started_at:
+    semantic_type: time_dimension
+    chart_eligible: true
+    component_preference: TimeseriesChart
+    aggregation: count_per_interval
+    role: trend
+    display_name: Started
+    reason: "Primary time axis for trend charts"
+
+  ended_at:
+    semantic_type: time_dimension
+    chart_eligible: false
+    aggregation: none
+    role: detail
+    display_name: Ended
+    reason: "Secondary time field — detail only"
+
+  platform:
+    semantic_type: constant
+    chart_eligible: false
+    aggregation: none
+    role: detail
+    display_name: Platform
+    reason: "Constant value 'make' in single-platform context — no information content"
+
+  error_message:
+    semantic_type: detail
+    chart_eligible: false
+    aggregation: none
+    role: detail
+    display_name: Error
+    reason: "Free-text error detail — table column only"
+
+  operations:
+    semantic_type: measure
+    chart_eligible: true
+    component_preference: BarChart
+    aggregation: sum
+    role: supporting
+    display_name: Total Operations
+    reason: "Billable operation count per execution — sum for cost tracking, BarChart for per-scenario comparison"
+
+  data_transfer:
+    semantic_type: measure
+    chart_eligible: false
+    aggregation: sum
+    unit: bytes
+    role: supporting
+    display_name: Data Transfer
+    reason: "Bytes transferred per execution — sum for bandwidth tracking, supporting metric"
