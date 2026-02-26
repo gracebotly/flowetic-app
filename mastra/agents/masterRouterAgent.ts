@@ -11,6 +11,7 @@ import { createFloweticMemory } from "../lib/memory";
 import { workspace } from '../workspace';  // ← ADD THIS IMPORT
 import { getCachedSkillAsync } from '../lib/skillCache';
 import { DesignTokenEnforcer } from "../processors/designTokenEnforcer";
+import { SkillComplianceProcessor } from "../processors/skill-compliance";
 import { TokenLimiterProcessor } from "@mastra/core/processors";
 import {
   delegateToPlatformMapper,
@@ -498,5 +499,8 @@ When users request edits, delegate to dashboardBuilder — never try to modify s
   inputProcessors: [
     new TokenLimiterProcessor({ limit: 12000 }),
     new DesignTokenEnforcer(),
+  ],
+  outputProcessors: [
+    new SkillComplianceProcessor(),
   ],
 });
