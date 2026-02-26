@@ -87,17 +87,35 @@ export function LineChartRenderer({ component, designTokens: dt, deviceMode, isE
           </div>
         ) : (
           /* Normal: render the Tremor chart */
-          <div className="min-h-[200px]">
+          <div
+            className="min-h-[200px]"
+            style={
+              {
+                '--tremor-brand': primary,
+                '--chart-color': primary,
+              } as React.CSSProperties
+            }
+          >
             <AreaChart
-              className="h-full"
+              className="h-full [&_.tremor-AreaChart-area]:fill-[var(--tremor-brand)]/10 [&_.tremor-AreaChart-line]:stroke-[var(--tremor-brand)]"
               data={chartData}
               index="date"
               categories={["value"]}
-              colors={[primary]}
+              colors={["blue"]}
               showLegend={false}
               showGridLines={false}
               showYAxis={deviceMode !== "mobile"}
               curveType="natural"
+              style={
+                {
+                  '--color-blue-500': primary,
+                  '--color-blue-400': `${primary}cc`,
+                  '--color-blue-300': `${primary}66`,
+                  '--color-blue-200': `${primary}33`,
+                  '--color-blue-100': `${primary}1a`,
+                  '--color-blue-50': `${primary}0d`,
+                } as React.CSSProperties
+              }
             />
           </div>
         )}

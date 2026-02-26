@@ -51,8 +51,31 @@ export function BarChartRenderer({ component, designTokens: dt, deviceMode, isEd
             </div>
           </div>
         ) : (
-          <div className="min-h-[200px]">
-            <BarChart className="h-full" data={chartData} index="name" categories={["value"]} colors={[primary, secondary]} showLegend={false} showGridLines={false} />
+          <div
+            className="min-h-[200px]"
+            style={
+              {
+                '--tremor-brand': primary,
+              } as React.CSSProperties
+            }
+          >
+            <BarChart
+              className="h-full [&_.tremor-BarChart-bar]:fill-[var(--tremor-brand)]"
+              data={chartData}
+              index="name"
+              categories={["value"]}
+              colors={["blue", "slate"]}
+              showLegend={false}
+              showGridLines={false}
+              style={
+                {
+                  '--color-blue-500': primary,
+                  '--color-blue-400': `${primary}cc`,
+                  '--color-blue-300': `${primary}66`,
+                  '--color-slate-500': secondary,
+                } as React.CSSProperties
+              }
+            />
           </div>
         )}
       </div>
