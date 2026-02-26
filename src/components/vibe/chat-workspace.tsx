@@ -1448,7 +1448,7 @@ return (
           "flex flex-col border-r border-gray-200 bg-white transition-all duration-300",
           view === "edit"
             ? "w-[52px] min-w-[52px] overflow-hidden"
-            : isChatExpanded ? "w-[720px]" : "w-[480px]"
+            : isChatExpanded ? "w-[600px]" : "w-[380px]"
         )}>
           {/* Edit mode collapsed indicator */}
           {view === "edit" && (
@@ -2204,7 +2204,7 @@ return (
                     }}
                   />
                 ) : loadedSpec?.components?.length > 0 ? (
-                  <div className="h-full flex items-start justify-center py-4">
+                  <div className="h-full flex items-stretch justify-center">
                     {(() => {
                       const dt = loadedDesignTokens || effectiveDesignTokens;
                       const hf = (dt?.fonts?.heading as string)?.split(",")[0]?.trim();
