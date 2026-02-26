@@ -23,7 +23,7 @@ export function LineChartRenderer({ component, designTokens: dt, deviceMode, isE
     { date: "Apr", value: 180 },
   ];
 
-  const isSparseData = chartData.length <= 2;
+  const isSparseData = chartData.length <= 1;
 
   return (
     <div
@@ -82,7 +82,7 @@ export function LineChartRenderer({ component, designTokens: dt, deviceMode, isE
               className="text-[10px] mt-3 px-3 py-1 rounded-full"
               style={{ backgroundColor: `${textColor}06`, color: `${textColor}44` }}
             >
-              Chart will populate as more data arrives
+              Waiting for data
             </div>
           </div>
         ) : (

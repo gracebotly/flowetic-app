@@ -17,7 +17,7 @@ export function BarChartRenderer({ component, designTokens: dt, deviceMode, isEd
   const { props, id } = component;
   const title = props?.title ?? id;
   const chartData = props?.data ?? [{ name: "A", value: 40 }, { name: "B", value: 65 }, { name: "C", value: 50 }, { name: "D", value: 80 }];
-  const isSparseData = chartData.length <= 2;
+  const isSparseData = chartData.length <= 1;
 
   return (
     <div

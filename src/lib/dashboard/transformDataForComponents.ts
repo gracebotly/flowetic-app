@@ -275,20 +275,45 @@ function enrichDataTable(component: ComponentSpec, events: FlatEvent[]): Compone
   const { props } = component;
   if (!events.length) return component;
 
-  const columns = props?.columns || Object.keys(events[0]).slice(0, 5);
+  // Fix: treat empty columns array the same as missing — fall back to event keys.
+  // The skeleton/wireframe builder sometimes generates columns: [] which is truthy
+  // but produces empty rows since columnKeys would be [].
+  const rawColumns = props?.columns;
+  const hasColumns = Array.isArray(rawColumns) && rawColumns.length > 0;
+
+  // Auto-detect meaningful columns from event data when none are provided.
+  // Exclude internal DB fields that shouldn't be shown to users.
+  const INTERNAL_FIELDS = new Set([
+    'id', 'tenant_id', 'source_id', 'interface_id', 'run_id',
+    'platform_event_id', 'created_at', '_enrichmentNote',
+  ]);
+
+  const columns = hasColumns
+    ? rawColumns
+    : Object.keys(events[0])
+        .filter((key) => !INTERNAL_FIELDS.has(key))
+        .slice(0, 8)
+        .map((key) => ({ key, label: humanizeLabel(key) }));
+
   const columnKeys = columns.map((c: any) => (typeof c === "string" ? c : c.key));
 
   const rows = events.slice(0, 10).map((e) => {
     const row: Record<string, any> = {};
     columnKeys.forEach((key: string) => {
-      row[key] = e[key] ?? "—";
+      const val = e[key];
+      // Format timestamps to be human-readable
+      if (val && typeof val === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(val)) {
+        row[key] = new Date(val).toLocaleString();
+      } else {
+        row[key] = val ?? "—";
+      }
     });
     return row;
   });
 
   return {
     ...component,
-    props: { ...props, rows },
+    props: { ...props, columns, rows },
   };
 }
 
