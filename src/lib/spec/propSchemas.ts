@@ -25,7 +25,8 @@ const ALLOWED_PROPS: Record<string, Set<string>> = {
   MetricCard: new Set([
     ...UNIVERSAL_PROPS,
     "value", "valueField", "delta", "deltaField", "unit", "aggregation",
-    "format", "prefix", "suffix", "trend", "sparkline", "color",
+    "format", "prefix", "suffix", "trend", "trendDelta", "sparkline", "color",
+    "variant", "showTrend",
   ]),
   LineChart: new Set([
     ...UNIVERSAL_PROPS, ...CHART_COMMON_PROPS,
@@ -96,6 +97,15 @@ const ALLOWED_PROPS: Record<string, Set<string>> = {
   FilterBar: new Set([
     ...UNIVERSAL_PROPS,
     "filters", "layout",
+  ]),
+
+  UIHeader: new Set([
+    ...UNIVERSAL_PROPS,
+    "showGreeting", "greeting", "category",
+  ]),
+  SectionHeader: new Set([
+    ...UNIVERSAL_PROPS,
+    "sectionId",
   ]),
   CRUDTable: new Set([
     ...UNIVERSAL_PROPS,

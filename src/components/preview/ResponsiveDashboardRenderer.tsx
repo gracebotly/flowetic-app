@@ -26,6 +26,8 @@ const PageHeaderRenderer = dynamic(() => import("./components/PageHeader"), { ss
 const FilterBarRenderer = dynamic(() => import("./components/FilterBar"), { ssr: false });
 const CRUDTableRenderer = dynamic(() => import("./components/CRUDTable"), { ssr: false });
 const AuthFormRenderer = dynamic(() => import("./components/AuthForm"), { ssr: false });
+const UIHeaderRenderer = dynamic(() => import("./components/UIHeader"), { ssr: false });
+const SectionHeaderRenderer = dynamic(() => import("./components/SectionHeader"), { ssr: false });
 
 // ── Renderer map ──
 const RENDERER_MAP: Record<string, React.ComponentType<RendererProps>> = {
@@ -40,6 +42,8 @@ const RENDERER_MAP: Record<string, React.ComponentType<RendererProps>> = {
   PageHeader: PageHeaderRenderer as any, FilterBar: FilterBarRenderer as any,
   CRUDTable: CRUDTableRenderer as any, Pagination: FilterBarRenderer as any,
   AuthForm: AuthFormRenderer as any,
+  UIHeader: UIHeaderRenderer as any,
+  SectionHeader: SectionHeaderRenderer as any,
   EmptyStateCard,
 };
 

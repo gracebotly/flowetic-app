@@ -583,7 +583,44 @@ function buildDashboardComponentsFromSkeleton(
     .map(r => ({ ...r }));
   let chartRecIndex = 0;
 
+  // ── Premium: UIHeader (category-aware greeting + context) ──
+  if (layoutHints.showUIHeader) {
+    components.push({
+      id: 'ui-header',
+      type: 'UIHeader',
+      propsBuilder: () => ({
+        title: `${entity} Dashboard`,
+        subtitle: `Monitoring your ${entity.toLowerCase()} performance and key metrics`,
+        category: 'dashboard',
+        showGreeting: true,
+      }),
+      layout: { col: 0, row, w: 12, h: 1 },
+      meta: { reason: 'Premium UI header', source: 'workflow', skeletonSlot: 'ui-header' },
+    });
+    row += 1;
+  }
+
   for (const section of skeleton.sections) {
+    // ── Premium: SectionHeader before major sections ──
+    if (layoutHints.showSectionHeaders && section.type !== 'feed') {
+      const sectionLabel = section.type === 'kpi-grid' ? 'Key Metrics'
+        : section.type === 'chart' && section.dominant ? 'Performance Trends'
+        : section.type === 'chart' ? 'Breakdown'
+        : section.type === 'table' ? 'Recent Activity'
+        : section.type === 'insight-card' ? 'Key Insight'
+        : null;
+      if (sectionLabel) {
+        components.push({
+          id: `section-header-${section.id}`,
+          type: 'SectionHeader',
+          propsBuilder: () => ({ title: sectionLabel, sectionId: section.id }),
+          layout: { col: 0, row, w: 12, h: 1 },
+          meta: { reason: `Section header for "${section.id}"`, source: 'workflow', skeletonSlot: 'section-header' },
+        });
+        row += 1;
+      }
+    }
+
     const sectionHeight = section.minHeight || 2;
 
     switch (section.type) {
@@ -610,9 +647,9 @@ function buildDashboardComponentsFromSkeleton(
                 title: (field as { displayName?: string }).displayName || humanizeFieldName(field.name),
                 valueField: m[field.name] || field.name,
                 aggregation: safeAggregation,
-                icon: idx === 0 ? 'activity' : idx === 1 ? 'check-circle' : 'clock',
-                variant: layoutHints.statusIndicators && field.shape === 'status' ? 'status-indicator' : 'default',
-                showTrend: layoutHints.realTimeUpdates || false,
+                icon: getIconForField(field, idx),
+                variant: layoutHints.statusIndicators && field.shape === 'status' ? 'status-indicator' : layoutHints.cardVariant,
+                showTrend: layoutHints.showTrends,
               }),
               layout: { col: idx * kpiWidth, row, w: kpiWidth, h: 2 },
               meta: {
@@ -1012,23 +1049,109 @@ function buildDashboardComponentsFromSkeleton(
   return components;
 }
 
+/**
+ * Premium layout hints extracted from skill design patterns.
+ * Parses must_have / if_ rules from skill CSV JSON and produces
+ * structured config that component builders consume.
+ * Category-aware: used by dashboard, product, and admin builders.
+ */
+interface PremiumLayoutHints {
+  // Existing (preserved)
+  realTimeUpdates: boolean;
+  statusIndicators: boolean;
+  preferDarkMode: boolean;
+  emphasisColor?: string;
+  // NEW: Skill-driven premium config
+  showUIHeader: boolean;
+  showSectionHeaders: boolean;
+  showTrends: boolean;
+  cardVariant: 'default' | 'solid' | 'dark-inset' | 'accent-border';
+  mustHaveRules: string[];
+  conditionalRules: Record<string, string>;
+}
+
 function extractLayoutHints(
   designPatterns?: Array<{ content: string; source: string; score: number }>,
-): {
-  insightHeadline?: string;
-  emphasisColor?: string;
-  preferDarkMode?: boolean;
-  statusIndicators?: boolean;
-  realTimeUpdates?: boolean;
-} {
-  if (!designPatterns || designPatterns.length === 0) return {};
-  const allContent = designPatterns.map(p => p.content.toLowerCase()).join(' ');
-  return {
-    realTimeUpdates: allContent.includes('real-time') || allContent.includes('real time') || allContent.includes('live'),
-    statusIndicators: allContent.includes('status indicator') || allContent.includes('health check'),
-    preferDarkMode: allContent.includes('dark mode') || allContent.includes('dark theme') || allContent.includes('dark palette'),
-    emphasisColor: allContent.includes('trust') && allContent.includes('blue') ? 'trust-blue' : undefined,
+): PremiumLayoutHints {
+  const defaults: PremiumLayoutHints = {
+    realTimeUpdates: false,
+    statusIndicators: false,
+    preferDarkMode: false,
+    showUIHeader: true,
+    showSectionHeaders: true,
+    showTrends: true,
+    cardVariant: 'default',
+    mustHaveRules: [],
+    conditionalRules: {},
   };
+
+  if (!designPatterns || designPatterns.length === 0) return defaults;
+
+  const allContent = designPatterns.map(p => p.content.toLowerCase()).join(' ');
+  const hints = { ...defaults };
+
+  // Existing boolean signals
+  hints.realTimeUpdates = allContent.includes('real-time') || allContent.includes('real time') || allContent.includes('live');
+  hints.statusIndicators = allContent.includes('status indicator') || allContent.includes('health check');
+  hints.preferDarkMode = allContent.includes('dark mode') || allContent.includes('dark theme') || allContent.includes('dark palette');
+  hints.emphasisColor = allContent.includes('trust') && allContent.includes('blue') ? 'trust-blue' : undefined;
+
+  // Parse must_have / if_ JSON rules from skill CSV patterns
+  for (const pattern of designPatterns) {
+    const jsonMatches = pattern.content.match(/\{[^}]*"must_have"[^}]*\}/g);
+    if (jsonMatches) {
+      for (const jsonStr of jsonMatches) {
+        try {
+          const rules = JSON.parse(jsonStr.replace(/'/g, '"'));
+          for (const [key, value] of Object.entries(rules)) {
+            if (key === 'must_have' && typeof value === 'string') {
+              hints.mustHaveRules.push(value);
+            } else if (key.startsWith('if_') && typeof value === 'string') {
+              hints.conditionalRules[key] = value;
+            }
+          }
+        } catch { /* non-fatal */ }
+      }
+    }
+  }
+
+  // Derive card variant from parsed rules
+  if (hints.mustHaveRules.includes('high-contrast') || allContent.includes('high-contrast')) {
+    hints.cardVariant = 'solid';
+  } else if (hints.preferDarkMode) {
+    hints.cardVariant = 'dark-inset';
+  } else if (allContent.includes('accent') || allContent.includes('border')) {
+    hints.cardVariant = 'accent-border';
+  }
+
+  if (hints.mustHaveRules.includes('real-time-updates')) {
+    hints.realTimeUpdates = true;
+    hints.showTrends = true;
+  }
+
+  return hints;
+}
+
+/** Maps field semantic shapes to Lucide icon names */
+const SHAPE_ICON_MAP: Record<string, string> = {
+  id: 'hash', status: 'check-circle', binary: 'percent',
+  timestamp: 'clock', duration: 'timer', money: 'dollar',
+  rate: 'trending-up', label: 'bar-chart', count: 'activity',
+  call: 'zap', conversation: 'users', ticket: 'inbox', execution: 'activity',
+};
+
+function getIconForField(field: { shape: string; name: string }, index: number): string {
+  if (SHAPE_ICON_MAP[field.shape]) return SHAPE_ICON_MAP[field.shape];
+  const name = field.name.toLowerCase();
+  if (name.includes('call') || name.includes('phone')) return 'zap';
+  if (name.includes('user') || name.includes('agent')) return 'users';
+  if (name.includes('duration') || name.includes('time') || name.includes('elapsed')) return 'timer';
+  if (name.includes('cost') || name.includes('amount') || name.includes('price') || name.includes('revenue')) return 'dollar';
+  if (name.includes('rate') || name.includes('success') || name.includes('score')) return 'trending-up';
+  if (name.includes('error') || name.includes('fail')) return 'alert-triangle';
+  if (name.includes('count') || name.includes('total')) return 'hash';
+  const cycle = ['activity', 'check-circle', 'timer', 'trending-up', 'zap'];
+  return cycle[index % cycle.length];
 }
 
 function buildProductComponentsFromSkeleton(
@@ -1037,13 +1160,245 @@ function buildProductComponentsFromSkeleton(
 ): ComponentBlueprint[] {
   const components: ComponentBlueprint[] = [];
   const entity = cleanEntityName(input.entityName || 'Product');
+  const layoutHints = extractLayoutHints(input.designPatterns);
   let row = 0;
+
+  // ── Premium: UIHeader for product pages ──
+  if (layoutHints.showUIHeader) {
+    components.push({
+      id: 'ui-header',
+      type: 'UIHeader',
+      propsBuilder: () => ({
+        title: entity,
+        subtitle: `Discover what ${entity.toLowerCase()} can do for you`,
+        category: 'product',
+        showGreeting: false,
+      }),
+      layout: { col: 0, row, w: 12, h: 1 },
+      meta: { reason: 'Premium UI header for product page', source: 'workflow', skeletonSlot: 'ui-header' },
+    });
+    row += 1;
+  }
+
   for (const section of skeleton.sections) {
-    if (section.type === 'hero') {
-      components.push({ id: `hero-${row}`, type: 'HeroSection', propsBuilder: () => ({ headline: `${entity}`, subheadline: 'Powered by AI automation', ctaText: 'Get Started', ctaLink: '#pricing' }), layout: { col: 0, row, w: 12, h: 3 }, meta: { reason: `Skeleton section: ${section.type}`, source: 'workflow', skeletonSlot: section.type } });
-      row += 3;
+    const h = section.minHeight || 2;
+    const w = section.columns || 12;
+    const col = w < 12 ? (12 - w) : 0; // Center narrow sections
+
+    switch (section.type) {
+      case 'hero': {
+        components.push({
+          id: `hero-${row}`,
+          type: 'HeroSection',
+          propsBuilder: () => ({
+            headline: entity,
+            subheadline: `Powered by AI automation`,
+            ctaText: 'Get Started',
+            ctaLink: '#pricing',
+          }),
+          layout: { col: 0, row, w: 12, h: Math.max(h, 3) },
+          meta: { reason: `Skeleton section: ${section.type}`, source: 'workflow', skeletonSlot: section.type },
+        });
+        row += Math.max(h, 3);
+        break;
+      }
+      case 'proof-bar': {
+        components.push({
+          id: `proof-${row}`,
+          type: 'MetricCard',
+          propsBuilder: () => ({
+            title: 'Trusted by teams worldwide',
+            value: '10,000+',
+            subtitle: 'active users',
+            icon: 'users',
+          }),
+          layout: { col: 0, row, w: 12, h: 1 },
+          meta: { reason: `Skeleton section: ${section.type} (social proof)`, source: 'workflow', skeletonSlot: section.type },
+        });
+        row += 1;
+        break;
+      }
+      case 'feature-grid': {
+        components.push({
+          id: `features-${row}`,
+          type: 'FeatureGrid',
+          propsBuilder: () => ({
+            features: [
+              { icon: 'zap', title: 'Fast Setup', description: `Get your ${entity.toLowerCase()} running in minutes` },
+              { icon: 'shield', title: 'Secure', description: 'Enterprise-grade security built in' },
+              { icon: 'trending-up', title: 'Growth', description: 'Scale with confidence as you grow' },
+            ],
+          }),
+          layout: { col: 0, row, w: 12, h: Math.max(h, 3) },
+          meta: { reason: `Skeleton section: ${section.type}`, source: 'workflow', skeletonSlot: section.type },
+        });
+        row += Math.max(h, 3);
+        break;
+      }
+      case 'pricing': {
+        components.push({
+          id: `pricing-${row}`,
+          type: 'PricingCards',
+          propsBuilder: () => ({
+            tiers: [
+              { name: 'Starter', price: '$29', period: '/mo', features: ['5 dashboards', 'Basic analytics', 'Email support'], highlighted: false },
+              { name: 'Pro', price: '$99', period: '/mo', features: ['Unlimited dashboards', 'Advanced analytics', 'Priority support', 'Custom branding'], highlighted: true },
+              { name: 'Enterprise', price: 'Custom', period: '', features: ['Everything in Pro', 'Dedicated manager', 'SLA guarantee'], highlighted: false },
+            ],
+          }),
+          layout: { col: 0, row, w: 12, h: Math.max(h, 3) },
+          meta: { reason: `Skeleton section: ${section.type}`, source: 'workflow', skeletonSlot: section.type },
+        });
+        row += Math.max(h, 3);
+        break;
+      }
+      case 'cta': {
+        components.push({
+          id: `cta-${row}`,
+          type: 'CTASection',
+          propsBuilder: () => ({
+            headline: `Ready to transform your ${entity.toLowerCase()}?`,
+            ctaText: 'Start Free Trial',
+          }),
+          layout: { col: 0, row, w: 12, h: Math.max(h, 2) },
+          meta: { reason: `Skeleton section: ${section.type}`, source: 'workflow', skeletonSlot: section.type },
+        });
+        row += Math.max(h, 2);
+        break;
+      }
+      case 'progress-bar': {
+        // Form wizard progress — render as a thin MetricCard with step info
+        components.push({
+          id: `progress-${row}`,
+          type: 'MetricCard',
+          propsBuilder: () => ({
+            title: 'Step 1 of 3',
+            value: '33%',
+            subtitle: 'Getting started',
+            icon: 'activity',
+          }),
+          layout: { col: 0, row, w: 12, h: 1 },
+          meta: { reason: `Skeleton section: ${section.type} (progress indicator)`, source: 'workflow', skeletonSlot: section.type },
+        });
+        row += 1;
+        break;
+      }
+      case 'form-step': {
+        // Form content area — render as a styled empty state prompting config
+        components.push({
+          id: `form-${row}`,
+          type: 'EmptyStateCard',
+          propsBuilder: () => ({
+            title: `${entity} Input Form`,
+            subtitle: 'Configure form fields in the editor',
+            icon: 'settings',
+          }),
+          layout: { col: 0, row, w: 12, h: Math.max(h, 4) },
+          meta: { reason: `Skeleton section: ${section.type} (form placeholder)`, source: 'workflow', skeletonSlot: section.type },
+        });
+        row += Math.max(h, 4);
+        break;
+      }
+      case 'form-nav': {
+        // Navigation buttons — render as CTA section with back/next
+        components.push({
+          id: `form-nav-${row}`,
+          type: 'CTASection',
+          propsBuilder: () => ({
+            headline: '',
+            ctaText: 'Next Step →',
+          }),
+          layout: { col: 0, row, w: 12, h: 1 },
+          meta: { reason: `Skeleton section: ${section.type}`, source: 'workflow', skeletonSlot: section.type },
+        });
+        row += 1;
+        break;
+      }
+      case 'success-banner': {
+        components.push({
+          id: `success-${row}`,
+          type: 'MetricCard',
+          propsBuilder: () => ({
+            title: 'Complete',
+            value: '✓',
+            subtitle: `Your ${entity.toLowerCase()} is ready`,
+            icon: 'check-circle',
+            variant: 'solid',
+          }),
+          layout: { col: 0, row, w: 12, h: 1 },
+          meta: { reason: `Skeleton section: ${section.type}`, source: 'workflow', skeletonSlot: section.type },
+        });
+        row += 1;
+        break;
+      }
+      case 'results-hero': {
+        components.push({
+          id: `results-hero-${row}`,
+          type: 'HeroSection',
+          propsBuilder: () => ({
+            headline: `${entity} Results`,
+            subheadline: 'Your workflow output is ready',
+            ctaText: 'Download Report',
+          }),
+          layout: { col: 0, row, w: 12, h: Math.max(h, 3) },
+          meta: { reason: `Skeleton section: ${section.type}`, source: 'workflow', skeletonSlot: section.type },
+        });
+        row += Math.max(h, 3);
+        break;
+      }
+      case 'results-cards': {
+        const maxCards = section.maxItems || 3;
+        const cardWidth = Math.floor(12 / maxCards);
+        for (let i = 0; i < maxCards; i++) {
+          components.push({
+            id: `result-card-${row}-${i}`,
+            type: 'MetricCard',
+            propsBuilder: () => ({
+              title: `Result ${i + 1}`,
+              value: '—',
+              icon: i === 0 ? 'check-circle' : i === 1 ? 'trending-up' : 'activity',
+              variant: 'accent-border',
+            }),
+            layout: { col: i * cardWidth, row, w: cardWidth, h: 2 },
+            meta: { reason: `Skeleton section: ${section.type} (card ${i + 1})`, source: 'workflow', skeletonSlot: section.type },
+          });
+        }
+        row += 2;
+        break;
+      }
+      case 'actions-bar': {
+        components.push({
+          id: `actions-${row}`,
+          type: 'CTASection',
+          propsBuilder: () => ({
+            headline: 'What would you like to do next?',
+            ctaText: 'Run Again',
+          }),
+          layout: { col: 0, row, w: 12, h: 1 },
+          meta: { reason: `Skeleton section: ${section.type}`, source: 'workflow', skeletonSlot: section.type },
+        });
+        row += 1;
+        break;
+      }
+      default: {
+        console.log(`[buildProductComponentsFromSkeleton] Unhandled section type: "${section.type}" — emitting EmptyStateCard`);
+        components.push({
+          id: `empty-${section.id}-${row}`,
+          type: 'EmptyStateCard',
+          propsBuilder: () => ({
+            title: section.description?.split(',')[0] || section.type,
+            subtitle: 'Configure in editor',
+            icon: 'settings',
+            sectionId: section.id,
+          }),
+          layout: { col: col, row, w: w, h: h },
+          meta: { reason: `Skeleton section: ${section.type} (unhandled)`, source: 'workflow', skeletonSlot: section.type },
+        });
+        row += h;
+      }
     }
   }
+
   return components;
 }
 
@@ -1052,14 +1407,194 @@ function buildAdminComponentsFromSkeleton(
   input: { entityName?: string; platformType?: string; designPatterns?: Array<{ content: string; source: string; score: number }> },
 ): ComponentBlueprint[] {
   const components: ComponentBlueprint[] = [];
-  const entity = cleanEntityName(input.entityName || 'Records');
+  const entity = cleanEntityName(input.entityName || 'Resource');
   let row = 0;
+
   for (const section of skeleton.sections) {
-    if (section.type === 'page-header') {
-      components.push({ id: `header-${row}`, type: 'PageHeader', propsBuilder: () => ({ title: entity }), layout: { col: 0, row, w: 12, h: 1 }, meta: { reason: `Skeleton section: ${section.type}`, source: 'workflow', skeletonSlot: section.type } });
-      row += 1;
+    const h = section.minHeight || 2;
+    const w = section.columns || 12;
+    // For asymmetric layouts (settings sidebar), calculate col offset
+    const colOffset = (() => {
+      if (w === 12) return 0;
+      // Find preceding sections on the same conceptual row to calculate offset
+      const idx = skeleton.sections.indexOf(section);
+      let offset = 0;
+      for (let i = 0; i < idx; i++) {
+        const prev = skeleton.sections[i];
+        if ((prev.columns || 12) < 12) {
+          offset += prev.columns || 0;
+        }
+      }
+      return offset < 12 ? offset : 0;
+    })();
+
+    switch (section.type) {
+      case 'page-header': {
+        // Admin panels use PageHeader, not UIHeader — it has breadcrumbs + actions
+        components.push({
+          id: `page-header-${row}`,
+          type: 'PageHeader',
+          propsBuilder: () => ({
+            heading: `${entity} Management`,
+            breadcrumbs: [{ label: 'Admin' }, { label: pluralizeEntity(entity) }],
+            actions: [{ label: `+ New ${entity}`, primary: true }],
+          }),
+          layout: { col: 0, row, w: 12, h: 1 },
+          meta: { reason: `Skeleton section: ${section.type}`, source: 'workflow', skeletonSlot: section.type },
+        });
+        row += 1;
+        break;
+      }
+      case 'filter-bar': {
+        components.push({
+          id: `filter-bar-${row}`,
+          type: 'FilterBar',
+          propsBuilder: () => ({
+            filters: [
+              { type: 'search', placeholder: `Search ${pluralizeEntity(entity).toLowerCase()}...` },
+              { type: 'select', label: 'Status', options: ['All', 'Active', 'Inactive'] },
+            ],
+          }),
+          layout: { col: 0, row, w: 12, h: 1 },
+          meta: { reason: `Skeleton section: ${section.type}`, source: 'workflow', skeletonSlot: section.type },
+        });
+        row += 1;
+        break;
+      }
+      case 'crud-table': {
+        components.push({
+          id: `crud-table-${row}`,
+          type: 'CRUDTable',
+          propsBuilder: () => ({
+            entityName: entity,
+            createLabel: `+ New ${entity}`,
+            columns: [
+              { key: 'name', label: 'Name' },
+              { key: 'status', label: 'Status' },
+              { key: 'created_at', label: 'Created' },
+            ],
+            rows: [],
+            showActions: true,
+            sortable: true,
+            pageSize: 10,
+          }),
+          layout: { col: 0, row, w: 12, h: Math.max(h, 5) },
+          meta: { reason: `Skeleton section: ${section.type}`, source: 'workflow', skeletonSlot: section.type },
+        });
+        row += Math.max(h, 5);
+        break;
+      }
+      case 'pagination': {
+        // Pagination control below table — render as a lightweight FilterBar
+        components.push({
+          id: `pagination-${row}`,
+          type: 'FilterBar',
+          propsBuilder: () => ({
+            title: 'Page 1 of 1',
+            filters: [],
+          }),
+          layout: { col: 0, row, w: 12, h: 1 },
+          meta: { reason: `Skeleton section: ${section.type} (pagination control)`, source: 'workflow', skeletonSlot: section.type },
+        });
+        row += 1;
+        break;
+      }
+      case 'settings-sidebar': {
+        // Sidebar navigation for settings — render as stacked MetricCards (nav items)
+        components.push({
+          id: `settings-nav-${row}`,
+          type: 'EmptyStateCard',
+          propsBuilder: () => ({
+            title: 'Settings',
+            subtitle: 'General • Billing • Team • API',
+            icon: 'settings',
+            sectionId: section.id,
+          }),
+          layout: { col: 0, row, w: w, h: Math.max(h, 6) },
+          meta: { reason: `Skeleton section: ${section.type} (settings navigation)`, source: 'workflow', skeletonSlot: section.type },
+        });
+        // Don't increment row — settings-forms sits beside this
+        break;
+      }
+      case 'settings-forms': {
+        components.push({
+          id: `settings-forms-${row}`,
+          type: 'EmptyStateCard',
+          propsBuilder: () => ({
+            title: `${entity} Settings`,
+            subtitle: 'Configure your preferences',
+            icon: 'settings',
+            sectionId: section.id,
+          }),
+          layout: { col: colOffset, row, w: w, h: Math.max(h, 6) },
+          meta: { reason: `Skeleton section: ${section.type}`, source: 'workflow', skeletonSlot: section.type },
+        });
+        row += Math.max(h, 6);
+        break;
+      }
+      case 'danger-zone': {
+        components.push({
+          id: `danger-zone-${row}`,
+          type: 'CTASection',
+          propsBuilder: () => ({
+            headline: 'Danger Zone',
+            ctaText: `Delete ${entity}`,
+          }),
+          layout: { col: colOffset, row, w: w, h: Math.max(h, 2) },
+          meta: { reason: `Skeleton section: ${section.type}`, source: 'workflow', skeletonSlot: section.type },
+        });
+        row += Math.max(h, 2);
+        break;
+      }
+      case 'auth-form': {
+        components.push({
+          id: `auth-form-${row}`,
+          type: 'AuthForm',
+          propsBuilder: () => ({
+            mode: 'login',
+            providers: ['email', 'google'],
+            showForgotPassword: true,
+          }),
+          layout: { col: 0, row, w: w, h: Math.max(h, 6) },
+          meta: { reason: `Skeleton section: ${section.type}`, source: 'workflow', skeletonSlot: section.type },
+        });
+        // Don't increment row — brand-visual sits beside this
+        break;
+      }
+      case 'brand-visual': {
+        components.push({
+          id: `brand-visual-${row}`,
+          type: 'HeroSection',
+          propsBuilder: () => ({
+            headline: entity,
+            subheadline: 'Secure access to your workspace',
+            ctaText: '',
+          }),
+          layout: { col: colOffset, row, w: w, h: Math.max(h, 6) },
+          meta: { reason: `Skeleton section: ${section.type} (brand visual)`, source: 'workflow', skeletonSlot: section.type },
+        });
+        row += Math.max(h, 6);
+        break;
+      }
+      default: {
+        console.log(`[buildAdminComponentsFromSkeleton] Unhandled section type: "${section.type}" — emitting EmptyStateCard`);
+        components.push({
+          id: `empty-${section.id}-${row}`,
+          type: 'EmptyStateCard',
+          propsBuilder: () => ({
+            title: section.description?.split(',')[0] || section.type,
+            subtitle: 'Configure in editor',
+            icon: 'settings',
+            sectionId: section.id,
+          }),
+          layout: { col: colOffset, row, w: w, h: h },
+          meta: { reason: `Skeleton section: ${section.type} (unhandled)`, source: 'workflow', skeletonSlot: section.type },
+        });
+        row += h;
+      }
     }
   }
+
   return components;
 }
 
