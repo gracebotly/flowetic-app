@@ -164,9 +164,8 @@ export const applySpecPatch = createTool({
       }
 
       try {
-        const { createClient } = await import('@supabase/supabase-js');
-        const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-        const supabase = createClient(supabaseUrl, accessToken);
+        const { createAuthenticatedClient } = await import('../../lib/supabase');
+        const supabase = createAuthenticatedClient(accessToken);
 
         const { data: versions, error: versionError } = await supabase
           .from('interface_versions')
