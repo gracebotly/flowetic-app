@@ -116,3 +116,13 @@ field_rules:
     role: detail
     display_name: Error
     reason: "Free-text error detail — table column only"
+
+  disconnection_reason:
+    semantic_type: dimension
+    chart_eligible: true
+    component_preference: PieChart
+    max_pie_cardinality: 8
+    aggregation: count_per_category
+    role: breakdown
+    display_name: Disconnection Reason
+    reason: "Why the call disconnected (agent_hangup, user_hangup, error, silence, max_duration, etc) — quality breakdown"

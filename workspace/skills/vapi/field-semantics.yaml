@@ -116,3 +116,23 @@ field_rules:
     role: detail
     display_name: Error
     reason: "Free-text error detail — table column only"
+
+  ended_reason:
+    semantic_type: dimension
+    chart_eligible: true
+    component_preference: PieChart
+    max_pie_cardinality: 8
+    aggregation: count_per_category
+    role: breakdown
+    display_name: Ended Reason
+    reason: "Why the call ended (hangup, voicemail, error, etc) — breakdown dimension for quality analysis"
+
+  cost:
+    semantic_type: measure
+    chart_eligible: true
+    component_preference: MetricCard
+    aggregation: sum
+    unit: usd
+    role: supporting
+    display_name: Total Cost
+    reason: "Per-call cost in USD — sum for total spend, useful as supporting metric"

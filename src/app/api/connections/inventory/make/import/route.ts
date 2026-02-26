@@ -187,6 +187,8 @@ export async function POST(req: Request) {
               started_at: startedAt,
               ended_at: '',
               duration_ms: exec.duration || undefined,
+              operations: typeof exec.operations === 'number' ? exec.operations : undefined,
+              data_transfer: typeof exec.transfer === 'number' ? exec.transfer : (typeof exec.dataTransfer === 'number' ? exec.dataTransfer : undefined),
               platform: 'make',
             },
             labels: {

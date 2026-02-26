@@ -108,3 +108,21 @@ field_rules:
     role: detail
     display_name: Error
     reason: "Free-text error detail — table column only"
+
+  operations:
+    semantic_type: measure
+    chart_eligible: true
+    component_preference: BarChart
+    aggregation: sum
+    role: supporting
+    display_name: Total Operations
+    reason: "Billable operation count per execution — sum for cost tracking, BarChart for per-scenario comparison"
+
+  data_transfer:
+    semantic_type: measure
+    chart_eligible: false
+    aggregation: sum
+    unit: bytes
+    role: supporting
+    display_name: Data Transfer
+    reason: "Bytes transferred per execution — sum for bandwidth tracking, supporting metric"

@@ -145,7 +145,7 @@ export async function POST(req: Request) {
           status: c.call_status === 'ended' || c.call_status === 'completed' ? 'success' : 'error',
           startedAt: c.start_timestamp ? new Date(c.start_timestamp * 1000).toISOString() : now,
           duration: c.end_timestamp && c.start_timestamp ? (c.end_timestamp - c.start_timestamp) * 1000 : undefined,
-          error: c.disconnect_reason,
+          error: c.disconnection_reason,
         }));
 
         // Store sample events
@@ -165,6 +165,7 @@ export async function POST(req: Request) {
               started_at: call.start_timestamp || '',
               ended_at: call.end_timestamp || '',
               duration_ms: call.duration_ms || undefined,
+              disconnection_reason: call.disconnection_reason || undefined,
               platform: 'retell',
             },
             labels: {
