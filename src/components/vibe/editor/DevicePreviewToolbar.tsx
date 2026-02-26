@@ -17,8 +17,8 @@ const DEVICE_OPTIONS: {
   icon: React.ElementType;
   width: string;
 }[] = [
-  { value: "mobile", label: "Mobile", icon: Smartphone, width: "375px" },
-  { value: "tablet", label: "Tablet", icon: Tablet, width: "768px" },
+  { value: "mobile", label: "Mobile", icon: Smartphone, width: "428px" },
+  { value: "tablet", label: "Tablet", icon: Tablet, width: "820px" },
   { value: "desktop", label: "Desktop", icon: Monitor, width: "100%" },
 ];
 

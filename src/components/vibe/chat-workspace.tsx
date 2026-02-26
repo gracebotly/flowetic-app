@@ -2185,7 +2185,7 @@ return (
                 </div>
               )}
               {/* Preview content */}
-              <div className="flex-1 overflow-auto bg-gray-100 p-4">
+              <div className="flex-1 overflow-auto bg-gray-100 p-2 sm:p-4 transition-all duration-300">
                 {journeyMode === 'propose' ? (
                   <ProposalGallery
                     payload={proposals}

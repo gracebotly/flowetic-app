@@ -64,9 +64,11 @@ function getResponsiveGap(baseGap: number, deviceMode: DeviceMode): number {
   switch (deviceMode) { case "mobile": return Math.max(8, Math.round(baseGap * 0.5)); case "tablet": return Math.max(12, Math.round(baseGap * 0.75)); case "desktop": return baseGap; }
 }
 function getDeviceContainerStyle(deviceMode: DeviceMode, bgColor: string): React.CSSProperties {
+  // No device mockup chrome — the dashboard itself is responsive.
+  // Width constraints simulate viewport sizes without fake bezels.
   switch (deviceMode) {
-    case "mobile": return { maxWidth: "375px", margin: "0 auto", border: "4px solid #1f2937", borderRadius: "20px", backgroundColor: bgColor, boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)" };
-    case "tablet": return { maxWidth: "768px", margin: "0 auto", border: "6px solid #374151", borderRadius: "16px", backgroundColor: bgColor, boxShadow: "0 20px 40px -10px rgba(0, 0, 0, 0.2)" };
+    case "mobile": return { maxWidth: "428px", margin: "0 auto", backgroundColor: bgColor };
+    case "tablet": return { maxWidth: "820px", margin: "0 auto", backgroundColor: bgColor };
     case "desktop": return { maxWidth: "100%", backgroundColor: bgColor };
   }
 }
@@ -245,10 +247,10 @@ export function ResponsiveDashboardRenderer({ spec, designTokens, deviceMode, is
     return (
       <div style={{ ...containerStyle, ...generateTokenCSS(effectiveTokens), fontFamily: bodyFont || undefined }} className="overflow-hidden">
         {fontLink}
-        <div className="p-3">
+        <div className={deviceMode === "mobile" ? "p-4" : "p-5"}>
           {spec?.title && (
             <motion.h1
-              className="text-lg font-bold mb-3 break-words"
+              className={`font-bold break-words ${deviceMode === "mobile" ? "text-base mb-3 leading-tight" : "text-lg mb-4"}`}
               style={{ color: textColor, fontFamily: headingFont || undefined }}
               initial={{ opacity: 0, y: -8 }}
               animate={{ opacity: 1, y: 0 }}
