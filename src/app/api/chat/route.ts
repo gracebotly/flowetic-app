@@ -136,6 +136,17 @@ async function autoAdvancePhase(params: {
   const currentPhase = LEGACY_MAP[session.mode] ?? session.mode;
   let nextPhase: string | null = null;
 
+  // Write-back: if DB has a legacy phase name, normalize it now so it doesn't persist.
+  // This catches sessions that were created between old code and the migration SQL.
+  if (LEGACY_MAP[session.mode]) {
+    console.log(`[autoAdvancePhase] Normalizing legacy phase: "${session.mode}" → "${currentPhase}"`);
+    await supabase
+      .from('journey_sessions')
+      .update({ mode: currentPhase, updated_at: new Date().toISOString() })
+      .eq('id', session.id)
+      .eq('tenant_id', tenantId);
+  }
+
   // 2. Deterministic transition rules — 3-phase journey
   if (currentPhase === 'propose' && session.selected_proposal_index != null) {
     nextPhase = 'build_edit';

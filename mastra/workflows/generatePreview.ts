@@ -625,12 +625,15 @@ const generateUISpecStep = createStep({
     }
 
     // ── Determine wireframe preference ───────────────────────────────
-    // Product outcomes should prefer the proposal wireframe (it IS the layout
-    // the user chose). Dashboard outcomes continue using skeletons (they produce
-    // richer data-driven layouts with responsive breakpoints).
-    const shouldPreferWireframe = resolvedUiType !== 'dashboard' && !!proposalWireframe?.components?.length;
+    // ALWAYS prefer the proposal wireframe when the user selected a proposal.
+    // The wireframe IS the layout they chose — overriding it with a generic
+    // skeleton defeats the purpose of the proposal system.
+    // Skeleton is the FALLBACK for when no proposal wireframe exists.
+    const shouldPreferWireframe = !!proposalWireframe?.components?.length;
     if (shouldPreferWireframe) {
-      console.log(`[generateUISpecStep] Product outcome with wireframe → preferWireframe=true`);
+      console.log(`[generateUISpecStep] Proposal wireframe available (${proposalWireframe!.components!.length} components) → preferWireframe=true`);
+    } else {
+      console.log(`[generateUISpecStep] No proposal wireframe — skeleton system will be used as fallback`);
     }
 
     // Extract intent from journey session's selected proposal for skeleton selection
