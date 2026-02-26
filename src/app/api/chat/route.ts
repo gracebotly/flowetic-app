@@ -1590,6 +1590,40 @@ export async function POST(req: Request) {
               sessionId: sessionRow.id,
               interfaceId: newInterface.id,
             });
+
+            // ── BACKFILL: Link existing events to the newly created interface ──
+            // Events arrive via webhook with source_id but NULL interface_id.
+            // Now that we have an interface, backfill the link so queries by
+            // interface_id find the events.
+            if (sessionRow?.source_id && newInterface.id) {
+              try {
+                const { count: pendingBackfillCount, error: countErr } = await supabase
+                  .from('events')
+                  .select('id', { count: 'exact', head: true })
+                  .eq('tenant_id', tenantId)
+                  .eq('source_id', sessionRow.source_id)
+                  .is('interface_id', null);
+
+                if (countErr) {
+                  console.warn('[api/chat] Events backfill count failed (non-fatal):', countErr.message);
+                }
+
+                const { error: backfillErr } = await supabase
+                  .from('events')
+                  .update({ interface_id: newInterface.id })
+                  .eq('tenant_id', tenantId)
+                  .eq('source_id', sessionRow.source_id)
+                  .is('interface_id', null);
+
+                if (backfillErr) {
+                  console.warn('[api/chat] Events backfill failed (non-fatal):', backfillErr.message);
+                } else {
+                  console.log(`[api/chat] ✅ Backfilled ${pendingBackfillCount ?? 0} events with interface_id=${newInterface.id}`);
+                }
+              } catch (bfErr) {
+                console.warn('[api/chat] Events backfill error (non-fatal):', bfErr);
+              }
+            }
           }
         } else if (sessionRow?.preview_interface_id) {
           requestContext.set('interfaceId', sessionRow.preview_interface_id);
@@ -2058,7 +2092,14 @@ export async function POST(req: Request) {
             if (selectedWireframe) {
               requestContext.set('proposalWireframe', JSON.stringify(selectedWireframe));
             }
-            console.log(`[api/chat] ✅ Persisted proposal selection: index=${selectedIndex}, outcome=${selectedOutcome}, wireframe=${selectedWireframe ? selectedWireframe.name : 'none'}`);
+            // ── ROOT CAUSE FIX: Set designTokens in RequestContext for this request cycle ──
+            // Previously only persisted to DB but not to RequestContext, so the
+            // generatePreviewWorkflow couldn't find them during the same request.
+            if (designTokens) {
+              requestContext.set('designTokens', JSON.stringify(designTokens));
+              requestContext.set('designSystemGenerated', 'true');
+            }
+            console.log(`[api/chat] ✅ Persisted proposal selection: index=${selectedIndex}, outcome=${selectedOutcome}, wireframe=${selectedWireframe ? selectedWireframe.name : 'none'}, designTokens=${designTokens ? 'yes' : 'MISSING'}`);
 
             try {
               const advResult = await autoAdvancePhase({

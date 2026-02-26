@@ -511,44 +511,25 @@ const generateUISpecStep = createStep({
     // Phase 2: Extract dataSignals from mapping result
     const mappingDataSignals = (mappingResult as { dataSignals?: unknown }).dataSignals;
 
-    // ── FIX: Load design tokens from DB if missing from RequestContext ────────
-    // Mastra workflow execution can lose RequestContext keys during step
-    // serialization. The DB is the source of truth for design tokens.
     if (!requestContext.get('designTokens')) {
-      console.warn('[generateUISpecStep] designTokens missing from RequestContext — loading from DB');
-      const journeyThreadId = requestContext.get('journeyThreadId') as string;
-      const supabaseToken = requestContext.get('supabaseAccessToken') as string;
-      const stepTenantId = initData.tenantId || requestContext.get('tenantId') as string;
-
-      if (journeyThreadId && supabaseToken && stepTenantId) {
-        try {
-          const { createAuthenticatedClient } = await import('../lib/supabase');
-          const supabase = createAuthenticatedClient(supabaseToken);
-          const { data: session } = await supabase
-            .from('journey_sessions')
-            .select('design_tokens')
-            .eq('thread_id', journeyThreadId)
-            .eq('tenant_id', stepTenantId)
-            .maybeSingle();
-
-          if (session?.design_tokens) {
-            requestContext.set('designTokens', JSON.stringify(session.design_tokens));
-            requestContext.set('designSystemGenerated', 'true');
-            const dbTokens = session.design_tokens as {
-              style?: { name?: string };
-              colors?: { primary?: string };
-            };
-            console.log('[generateUISpecStep] ✅ Loaded design tokens from DB:', {
-              styleName: dbTokens?.style?.name,
-              primary: dbTokens?.colors?.primary,
-            });
-          } else {
-            console.error('[generateUISpecStep] ❌ No design tokens in DB either');
-          }
-        } catch (dbErr) {
-          console.error('[generateUISpecStep] Failed to load design tokens from DB:', dbErr);
-        }
-      }
+      const debugInfo = {
+        hasJourneyThreadId: !!requestContext.get('journeyThreadId'),
+        hasSupabaseToken: !!requestContext.get('supabaseAccessToken'),
+        hasTenantId: !!requestContext.get('tenantId'),
+        hasSourceId: !!requestContext.get('sourceId'),
+        hasInterfaceId: !!requestContext.get('interfaceId'),
+        hasSelectedOutcome: !!requestContext.get('selectedOutcome'),
+        hasProposalWireframe: !!requestContext.get('proposalWireframe'),
+        hasDesignSystemGenerated: !!requestContext.get('designSystemGenerated'),
+        phase: requestContext.get('phase'),
+      };
+      console.error('[generateUISpecStep] ❌ HARD FAIL: designTokens missing from RequestContext.', debugInfo);
+      throw new Error(
+        'DESIGN_TOKENS_MISSING: designTokens not found in RequestContext. ' +
+        'The propose phase must set designTokens via requestContext.set() when a proposal is selected. ' +
+        'Check api/chat/route.ts proposal selection block. ' +
+        `Debug: ${JSON.stringify(debugInfo)}`
+      );
     }
 
     // ── Load proposal wireframe from DB ────────────────────────────────
@@ -758,23 +739,22 @@ const generateUISpecStep = createStep({
 
         events = primaryEvents;
 
-        // Fallback: if interface_id yields 0 events, try source_id
-        // This handles the common case where events were ingested before
-        // the interface was created (they still have old/null interface_id)
-        if ((!events || events.length === 0)) {
+        // HARD FAIL: No fallback to source_id — events MUST be linked to interface_id.
+        // If events are missing, the backfill in api/chat/route.ts didn't run,
+        // or the interface_id is wrong.
+        if (!events || events.length === 0) {
           const sourceId = requestContext.get('sourceId') as string | undefined;
-          if (sourceId) {
-            console.log(`[generateUISpecStep] No events for interface_id=${interfaceId}, falling back to source_id=${sourceId}`);
-            const { data: sourceEvents } = await supabase
-              .from('events')
-              .select('*')
-              .eq('tenant_id', tenantId)
-              .eq('source_id', sourceId)
-              .not('type', 'in', '("state","tool_event")')
-              .order('created_at', { ascending: false })
-              .limit(500);
-            events = sourceEvents;
-          }
+          console.error('[generateUISpecStep] ❌ HARD FAIL: No events for interface_id.', {
+            interfaceId,
+            tenantId,
+            sourceId,
+            hint: 'Events should be backfilled with interface_id when the interface is created. Check api/chat/route.ts interface creation block.',
+          });
+          throw new Error(
+            `NO_EVENTS_FOR_INTERFACE: 0 events found for interface_id=${interfaceId}, tenant_id=${tenantId}. ` +
+            `Events must be linked to this interface before preview generation. ` +
+            `sourceId=${sourceId || 'none'} — backfill may not have run.`
+          );
         }
 
         if (events && events.length > 0) {
@@ -831,8 +811,25 @@ const validateSpecStep = createStep({
       { spec_json },
       { requestContext }
     );
+
+    console.log('[validateSpecStep] Gate check:', JSON.stringify({
+      valid: result.valid,
+      score: result.score,
+      threshold: 0.8,
+      errorCount: result.errors?.length ?? 0,
+      errors: result.errors?.slice(0, 5) ?? [],
+      hasFixedSpec: !!result.fixed_spec,
+      fixedSpecComponentCount: result.fixed_spec?.components?.length ?? 'N/A',
+      inputSpecComponentCount: (spec_json as any)?.components?.length ?? 'N/A',
+      decision: (!result.valid || result.score < 0.8) ? 'REJECT' : 'PASS',
+    }));
+
     if (!result.valid || result.score < 0.8) {
-      throw new Error('SCORING_HARD_GATE_FAILED');
+      throw new Error(
+        `SCORING_HARD_GATE_FAILED: score=${result.score?.toFixed(3) ?? '?'}, ` +
+        `valid=${result.valid}, errors=[${(result.errors || []).slice(0, 3).join('; ')}], ` +
+        `components=${(spec_json as any)?.components?.length ?? '?'}`
+      );
     }
     return result;
   },
