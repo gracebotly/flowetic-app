@@ -2185,7 +2185,7 @@ return (
                 </div>
               )}
               {/* Preview content */}
-              <div className="flex-1 overflow-auto bg-gray-100 p-2 sm:p-4 transition-all duration-300">
+              <div className="flex-1 overflow-auto bg-gray-100 p-4">
                 {journeyMode === 'propose' ? (
                   <ProposalGallery
                     payload={proposals}
@@ -2204,22 +2204,7 @@ return (
                     }}
                   />
                 ) : loadedSpec?.components?.length > 0 ? (
-                  <div className="h-full flex items-stretch justify-center">
-                    {(() => {
-                      const dt = loadedDesignTokens || effectiveDesignTokens;
-                      const hf = (dt?.fonts?.heading as string)?.split(",")[0]?.trim();
-                      const bf = (dt?.fonts?.body as string)?.split(",")[0]?.trim();
-                      const fonts = [...new Set([hf, bf].filter(Boolean))];
-                      if (fonts.length === 0) return null;
-                      return (
-                        <link
-                          rel="stylesheet"
-                          href={`https://fonts.googleapis.com/css2?${fonts
-                            .map((f) => `family=${encodeURIComponent(f)}:wght@400;500;600;700`)
-                            .join("&")}&display=swap`}
-                        />
-                      );
-                    })()}
+                  <div className="h-full">
                     <PreviewErrorBoundary>
                       {/* Phase 5: Dev-mode validation overlay */}
                       {process.env.NODE_ENV === "development" && validationResult && (
