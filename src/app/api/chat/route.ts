@@ -1350,13 +1350,18 @@ export async function POST(req: Request) {
 
             // If DB had a legacy phase, update it to the new name
             if (normalizedPhase !== sessionRow.mode) {
-              console.warn(`[api/chat] ⚠️ LEGACY PHASE DETECTED: "${sessionRow.mode}" → "${normalizedPhase}". Session: ${sessionRow.id}. This session was created under the old 6-phase journey. Migrating to 3-phase.`);
+              // Silently migrate legacy phase names — no warning needed.
+              // These are expected for sessions created before the 3-phase migration.
               await supabase
                 .from('journey_sessions')
                 .update({ mode: normalizedPhase, updated_at: new Date().toISOString() })
                 .eq('id', sessionRow.id)
                 .eq('tenant_id', tenantId);
-              console.log('[api/chat] ✅ Migrated legacy 6-phase → 3-phase:', { from: sessionRow.mode, to: normalizedPhase });
+              console.log('[api/chat] Migrated legacy phase:', {
+                from: sessionRow.mode,
+                to: normalizedPhase,
+                sessionId: sessionRow.id,
+              });
             }
           } else {
             // Bad data in DB — don't let it crash the agent
@@ -1567,17 +1572,45 @@ export async function POST(req: Request) {
         // BUG FIX: Ensure interface exists for this journey session
         // This prevents "MISSING" interfaceId in downstream tools
         if (sessionRow && !sessionRow.preview_interface_id) {
-          const { data: newInterface, error: ifaceErr } = await supabase
+          // FIX: Reuse an existing draft interface for this tenant+source instead
+          // of creating a new one every session. This prevents orphaned interface buildup.
+          // Only create if no reusable interface exists.
+          let newInterface: { id: string } | null = null;
+          let ifaceErr: any = null;
+
+          // Step 1: Try to reuse a recent draft interface for the same source
+          const { data: existingIface } = await supabase
             .from('interfaces')
-            .insert({
-              tenant_id: tenantId,
-              name: clientData.displayName || 'Untitled Dashboard',
-              status: 'draft',
-              component_pack: 'default',
-            })
             .select('id')
-            .single();
-          if (!ifaceErr && newInterface?.id) {
+            .eq('tenant_id', tenantId)
+            .eq('status', 'draft')
+            .eq('name', clientData.displayName || 'Untitled Dashboard')
+            .is('active_version_id', null)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (existingIface?.id) {
+            newInterface = existingIface;
+            console.log('[api/chat] ♻️ Reusing existing draft interface:', { interfaceId: existingIface.id });
+          } else {
+            // Step 2: Create new only if no reusable interface found
+            const { data: created, error: createErr } = await supabase
+              .from('interfaces')
+              .insert({
+                tenant_id: tenantId,
+                name: clientData.displayName || 'Untitled Dashboard',
+                status: 'draft',
+                component_pack: 'default',
+              })
+              .select('id')
+              .single();
+            newInterface = created;
+            ifaceErr = createErr;
+          }
+
+          const originalIfaceErr = ifaceErr;
+          if (!originalIfaceErr && newInterface?.id) {
             await supabase
               .from('journey_sessions')
               .update({
@@ -1597,28 +1630,23 @@ export async function POST(req: Request) {
             // interface_id find the events.
             if (sessionRow?.source_id && newInterface.id) {
               try {
-                const { count: pendingBackfillCount, error: countErr } = await supabase
-                  .from('events')
-                  .select('id', { count: 'exact', head: true })
-                  .eq('tenant_id', tenantId)
-                  .eq('source_id', sessionRow.source_id)
-                  .is('interface_id', null);
-
-                if (countErr) {
-                  console.warn('[api/chat] Events backfill count failed (non-fatal):', countErr.message);
-                }
-
-                const { error: backfillErr } = await supabase
+                // FIX: Re-link ALL events for this source to the new interface.
+                // Events may already be linked to stale interfaces from previous sessions.
+                // The current session's interface is authoritative.
+                // Old behavior: .is('interface_id', null) — failed because events were
+                // already claimed by old interfaces. Result: 0 events backfilled every time.
+                const { count: backfilledCount, error: backfillErr } = await supabase
                   .from('events')
                   .update({ interface_id: newInterface.id })
                   .eq('tenant_id', tenantId)
                   .eq('source_id', sessionRow.source_id)
-                  .is('interface_id', null);
+                  .neq('interface_id', newInterface.id)
+                  .select('id', { count: 'exact', head: true });
 
                 if (backfillErr) {
                   console.warn('[api/chat] Events backfill failed (non-fatal):', backfillErr.message);
                 } else {
-                  console.log(`[api/chat] ✅ Backfilled ${pendingBackfillCount ?? 0} events with interface_id=${newInterface.id}`);
+                  console.log(`[api/chat] ✅ Backfilled ${backfilledCount ?? 0} events with interface_id=${newInterface.id}`);
                 }
               } catch (bfErr) {
                 console.warn('[api/chat] Events backfill error (non-fatal):', bfErr);
