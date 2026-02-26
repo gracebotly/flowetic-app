@@ -335,39 +335,100 @@ const retrieveDesignPatternsStep = createStep({
       let uxGuidelines: string[] = [];
 
       if (dtRaw) {
-        const parsed = JSON.parse(dtRaw);
+        const parsed = typeof dtRaw === 'string' ? JSON.parse(dtRaw) : dtRaw;
 
         if (parsed.rawPatterns) {
           if (parsed.rawPatterns.product) {
             for (const p of parsed.rawPatterns.product) {
-              designPatterns.push({
-                content: p.content || '',
-                source: 'product-patterns',
-                score: p.score || 0.5,
-              });
+              if (p.content && p.content.length > 0) {
+                designPatterns.push({
+                  content: p.content,
+                  source: 'product-patterns',
+                  score: p.score || 0.5,
+                });
+              }
             }
           }
           if (parsed.rawPatterns.ux) {
             for (const u of parsed.rawPatterns.ux) {
-              designPatterns.push({
-                content: u.content || '',
-                source: 'ux-guidelines',
-                score: u.score || 0.5,
-              });
+              if (u.content && u.content.length > 0) {
+                designPatterns.push({
+                  content: u.content,
+                  source: 'ux-guidelines',
+                  score: u.score || 0.5,
+                });
+              }
             }
           }
           if (parsed.rawPatterns.styles) {
             for (const s of parsed.rawPatterns.styles) {
-              designPatterns.push({
-                content: s.content || '',
-                source: 'style-patterns',
-                score: s.score || 0.5,
-              });
+              if (s.content && s.content.length > 0) {
+                designPatterns.push({
+                  content: s.content,
+                  source: 'style-patterns',
+                  score: s.score || 0.5,
+                });
+              }
             }
           }
         }
 
         uxGuidelines = parsed.uxGuidelines || [];
+      }
+
+      // ── Fallback: If rawPatterns were empty/missing from designTokens,
+      // load patterns directly from the designSystemWorkflow output via
+      // the proposals stored in journey_sessions ──
+      if (designPatterns.length === 0) {
+        console.log('[retrieveDesignPatterns] rawPatterns empty in designTokens — attempting direct DB lookup');
+        try {
+          const tenantId = requestContext.get('tenantId') as string;
+          const journeyThreadId = requestContext.get('journeyThreadId') as string;
+          const supabaseToken = requestContext.get('supabaseAccessToken') as string;
+
+          if (tenantId && journeyThreadId && supabaseToken) {
+            const { createClient } = await import('@supabase/supabase-js');
+            const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+            const supabase = createClient(supabaseUrl, supabaseToken);
+            const { data: session } = await supabase
+              .from('journey_sessions')
+              .select('proposals')
+              .eq('thread_id', journeyThreadId)
+              .eq('tenant_id', tenantId)
+              .maybeSingle();
+
+            if (session?.proposals && Array.isArray(session.proposals)) {
+              // Find the selected proposal (index 0 by default)
+              const selectedIdx = (requestContext.get('selectedProposalIndex') as number) ?? 0;
+              const proposal = session.proposals[selectedIdx];
+              if (proposal?.reasoning) {
+                designPatterns.push({
+                  content: proposal.reasoning,
+                  source: 'proposal-reasoning',
+                  score: 0.8,
+                });
+              }
+              // Extract style keywords as pattern hints
+              if (proposal?.designSystem?.style?.keywords) {
+                designPatterns.push({
+                  content: `Style direction: ${proposal.designSystem.style.keywords}`,
+                  source: 'proposal-style-keywords',
+                  score: 0.7,
+                });
+              }
+              if (proposal?.designSystem?.style?.effects) {
+                designPatterns.push({
+                  content: `Visual effects: ${proposal.designSystem.style.effects}`,
+                  source: 'proposal-style-effects',
+                  score: 0.6,
+                });
+              }
+              console.log(`[retrieveDesignPatterns] Loaded ${designPatterns.length} patterns from proposal DB fallback`);
+            }
+          }
+        } catch (dbErr) {
+          console.warn('[retrieveDesignPatterns] DB fallback for patterns failed (non-fatal):', dbErr);
+        }
       }
 
       console.log(`[retrieveDesignPatterns] Loaded ${designPatterns.length} patterns from designSystemWorkflow`);

@@ -89,6 +89,11 @@ export interface ProposalDesignSystem {
   spacing?: { unit: number };
   radius?: number;
   shadow?: string;
+  rawPatterns?: {
+    styles?: Array<{ content: string; score: number }>;
+    ux?: Array<{ content: string; score: number }>;
+    product?: Array<{ content: string; score: number }>;
+  };
 }
 
 /**

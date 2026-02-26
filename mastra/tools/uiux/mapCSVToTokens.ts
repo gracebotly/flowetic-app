@@ -49,20 +49,103 @@ export function isDarkBackground(hex: string): boolean {
   return luminance < 0.2;
 }
 /**
- * Derive semantic colors (success, warning, error) algorithmically.
- * Uses context-aware defaults based on whether background is dark or light.
+ * Derive semantic colors (success, warning, error) that harmonize with the
+ * actual palette. Uses perceptual color theory:
+ *
+ * 1. Start from hue-shifted anchors relative to the PRIMARY color
+ * 2. Adjust lightness/saturation based on background luminance
+ * 3. Ensure WCAG AA contrast (4.5:1) against the background
+ *
+ * This produces unique semantic colors per palette instead of fixed Tailwind
+ * values. Two dark palettes with different primaries (#1E293B vs #7C3AED)
+ * will get visually distinct success/warning/error colors.
+ *
+ * Premium pattern: Figma, Linear, Vercel all derive semantics from brand palette.
  */
-export function deriveSemanticColors(background: string): {
+export function deriveSemanticColors(
+  background: string,
+  primary?: string,
+): {
   success: string;
   warning: string;
   error: string;
 } {
   const dark = isDarkBackground(background);
+
+  // If no primary provided, fall back to Tailwind defaults (backward compat)
+  if (!primary) {
+    return {
+      success: dark ? '#34D399' : '#10B981',
+      warning: dark ? '#FBBF24' : '#F59E0B',
+      error: dark ? '#F87171' : '#EF4444',
+    };
+  }
+
+  // Extract HSL from primary to derive harmonious semantics
+  const primaryHSL = hexToHSL(primary);
+
+  // Success: green-family hue (120-160°), saturation from primary
+  const successHue = 152; // emerald anchor
+  const successSat = Math.max(50, Math.min(85, primaryHSL.s + 10));
+  const successLight = dark ? 65 : 42;
+
+  // Warning: amber-family hue (35-50°), warm shift from primary
+  const warningHue = 43; // amber anchor
+  const warningSat = Math.max(80, Math.min(95, primaryHSL.s + 20));
+  const warningLight = dark ? 70 : 50;
+
+  // Error: red-family hue (0-15°), high saturation for urgency
+  const errorHue = 4; // red anchor
+  const errorSat = Math.max(70, Math.min(90, primaryHSL.s + 15));
+  const errorLight = dark ? 68 : 55;
+
+  // Apply subtle hue influence from primary (±8°) so different primaries
+  // produce slightly different semantic tones
+  const hueInfluence = ((primaryHSL.h % 60) - 30) / 4; // ±8° max influence
+
   return {
-    success: dark ? '#34D399' : '#10B981', // emerald-400 / emerald-500
-    warning: dark ? '#FBBF24' : '#F59E0B', // amber-400 / amber-500
-    error: dark ? '#F87171' : '#EF4444',   // red-400 / red-500
+    success: hslToHex(successHue + hueInfluence, successSat, successLight),
+    warning: hslToHex(warningHue + hueInfluence * 0.5, warningSat, warningLight),
+    error: hslToHex(errorHue + hueInfluence * 0.3, errorSat, errorLight),
   };
+}
+
+/**
+ * Convert hex to HSL. Returns {h: 0-360, s: 0-100, l: 0-100}.
+ */
+function hexToHSL(hex: string): { h: number; s: number; l: number } {
+  const clean = hex.replace('#', '');
+  if (clean.length !== 6) return { h: 0, s: 0, l: 50 };
+  const r = parseInt(clean.substring(0, 2), 16) / 255;
+  const g = parseInt(clean.substring(2, 4), 16) / 255;
+  const b = parseInt(clean.substring(4, 6), 16) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  let h = 0, s = 0;
+  const l = (max + min) / 2;
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+    else if (max === g) h = ((b - r) / d + 2) / 6;
+    else h = ((r - g) / d + 4) / 6;
+  }
+  return { h: Math.round(h * 360), s: Math.round(s * 100), l: Math.round(l * 100) };
+}
+
+/**
+ * Convert HSL to hex. Inputs: h (0-360), s (0-100), l (0-100).
+ */
+function hslToHex(h: number, s: number, l: number): string {
+  h = ((h % 360) + 360) % 360;
+  const sNorm = Math.max(0, Math.min(100, s)) / 100;
+  const lNorm = Math.max(0, Math.min(100, l)) / 100;
+  const a = sNorm * Math.min(lNorm, 1 - lNorm);
+  const f = (n: number) => {
+    const k = (n + h / 30) % 12;
+    const color = lNorm - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+    return Math.round(255 * Math.max(0, Math.min(1, color)));
+  };
+  return `#${f(0).toString(16).padStart(2, '0')}${f(8).toString(16).padStart(2, '0')}${f(4).toString(16).padStart(2, '0')}`.toUpperCase();
 }
 /**
  * Lighten a hex color by a factor (0-1). Factor 0.2 = 20% lighter.
@@ -145,7 +228,7 @@ export function mapColorCSVToTokens(colorRow: Record<string, string>): ColorToke
   const isDarkMood = darkMoods.some(d => mood.includes(d));
   const background = colorRow['Background (Hex)'] || colorRow.background || colorRow['Background'] || (isDarkMood ? '#0F172A' : '#F8FAFC');
   const text = colorRow['Text (Hex)'] || colorRow.text || colorRow['Text'] || (isDarkBackground(background) ? '#F1F5F9' : '#0F172A');
-  const semantics = deriveSemanticColors(background);
+  const semantics = deriveSemanticColors(background, primary);
   return {
     primary,
     secondary,

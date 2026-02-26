@@ -65,7 +65,7 @@ function getResponsiveGap(baseGap: number, deviceMode: DeviceMode): number {
 }
 function getDeviceContainerStyle(deviceMode: DeviceMode, bgColor: string): React.CSSProperties {
   switch (deviceMode) {
-    case "mobile": return { maxWidth: "375px", margin: "0 auto", border: "8px solid #1f2937", borderRadius: "24px", backgroundColor: bgColor, boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)" };
+    case "mobile": return { maxWidth: "375px", margin: "0 auto", border: "4px solid #1f2937", borderRadius: "20px", backgroundColor: bgColor, boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)" };
     case "tablet": return { maxWidth: "768px", margin: "0 auto", border: "6px solid #374151", borderRadius: "16px", backgroundColor: bgColor, boxShadow: "0 20px 40px -10px rgba(0, 0, 0, 0.2)" };
     case "desktop": return { maxWidth: "100%", backgroundColor: bgColor };
   }
@@ -245,10 +245,10 @@ export function ResponsiveDashboardRenderer({ spec, designTokens, deviceMode, is
     return (
       <div style={{ ...containerStyle, ...generateTokenCSS(effectiveTokens), fontFamily: bodyFont || undefined }} className="overflow-hidden">
         {fontLink}
-        <div className="p-4">
+        <div className="p-3">
           {spec?.title && (
             <motion.h1
-              className="text-xl font-bold mb-4"
+              className="text-lg font-bold mb-3 break-words"
               style={{ color: textColor, fontFamily: headingFont || undefined }}
               initial={{ opacity: 0, y: -8 }}
               animate={{ opacity: 1, y: 0 }}
