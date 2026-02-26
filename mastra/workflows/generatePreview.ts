@@ -439,6 +439,39 @@ const retrieveDesignPatternsStep = createStep({
               `[retrieveDesignPatterns] Direct BM25 search added ${newPatterns.length} patterns from layoutQuery: "${dataSignals.layoutQuery.substring(0, 60)}..."`
             );
           }
+
+          // ── Targeted ui-reasoning search for must_have/if_ layout rules ──
+          // The general BM25 search returns results from all 11 CSV domains.
+          // ui-reasoning rows (must_have, if_ conditional rules) get drowned
+          // out by style/color rows with higher term frequency. This targeted
+          // search specifically looks for layout reasoning rules.
+          try {
+            const reasoningQuery = `must_have ${dataSignals.dataStory || ''} ${dataSignals.eventDensity || ''} layout dashboard`.trim();
+            const reasoningResults = await workspace.search(reasoningQuery, {
+              topK: 10,
+              mode: 'bm25',
+            });
+
+            let reasoningCount = 0;
+            for (const result of reasoningResults) {
+              const domain = result.metadata?.domain || '';
+              const content = result.content || '';
+              // Only accept results from ui-reasoning domain
+              if ((domain === 'ui-reasoning' || domain === 'reasoning' || result.id?.includes('uiux-reasoning')) && content.length > 0) {
+                if (!designPatterns.some(p => p.content === content)) {
+                  designPatterns.push({
+                    content,
+                    source: 'ui-reasoning-targeted',
+                    score: result.score ?? 0,
+                  });
+                  reasoningCount++;
+                }
+              }
+            }
+            console.log(`[retrieveDesignPatterns] Targeted ui-reasoning search added ${reasoningCount} layout rules`);
+          } catch (reasoningErr) {
+            console.warn('[retrieveDesignPatterns] Targeted ui-reasoning search failed (non-fatal):', reasoningErr);
+          }
         }
       } catch (bm25Err) {
         console.warn('[retrieveDesignPatterns] Direct BM25 search failed (non-fatal):', bm25Err);

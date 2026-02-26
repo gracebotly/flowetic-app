@@ -1097,8 +1097,13 @@ function extractLayoutHints(
   hints.preferDarkMode = allContent.includes('dark mode') || allContent.includes('dark theme') || allContent.includes('dark palette');
   hints.emphasisColor = allContent.includes('trust') && allContent.includes('blue') ? 'trust-blue' : undefined;
 
-  // Parse must_have / if_ JSON rules from skill CSV patterns
+  // Parse must_have / if_ rules from skill CSV patterns.
+  // Two formats exist:
+  //   1. JSON blobs: {"must_have": "value", "if_condition": "rule"}
+  //   2. CSV text: must_have: "value", if_condition: "rule"
+  // Both formats are emitted by BM25 search over ui-reasoning.csv rows.
   for (const pattern of designPatterns) {
+    // Format 1: JSON blobs (from direct skill content)
     const jsonMatches = pattern.content.match(/\{[^}]*"must_have"[^}]*\}/g);
     if (jsonMatches) {
       for (const jsonStr of jsonMatches) {
@@ -1112,6 +1117,33 @@ function extractLayoutHints(
             }
           }
         } catch { /* non-fatal */ }
+      }
+    }
+
+    // Format 2: CSV text (from BM25 search over ui-reasoning.csv rows)
+    // Matches patterns like: must_have: "real-time-updates" or must_have: high-contrast
+    if (!jsonMatches || jsonMatches.length === 0) {
+      const csvMustHave = pattern.content.match(/must_have[:\s]+["']?([^"',\n|]+)/gi);
+      if (csvMustHave) {
+        for (const match of csvMustHave) {
+          const value = match.replace(/^must_have[:\s]+["']?/i, '').replace(/["']$/, '').trim();
+          if (value && !hints.mustHaveRules.includes(value)) {
+            hints.mustHaveRules.push(value);
+          }
+        }
+      }
+      const csvIfRules = pattern.content.match(/if_[a-z_]+[:\s]+["']?([^"',\n|]+)/gi);
+      if (csvIfRules) {
+        for (const match of csvIfRules) {
+          const eqIdx = match.indexOf(':');
+          if (eqIdx > 0) {
+            const key = match.substring(0, eqIdx).trim();
+            const value = match.substring(eqIdx + 1).replace(/["'\s]/g, '').trim();
+            if (key && value) {
+              hints.conditionalRules[key] = value;
+            }
+          }
+        }
       }
     }
   }
