@@ -1,28 +1,52 @@
-# Semantic field rules for n8n workflow automation platform events.
+# Semantic field rules for Vapi voice AI platform events.
 #
-# This file is read by the deterministic generateMapping pipeline —
-# NOT by the conversational agent. It defines which fields are identifiers,
-# which are dimensions, which are measures, and how they relate.
-#
-# Field names here MUST match what the n8n import route puts into event.state and event.labels.
-# Source of truth for field names: src/app/api/connections/inventory/n8n/import/route.ts
+# Read by the deterministic generateMapping pipeline via applySemanticOverrides().
+# Field names here MUST match what the Vapi import route puts into event.state and event.labels.
+# Source of truth for field names: src/app/api/connections/inventory/vapi/import/route.ts
 #
 # Schema validated by: mastra/lib/semantics/fieldSemantics.ts (Zod)
 # Consumed by: mastra/tools/generateMapping.ts → applySemanticOverrides()
 
 version: 1
-entity_type: workflow_run
-platform: n8n
+entity_type: assistant_call
+platform: vapi
 
 field_rules:
+  call_id:
+    semantic_type: surrogate_key
+    chart_eligible: false
+    aggregation: count
+    role: hero
+    display_name: Total Calls
+    reason: "Surrogate key — count for KPI card, never chart as category"
+
+  assistant_id:
+    semantic_type: identifier
+    references: assistant_name
+    chart_eligible: false
+    aggregation: count
+    role: hero
+    display_name: Total Assistants
+    reason: "FK to assistant — use assistant_name for display labels"
+
+  assistant_name:
+    semantic_type: dimension
+    chart_eligible: true
+    component_preference: PieChart
+    max_pie_cardinality: 6
+    aggregation: count_per_category
+    role: breakdown
+    display_name: Assistant
+    reason: "Human-readable assistant label — primary breakdown dimension"
+
   workflow_id:
     semantic_type: identifier
     references: workflow_name
     chart_eligible: false
     aggregation: count
     role: hero
-    display_name: Total Workflows
-    reason: "Foreign key to workflow — use workflow_name for display labels"
+    display_name: Total Assistants
+    reason: "Vapi import maps assistant_id to workflow_id in state — identifier"
 
   workflow_name:
     semantic_type: dimension
@@ -31,16 +55,16 @@ field_rules:
     max_pie_cardinality: 6
     aggregation: count_per_category
     role: breakdown
-    display_name: Workflow
-    reason: "Human-readable workflow label — primary breakdown dimension"
+    display_name: Assistant
+    reason: "Vapi import maps assistant name to workflow_name in state"
 
   execution_id:
     semantic_type: surrogate_key
     chart_eligible: false
     aggregation: count
     role: hero
-    display_name: Total Runs
-    reason: "Surrogate key — count only, never chart as category"
+    display_name: Total Calls
+    reason: "Vapi import maps call.id to execution_id in state — surrogate key"
 
   status:
     semantic_type: dimension
@@ -49,7 +73,7 @@ field_rules:
     aggregation: percentage
     role: hero
     display_name: Success Rate
-    reason: "Binary status dimension — best as percentage metric"
+    reason: "Call outcome (success/unknown) — best as percentage metric"
 
   duration_ms:
     semantic_type: measure
@@ -58,7 +82,7 @@ field_rules:
     unit: ms
     role: supporting
     display_name: Avg Duration
-    reason: "Numeric measure — average is most meaningful"
+    reason: "Call length — average is most meaningful"
 
   started_at:
     semantic_type: time_dimension
@@ -83,7 +107,7 @@ field_rules:
     aggregation: none
     role: detail
     display_name: Platform
-    reason: "Constant value in single-platform context — no information content"
+    reason: "Constant value 'vapi' in single-platform context — no information content"
 
   error_message:
     semantic_type: detail
