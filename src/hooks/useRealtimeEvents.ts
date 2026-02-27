@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, type Dispatch, type SetStateAction } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 
@@ -19,6 +19,7 @@ interface UseRealtimeEventsOptions {
 
 interface UseRealtimeEventsReturn {
   events: any[];
+  setEvents: Dispatch<SetStateAction<any[]>>;
   connectionStatus: ConnectionStatus;
   connectionError: string | null;
   newEventCount: number;
@@ -148,5 +149,5 @@ export function useRealtimeEvents({
     };
   }, [sourceId, interfaceId, enabled, flushPending, resetStaleTimer]);
 
-  return { events, connectionStatus, connectionError, newEventCount, resetCount };
+  return { events, setEvents, connectionStatus, connectionError, newEventCount, resetCount };
 }

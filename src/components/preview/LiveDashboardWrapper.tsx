@@ -1,16 +1,15 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useCallback } from "react";
 import { ResponsiveDashboardRenderer } from "./ResponsiveDashboardRenderer";
 import { transformDataForComponents } from "@/lib/dashboard/transformDataForComponents";
 import { validateBeforeRender } from "@/lib/spec/validateBeforeRender";
 import { useRealtimeEvents } from "@/hooks/useRealtimeEvents";
+import { createClient } from "@/lib/supabase/client";
 import type { DeviceMode } from "@/components/vibe/editor";
 
 interface LiveDashboardWrapperProps {
-  /** safeSpec = already transformed + validated by server (SSR parity) */
   safeSpec: any;
-  /** Raw spec from version.spec_json — used for re-transformation on new events */
   rawSpec: any;
   initialEvents: any[];
   designTokens: any;
@@ -18,6 +17,7 @@ interface LiveDashboardWrapperProps {
   interfaceId: string;
   deviceMode?: DeviceMode;
   isEditing?: boolean;
+  children?: React.ReactNode;
 }
 
 export function LiveDashboardWrapper({
@@ -29,19 +29,55 @@ export function LiveDashboardWrapper({
   interfaceId,
   deviceMode = "desktop",
   isEditing = false,
+  children,
 }: LiveDashboardWrapperProps) {
-  // --- Realtime subscription ---
-  const { events, connectionStatus, connectionError, newEventCount, resetCount } =
+  const { events, setEvents, connectionStatus, connectionError, newEventCount, resetCount } =
     useRealtimeEvents({ sourceId, interfaceId, initialEvents });
 
-  // --- Date range filter (Phase 2 ready) ---
   const [dateRange, setDateRange] = useState<{
     preset: string;
     from?: Date;
     to?: Date;
   }>({ preset: "all" });
 
-  // --- Filter events by date range ---
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("events")
+        .select("*")
+        .eq("source_id", sourceId)
+        .order("created_at", { ascending: false })
+        .limit(1000);
+
+      if (data && data.length > 0) {
+        const flattened = data.map((evt: any) => {
+          const flat: Record<string, any> = { ...evt };
+          if (evt.state && typeof evt.state === "object") {
+            for (const [key, value] of Object.entries(evt.state)) {
+              if (flat[key] == null || flat[key] === "") flat[key] = value;
+            }
+            if (flat.duration_ms != null) flat.duration_ms = Number(flat.duration_ms);
+          }
+          if (evt.labels && typeof evt.labels === "object") {
+            for (const [key, value] of Object.entries(evt.labels)) {
+              if (flat[key] == null || flat[key] === "") flat[key] = value;
+            }
+          }
+          return flat;
+        });
+        setEvents(flattened);
+      }
+    } catch (err) {
+      console.error("[LiveDashboardWrapper] Refresh failed:", err);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [sourceId, setEvents]);
+
   const filteredEvents = useMemo(() => {
     if (dateRange.preset === "all") return events;
 
@@ -76,69 +112,112 @@ export function LiveDashboardWrapper({
     });
   }, [events, dateRange]);
 
-  // --- Spec computation ---
-  // Key insight: on first render (no new events yet), use safeSpec directly
-  // to guarantee SSR/client parity. Only re-transform when new events arrive.
-  const hasNewEvents = newEventCount > 0;
-
   const enrichedSpec = useMemo(() => {
-    if (!hasNewEvents) {
-      // No new events since SSR — use server-computed safeSpec as-is
+    if (!rawSpec) return safeSpec;
+    if (filteredEvents.length === 0) {
       return safeSpec;
     }
-    // New events arrived via Realtime — re-transform from rawSpec
-    if (!rawSpec || filteredEvents.length === 0) return safeSpec;
     const transformed = transformDataForComponents(rawSpec, filteredEvents);
     const validationResult = validateBeforeRender(transformed);
     return validationResult.spec ?? transformed;
-  }, [safeSpec, rawSpec, filteredEvents, hasNewEvents]);
+  }, [safeSpec, rawSpec, filteredEvents]);
 
-  // --- Connection status indicator ---
-  const statusConfig = {
-    connecting: { color: "bg-yellow-500", label: "Connecting", animate: true },
-    connected: { color: "bg-green-500", label: "Live", animate: true },
-    stale: { color: "bg-amber-500", label: "Stale", animate: false },
-    error: { color: "bg-red-500", label: "Offline", animate: false },
+  const isFilteredEmpty = dateRange.preset !== "all" && filteredEvents.length === 0 && events.length > 0;
+
+  const PRESET_LABELS: Record<string, string> = {
+    "24h": "24 hours",
+    "7d": "7 days",
+    "30d": "30 days",
   };
 
-  const status = statusConfig[connectionStatus];
-
   return (
-    <div className="relative">
-      {/* Connection status indicator */}
-      <div
-        className="absolute top-2 right-2 z-50 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/5 backdrop-blur-sm text-xs cursor-pointer"
-        onClick={resetCount}
-        title={
-          connectionError
-            ? `Error: ${connectionError}`
-            : connectionStatus === "stale"
-              ? "No events received for 30s"
-              : newEventCount > 0
-                ? "Click to reset counter"
-                : "Listening for events"
-        }
-      >
-        <div
-          className={`w-1.5 h-1.5 rounded-full ${status.color} ${status.animate ? "animate-pulse" : ""}`}
-        />
-        <span style={{ color: "var(--gf-muted, #6b7280)" }}>{status.label}</span>
-        {newEventCount > 0 && (
-          <span style={{ color: "var(--gf-muted, #6b7280)" }}>
-            +{newEventCount}
-          </span>
+    <LiveDashboardContext.Provider
+      value={{
+        dateRange,
+        setDateRange,
+        handleRefresh,
+        isRefreshing,
+        events,
+        filteredEvents,
+        connectionStatus,
+        connectionError,
+        newEventCount,
+        resetCount,
+        dashboardTitle: rawSpec?.title,
+      }}
+    >
+      {children}
+
+      <div className="relative">
+        {isFilteredEmpty ? (
+          <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
+            <div
+              className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4"
+              style={{
+                background: "linear-gradient(135deg, var(--gf-primary, #3b82f6)12, var(--gf-primary, #3b82f6)06)",
+                border: "1px solid var(--gf-border, #e5e7eb)",
+              }}
+            >
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--gf-muted, #6b7280)" strokeWidth="1.5">
+                <circle cx="12" cy="12" r="10" />
+                <polyline points="12 6 12 12 16 14" />
+              </svg>
+            </div>
+            <p
+              className="text-sm font-medium mb-1"
+              style={{ color: "var(--gf-text, #111827)" }}
+            >
+              No events in the last {PRESET_LABELS[dateRange.preset] ?? dateRange.preset}
+            </p>
+            <p
+              className="text-xs mb-4"
+              style={{ color: "var(--gf-muted, #6b7280)" }}
+            >
+              {events.length} event{events.length !== 1 ? "s" : ""} exist outside this range
+            </p>
+            <button
+              onClick={() => setDateRange({ preset: "all" })}
+              className="text-xs font-medium px-3 py-1.5 rounded-md transition-all hover:opacity-80"
+              style={{
+                color: "var(--gf-primary, #3b82f6)",
+                border: "1px solid var(--gf-primary, #3b82f6)",
+                backgroundColor: "transparent",
+              }}
+            >
+              Show all time
+            </button>
+          </div>
+        ) : (
+          <ResponsiveDashboardRenderer
+            spec={enrichedSpec}
+            designTokens={designTokens}
+            deviceMode={deviceMode}
+            isEditing={isEditing}
+          />
         )}
       </div>
-
-      {/* Phase 2 slot: <DateRangeFilter value={dateRange} onChange={setDateRange} /> */}
-
-      {/* Dashboard renderer — unchanged component */}
-      <ResponsiveDashboardRenderer
-        spec={enrichedSpec}
-        designTokens={designTokens}
-        deviceMode={deviceMode}
-        isEditing={isEditing}
-      />
-    </div>
+    </LiveDashboardContext.Provider>
   );
+}
+
+interface LiveDashboardContextValue {
+  dateRange: { preset: string; from?: Date; to?: Date };
+  setDateRange: (range: { preset: string; from?: Date; to?: Date }) => void;
+  handleRefresh: () => void;
+  isRefreshing: boolean;
+  events: any[];
+  filteredEvents: any[];
+  connectionStatus: "connecting" | "connected" | "stale" | "error";
+  connectionError: string | null;
+  newEventCount: number;
+  resetCount: () => void;
+  dashboardTitle?: string;
+}
+
+const LiveDashboardContext = React.createContext<LiveDashboardContextValue | null>(null);
+
+export function useLiveDashboard() {
+  const ctx = React.useContext(LiveDashboardContext);
+  if (!ctx) throw new Error("useLiveDashboard must be used within LiveDashboardWrapper");
+  return ctx;
 }

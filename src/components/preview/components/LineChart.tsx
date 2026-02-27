@@ -106,6 +106,7 @@ export function LineChartRenderer({ component, designTokens: dt, deviceMode, isE
               showGridLines={false}
               showYAxis={deviceMode !== "mobile"}
               curveType="natural"
+              enableAnimation={true}
               style={
                 {
                   '--color-blue-500': primary,
