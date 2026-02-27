@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createAuthenticatedClient } from "../lib/supabase";
 import { decryptSecret } from "@/lib/secrets";
 import { AuthenticatedContextSchema } from "../lib/REQUEST_CONTEXT_CONTRACT";
+import { extractPayloadFields } from '../normalizers/extractPayloadFields';
 
 const PlatformType = z.enum(["vapi", "n8n", "make", "retell"]);
 
@@ -175,7 +176,7 @@ async function fetchN8nEvents(
 
       try {
         const execRes = await fetch(
-          `${baseUrl}/api/v1/executions?workflowId=${wfId}&limit=${perWorkflowLimit}`,
+          `${baseUrl}/api/v1/executions?workflowId=${wfId}&limit=${perWorkflowLimit}&includeData=true`,
           { method: "GET", headers },
         );
 
@@ -190,6 +191,19 @@ async function fetchN8nEvents(
           // FIX: stoppedAt exists on ALL completed n8n executions (success AND error).
           // Only exec.status reliably indicates failure. Never use stoppedAt for status.
           const isError = exec.status === "error" || exec.status === "crashed";
+
+          // Extract rich payload fields from execution runData (business data)
+          let payloadFields: Record<string, unknown> = {};
+          if (exec.data?.resultData?.runData) {
+            const extraction = extractPayloadFields(
+              exec.data.resultData.runData,
+              exec.data.resultData.lastNodeExecuted,
+            );
+            if (extraction.fieldCount > 0) {
+              payloadFields = extraction.fields;
+            }
+          }
+
           allEvents.push({
             // Raw event shape that normalizeEvents expects
             type: "workflow_execution",
@@ -202,6 +216,8 @@ async function fetchN8nEvents(
               status: isError ? "error" : "success",
               platform: "n8n",
             },
+            // Pass extracted payload fields so normalizer can preserve them
+            ...payloadFields,
             timestamp: exec.startedAt || exec.createdAt || nowIso(),
             startedAt: exec.startedAt || null,
             stoppedAt: exec.stoppedAt || null,

@@ -410,8 +410,11 @@ function buildProposeBriefing(
 
     for (const insight of dataAvailability.insights) {
       if (insight.metric === 'success_rate') {
+        // insight.value is already a percentage integer (e.g. 62 for 62%)
+        // from assessDataAvailability which does: Math.round(successRate * 100)
+        // Do NOT multiply by 100 again — that produces 6200%.
         const pct = typeof insight.value === 'number'
-          ? `${Math.round(insight.value * 100)}%`
+          ? `${Math.min(100, Math.max(0, Math.round(insight.value)))}%`
           : insight.value;
         parts.push(`• Success rate: ${pct}`);
       } else if (insight.metric === 'avg_duration') {
@@ -2231,7 +2234,16 @@ export async function POST(req: Request) {
           if (proposalSession) {
             const selectedProposal = proposalSession.proposals?.proposals?.[selectedIndex];
             const designSystemBase = selectedProposal?.designSystem || null;
-            const selectedOutcome = selectedProposal?.emphasisBlend?.product >= 0.5 ? 'product' : 'dashboard';
+            // Guard: only derive 'product' outcome if platform + data actually support it.
+            // Product UI (landing-page skeleton) only makes sense for voice platforms
+            // (Vapi/Retell) or when data contains product-appropriate fields.
+            // Without this guard, a bad blend preset (product >= 0.5) on an n8n workflow
+            // would trigger Hero + Pricing + CTA instead of a dashboard.
+            const platformTypeLower = ((requestContext.get('platformType') as string) || '').toLowerCase();
+            const isProductCapable = ['vapi', 'retell'].includes(platformTypeLower);
+            const selectedOutcome = (
+              selectedProposal?.emphasisBlend?.product >= 0.5 && isProductCapable
+            ) ? 'product' : 'dashboard';
             const selectedWireframe = selectedProposal?.wireframeLayout || null;
 
             // Preserve rawPatterns from designSystemWorkflow output so

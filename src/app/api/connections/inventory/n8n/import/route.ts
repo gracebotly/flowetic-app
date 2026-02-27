@@ -4,6 +4,7 @@ import { decryptSecret } from "@/lib/secrets";
 import { workspace } from '@/mastra/workspace';
 import { indexWorkflowToWorkspace, clearSourceWorkflows } from '@/mastra/lib/workflowIndexer';
 import { generateSkillMd, type WorkflowData } from '@/mastra/lib/skillMdGenerator';
+import { extractPayloadFields } from '@/mastra/normalizers/extractPayloadFields';
 
 export const runtime = "nodejs";
 
@@ -171,7 +172,7 @@ export async function POST(req: Request) {
     let recentExecutions: Array<{ id: string; status: string; startedAt: string; duration?: number; error?: string }> = [];
 
     try {
-      const execRes = await fetch(`${baseUrl}/api/v1/executions?workflowId=${wfId}&limit=20`, { method: "GET", headers });
+      const execRes = await fetch(`${baseUrl}/api/v1/executions?workflowId=${wfId}&limit=20&includeData=true`, { method: "GET", headers });
       if (execRes.ok) {
         const execData = await execRes.json();
         const executions = execData.data || execData || [];
@@ -205,6 +206,19 @@ export async function POST(req: Request) {
             ? Math.max(0, new Date(endedAt).getTime() - new Date(startedAt).getTime())
             : undefined;
 
+          // Extract rich payload fields from execution runData (business data)
+          let payloadFields: Record<string, unknown> = {};
+          if (exec.data?.resultData?.runData) {
+            const extraction = extractPayloadFields(
+              exec.data.resultData.runData,
+              exec.data.resultData.lastNodeExecuted,
+            );
+            if (extraction.fieldCount > 0) {
+              payloadFields = extraction.fields;
+              console.log(`[n8n import] Extracted ${extraction.fieldCount} fields from node "${extraction.nodeSource}" for exec ${exec.id}`);
+            }
+          }
+
           eventRows.push({
             tenant_id: membership.tenant_id,
             source_id: sourceId,
@@ -222,6 +236,7 @@ export async function POST(req: Request) {
               duration_ms: durationMs,
               error_message: isError ? (exec.data?.resultData?.error?.message || '') : undefined,
               platform: 'n8n',
+              ...payloadFields,
             },
             labels: {
               workflow_id: wfId,
