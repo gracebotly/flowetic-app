@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { notFound } from "next/navigation";
 import { ResponsiveDashboardRenderer } from "@/components/preview/ResponsiveDashboardRenderer";
+import { LiveDashboardWrapper } from "@/components/preview/LiveDashboardWrapper";
 import { transformDataForComponents } from "@/lib/dashboard/transformDataForComponents";
 import { validateBeforeRender } from "@/lib/spec/validateBeforeRender";
 
@@ -59,6 +60,8 @@ export default async function PreviewPage({ params }: PreviewPageProps) {
   // 2. Fetch event data using service client (bypasses RLS for public preview)
   //    This is safe because we scope to the specific interface_id / source_id
   let resolvedEvents: any[] = [];
+  let resolvedSourceId: string | null = null;
+  let resolvedTenantId: string | null = null;
   try {
     const svc = createServiceClient();
 
@@ -193,6 +196,51 @@ export default async function PreviewPage({ params }: PreviewPageProps) {
     console.error("[PreviewPage] Service client error:", err);
   }
 
+  // 2c. Resolve sourceId + tenantId for Realtime subscription
+  //     Tenant boundary: derive tenant_id from interfaces table (interface owns the tenant),
+  //     then scope the journey_sessions lookup by that tenant_id.
+  try {
+    const svc = createServiceClient();
+
+    // First: get tenant_id from the interface (authoritative tenant boundary)
+    const { data: iface } = await svc
+      .from("interfaces")
+      .select("tenant_id")
+      .eq("id", dashboardId)
+      .maybeSingle();
+
+    if (iface?.tenant_id) {
+      resolvedTenantId = iface.tenant_id;
+    }
+
+    // Try to extract sourceId from fetched events
+    if (resolvedEvents.length > 0) {
+      const firstWithSourceId = resolvedEvents.find((e: any) => e.source_id);
+      if (firstWithSourceId) {
+        resolvedSourceId = firstWithSourceId.source_id;
+      }
+    }
+
+    // Fallback: query journey_sessions scoped by tenant_id
+    if (!resolvedSourceId && resolvedTenantId) {
+      const { data: sessionForSourceId } = await svc
+        .from("journey_sessions")
+        .select("source_id")
+        .eq("preview_interface_id", dashboardId)
+        .eq("tenant_id", resolvedTenantId)
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (sessionForSourceId?.source_id) {
+        resolvedSourceId = sessionForSourceId.source_id;
+      }
+    }
+  } catch {
+    // Non-critical — Realtime just won't connect
+    console.warn("[PreviewPage] Could not resolve sourceId for Realtime");
+  }
+
   // 3. Inject event data into spec components
   const enrichedSpec = transformDataForComponents(
     version.spec_json,
@@ -240,28 +288,53 @@ export default async function PreviewPage({ params }: PreviewPageProps) {
           )}
         </div>
       )}
-      <ResponsiveDashboardRenderer
-        spec={safeSpec}
-        designTokens={{
-          colors:
-            version.design_tokens?.colors ??
-            version.design_tokens?.theme?.colors ?? { primary: "#3b82f6" },
-          borderRadius: version.design_tokens?.radius ?? version.design_tokens?.borderRadius ?? 8,
-          shadow: (() => {
-            const raw = version.design_tokens?.shadow;
-            if (!raw || raw === 'soft') return '0 1px 3px rgba(0,0,0,0.08), 0 4px 6px rgba(0,0,0,0.04)';
-            if (raw === 'medium') return '0 4px 6px rgba(0,0,0,0.1), 0 10px 15px rgba(0,0,0,0.05)';
-            if (raw === 'hard') return '0 10px 25px rgba(0,0,0,0.15)';
-            if (raw === 'none') return 'none';
-            // If it looks like a CSS value already, use it
-            if (typeof raw === 'string' && raw.includes('px')) return raw;
-            return '0 1px 3px rgba(0,0,0,0.08), 0 4px 6px rgba(0,0,0,0.04)';
-          })(),
-          fonts: version.design_tokens?.fonts ?? undefined,
-        }}
-        deviceMode="desktop"
-        isEditing={false}
-      />
+      {resolvedSourceId ? (
+        <LiveDashboardWrapper
+          safeSpec={safeSpec}
+          rawSpec={version.spec_json}
+          initialEvents={resolvedEvents}
+          designTokens={{
+            colors:
+              version.design_tokens?.colors ??
+              version.design_tokens?.theme?.colors ?? { primary: "#3b82f6" },
+            borderRadius: version.design_tokens?.radius ?? version.design_tokens?.borderRadius ?? 8,
+            shadow: (() => {
+              const raw = version.design_tokens?.shadow;
+              if (!raw || raw === 'soft') return '0 1px 3px rgba(0,0,0,0.08), 0 4px 6px rgba(0,0,0,0.04)';
+              if (raw === 'medium') return '0 4px 6px rgba(0,0,0,0.1), 0 10px 15px rgba(0,0,0,0.05)';
+              if (raw === 'hard') return '0 10px 25px rgba(0,0,0,0.15)';
+              if (raw === 'none') return 'none';
+              if (typeof raw === 'string' && raw.includes('px')) return raw;
+              return '0 1px 3px rgba(0,0,0,0.08), 0 4px 6px rgba(0,0,0,0.04)';
+            })(),
+            fonts: version.design_tokens?.fonts ?? undefined,
+          }}
+          sourceId={resolvedSourceId}
+          interfaceId={dashboardId}
+        />
+      ) : (
+        <ResponsiveDashboardRenderer
+          spec={safeSpec}
+          designTokens={{
+            colors:
+              version.design_tokens?.colors ??
+              version.design_tokens?.theme?.colors ?? { primary: "#3b82f6" },
+            borderRadius: version.design_tokens?.radius ?? version.design_tokens?.borderRadius ?? 8,
+            shadow: (() => {
+              const raw = version.design_tokens?.shadow;
+              if (!raw || raw === 'soft') return '0 1px 3px rgba(0,0,0,0.08), 0 4px 6px rgba(0,0,0,0.04)';
+              if (raw === 'medium') return '0 4px 6px rgba(0,0,0,0.1), 0 10px 15px rgba(0,0,0,0.05)';
+              if (raw === 'hard') return '0 10px 25px rgba(0,0,0,0.15)';
+              if (raw === 'none') return 'none';
+              if (typeof raw === 'string' && raw.includes('px')) return raw;
+              return '0 1px 3px rgba(0,0,0,0.08), 0 4px 6px rgba(0,0,0,0.04)';
+            })(),
+            fonts: version.design_tokens?.fonts ?? undefined,
+          }}
+          deviceMode="desktop"
+          isEditing={false}
+        />
+      )}
     </div>
   );
 }
