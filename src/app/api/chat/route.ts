@@ -377,9 +377,9 @@ async function handleDeterministicSelectEntity(params: {
 //
 // Subsequent propose messages (user asking questions, selecting) go through agent.
 /**
- * Build a premium "data briefing" message for the propose phase.
- * Shows the user what data was analyzed — conveys intelligence.
- * Does NOT list proposal titles (those render as visual cards in the right panel).
+ * Build a "data story" briefing for the propose phase.
+ * Uses Goal Explorer LLM reasoning to tell the user what their data means
+ * and what each proposal can do — NOT a raw field dump.
  */
 function buildProposeBriefing(
   workflowName: string,
@@ -394,91 +394,126 @@ function buildProposeBriefing(
     availableFields: string[];
     fieldShapes: Record<string, string>;
   } | null,
+  goalExplorer?: {
+    source: 'llm' | 'fallback';
+    reasoning: string;
+    category: string;
+    goals: Array<{ title: string; pitch: string; focusMetrics: string[]; emphasis: { dashboard: number; product: number; analytics: number } }>;
+  } | null,
 ): string {
   const parts: string[] = [];
 
-  parts.push(`I connected to your ${platformType} instance and analyzed **${workflowName}**.`);
+  if (!dataAvailability || dataAvailability.totalEvents === 0) {
+    parts.push('No execution data found yet.');
+    parts.push('');
+    parts.push('**Run your workflow 2–3 times** in n8n (test runs work perfectly), then come back — even 2 executions give me enough to design dashboards with real metrics.');
+    return parts.join('\n');
+  }
+
+  // ── Opening: what I analyzed ────────────────────────────────────
+  const timeDesc = dataAvailability.timeSpanHours < 24
+    ? `${Math.round(dataAvailability.timeSpanHours)} hours`
+    : `${Math.round(dataAvailability.timeSpanHours / 24)} days`;
+  parts.push(`I analyzed **${dataAvailability.totalEvents} executions** of your ${platformType} workflow over ${timeDesc}.`);
   parts.push('');
 
-  if (dataAvailability && dataAvailability.totalEvents > 0) {
-    parts.push('📊 **Your Data Profile**');
+  // ── The data story: what's happening in their workflow ──────────
+  // Pull key stats to build a narrative, not a bullet list
+  const successInsight = dataAvailability.insights.find(i => i.metric === 'success_rate');
+  const durationInsight = dataAvailability.insights.find(i => i.metric === 'avg_duration');
+  const errorInsight = dataAvailability.insights.find(i => i.metric === 'error_count');
+  const frequencyInsight = dataAvailability.insights.find(i => i.metric === 'event_frequency');
 
-    const timeDesc = dataAvailability.timeSpanHours < 24
-      ? `${Math.round(dataAvailability.timeSpanHours)} hours`
-      : `${Math.round(dataAvailability.timeSpanHours / 24)} days`;
-    parts.push(`• ${dataAvailability.totalEvents} executions over ${timeDesc}`);
+  const successRate = successInsight
+    ? (typeof successInsight.value === 'number' ? Math.round(successInsight.value) : successInsight.value)
+    : null;
+  const errorCount = errorInsight ? Number(errorInsight.value) : 0;
+  const avgDuration = durationInsight ? durationInsight.value : null;
 
-    // ── Core execution metrics ────────────────────────────────────
-    for (const insight of dataAvailability.insights) {
-      if (insight.metric === 'success_rate') {
-        const pct = typeof insight.value === 'number'
-          ? `${Math.min(100, Math.max(0, Math.round(insight.value)))}%`
-          : insight.value;
-        parts.push(`• Success rate: ${pct}`);
-      } else if (insight.metric === 'avg_duration') {
-        parts.push(`• Avg duration: ${insight.value}${insight.unit ? insight.unit : 'ms'}`);
-      } else if (insight.metric === 'error_count' && Number(insight.value) > 0) {
-        parts.push(`• ${insight.value} errors detected`);
-      } else if (insight.metric === 'event_frequency') {
-        parts.push(`• ~${insight.value} ${insight.unit || 'events/day'}`);
-      }
-    }
+  // Determine the story angle based on archetype + data shape
+  const category = goalExplorer?.category || 'general';
+  const isOpsMonitoring = ['ops_monitoring', 'data_integration'].includes(category);
+  const isClientFacing = ['client_reporting', 'lead_pipeline'].includes(category);
+  const isAnalytics = ['ai_automation', 'content_automation', 'voice_analytics'].includes(category);
 
-    // ── Enriched business metrics (Phase 3) ──────────────────────
-    const enrichedInsights = dataAvailability.insights.filter(i =>
-      !['success_rate', 'avg_duration', 'error_count', 'fail_count', 'event_frequency',
-        'median_duration', 'min_duration', 'max_duration', 'time_span',
-        'status_distribution', 'enriched_field_count'].includes(i.metric)
-    );
-
-    if (enrichedInsights.length > 0) {
-      parts.push('');
-      parts.push('🔍 **Business Intelligence**');
-
-      for (const insight of enrichedInsights.slice(0, 6)) {
-        if (insight.metric.endsWith('_distribution')) {
-          // Categorical distribution: "Industry Breakdown: Technology: 3, Finance: 2"
-          parts.push(`• ${insight.label}: ${insight.value}`);
-        } else if (insight.metric.endsWith('_rate')) {
-          // Conversion/qualification rate: "Qualified Rate: 43%"
-          const pct = typeof insight.value === 'number'
-            ? `${Math.min(100, Math.max(0, Math.round(insight.value)))}%`
-            : insight.value;
-          parts.push(`• ${insight.label}: ${pct}`);
-        } else if (insight.metric.startsWith('avg_')) {
-          // Numeric average: "Avg Budget: 120000"
-          const val = typeof insight.value === 'number' ? insight.value.toLocaleString() : insight.value;
-          parts.push(`• ${insight.label}: ${val}${insight.unit ? ` ${insight.unit}` : ''}`);
-        }
-      }
-    }
-
-    // ── Trackable fields summary ─────────────────────────────────
-    const usableFields = dataAvailability.availableFields
-      .filter(f => dataAvailability.fieldShapes[f] !== 'identifier')
-      .slice(0, 8);
-    if (usableFields.length > 0) {
-      parts.push('');
-      parts.push(`• ${usableFields.length} trackable fields: ${usableFields.map(f => f.replace(/_/g, ' ')).join(', ')}`);
-    }
-
-    parts.push('');
-
-    if (proposalCount === 1) {
-      parts.push(`Based on this data profile, I've designed **1 dashboard option** — check it out on the right.`);
+  // Build the health narrative
+  if (successRate !== null) {
+    if (Number(successRate) >= 90) {
+      parts.push(`Your workflow is running strong — **${successRate}% success rate**${avgDuration ? ` with ${avgDuration}ms average execution time` : ''}.`);
+    } else if (Number(successRate) >= 60) {
+      parts.push(`Your workflow shows a **${successRate}% success rate**${avgDuration ? ` (avg ${avgDuration}ms)` : ''}${errorCount > 0 ? ` with **${errorCount} errors** worth investigating` : ''}.`);
     } else {
-      parts.push(`Based on this data profile, I've designed **${proposalCount} dashboard options** — check them out on the right.`);
+      parts.push(`I'm seeing a **${successRate}% success rate** with **${errorCount} errors** across your executions${avgDuration ? ` (avg ${avgDuration}ms)` : ''} — there's a clear story here about what's failing and why.`);
     }
   } else {
-    parts.push(`I connected to your n8n instance and analyzed **${workflowName}**.`);
-    parts.push('');
-    parts.push('No execution data found yet. I generated proposals based on your workflow structure.');
-    parts.push('');
-    parts.push('**💡 To get data-driven dashboards:** Run your workflow 2–3 times in n8n (test or real runs both work), then come back. Even 2 executions give me enough to show success rates, timing trends, and field-level metrics.');
-    parts.push('');
-    if (proposalCount > 0) {
-      parts.push(`In the meantime, I've designed **${proposalCount} dashboard ${proposalCount === 1 ? 'option' : 'options'}** based on your workflow structure — check ${proposalCount === 1 ? 'it' : 'them'} out on the right. Once you have execution data, I can refine these with real metrics.`);
+    parts.push(`I found ${dataAvailability.totalEvents} executions${avgDuration ? ` averaging ${avgDuration}ms each` : ''}.`);
+  }
+
+  if (frequencyInsight) {
+    parts.push(` You're running about **${frequencyInsight.value} executions per day**.`);
+  }
+  parts.push('');
+
+  // ── Business intelligence discoveries ──────────────────────────
+  const enrichedInsights = dataAvailability.insights.filter(i =>
+    !['success_rate', 'avg_duration', 'error_count', 'fail_count', 'event_frequency',
+      'median_duration', 'min_duration', 'max_duration', 'time_span',
+      'status_distribution', 'enriched_field_count', 'total_events'].includes(i.metric)
+  );
+
+  if (enrichedInsights.length > 0) {
+    // Frame the business data discovery as what it enables, not what it is
+    const distributions = enrichedInsights.filter(i => i.metric.endsWith('_distribution'));
+    const constants = enrichedInsights.filter(i => i.metric.endsWith('_constant'));
+
+    if (distributions.length > 0) {
+      parts.push('I also found rich business data I can use:');
+      for (const d of distributions.slice(0, 4)) {
+        parts.push(`• **${d.label}:** ${d.value}`);
+      }
+      parts.push('');
     }
+  }
+
+  // ── What I can build: the story angle per proposal ─────────────
+  if (goalExplorer && goalExplorer.goals.length > 0 && goalExplorer.source === 'llm') {
+    // Use the LLM's intelligent pitches — these are data-aware and context-aware
+    parts.push(`Here's what I can build with this data:`);
+    parts.push('');
+
+    for (const goal of goalExplorer.goals) {
+      // Frame errors vs success based on emphasis blend
+      const isProductView = goal.emphasis.product >= 0.4;
+      const isOpsView = goal.emphasis.dashboard >= 0.5 && goal.emphasis.analytics < 0.3;
+
+      if (isProductView && errorCount > 0 && Number(successRate) >= 70) {
+        // Client-facing: focus on success, hide errors
+        parts.push(`**${goal.title}** — ${goal.pitch} Focused on showcasing your successful outputs to clients.`);
+      } else if (isOpsView && errorCount > 0) {
+        // Ops monitoring: errors are the point
+        parts.push(`**${goal.title}** — ${goal.pitch} Includes error tracking so you can catch issues early.`);
+      } else {
+        parts.push(`**${goal.title}** — ${goal.pitch}`);
+      }
+    }
+  } else {
+    // Fallback: generate a data-aware story without LLM goals
+    if (isOpsMonitoring && errorCount > 0) {
+      parts.push(`With ${errorCount} errors in your recent runs, I'll build you a dashboard that highlights failure patterns so you can fix them — plus a success view for when things are running smoothly.`);
+    } else if (isClientFacing) {
+      parts.push(`I'll design a clean, client-ready view that showcases your workflow results — success metrics front and center, with the operational details tucked away for your internal use.`);
+    } else if (isAnalytics) {
+      parts.push(`Your data has enough variety for deep analytics — I can show you trends over time, breakdowns by category, and help you optimize performance.`);
+    } else {
+      parts.push(`I can build you dashboards that track execution health, visualize your business data, and give you real-time insight into how your workflow performs.`);
+    }
+  }
+
+  parts.push('');
+  if (proposalCount === 1) {
+    parts.push(`Check out the design I've prepared on the right — pick it to start building, or tell me what you'd like to adjust.`);
+  } else {
+    parts.push(`I've designed **${proposalCount} options** on the right — each takes a different angle on your data. Pick one to start building, or tell me what matters most to you.`);
   }
 
   return parts.join('\n');
@@ -639,11 +674,27 @@ async function handleDeterministicPropose(params: {
     let responseText: string;
     // FIX B1: Data briefing instead of listing proposal titles.
     // Proposal titles/pitches are already shown as visual cards in the right panel.
+    // Extract Goal Explorer output for the data story briefing
+    const goalExplorerForBriefing = result.payload?.context?.goalExplorer
+      ? {
+          source: result.payload.context.goalExplorer.source,
+          reasoning: result.payload.context.goalExplorer.reasoning,
+          category: result.archetype,
+          goals: result.proposals.map(p => ({
+            title: p.title,
+            pitch: p.pitch,
+            focusMetrics: (p as any).wireframeLayout?.sections?.flatMap((s: any) => s.focusMetrics || []) || [],
+            emphasis: p.emphasisBlend,
+          })),
+        }
+      : null;
+
     responseText = buildProposeBriefing(
       workflowName,
       platformType,
       result.proposals.length,
       result.dataAvailability || null,
+      goalExplorerForBriefing,
     );
 
     const stream = createUIMessageStream({
