@@ -155,6 +155,7 @@ async function assessDataAvailability(
   supabase: any,
   tenantId: string,
   sourceId?: string,
+  workflowName?: string,
 ): Promise<DataAvailability> {
   const empty: DataAvailability = {
     totalEvents: 0,
@@ -181,6 +182,13 @@ async function assessDataAvailability(
 
     if (sourceId) {
       query = query.eq('source_id', sourceId);
+    }
+
+    // ✅ FIX: Scope to specific workflow when the user selected one.
+    // Without this, a single n8n source with 3 workflows returns all events.
+    if (workflowName) {
+      query = query.eq('state->>workflow_name', workflowName);
+      console.log(`[assessDataAvailability] Scoping to workflow: "${workflowName}"`);
     }
 
     const { data: events, count } = await query;
@@ -656,6 +664,7 @@ interface GenerateProposalsResult {
   proposals: Proposal[];
   payload: ProposalsPayload;
   archetype: Archetype;
+  dataAvailability?: DataAvailability | null;
   error?: string;
   /** Timing info for observability */
   timing: {
@@ -1037,6 +1046,7 @@ export async function generateProposals(
       input.supabase,
       input.tenantId,
       input.sourceId,
+      input.workflowName, // ✅ Scope to selected workflow
     );
     console.log(`[generateProposals] Data availability: ${dataAvailability.dataRichness} — ${dataAvailability.totalEvents} events, ${dataAvailability.usableFieldCount} usable fields, types: [${dataAvailability.eventTypes.join(', ')}]`);
   }
@@ -1294,6 +1304,7 @@ export async function generateProposals(
     proposals,
     payload,
     archetype: goalResult.category,
+    dataAvailability,
     timing: { classifyMs, designSystemMs: dsMs, totalMs },
   };
 }

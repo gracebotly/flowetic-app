@@ -58,6 +58,12 @@ export const getRecentEventSamples = createTool({
       query = query.eq("source_id", sourceId);
     }
 
+    // ✅ FIX: Scope to selected workflow
+    const selectedWorkflowName = (context?.requestContext as any)?.get('selectedWorkflowName') as string | undefined;
+    if (selectedWorkflowName) {
+      query = query.eq('state->>workflow_name', selectedWorkflowName);
+    }
+
     const { data: events, error } = await query;
 
     if (error) {
