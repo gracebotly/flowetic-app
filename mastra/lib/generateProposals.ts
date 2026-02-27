@@ -245,7 +245,7 @@ async function assessDataAvailability(
         for (const [key, value] of Object.entries(event.state)) {
           fieldSet.add(key);
           if (!fieldSamples[key]) fieldSamples[key] = value;
-          // Flatten nested objects (e.g., state.body.user_name, state.research.summary)
+          // Flatten one level of nested objects (e.g., body.user_name, research.summary)
           if (value && typeof value === 'object' && !Array.isArray(value)) {
             for (const [nestedKey, nestedValue] of Object.entries(value as Record<string, unknown>)) {
               const flatKey = `${key}.${nestedKey}`;
@@ -563,6 +563,41 @@ async function assessDataAvailability(
               value: avg,
             });
           }
+        }
+      }
+
+      // Compute distribution insights for categorical business fields
+      for (const field of enrichedFields.slice(0, 15)) {
+        const shape = fieldShapes[field];
+        if (shape === 'timestamp' || shape === 'duration' || shape === 'identifier' || shape === 'numeric') continue;
+        const sample = fieldSamples[field];
+        if (sample && typeof sample === 'object') continue;
+
+        const values: string[] = [];
+        for (const event of events) {
+          let val: unknown;
+          if (field.includes('.')) {
+            const [parent, child] = field.split('.', 2);
+            val = (event.state as any)?.[parent]?.[child];
+          } else {
+            val = (event.state as any)?.[field] ?? (event.labels as any)?.[field];
+          }
+          if (val !== null && val !== undefined && val !== '') {
+            values.push(String(val));
+          }
+        }
+        if (values.length === 0) continue;
+        const unique = [...new Set(values)];
+
+        if (unique.length >= 2 && unique.length <= 10) {
+          const counts: Record<string, number> = {};
+          for (const v of values) counts[v] = (counts[v] || 0) + 1;
+          const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+          insights.push({
+            metric: `${field}_distribution`,
+            label: `${humanizeLabel(field.includes('.') ? field.split('.').pop()! : field)} Breakdown`,
+            value: sorted.map(([k, v]) => `${k}: ${v}`).join(', '),
+          });
         }
       }
 
