@@ -562,11 +562,19 @@ export function ChatWorkspace({
       ...extraData,
     };
 
+    const messagePayload: any = {
+      role: 'user',
+      parts: [{ type: 'text', text }],
+    };
+    if (extraData?.data) {
+      messagePayload.data = extraData.data;
+    }
+    if (extraData?.experimental_providerMetadata) {
+      messagePayload.experimental_providerMetadata = extraData.experimental_providerMetadata;
+    }
+
     await sendUiMessage(
-      {
-        role: 'user',
-        parts: [{ type: 'text', text }],
-      },
+      messagePayload,
       { body: payload }
     );
   }
@@ -1928,6 +1936,29 @@ return (
                           "inline-block max-w-[90%] rounded-xl px-4 py-2 bg-indigo-600 text-white"
                         )}>
                           {m.parts?.map((part, idx) => {
+                            // FIX B2: Replace raw __ACTION__ tokens with clean display
+                            if (part.type === 'text' && m.role === 'user') {
+                              const rawText = (part as any).text || '';
+                              const actionProposalMatch = rawText.match(/__ACTION__:select_proposal:(\d+)/);
+                              if (actionProposalMatch) {
+                                const pidx = parseInt(actionProposalMatch[1], 10);
+                                const pTitle = proposals?.proposals?.[pidx]?.title || `Option ${pidx + 1}`;
+                                return (
+                                  <p key={idx} className="text-sm">
+                                    ✓ Selected: <strong>{pTitle}</strong>
+                                  </p>
+                                );
+                              }
+                              if (rawText.startsWith('__ACTION__:')) {
+                                const ack = getActionAcknowledgment(rawText);
+                                return (
+                                  <p key={idx} className="text-sm text-white/80">
+                                    ✓ {ack}
+                                  </p>
+                                );
+                              }
+                            }
+
                             if (part.type === 'text') {
                               return (
                                 <div key={idx} className="whitespace-pre-wrap">
@@ -2197,7 +2228,12 @@ return (
                       setIsSelectingProposal(true);
                       setSelectedProposalIndex(index);
                       try {
-                        await sendAi(`__ACTION__:select_proposal:${index}`, {});
+                        // FIX B2: Send natural language as visible chat text,
+                        // pass action token as metadata for backend detection.
+                        const proposalTitle = proposals?.proposals?.[index]?.title || `Option ${index + 1}`;
+                        await sendAi(`I'll go with "${proposalTitle}"`, {
+                          data: { __action: `select_proposal:${index}` },
+                        });
                       } finally {
                         setTimeout(() => setIsSelectingProposal(false), 1000);
                       }

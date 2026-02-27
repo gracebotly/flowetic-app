@@ -376,6 +376,76 @@ async function handleDeterministicSelectEntity(params: {
 // 4. Stream proposals as data-proposals part + text explanation to frontend
 //
 // Subsequent propose messages (user asking questions, selecting) go through agent.
+/**
+ * Build a premium "data briefing" message for the propose phase.
+ * Shows the user what data was analyzed — conveys intelligence.
+ * Does NOT list proposal titles (those render as visual cards in the right panel).
+ */
+function buildProposeBriefing(
+  workflowName: string,
+  platformType: string,
+  proposalCount: number,
+  dataAvailability: {
+    totalEvents: number;
+    insights: Array<{ metric: string; label: string; value: string | number; unit?: string }>;
+    dataRichness: string;
+    timeSpanHours: number;
+    eventTypes: string[];
+    availableFields: string[];
+    fieldShapes: Record<string, string>;
+  } | null,
+): string {
+  const parts: string[] = [];
+
+  parts.push(`I connected to your ${platformType} instance and analyzed **${workflowName}**.`);
+  parts.push('');
+
+  if (dataAvailability && dataAvailability.totalEvents > 0) {
+    parts.push('📊 **Your Data Profile**');
+
+    const timeDesc = dataAvailability.timeSpanHours < 24
+      ? `${Math.round(dataAvailability.timeSpanHours)} hours`
+      : `${Math.round(dataAvailability.timeSpanHours / 24)} days`;
+    parts.push(`• ${dataAvailability.totalEvents} executions over ${timeDesc}`);
+
+    for (const insight of dataAvailability.insights) {
+      if (insight.metric === 'success_rate') {
+        const pct = typeof insight.value === 'number'
+          ? `${Math.round(insight.value * 100)}%`
+          : insight.value;
+        parts.push(`• Success rate: ${pct}`);
+      } else if (insight.metric === 'avg_duration') {
+        parts.push(`• Avg duration: ${insight.value}${insight.unit ? insight.unit : 'ms'}`);
+      } else if (insight.metric === 'error_count' && Number(insight.value) > 0) {
+        parts.push(`• ${insight.value} errors detected`);
+      } else if (insight.metric === 'event_frequency') {
+        parts.push(`• ~${insight.value} ${insight.unit || 'events/day'}`);
+      }
+    }
+
+    const usableFields = dataAvailability.availableFields
+      .filter(f => dataAvailability.fieldShapes[f] !== 'identifier')
+      .slice(0, 6);
+    if (usableFields.length > 0) {
+      parts.push(`• Trackable fields: ${usableFields.join(', ')}`);
+    }
+
+    parts.push('');
+
+    if (proposalCount === 1) {
+      parts.push(`Based on this data profile, I've designed **1 dashboard option** — check it out on the right.`);
+    } else {
+      parts.push(`Based on this data profile, I've designed **${proposalCount} dashboard options** — check them out on the right. I'd recommend **Option A** for the best coverage of your data.`);
+    }
+  } else {
+    parts.push(`I found limited event data so far. I've designed ${proposalCount} option${proposalCount !== 1 ? 's' : ''} based on your workflow structure — check the panel on the right.`);
+    parts.push('');
+    parts.push('Send more workflow executions through your webhook to unlock richer analytics.');
+  }
+
+  return parts.join('\n');
+}
+
 async function handleDeterministicPropose(params: {
   mastra: any;
   supabase: any;
@@ -406,7 +476,7 @@ async function handleDeterministicPropose(params: {
           await writer.write({
             type: 'text-delta',
             id: textId,
-            delta: "Here are the proposals I've prepared for your dashboard. Take a look and pick the one that fits your vision!",
+            delta: `I've analyzed your workflow and prepared ${existingSession.proposals?.proposals?.length || 'several'} dashboard option${(existingSession.proposals?.proposals?.length || 0) !== 1 ? 's' : ''} — check them out on the right panel and pick the one that fits your vision.`,
           });
           await writer.write({ type: 'text-end', id: textId });
 
@@ -528,13 +598,15 @@ async function handleDeterministicPropose(params: {
       console.error('[deterministic-propose] Failed to persist proposals:', persistError.message);
     }
 
-    const proposalNames = result.proposals.map((p, i) => `${i + 1}. **${p.title}** — ${p.pitch}`).join('\n');
     let responseText: string;
-    if (result.proposals.length === 1) {
-      responseText = `I've analyzed your ${workflowName} workflow and your current data. Based on what's available, I've designed the best dashboard I can build right now.\n\n${proposalNames}\n\nTo unlock richer dashboard options, send more event types from your workflow. Check out the preview on the right!`;
-    } else {
-      responseText = `I've analyzed your ${workflowName} workflow and generated ${result.proposals.length} tailored dashboard proposals based on your actual data.\n\n${proposalNames}\n\nCheck out the visual previews in the panel on the right. Which one speaks to you?`;
-    }
+    // FIX B1: Data briefing instead of listing proposal titles.
+    // Proposal titles/pitches are already shown as visual cards in the right panel.
+    responseText = buildProposeBriefing(
+      workflowName,
+      platformType,
+      result.proposals.length,
+      result.dataAvailability || null,
+    );
 
     const stream = createUIMessageStream({
       execute: async ({ writer }) => {
@@ -2052,7 +2124,22 @@ export async function POST(req: Request) {
         // advanced past propose, skip re-processing. Prevents infinite loop
         // when frontend double-fires __ACTION__:select_proposal.
         const actionMatch = messageText.match(/__ACTION__:select_proposal:(\d+)/);
-        if (actionMatch) {
+        // FIX B2: Also check message metadata for clean proposal selection
+        // (new path: frontend sends natural language text + __action in data field)
+        let metadataActionMatch: RegExpMatchArray | null = null;
+        if (!actionMatch) {
+          const lastUserMsg = rawMessages?.filter((m: any) => m.role === 'user')?.slice(-1)?.[0];
+          const actionData = lastUserMsg?.data?.__action
+            || lastUserMsg?.experimental_providerMetadata?.__action;
+          if (typeof actionData === 'string') {
+            metadataActionMatch = actionData.match(/select_proposal:(\d+)/);
+            if (metadataActionMatch) {
+              console.log(`[api/chat] 🎯 Proposal selection via metadata: index=${metadataActionMatch[1]}`);
+            }
+          }
+        }
+        const effectiveActionMatch = actionMatch || metadataActionMatch;
+        if (effectiveActionMatch) {
           const { data: existingSession } = await supabase
             .from('journey_sessions')
             .select('selected_proposal_index, mode')
@@ -2082,7 +2169,7 @@ export async function POST(req: Request) {
         const currentPhase = requestContext.get('phase');
         const alreadySelected = currentPhase !== 'propose' && currentPhase !== undefined;
 
-        if (actionMatch && !alreadySelected) {
+        if (effectiveActionMatch && !alreadySelected) {
           // Additional check: verify this proposal hasn't already been selected in DB
           const { data: existingSelection } = await supabase
             .from('journey_sessions')
@@ -2091,7 +2178,7 @@ export async function POST(req: Request) {
             .eq('tenant_id', tenantId)
             .maybeSingle();
 
-          const proposalIndex = parseInt(actionMatch[1], 10);
+          const proposalIndex = parseInt(effectiveActionMatch[1], 10);
 
           if (existingSelection?.selected_proposal_index === proposalIndex) {
             console.log(`[api/chat] 🛡️ Idempotency: Proposal ${proposalIndex} already selected, skipping duplicate`);
@@ -2100,7 +2187,7 @@ export async function POST(req: Request) {
             selectedIndex = proposalIndex;
             console.log(`[api/chat] 🎯 Proposal selection via __ACTION__: index=${selectedIndex}`);
           }
-        } else if (!actionMatch) {
+        } else if (!effectiveActionMatch) {
           const { classifyProposeIntent } = await import('@/lib/intent-classifier');
           const { data: propSession } = await supabase
             .from('journey_sessions')

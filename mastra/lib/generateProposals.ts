@@ -664,6 +664,7 @@ interface GenerateProposalsResult {
   proposals: Proposal[];
   payload: ProposalsPayload;
   archetype: Archetype;
+  dataAvailability?: DataAvailability | null;
   error?: string;
   /** Timing info for observability */
   timing: {
@@ -1303,6 +1304,7 @@ export async function generateProposals(
     proposals,
     payload,
     archetype: goalResult.category,
+    dataAvailability,
     timing: { classifyMs, designSystemMs: dsMs, totalMs },
   };
 }
