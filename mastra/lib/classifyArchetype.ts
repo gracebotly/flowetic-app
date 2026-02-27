@@ -98,42 +98,42 @@ const ARCHETYPE_SIGNALS: Record<Archetype, {
 const ARCHETYPE_BLEND_PRESETS: Record<Archetype, EmphasisBlend[]> = {
   ops_monitoring: [
     { dashboard: 0.8, product: 0.1, analytics: 0.1 },   // Ops command center
-    { dashboard: 0.4, product: 0.4, analytics: 0.2 },   // Client-facing ops
+    { dashboard: 0.5, product: 0.2, analytics: 0.3 },   // Client-facing ops
     { dashboard: 0.5, product: 0.0, analytics: 0.5 },   // Deep ops analytics
   ],
   lead_pipeline: [
     { dashboard: 0.6, product: 0.3, analytics: 0.1 },   // Pipeline tracker
-    { dashboard: 0.2, product: 0.7, analytics: 0.1 },   // Client portal
+    { dashboard: 0.4, product: 0.3, analytics: 0.3 },   // Client growth dashboard
     { dashboard: 0.3, product: 0.1, analytics: 0.6 },   // Conversion analytics
   ],
   voice_analytics: [
     { dashboard: 0.7, product: 0.2, analytics: 0.1 },   // Call center dashboard
-    { dashboard: 0.2, product: 0.6, analytics: 0.2 },   // Agent performance portal
+    { dashboard: 0.2, product: 0.6, analytics: 0.2 },   // Agent performance portal — ONLY archetype with product >= 0.5
     { dashboard: 0.3, product: 0.1, analytics: 0.6 },   // Sentiment deep-dive
   ],
   content_automation: [
-    { dashboard: 0.5, product: 0.4, analytics: 0.1 },   // Content calendar
-    { dashboard: 0.1, product: 0.8, analytics: 0.1 },   // Publishing portal
+    { dashboard: 0.5, product: 0.3, analytics: 0.2 },   // Content calendar
+    { dashboard: 0.3, product: 0.3, analytics: 0.4 },   // Publishing dashboard
     { dashboard: 0.3, product: 0.1, analytics: 0.6 },   // Engagement analytics
   ],
   data_integration: [
     { dashboard: 0.7, product: 0.1, analytics: 0.2 },   // Sync status board
-    { dashboard: 0.3, product: 0.5, analytics: 0.2 },   // Data portal
+    { dashboard: 0.4, product: 0.3, analytics: 0.3 },   // Data operations dashboard
     { dashboard: 0.2, product: 0.1, analytics: 0.7 },   // Pipeline analytics
   ],
   client_reporting: [
-    { dashboard: 0.3, product: 0.6, analytics: 0.1 },   // Client dashboard
-    { dashboard: 0.1, product: 0.8, analytics: 0.1 },   // White-label portal
+    { dashboard: 0.3, product: 0.3, analytics: 0.4 },   // Client dashboard
+    { dashboard: 0.2, product: 0.3, analytics: 0.5 },   // White-label analytics
     { dashboard: 0.4, product: 0.1, analytics: 0.5 },   // Executive analytics
   ],
   ai_automation: [
     { dashboard: 0.6, product: 0.2, analytics: 0.2 },   // AI ops monitor
-    { dashboard: 0.2, product: 0.6, analytics: 0.2 },   // AI product portal
+    { dashboard: 0.3, product: 0.3, analytics: 0.4 },   // AI operations dashboard
     { dashboard: 0.3, product: 0.1, analytics: 0.6 },   // AI performance analytics
   ],
   general: [
     { dashboard: 0.6, product: 0.2, analytics: 0.2 },   // Balanced overview
-    { dashboard: 0.2, product: 0.6, analytics: 0.2 },   // Client-facing
+    { dashboard: 0.3, product: 0.3, analytics: 0.4 },   // Client-facing dashboard
     { dashboard: 0.3, product: 0.1, analytics: 0.6 },   // Data-dense
   ],
 };
@@ -141,14 +141,14 @@ const ARCHETYPE_BLEND_PRESETS: Record<Archetype, EmphasisBlend[]> = {
 // ─── Proposal title templates per archetype ───────────────────────────────
 
 export const ARCHETYPE_TITLE_TEMPLATES: Record<Archetype, string[]> = {
-  ops_monitoring: ['Ops Command Center', 'Client Ops Portal', 'Deep Ops Analytics'],
-  lead_pipeline: ['Pipeline Tracker', 'Client Growth Portal', 'Conversion Analytics'],
+  ops_monitoring: ['Ops Command Center', 'Client Ops Dashboard', 'Deep Ops Analytics'],
+  lead_pipeline: ['Pipeline Tracker', 'Client Growth Dashboard', 'Conversion Analytics'],
   voice_analytics: ['Call Center Dashboard', 'Agent Performance Hub', 'Sentiment Deep-Dive'],
-  content_automation: ['Content Calendar', 'Publishing Portal', 'Engagement Analytics'],
-  data_integration: ['Sync Status Board', 'Data Portal', 'Pipeline Analytics'],
-  client_reporting: ['Client Dashboard', 'White-Label Portal', 'Executive Analytics'],
-  ai_automation: ['AI Ops Monitor', 'AI Product Portal', 'AI Performance Analytics'],
-  general: ['Workflow Overview', 'Client Portal', 'Data Analytics'],
+  content_automation: ['Content Calendar', 'Publishing Dashboard', 'Engagement Analytics'],
+  data_integration: ['Sync Status Board', 'Data Operations Dashboard', 'Pipeline Analytics'],
+  client_reporting: ['Client Dashboard', 'White-Label Analytics', 'Executive Analytics'],
+  ai_automation: ['AI Ops Monitor', 'AI Operations Dashboard', 'AI Performance Analytics'],
+  general: ['Workflow Overview', 'Client Dashboard', 'Data Analytics'],
 };
 
 // ─── Public API ────────────────────────────────────────────────────────────
