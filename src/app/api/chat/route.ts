@@ -2239,7 +2239,7 @@ export async function POST(req: Request) {
             // (Vapi/Retell) or when data contains product-appropriate fields.
             // Without this guard, a bad blend preset (product >= 0.5) on an n8n workflow
             // would trigger Hero + Pricing + CTA instead of a dashboard.
-            const platformTypeLower = (requestContext.get('platformType') as string || platformType || '').toLowerCase();
+            const platformTypeLower = ((requestContext.get('platformType') as string) || '').toLowerCase();
             const isProductCapable = ['vapi', 'retell'].includes(platformTypeLower);
             const selectedOutcome = (
               selectedProposal?.emphasisBlend?.product >= 0.5 && isProductCapable
