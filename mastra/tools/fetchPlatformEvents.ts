@@ -192,12 +192,30 @@ async function fetchN8nEvents(
           // Only exec.status reliably indicates failure. Never use stoppedAt for status.
           const isError = exec.status === "error" || exec.status === "crashed";
 
-          // Extract rich payload fields from execution runData (business data)
+          // Extract rich payload fields from execution runData (business data).
+          // List endpoint often omits runData — fallback to individual fetch.
           let payloadFields: Record<string, unknown> = {};
-          if (exec.data?.resultData?.runData) {
+          let runData = exec.data?.resultData?.runData;
+
+          if (!runData) {
+            try {
+              const detailRes = await fetch(
+                `${baseUrl}/api/v1/executions/${exec.id}?includeData=true`,
+                { method: "GET", headers },
+              );
+              if (detailRes.ok) {
+                const detailData = await detailRes.json().catch(() => ({}));
+                runData = detailData?.data?.resultData?.runData;
+              }
+            } catch {
+              // Non-fatal
+            }
+          }
+
+          if (runData) {
             const extraction = extractPayloadFields(
-              exec.data.resultData.runData,
-              exec.data.resultData.lastNodeExecuted,
+              runData,
+              exec.data?.resultData?.lastNodeExecuted,
             );
             if (extraction.fieldCount > 0) {
               payloadFields = extraction.fields;

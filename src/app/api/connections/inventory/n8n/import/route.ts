@@ -206,12 +206,33 @@ export async function POST(req: Request) {
             ? Math.max(0, new Date(endedAt).getTime() - new Date(startedAt).getTime())
             : undefined;
 
-          // Extract rich payload fields from execution runData (business data)
+          // Extract rich payload fields from execution runData (business data).
+          // The list endpoint often omits runData even with includeData=true.
+          // Fallback: fetch individual execution detail for full data.
           let payloadFields: Record<string, unknown> = {};
-          if (exec.data?.resultData?.runData) {
+          let runData = exec.data?.resultData?.runData;
+
+          if (!runData) {
+            // Fallback: fetch individual execution for full runData
+            try {
+              const detailRes = await fetch(
+                `${baseUrl}/api/v1/executions/${exec.id}?includeData=true`,
+                { method: "GET", headers },
+              );
+              if (detailRes.ok) {
+                const detailData = await detailRes.json().catch(() => ({}));
+                runData = detailData?.data?.resultData?.runData;
+              }
+            } catch (e) {
+              // Non-fatal — proceed without enriched data
+              console.warn(`[n8n import] Detail fetch failed for exec ${exec.id}:`, e);
+            }
+          }
+
+          if (runData) {
             const extraction = extractPayloadFields(
-              exec.data.resultData.runData,
-              exec.data.resultData.lastNodeExecuted,
+              runData,
+              exec.data?.resultData?.lastNodeExecuted,
             );
             if (extraction.fieldCount > 0) {
               payloadFields = extraction.fields;
