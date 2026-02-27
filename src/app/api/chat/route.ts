@@ -470,10 +470,14 @@ function buildProposeBriefing(
       parts.push(`Based on this data profile, I've designed **${proposalCount} dashboard options** — check them out on the right.`);
     }
   } else {
+    parts.push(`I connected to your n8n instance and analyzed **${workflowName}**.`);
+    parts.push('');
     parts.push('No execution data found yet. I generated proposals based on your workflow structure.');
     parts.push('');
+    parts.push('**💡 To get data-driven dashboards:** Run your workflow 2–3 times in n8n (test or real runs both work), then come back. Even 2 executions give me enough to show success rates, timing trends, and field-level metrics.');
+    parts.push('');
     if (proposalCount > 0) {
-      parts.push(`I've designed **${proposalCount} dashboard ${proposalCount === 1 ? 'option' : 'options'}** — check ${proposalCount === 1 ? 'it' : 'them'} out on the right.`);
+      parts.push(`In the meantime, I've designed **${proposalCount} dashboard ${proposalCount === 1 ? 'option' : 'options'}** based on your workflow structure — check ${proposalCount === 1 ? 'it' : 'them'} out on the right. Once you have execution data, I can refine these with real metrics.`);
     }
   }
 
