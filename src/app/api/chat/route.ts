@@ -408,11 +408,9 @@ function buildProposeBriefing(
       : `${Math.round(dataAvailability.timeSpanHours / 24)} days`;
     parts.push(`• ${dataAvailability.totalEvents} executions over ${timeDesc}`);
 
+    // ── Core execution metrics ────────────────────────────────────
     for (const insight of dataAvailability.insights) {
       if (insight.metric === 'success_rate') {
-        // insight.value is already a percentage integer (e.g. 62 for 62%)
-        // from assessDataAvailability which does: Math.round(successRate * 100)
-        // Do NOT multiply by 100 again — that produces 6200%.
         const pct = typeof insight.value === 'number'
           ? `${Math.min(100, Math.max(0, Math.round(insight.value)))}%`
           : insight.value;
@@ -426,11 +424,42 @@ function buildProposeBriefing(
       }
     }
 
+    // ── Enriched business metrics (Phase 3) ──────────────────────
+    const enrichedInsights = dataAvailability.insights.filter(i =>
+      !['success_rate', 'avg_duration', 'error_count', 'fail_count', 'event_frequency',
+        'median_duration', 'min_duration', 'max_duration', 'time_span',
+        'status_distribution', 'enriched_field_count'].includes(i.metric)
+    );
+
+    if (enrichedInsights.length > 0) {
+      parts.push('');
+      parts.push('🔍 **Business Intelligence**');
+
+      for (const insight of enrichedInsights.slice(0, 6)) {
+        if (insight.metric.endsWith('_distribution')) {
+          // Categorical distribution: "Industry Breakdown: Technology: 3, Finance: 2"
+          parts.push(`• ${insight.label}: ${insight.value}`);
+        } else if (insight.metric.endsWith('_rate')) {
+          // Conversion/qualification rate: "Qualified Rate: 43%"
+          const pct = typeof insight.value === 'number'
+            ? `${Math.min(100, Math.max(0, Math.round(insight.value)))}%`
+            : insight.value;
+          parts.push(`• ${insight.label}: ${pct}`);
+        } else if (insight.metric.startsWith('avg_')) {
+          // Numeric average: "Avg Budget: 120000"
+          const val = typeof insight.value === 'number' ? insight.value.toLocaleString() : insight.value;
+          parts.push(`• ${insight.label}: ${val}${insight.unit ? ` ${insight.unit}` : ''}`);
+        }
+      }
+    }
+
+    // ── Trackable fields summary ─────────────────────────────────
     const usableFields = dataAvailability.availableFields
       .filter(f => dataAvailability.fieldShapes[f] !== 'identifier')
-      .slice(0, 6);
+      .slice(0, 8);
     if (usableFields.length > 0) {
-      parts.push(`• Trackable fields: ${usableFields.join(', ')}`);
+      parts.push('');
+      parts.push(`• ${usableFields.length} trackable fields: ${usableFields.map(f => f.replace(/_/g, ' ')).join(', ')}`);
     }
 
     parts.push('');
@@ -438,18 +467,14 @@ function buildProposeBriefing(
     if (proposalCount === 1) {
       parts.push(`Based on this data profile, I've designed **1 dashboard option** — check it out on the right.`);
     } else {
-      parts.push(`Based on this data profile, I've designed **${proposalCount} dashboard options** — check them out on the right. I'd recommend **Option A** for the best coverage of your data.`);
+      parts.push(`Based on this data profile, I've designed **${proposalCount} dashboard options** — check them out on the right.`);
     }
   } else {
-    // Zero-data case: be specific about what was searched and found
-    parts.push(`📊 **Data Scan Results**`);
-    parts.push(`I searched for execution events from **${workflowName}** in your ${platformType} connection — **0 executions found** in the database.`);
+    parts.push('No execution data found yet. I generated proposals based on your workflow structure.');
     parts.push('');
-    parts.push(`Your workflow exists in ${platformType} but hasn't sent execution data to Flowetic yet. To populate your dashboard with real data:`);
-    parts.push(`1. Make sure your ${platformType} workflow has a webhook node that sends execution events to Flowetic`);
-    parts.push(`2. Run the workflow a few times — even 5-10 executions will give us enough to build meaningful analytics`);
-    parts.push('');
-    parts.push(`In the meantime, I've designed ${proposalCount} dashboard option${proposalCount !== 1 ? 's' : ''} based on your workflow structure — check ${proposalCount === 1 ? 'it' : 'them'} out on the right. Once data flows in, these widgets will light up automatically.`);
+    if (proposalCount > 0) {
+      parts.push(`I've designed **${proposalCount} dashboard ${proposalCount === 1 ? 'option' : 'options'}** — check ${proposalCount === 1 ? 'it' : 'them'} out on the right.`);
+    }
   }
 
   return parts.join('\n');

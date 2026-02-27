@@ -40,6 +40,9 @@ interface DataAvailability {
   canSupportTimeseries: boolean;
   canSupportBreakdowns: boolean;
   usableFieldCount: number;
+  insights: Array<{ metric: string; label: string; value: string | number; unit?: string }>;
+  supportedGoals: string[];
+  naturalSummary: string;
 }
 
 // ─── Build natural language data summary (LIDA Summarizer step) ───────────
@@ -83,6 +86,28 @@ function buildDataSummary(
   lines.push(`  Time-series possible: ${data.canSupportTimeseries ? 'yes' : 'no'}`);
   lines.push(`  Categorical breakdowns possible: ${data.canSupportBreakdowns ? 'yes' : 'no'}`);
   lines.push(`  Usable (non-ID) fields: ${data.usableFieldCount}`);
+  lines.push('');
+
+  // NEW: Include computed insights so LLM can reason about actual values
+  if (data.insights && data.insights.length > 0) {
+    lines.push('Computed statistics from actual data:');
+    for (const insight of data.insights) {
+      const unit = insight.unit ? ` ${insight.unit}` : '';
+      lines.push(`  ${insight.label}: ${insight.value}${unit}`);
+    }
+    lines.push('');
+  }
+
+  // NEW: Include supported goals so LLM knows what's feasible
+  if (data.supportedGoals && data.supportedGoals.length > 0) {
+    lines.push(`Supported visualization goals: ${data.supportedGoals.join(', ')}`);
+    lines.push('');
+  }
+
+  // NEW: Include the natural language summary for grounding
+  if (data.naturalSummary && data.naturalSummary !== 'No event data available yet.') {
+    lines.push(`Data summary: ${data.naturalSummary}`);
+  }
 
   return lines.join('\n');
 }

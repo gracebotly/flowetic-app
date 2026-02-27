@@ -136,11 +136,42 @@ interface DataAvailability {
 
 function inferFieldShape(fieldName: string, sampleValue: unknown): DataAvailability['fieldShapes'][string] {
   const name = fieldName.toLowerCase();
-  if (name.includes('status') || name.includes('state') || name.includes('result') || name.includes('outcome')) return 'status';
-  if (name.includes('_at') || name.includes('time') || name.includes('date') || name.includes('timestamp')) return 'timestamp';
-  if (name.includes('duration') || name.includes('elapsed') || name.includes('_ms') || name.includes('_seconds')) return 'duration';
+
+  // ── Identifiers (skip these for visualization) ────────────────────
   if (name.includes('_id') || name === 'id') return 'identifier';
-  if (typeof sampleValue === 'number') return 'numeric';
+
+  // ── Status / binary (categorical with few values) ─────────────────
+  if (name.includes('status') || name.includes('state') || name.includes('result') || name.includes('outcome')) return 'status';
+  // Boolean fields: qualified, is_hot, approved, active, etc.
+  if (typeof sampleValue === 'boolean') return 'status';
+  if (name.startsWith('is_') || name.startsWith('has_') || name === 'qualified' || name === 'approved' || name === 'active') return 'status';
+
+  // ── Timestamps ────────────────────────────────────────────────────
+  if (name.includes('_at') || name.includes('time') || name.includes('date') || name.includes('timestamp')) return 'timestamp';
+
+  // ── Durations ─────────────────────────────────────────────────────
+  if (name.includes('duration') || name.includes('elapsed') || name.includes('_ms') || name.includes('_seconds')) return 'duration';
+
+  // ── Numeric: distinguish rates/scores from raw numbers ────────────
+  if (typeof sampleValue === 'number' || (typeof sampleValue === 'string' && !isNaN(Number(sampleValue)) && sampleValue.trim() !== '')) {
+    // Scores and rates (0-100 range, or field name suggests it)
+    if (name.includes('score') || name.includes('rating') || name.includes('rate') || name.includes('confidence') || name.includes('percent')) return 'numeric';
+    // Money / budget / revenue (large numbers or money-related names)
+    if (name.includes('budget') || name.includes('cost') || name.includes('price') || name.includes('revenue') || name.includes('amount') || name.includes('spend')) return 'numeric';
+    return 'numeric';
+  }
+
+  // ── Categorical text (known business dimension fields) ────────────
+  // These are LOW cardinality text fields that make great breakdowns/pie charts.
+  // The name-based heuristic catches common business fields from n8n workflow outputs.
+  const CATEGORICAL_PATTERNS = [
+    'industry', 'sector', 'category', 'type', 'segment', 'tier',
+    'source', 'channel', 'region', 'country', 'city', 'department',
+    'priority', 'level', 'stage', 'phase', 'plan', 'size',
+    'lead_source', 'campaign', 'referral', 'medium',
+  ];
+  if (CATEGORICAL_PATTERNS.some(pat => name === pat || name.includes(pat))) return 'status';
+
   return 'text';
 }
 
@@ -442,6 +473,96 @@ async function assessDataAvailability(
         metric: 'total_events',
         label: 'Total Events',
         value: totalEvents,
+      });
+    }
+
+    // ── Step 3: NEW — Enriched field insights (from Phase 2 payload extraction) ──
+    // Analyze extracted business fields (not just base execution fields).
+    // These fields were added by extractPayloadFields() in Phase 2.
+    const BASE_FIELDS = new Set([
+      'workflow_id', 'workflow_name', 'execution_id', 'status',
+      'started_at', 'ended_at', 'duration_ms', 'error_message', 'platform',
+      'platformType',
+    ]);
+
+    const enrichedFields = availableFields.filter(f => !BASE_FIELDS.has(f));
+    const enrichedFieldCount = enrichedFields.length;
+
+    if (enrichedFieldCount > 0) {
+      // Upgrade dataRichness based on enriched fields
+      if (enrichedFieldCount >= 8 && totalEvents >= 5) {
+        dataRichness = 'rich';
+      } else if (enrichedFieldCount >= 4 && totalEvents >= 3) {
+        dataRichness = dataRichness === 'minimal' ? 'moderate' : (dataRichness === 'sparse' ? 'moderate' : dataRichness);
+      }
+
+      // Compute insights from enriched categorical fields
+      for (const field of enrichedFields) {
+        const shape = fieldShapes[field];
+        if (shape === 'identifier' || shape === 'timestamp' || shape === 'duration') continue;
+
+        // Collect values across events
+        const values: unknown[] = [];
+        for (const event of events) {
+          const val = getFieldValue(event, field);
+          if (val !== null && val !== undefined && val !== '') {
+            values.push(val);
+          }
+        }
+        if (values.length === 0) continue;
+
+        if (shape === 'status') {
+          // Categorical: compute distribution
+          const distribution: Record<string, number> = {};
+          for (const v of values) {
+            const key = String(v);
+            distribution[key] = (distribution[key] || 0) + 1;
+          }
+          const entries = Object.entries(distribution).sort((a, b) => b[1] - a[1]);
+          const topEntries = entries.slice(0, 4);
+          const distStr = topEntries.map(([k, v]) => `${k}: ${v}`).join(', ');
+          insights.push({
+            metric: `${field}_distribution`,
+            label: `${humanizeLabel(field)} Breakdown`,
+            value: distStr,
+          });
+
+          // If it's a boolean-ish field, compute conversion rate
+          if (entries.length === 2) {
+            const trueKeys = ['true', 'yes', '1', 'hot', 'qualified', 'approved', 'active', 'success'];
+            const positiveEntry = entries.find(([k]) => trueKeys.includes(k.toLowerCase()));
+            if (positiveEntry) {
+              const rate = Math.round((positiveEntry[1] / values.length) * 100);
+              insights.push({
+                metric: `${field}_rate`,
+                label: `${humanizeLabel(field)} Rate`,
+                value: rate,
+                unit: '%',
+              });
+              if (!supportedGoals.includes('status_breakdown')) {
+                supportedGoals.push('status_breakdown');
+              }
+            }
+          }
+        } else if (shape === 'numeric') {
+          // Numeric: compute avg, min, max
+          const nums = values.map(v => Number(v)).filter(n => !isNaN(n));
+          if (nums.length >= 2) {
+            const avg = Math.round(nums.reduce((a, b) => a + b, 0) / nums.length);
+            insights.push({
+              metric: `avg_${field}`,
+              label: `Avg ${humanizeLabel(field)}`,
+              value: avg,
+            });
+          }
+        }
+      }
+
+      // Add enriched field count as insight
+      insights.push({
+        metric: 'enriched_field_count',
+        label: 'Business Data Fields',
+        value: enrichedFieldCount,
       });
     }
 
