@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import type { DeviceMode } from "@/components/vibe/editor";
 import { deriveMuted, deriveSurface, isColorDark, resolveComponentType, type ComponentSpec, type DesignTokens, type RendererProps } from "./componentRegistry";
 import { sanitizeProps } from "@/lib/spec/propSchemas";
+import { ActionMenu } from "./controls/ActionMenu";
 
 // Dashboard components (always loaded — 90% of renders)
 import { MetricCardRenderer } from "./components/MetricCard";
@@ -122,10 +123,28 @@ interface ResponsiveDashboardRendererProps {
   deviceMode: DeviceMode;
   isEditing?: boolean;
   onWidgetClick?: (widgetId: string) => void;
+  events?: any[];
+  filteredEvents?: any[];
+  dashboardTitle?: string;
+  onDrillDown?: (result: any) => void;
+  onRefresh?: () => void;
+  onToast?: (message: string, success: boolean) => void;
 }
 
 // ── Main component ──
-export function ResponsiveDashboardRenderer({ spec, designTokens, deviceMode, isEditing = false, onWidgetClick }: ResponsiveDashboardRendererProps) {
+export function ResponsiveDashboardRenderer({
+  spec,
+  designTokens,
+  deviceMode,
+  isEditing = false,
+  onWidgetClick,
+  events = [],
+  filteredEvents = [],
+  dashboardTitle,
+  onDrillDown,
+  onRefresh,
+  onToast,
+}: ResponsiveDashboardRendererProps) {
   const components = spec?.components ?? [];
   const layout = spec?.layout ?? { type: "grid", columns: 12, gap: 16 };
   const baseColumns = typeof layout === "object" ? layout.columns ?? 12 : 12;
@@ -243,7 +262,7 @@ export function ResponsiveDashboardRenderer({ spec, designTokens, deviceMode, is
   // Mobile/Tablet: Stack vertically + container queries + staggered animations
   if (deviceMode === "mobile" || deviceMode === "tablet") {
     return (
-      <div style={{ ...containerStyle, ...generateTokenCSS(effectiveTokens), fontFamily: bodyFont || undefined }} className="overflow-hidden">
+      <div data-dashboard-root style={{ ...containerStyle, ...generateTokenCSS(effectiveTokens), fontFamily: bodyFont || undefined }} className="overflow-hidden">
         {fontLink}
         <div className="p-3">
           {spec?.title && (
@@ -284,7 +303,7 @@ export function ResponsiveDashboardRenderer({ spec, designTokens, deviceMode, is
                 return (
                   <motion.div
                     key={comp.id}
-                    className="@container relative"
+                    className="@container relative group"
                     style={tabletSpan ? { gridColumn: `span ${tabletSpan}` } : undefined}
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -296,6 +315,18 @@ export function ResponsiveDashboardRenderer({ spec, designTokens, deviceMode, is
                   >
                     <>
                     <Renderer component={{ ...comp, type: resolved, props: sanitizeProps(resolved, comp.props ?? {}) }} designTokens={effectiveTokens} deviceMode={deviceMode} isEditing={isEditing} onClick={() => onWidgetClick?.(comp.id)} />
+                    <ActionMenu
+                      componentId={comp.id}
+                      componentType={resolved}
+                      componentTitle={comp.props?.title || comp.props?.label}
+                      componentProps={comp.props}
+                      events={events}
+                      filteredEvents={filteredEvents}
+                      dashboardTitle={dashboardTitle}
+                      onDrillDown={onDrillDown}
+                      onRefresh={onRefresh}
+                      onToast={onToast}
+                    />
                     {isEditing && comp.meta?.reason && (
                       <div
                         className="absolute top-1 right-1 z-10"
@@ -371,7 +402,7 @@ export function ResponsiveDashboardRenderer({ spec, designTokens, deviceMode, is
 
   // Desktop: Full grid with positioning + container queries + staggered animations
   return (
-    <div style={{ ...containerStyle, ...generateTokenCSS(effectiveTokens), fontFamily: bodyFont || undefined }} className="overflow-hidden">
+    <div data-dashboard-root style={{ ...containerStyle, ...generateTokenCSS(effectiveTokens), fontFamily: bodyFont || undefined }} className="overflow-hidden">
       {fontLink}
       <div className="p-6">
         {spec?.title && (
@@ -406,7 +437,7 @@ export function ResponsiveDashboardRenderer({ spec, designTokens, deviceMode, is
               return (
                 <motion.div
                   key={comp.id}
-                  className="@container min-w-0 relative"
+                  className="@container min-w-0 relative group"
                   style={{
                     gridColumn: `${(comp.layout?.col ?? 0) + 1} / span ${Math.min(comp.layout?.w ?? 4, baseColumns - (comp.layout?.col ?? 0))}`,
                     gridRow: `${(comp.layout?.row ?? 0) + 1} / span ${comp.layout?.h ?? 2}`,
@@ -422,6 +453,18 @@ export function ResponsiveDashboardRenderer({ spec, designTokens, deviceMode, is
                 >
                   <>
                     <Renderer component={{ ...comp, type: resolved, props: sanitizeProps(resolved, comp.props ?? {}) }} designTokens={effectiveTokens} deviceMode={deviceMode} isEditing={isEditing} onClick={() => onWidgetClick?.(comp.id)} />
+                    <ActionMenu
+                      componentId={comp.id}
+                      componentType={resolved}
+                      componentTitle={comp.props?.title || comp.props?.label}
+                      componentProps={comp.props}
+                      events={events}
+                      filteredEvents={filteredEvents}
+                      dashboardTitle={dashboardTitle}
+                      onDrillDown={onDrillDown}
+                      onRefresh={onRefresh}
+                      onToast={onToast}
+                    />
                     {isEditing && comp.meta?.reason && (
                       <div
                         className="absolute top-1 right-1 z-10"
