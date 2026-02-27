@@ -245,6 +245,14 @@ async function assessDataAvailability(
         for (const [key, value] of Object.entries(event.state)) {
           fieldSet.add(key);
           if (!fieldSamples[key]) fieldSamples[key] = value;
+          // Flatten nested objects (e.g., state.body.user_name, state.research.summary)
+          if (value && typeof value === 'object' && !Array.isArray(value)) {
+            for (const [nestedKey, nestedValue] of Object.entries(value as Record<string, unknown>)) {
+              const flatKey = `${key}.${nestedKey}`;
+              fieldSet.add(flatKey);
+              if (!fieldSamples[flatKey]) fieldSamples[flatKey] = nestedValue;
+            }
+          }
         }
       }
     }
@@ -766,6 +774,7 @@ interface DesignSystemResult {
 
 interface GenerateProposalsInput {
   workflowName: string;
+  workflowExternalId?: string; // Platform-native ID for event filtering (e.g., n8n workflow ID)
   platformType: string;
   selectedEntities: string;
   tenantId: string;
@@ -1179,9 +1188,34 @@ export async function generateProposals(
       input.supabase,
       input.tenantId,
       input.sourceId,
-      input.workflowName, // ✅ Scope to selected workflow
+      input.workflowExternalId || input.workflowName, // Use platform ID for event filtering
     );
     console.log(`[generateProposals] Data availability: ${dataAvailability.dataRichness} — ${dataAvailability.totalEvents} events, ${dataAvailability.usableFieldCount} usable fields, types: [${dataAvailability.eventTypes.join(', ')}]`);
+
+    // Guard: Do NOT generate proposals with zero execution data.
+    // Structure-only proposals mislead users into thinking we analyzed their data.
+    if (dataAvailability.totalEvents === 0) {
+      console.log('[generateProposals] ⚠️ Zero events — skipping proposal generation. User needs to run their workflow first.');
+      return {
+        success: false,
+        proposals: [],
+        payload: {
+          proposals: [],
+          generatedAt: new Date().toISOString(),
+          context: {
+            workflowName: input.workflowName,
+            platformType: input.platformType,
+            selectedEntities: input.selectedEntities,
+            archetype: 'general' as any,
+            dataAvailability,
+          },
+        },
+        archetype: 'general' as any,
+        error: 'NO_EXECUTION_DATA',
+        dataAvailability,
+        timing: { classifyMs: 0, designSystemMs: 0, totalMs: Date.now() - totalStart },
+      };
+    }
   }
 
   // Step 1b: LLM Goal Explorer — replaces classifyArchetype as primary brain.

@@ -567,6 +567,10 @@ async function handleDeterministicPropose(params: {
 
       if (entityRow?.display_name) {
         workflowName = entityRow.display_name;
+        // Also set the external_id for event filtering in generateProposals
+        if (entityRow.external_id) {
+          requestContext.set('selectedWorkflowName', entityRow.external_id);
+        }
         console.log('[deterministic-propose] Resolved entity:', {
           entityId: entityRow.id,
           displayName: entityRow.display_name,
@@ -602,8 +606,23 @@ async function handleDeterministicPropose(params: {
 
     const { generateProposals } = await import('@/mastra/lib/generateProposals');
 
+    // Resolve external_id for event filtering — events store platform workflow ID
+    let workflowExternalId = workflowName; // fallback
+    if (existingSession.entity_id) {
+      const { data: entityForFilter } = await supabase
+        .from('source_entities')
+        .select('external_id')
+        .eq('id', existingSession.entity_id)
+        .eq('tenant_id', tenantId)
+        .maybeSingle();
+      if (entityForFilter?.external_id) {
+        workflowExternalId = entityForFilter.external_id;
+      }
+    }
+
     const result = await generateProposals({
       workflowName,
+      workflowExternalId, // NEW: for event filtering (state->>workflow_name)
       platformType,
       selectedEntities,
       tenantId,
@@ -615,6 +634,23 @@ async function handleDeterministicPropose(params: {
     });
 
     if (!result.success || result.proposals.length === 0) {
+      // Special case: zero execution data → tell user to run their workflow
+      if (result.error === 'NO_EXECUTION_DATA') {
+        console.log('[deterministic-propose] No execution data available — prompting user to run workflow');
+        const stream = createUIMessageStream({
+          execute: async ({ writer }) => {
+            const textId = generateId();
+            await writer.write({ type: 'text-start', id: textId });
+            await writer.write({
+              type: 'text-delta',
+              id: textId,
+              delta: `I connected to your workflow successfully, but I don't see any execution data yet.\n\n**To generate an intelligent dashboard, I need real data to work with.** Run your workflow 2–3 times in n8n (test runs work perfectly), then come back — even 2 executions give me enough to design dashboards with real success rates, timing metrics, and field-level insights.\n\n💡 **Quick test:** Send a test request to your webhook endpoint, wait for it to complete, then refresh this chat.`,
+            });
+            await writer.write({ type: 'text-end', id: textId });
+          },
+        });
+        return stream;
+      }
       console.warn('[deterministic-propose] Generation failed:', result.error);
       return null;
     }
@@ -1020,7 +1056,7 @@ async function handleDeterministicBuildPreview(params: {
     if (session.entity_id) {
       const { data: entityRow } = await supabase
         .from('source_entities')
-        .select('id, display_name, entity_kind')
+        .select('id, display_name, entity_kind, external_id')
         .eq('id', session.entity_id)
         .eq('tenant_id', tenantId)
         .maybeSingle();
@@ -1036,6 +1072,9 @@ async function handleDeterministicBuildPreview(params: {
           .replace(/:operation$/i, '')
           .replace(/:call$/i, '')
           .trim();
+        if (entityRow.external_id) {
+          requestContext.set('selectedWorkflowName', entityRow.external_id);
+        }
         console.log('[deterministic-build-preview] Resolved entity:', {
           entityId: entityRow.id,
           displayName: entityRow.display_name,
@@ -1417,7 +1456,7 @@ export async function POST(req: Request) {
 
         const { data: byThreadId } = await supabase
           .from('journey_sessions')
-          .select('id, mode, source_id, preview_interface_id, selected_style_bundle_id, selected_entities, selected_outcome, selected_layout, schema_ready, wireframe_confirmed, design_tokens, style_confirmed')
+          .select('id, mode, source_id, entity_id, preview_interface_id, selected_style_bundle_id, selected_entities, selected_outcome, selected_layout, schema_ready, wireframe_confirmed, design_tokens, style_confirmed')
           .eq('thread_id', cleanJourneyThreadId)
           .eq('tenant_id', tenantId)
           .maybeSingle();
@@ -1428,7 +1467,7 @@ export async function POST(req: Request) {
           // Fallback: query by mastra_thread_id (in case thread was created that way)
           const { data: byMastraId } = await supabase
             .from('journey_sessions')
-            .select('id, mode, source_id, preview_interface_id, selected_style_bundle_id, selected_entities, selected_outcome, selected_layout, schema_ready, wireframe_confirmed, design_tokens, style_confirmed')
+            .select('id, mode, source_id, entity_id, preview_interface_id, selected_style_bundle_id, selected_entities, selected_outcome, selected_layout, schema_ready, wireframe_confirmed, design_tokens, style_confirmed')
             .eq('mastra_thread_id', cleanMastraThreadId)
             .eq('tenant_id', tenantId)
             .maybeSingle();
@@ -1644,12 +1683,26 @@ export async function POST(req: Request) {
         }
         if (sessionRow?.selected_entities) {
           requestContext.set('selectedEntities', sessionRow.selected_entities);
-          // Propagate workflow name for event scoping — when the user selects a
-          // specific workflow entity, downstream queries must filter by this name.
-          // selected_entities contains the workflow name (e.g., "Template 2: Website Chatbot Analytics Aggregator")
-          requestContext.set('selectedWorkflowName', sessionRow.selected_entities);
+
+          // Resolve external_id for event filtering — events store platform ID, not display name
+          if (sessionRow.entity_id) {
+            const { data: entityForScope } = await supabase
+              .from('source_entities')
+              .select('external_id')
+              .eq('id', sessionRow.entity_id)
+              .eq('tenant_id', tenantId)
+              .maybeSingle();
+
+            if (entityForScope?.external_id) {
+              requestContext.set('selectedWorkflowName', entityForScope.external_id);
+            } else {
+              requestContext.set('selectedWorkflowName', sessionRow.selected_entities);
+            }
+          } else {
+            requestContext.set('selectedWorkflowName', sessionRow.selected_entities);
+          }
           console.log('[api/chat] Loaded selectedEntities from DB:', sessionRow.selected_entities);
-          console.log('[api/chat] Loaded selectedWorkflowName from DB:', sessionRow.selected_entities);
+          console.log('[api/chat] Loaded selectedWorkflowName from DB context');
         }
         if (sessionRow?.source_id) {
           requestContext.set('sourceId', sessionRow.source_id);
