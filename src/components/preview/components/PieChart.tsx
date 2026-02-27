@@ -20,7 +20,7 @@ export function PieChartRenderer({ component, designTokens: dt, deviceMode, isEd
       <div className={deviceMode === "mobile" ? "p-3" : "p-4"}>
         <h3 className="text-sm font-semibold mb-3" style={{ color: textColor, fontFamily: headingFont || undefined }}>{title}</h3>
         <div className="min-h-[200px]">
-          <DonutChart className="h-full" data={chartData} category="value" index="name" colors={[primary, secondary, accent]} showLabel={true} />
+          <DonutChart className="h-full" data={chartData} category="value" index="name" colors={[primary, secondary, accent]} showLabel={true} {...({ enableAnimation: true } as any)} />
         </div>
       </div>
     </div>

@@ -3,6 +3,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { notFound } from "next/navigation";
 import { ResponsiveDashboardRenderer } from "@/components/preview/ResponsiveDashboardRenderer";
 import { LiveDashboardWrapper } from "@/components/preview/LiveDashboardWrapper";
+import { PreviewControlBar } from "./PreviewControlBar";
 import { transformDataForComponents } from "@/lib/dashboard/transformDataForComponents";
 import { validateBeforeRender } from "@/lib/spec/validateBeforeRender";
 
@@ -311,7 +312,9 @@ export default async function PreviewPage({ params }: PreviewPageProps) {
           }}
           sourceId={resolvedSourceId}
           interfaceId={dashboardId}
-        />
+        >
+          <PreviewControlBar />
+        </LiveDashboardWrapper>
       ) : (
         <ResponsiveDashboardRenderer
           spec={safeSpec}

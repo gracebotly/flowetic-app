@@ -67,6 +67,7 @@ export function BarChartRenderer({ component, designTokens: dt, deviceMode, isEd
               colors={["blue", "slate"]}
               showLegend={false}
               showGridLines={false}
+              enableAnimation={true}
               style={
                 {
                   '--color-blue-500': primary,
