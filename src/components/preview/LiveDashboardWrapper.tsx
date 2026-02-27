@@ -7,6 +7,10 @@ import { validateBeforeRender } from "@/lib/spec/validateBeforeRender";
 import { useRealtimeEvents } from "@/hooks/useRealtimeEvents";
 import { createClient } from "@/lib/supabase/client";
 import type { DeviceMode } from "@/components/vibe/editor";
+import { CommandPalette } from "./controls/CommandPalette";
+import { ActionToastContainer, useActionToast } from "./controls/ActionToast";
+import { DrillDownModal } from "./controls/DrillDownModal";
+import type { ActionResult } from "@/lib/actions/actionRegistry";
 
 interface LiveDashboardWrapperProps {
   safeSpec: any;
@@ -78,6 +82,18 @@ export function LiveDashboardWrapper({
     }
   }, [sourceId, setEvents]);
 
+  // Level 3: Action system state
+  const { toasts, showToast, dismiss: dismissToast } = useActionToast();
+  const [drillDownResult, setDrillDownResult] = useState<ActionResult | null>(null);
+
+  const handleDrillDown = useCallback((result: ActionResult) => {
+    if (result.success && result.filteredEvents) {
+      setDrillDownResult(result);
+    } else {
+      showToast(result.message, result.success);
+    }
+  }, [showToast]);
+
   const filteredEvents = useMemo(() => {
     if (dateRange.preset === "all") return events;
 
@@ -122,6 +138,11 @@ export function LiveDashboardWrapper({
     return validationResult.spec ?? transformed;
   }, [safeSpec, rawSpec, filteredEvents]);
 
+  // Extract components for Command Palette (Level 3)
+  const specComponents = useMemo(() => {
+    return enrichedSpec?.components ?? [];
+  }, [enrichedSpec]);
+
   const isFilteredEmpty = dateRange.preset !== "all" && filteredEvents.length === 0 && events.length > 0;
 
   const PRESET_LABELS: Record<string, string> = {
@@ -147,6 +168,29 @@ export function LiveDashboardWrapper({
       }}
     >
       {children}
+
+      {/* Level 3: Command Palette (⌘K) */}
+      <CommandPalette
+        components={specComponents}
+        events={events}
+        filteredEvents={filteredEvents}
+        dashboardTitle={rawSpec?.title}
+        onDrillDown={handleDrillDown}
+        onRefresh={handleRefresh}
+        onToast={showToast}
+      />
+
+      {/* Level 3: Drill Down Modal */}
+      {drillDownResult && (
+        <DrillDownModal
+          result={drillDownResult}
+          onClose={() => setDrillDownResult(null)}
+          dashboardTitle={rawSpec?.title}
+        />
+      )}
+
+      {/* Level 3: Toast Notifications */}
+      <ActionToastContainer toasts={toasts} onDismiss={dismissToast} />
 
       <div className="relative">
         {isFilteredEmpty ? (
@@ -193,6 +237,12 @@ export function LiveDashboardWrapper({
             designTokens={designTokens}
             deviceMode={deviceMode}
             isEditing={isEditing}
+            events={events}
+            filteredEvents={filteredEvents}
+            dashboardTitle={rawSpec?.title}
+            onDrillDown={handleDrillDown}
+            onRefresh={handleRefresh}
+            onToast={showToast}
           />
         )}
       </div>
