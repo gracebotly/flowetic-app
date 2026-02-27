@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { extractPayloadFields } from "@/mastra/normalizers/extractPayloadFields";
+import { extractPayloadFields } from "../../../../../mastra/normalizers/extractPayloadFields";
 import { decryptSecret } from "@/lib/secrets";
 
 export const maxDuration = 60;
