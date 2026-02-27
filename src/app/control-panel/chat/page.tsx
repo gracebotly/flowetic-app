@@ -442,10 +442,17 @@ export default function ControlPanelChatWizardPage() {
             />
             <button
               type="button"
-              onClick={loadContext}
-              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+              onClick={async () => {
+                const conn = connections.find((c) => c.platformType === selectedPlatform);
+                if (conn?.sourceId) {
+                  await handleRefreshEvents(conn.sourceId);
+                }
+                loadContext();
+              }}
+              disabled={refreshing}
+              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
             >
-              Refresh
+              {refreshing ? "Refreshing..." : "Refresh"}
             </button>
           </div>
 
@@ -484,34 +491,9 @@ export default function ControlPanelChatWizardPage() {
               </div>
             )}
 
-            <div className="mt-4 text-center space-y-2">
-              <button
-                type="button"
-                onClick={() => {
-                  const conn = connections.find((c) => c.platformType === selectedPlatform);
-                  const selected = filteredIndexedForPlatform.find((e) => e.id === selectedEntityId);
-                  handleRefreshEvents(conn?.sourceId, selected?.externalId || undefined);
-                  loadContext();
-                }}
-                disabled={refreshing}
-                className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-              >
-                {refreshing ? (
-                  <>
-                    <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25" />
-                      <path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" className="opacity-75" />
-                    </svg>
-                    Refreshing...
-                  </>
-                ) : (
-                  "Refresh Data"
-                )}
-              </button>
-              {refreshMsg && (
-                <div className="text-xs text-gray-500">{refreshMsg}</div>
-              )}
-            </div>
+            {refreshMsg && (
+              <div className="mt-4 text-center text-xs text-gray-500">{refreshMsg}</div>
+            )}
           </div>
         </div>
       ) : null}
