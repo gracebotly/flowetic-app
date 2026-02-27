@@ -214,6 +214,7 @@ export const ProposeIntentSchema = z.object({
     'select_second',
     'select_third',
     'regenerate',
+    'custom_vision', // User describes a specific UI they want ("I want a client portal", "build me an error tracker", "I need a form where clients submit requests")
     'question',
     'other',
   ]),
@@ -230,7 +231,7 @@ export async function classifyProposeIntent(
   const result = await classifyIntent(
     {
       phase: 'propose',
-      contextHint: `User has been shown ${proposalCount} dashboard proposals (visual cards with wireframes, color swatches, and descriptions). They need to pick one or request new options. Proposals are numbered 1-${proposalCount}.`,
+      contextHint: `User has been shown ${proposalCount} dashboard proposals (visual cards with wireframes, color swatches, and descriptions). They need to pick one or request new options. Proposals are numbered 1-${proposalCount}. If the user describes a specific UI they want to build — like "I want a client portal", "build me an error tracker", "I need a form where clients submit data", "make me a landing page for my workflow" — classify as 'custom_vision'. This is different from 'question' (which asks ABOUT proposals) and 'other' (which is off-topic).`,
       schema: ProposeIntentSchema,
       userMessage,
     },
