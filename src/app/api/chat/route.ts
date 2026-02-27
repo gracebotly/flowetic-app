@@ -438,9 +438,15 @@ function buildProposeBriefing(
       parts.push(`Based on this data profile, I've designed **${proposalCount} dashboard options** — check them out on the right. I'd recommend **Option A** for the best coverage of your data.`);
     }
   } else {
-    parts.push(`I found limited event data so far. I've designed ${proposalCount} option${proposalCount !== 1 ? 's' : ''} based on your workflow structure — check the panel on the right.`);
+    // Zero-data case: be specific about what was searched and found
+    parts.push(`📊 **Data Scan Results**`);
+    parts.push(`I searched for execution events from **${workflowName}** in your ${platformType} connection — **0 executions found** in the database.`);
     parts.push('');
-    parts.push('Send more workflow executions through your webhook to unlock richer analytics.');
+    parts.push(`Your workflow exists in ${platformType} but hasn't sent execution data to Flowetic yet. To populate your dashboard with real data:`);
+    parts.push(`1. Make sure your ${platformType} workflow has a webhook node that sends execution events to Flowetic`);
+    parts.push(`2. Run the workflow a few times — even 5-10 executions will give us enough to build meaningful analytics`);
+    parts.push('');
+    parts.push(`In the meantime, I've designed ${proposalCount} dashboard option${proposalCount !== 1 ? 's' : ''} based on your workflow structure — check ${proposalCount === 1 ? 'it' : 'them'} out on the right. Once data flows in, these widgets will light up automatically.`);
   }
 
   return parts.join('\n');

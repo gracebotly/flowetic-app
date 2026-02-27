@@ -976,19 +976,31 @@ function buildWireframeLayout(
 // ─── Pitch text generation ────────────────────────────────────────────────
 
 function generatePitch(blend: EmphasisBlend, archetype: Archetype): string {
-  const dominant = blend.dashboard >= blend.product && blend.dashboard >= blend.analytics
-    ? 'dashboard'
-    : blend.product >= blend.analytics
-      ? 'product'
-      : 'analytics';
+  // Determine the dominant emphasis
+  const dominant = Object.entries(blend).sort((a, b) => b[1] - a[1])[0][0];
 
-  const pitches: Record<string, string> = {
-    dashboard: 'Real-time monitoring with live KPIs, trend charts, and status overviews. Built for internal ops teams who need instant visibility.',
-    product: 'Clean, client-facing interface with branded styling and clear actions. Built to showcase your service value to clients.',
-    analytics: 'Data-dense analytics with drill-down capability, detailed tables, and multi-metric views. Built for teams that need deep insights.',
+  const pitchTemplates: Record<string, string[]> = {
+    dashboard: [
+      'Real-time monitoring for your automation pipeline.',
+      'At-a-glance operational insights for your workflow.',
+      'Track performance, spot issues, stay in control.',
+    ],
+    product: [
+      'A client-ready view of your automation results.',
+      'Professional reporting your clients will love.',
+      'Showcase your automation ROI to stakeholders.',
+    ],
+    analytics: [
+      'Deep-dive analytics to optimize your workflow.',
+      'Uncover patterns and trends in your execution data.',
+      'Data-driven insights to improve automation performance.',
+    ],
   };
 
-  return pitches[dominant] || pitches.dashboard;
+  const templates = pitchTemplates[dominant] || pitchTemplates.dashboard;
+  // Use archetype hash to pick a consistent template
+  const hash = archetype.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  return templates[hash % templates.length];
 }
 
 // ─── Outcome hint per blend ───────────────────────────────────────────────
