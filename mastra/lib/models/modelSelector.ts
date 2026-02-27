@@ -11,7 +11,7 @@ let didLogModel = false;
  * 
  * CRITICAL: Models are now LAZY (factory functions), not EAGER (pre-built instances)
  */
-export type ModelId = "glm-4.7" | "gemini-3-pro-preview" | "claude-sonnet-4-5" | "gpt-5.2";
+export type ModelId = "glm-4.7" | "gemini-3-pro-preview" | "gemini-3.1-pro-preview" | "claude-sonnet-4-5" | "gpt-5.2";
 
 export interface ModelConfig {
   id: ModelId;
@@ -27,8 +27,22 @@ export interface ModelConfig {
  */
 export const AVAILABLE_MODELS: ModelConfig[] = [
   {
+    id: "gemini-3.1-pro-preview",
+    displayName: "Gemini 3.1 Pro (Latest)",
+    provider: "google",
+    costTier: "expensive",
+    factory: () => {
+      const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+      if (!apiKey) {
+        console.warn("[ModelSelector] GOOGLE_GENERATIVE_AI_API_KEY not set, Gemini will fail");
+      }
+      const google = createGoogleGenerativeAI({ apiKey });
+      return google("gemini-3.1-pro-preview");
+    },
+  },
+  {
     id: "gemini-3-pro-preview",
-    displayName: "Gemini 3 Pro",
+    displayName: "Gemini 3 Pro (Deprecated — shutdown March 9, 2026)",
     provider: "google",
     costTier: "expensive",
     factory: () => {
@@ -80,7 +94,7 @@ export const AVAILABLE_MODELS: ModelConfig[] = [
 /**
  * Default model
  */
-export const DEFAULT_MODEL_ID: ModelId = "gemini-3-pro-preview";
+export const DEFAULT_MODEL_ID: ModelId = "gemini-3.1-pro-preview";
 
 /**
  * Get model instance by ID (lazy instantiation)
@@ -95,7 +109,7 @@ export function getModelById(modelId: ModelId | string | undefined): any {
 
   if (!config) {
     console.warn(`[ModelSelector] Unknown model ID "${normalized}", falling back to default`);
-    const defaultConfig = AVAILABLE_MODELS[0]; // Gemini 3 Pro
+    const defaultConfig = AVAILABLE_MODELS.find(m => m.id === DEFAULT_MODEL_ID) || AVAILABLE_MODELS[0];
     return defaultConfig.factory(); // ✅ Call factory
   }
 

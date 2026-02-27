@@ -58,6 +58,46 @@ export default function ControlPanelChatWizardPage() {
   // Step 2 list state
   const [q, setQ] = useState("");
   const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshMsg, setRefreshMsg] = useState<string | null>(null);
+
+  async function handleRefreshEvents(sourceId?: string, workflowExternalId?: string) {
+    let resolvedSourceId = sourceId;
+    if (!resolvedSourceId && selectedPlatform) {
+      const conn = connections.find((c) => c.platformType === selectedPlatform);
+      resolvedSourceId = conn?.sourceId;
+    }
+    if (!resolvedSourceId) {
+      setRefreshMsg("No connection found to refresh.");
+      return;
+    }
+
+    setRefreshing(true);
+    setRefreshMsg(null);
+
+    try {
+      const res = await fetch("/api/connections/refresh-events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sourceId: resolvedSourceId,
+          workflowExternalId,
+        }),
+      });
+
+      const json = await res.json().catch(() => ({}));
+
+      if (res.ok && json.ok) {
+        setRefreshMsg(json.message || `Refreshed ${json.refreshed} events.`);
+      } else {
+        setRefreshMsg(json.message || "Refresh failed.");
+      }
+    } catch (e: any) {
+      setRefreshMsg(e?.message || "Refresh failed.");
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   async function loadContext() {
     setLoading(true);
@@ -257,14 +297,31 @@ export default function ControlPanelChatWizardPage() {
             </button>
           </div>
 
-          <div className="mt-4 text-center">
+          <div className="mt-4 text-center space-y-2">
             <button
               type="button"
-              onClick={loadContext}
-              className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+              onClick={() => {
+                loadContext();
+                handleRefreshEvents();
+              }}
+              disabled={refreshing}
+              className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
             >
-              Refresh
+              {refreshing ? (
+                <>
+                  <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25" />
+                    <path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" className="opacity-75" />
+                  </svg>
+                  Refreshing...
+                </>
+              ) : (
+                "Refresh Data"
+              )}
             </button>
+            {refreshMsg && (
+              <div className="text-xs text-gray-500">{refreshMsg}</div>
+            )}
           </div>
         </div>
       ) : null}
@@ -427,14 +484,33 @@ export default function ControlPanelChatWizardPage() {
               </div>
             )}
 
-            <div className="mt-4 text-center">
+            <div className="mt-4 text-center space-y-2">
               <button
                 type="button"
-                onClick={loadContext}
-                className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+                onClick={() => {
+                  const conn = connections.find((c) => c.platformType === selectedPlatform);
+                  const selected = filteredIndexedForPlatform.find((e) => e.id === selectedEntityId);
+                  handleRefreshEvents(conn?.sourceId, selected?.externalId || undefined);
+                  loadContext();
+                }}
+                disabled={refreshing}
+                className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
               >
-                Refresh
+                {refreshing ? (
+                  <>
+                    <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25" />
+                      <path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" className="opacity-75" />
+                    </svg>
+                    Refreshing...
+                  </>
+                ) : (
+                  "Refresh Data"
+                )}
               </button>
+              {refreshMsg && (
+                <div className="text-xs text-gray-500">{refreshMsg}</div>
+              )}
             </div>
           </div>
         </div>
