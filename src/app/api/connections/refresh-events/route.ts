@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
 
   const { data: source } = await supabase
     .from("sources")
-    .select("id, type, secret, secret_hash")
+    .select("id, type, secret_hash")
     .eq("id", sourceId)
     .eq("tenant_id", tenantId)
     .maybeSingle();
@@ -58,13 +58,10 @@ export async function POST(req: NextRequest) {
 
   let secret: { apiKey?: string; instanceUrl?: string; authMode?: string; method?: string };
   try {
-    if (source.secret_hash) {
-      secret = JSON.parse(decryptSecret(source.secret_hash));
-    } else if (typeof source.secret === "string") {
-      secret = JSON.parse(source.secret);
-    } else {
-      secret = source.secret || {};
+    if (!source.secret_hash) {
+      return NextResponse.json({ ok: false, code: "MISSING_SECRET" }, { status: 400 });
     }
+    secret = JSON.parse(decryptSecret(source.secret_hash));
   } catch {
     return NextResponse.json({ ok: false, code: "INVALID_SECRET" }, { status: 500 });
   }
