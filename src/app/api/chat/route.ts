@@ -475,45 +475,62 @@ function buildProposeBriefing(
     }
   }
 
-  // ── What I can build: the story angle per proposal ─────────────
+  // ── What I can build: narrative story, NOT bullet-dumping proposal titles ──
+  // Visual cards already show titles + pitches. This section tells the DATA STORY
+  // angle: what the options mean for the user's business, without repeating card content.
   if (goalExplorer && goalExplorer.goals.length > 0 && goalExplorer.source === 'llm') {
-    // Use the LLM's intelligent pitches — these are data-aware and context-aware
-    parts.push(`Here's what I can build with this data:`);
-    parts.push('');
+    // Determine the narrative angle from the mix of proposals
+    const hasOpsView = goalExplorer.goals.some(g => g.emphasis.dashboard >= 0.5 && g.emphasis.analytics < 0.3);
+    const hasProductView = goalExplorer.goals.some(g => g.emphasis.product >= 0.4);
+    const hasAnalyticsView = goalExplorer.goals.some(g => g.emphasis.analytics >= 0.4);
 
-    for (const goal of goalExplorer.goals) {
-      // Frame errors vs success based on emphasis blend
-      const isProductView = goal.emphasis.product >= 0.4;
-      const isOpsView = goal.emphasis.dashboard >= 0.5 && goal.emphasis.analytics < 0.3;
+    if (hasOpsView && hasProductView) {
+      // Mix of internal ops + client-facing
+      parts.push(`I've designed your options around two angles: one keeps your team informed about what's running (and what's breaking), and another puts a polished view in front of your clients${errorCount > 0 && Number(successRate) >= 70 ? ' — showcasing the wins while you handle the errors behind the scenes' : ''}.`);
+    } else if (hasOpsView && errorCount > 0) {
+      // Ops-heavy with errors worth tracking
+      parts.push(`With ${errorCount} errors in your recent runs, the options I've designed focus on catching failure patterns early — but each takes a different depth. One gives you the quick pulse, another goes deeper into what's going wrong and when.`);
+    } else if (hasProductView) {
+      // Client-facing / product emphasis
+      parts.push(`Your options are designed to put your best numbers in front of clients — the kind of view that makes a retainer feel worth every dollar. Each takes a different approach to framing your workflow's output.`);
+    } else if (hasAnalyticsView) {
+      // Analytics emphasis
+      parts.push(`Your data has enough depth for real analytics. The options I've prepared range from high-level overviews to deep drill-downs — depending on how close to the data you want to get.`);
+    } else {
+      // General / mixed
+      parts.push(`Each option takes a different angle on your data — from quick executive snapshots to deeper operational views. They're designed for different audiences and use cases.`);
+    }
 
-      if (isProductView && errorCount > 0 && Number(successRate) >= 70) {
-        // Client-facing: focus on success, hide errors
-        parts.push(`**${goal.title}** — ${goal.pitch} Focused on showcasing your successful outputs to clients.`);
-      } else if (isOpsView && errorCount > 0) {
-        // Ops monitoring: errors are the point
-        parts.push(`**${goal.title}** — ${goal.pitch} Includes error tracking so you can catch issues early.`);
-      } else {
-        parts.push(`**${goal.title}** — ${goal.pitch}`);
+    // Add the reasoning from Goal Explorer if it's insightful
+    if (goalExplorer.reasoning && goalExplorer.reasoning.length > 20) {
+      // Extract the key insight from the LLM reasoning, keep it to one sentence
+      const reasoningSentences = goalExplorer.reasoning.split(/[.!]\s+/).filter(s => s.length > 15);
+      if (reasoningSentences.length > 0) {
+        const keyInsight = reasoningSentences[0].trim();
+        if (!keyInsight.toLowerCase().includes('workflow_execution') && !keyInsight.toLowerCase().includes('json')) {
+          // Only include if it reads like natural language, not technical jargon
+          parts.push(` ${keyInsight}.`);
+        }
       }
     }
   } else {
     // Fallback: generate a data-aware story without LLM goals
     if (isOpsMonitoring && errorCount > 0) {
-      parts.push(`With ${errorCount} errors in your recent runs, I'll build you a dashboard that highlights failure patterns so you can fix them — plus a success view for when things are running smoothly.`);
+      parts.push(`With ${errorCount} errors in your recent runs, I've designed options that highlight failure patterns so you can fix them — plus success views for when things are running smoothly.`);
     } else if (isClientFacing) {
-      parts.push(`I'll design a clean, client-ready view that showcases your workflow results — success metrics front and center, with the operational details tucked away for your internal use.`);
+      parts.push(`I've designed clean, client-ready views that showcase your workflow results — success metrics front and center, with the operational details tucked away for your internal use.`);
     } else if (isAnalytics) {
-      parts.push(`Your data has enough variety for deep analytics — I can show you trends over time, breakdowns by category, and help you optimize performance.`);
+      parts.push(`Your data has enough variety for real analytics — the options I've prepared show trends over time, breakdowns by category, and performance patterns.`);
     } else {
-      parts.push(`I can build you dashboards that track execution health, visualize your business data, and give you real-time insight into how your workflow performs.`);
+      parts.push(`I've designed options that track execution health, visualize your business data, and give you real-time insight into how your workflow performs.`);
     }
   }
 
   parts.push('');
   if (proposalCount === 1) {
-    parts.push(`Check out the design I've prepared on the right — pick it to start building, or tell me what you'd like to adjust.`);
+    parts.push(`Take a look at the design on the right — pick it to start building, or tell me what you'd change.`);
   } else {
-    parts.push(`I've designed **${proposalCount} options** on the right — each takes a different angle on your data. Pick one to start building, or tell me what matters most to you.`);
+    parts.push(`Take a look at the ${proposalCount} options on the right. Pick whichever fits your vision, or tell me what matters most and I'll point you to the right one.`);
   }
 
   return parts.join('\n');
@@ -2348,6 +2365,22 @@ export async function POST(req: Request) {
               selectedIndex = 1;
             } else if (classification.intent === 'select_third' && classification.confidence >= 0.7 && proposalCount >= 3) {
               selectedIndex = 2;
+            } else if (classification.intent === 'custom_vision' && classification.confidence >= 0.6) {
+              // User has their own vision — let the agent handle it with data context
+              // Don't select a proposal; fall through to agent with enriched context
+              console.log(`[api/chat] 🎨 Custom vision detected: "${messageText.substring(0, 80)}..." (confidence: ${classification.confidence})`);
+              // Inject data profile into request context so the agent can validate feasibility
+              if (propSession?.proposals?.context?.dataAvailability) {
+                requestContext.set('dataProfile', JSON.stringify({
+                  totalEvents: propSession.proposals.context.dataAvailability.totalEvents,
+                  dataRichness: propSession.proposals.context.dataAvailability.dataRichness,
+                  availableFields: propSession.proposals.context.dataAvailability.availableFields,
+                  fieldShapes: propSession.proposals.context.dataAvailability.fieldShapes,
+                }));
+              }
+              if (propSession?.proposals?.context?.goalExplorer?.category) {
+                requestContext.set('detectedArchetype', propSession.proposals.context.goalExplorer.category);
+              }
             }
 
             if (selectedIndex !== null) {
