@@ -18,6 +18,7 @@
 
 import { generateObject } from 'ai';
 import { z } from 'zod';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { getModelById } from './models/modelSelector';
 import { classifyArchetype } from './classifyArchetype';
 import type {
@@ -26,6 +27,21 @@ import type {
   GoalExplorerResult,
   ProposalGoal,
 } from '@/types/proposal';
+
+// ─── Timeout + Cascade Fallback ──────────────────────────────────────────
+
+/** Create a 20-second AbortSignal. Keeps us well within Vercel's 60s limit. */
+function goalExplorerTimeout(): AbortSignal {
+  return AbortSignal.timeout(20_000);
+}
+
+/** Gemini 3 Flash — fast, cheap fallback for cascade retry. Same Gemini 3 family. */
+function getCascadeFallbackModel() {
+  const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+  if (!apiKey) return null;
+  const google = createGoogleGenerativeAI({ apiKey });
+  return google('gemini-3-flash-preview');
+}
 
 // ─── Data Availability type (same as in generateProposals.ts) ─────────────
 // Re-declared here to avoid circular imports. The canonical definition
@@ -309,37 +325,60 @@ export async function exploreGoals(
   const dataSummary = buildDataSummary(workflowName, platformType, selectedEntities, data);
   console.log(`[goalExplorer] Data summary:\n${dataSummary}`);
 
-  // ── Call LLM with structured output (retry once on failure) ───────
-  const model = getModelById('gemini-3-pro-preview');
+  // ── Call LLM with structured output (cascade retry across models) ────
+  //
+  // Strategy: Try primary (Gemini 3.1 Pro) → fallback (Gemini 3 Flash).
+  // Both are Gemini 3 family with native structured output support.
+  // Each attempt has a 20s timeout to stay within Vercel's 60s limit.
+  //
+  // If BOTH fail → throw. No silent keyword fallback. Fail hard.
+  //
+  // Why cascade works:
+  // - Gemini 3.1 Pro is in preview and experiencing 503 "high demand" errors
+  // - Flash has separate capacity, is faster, and cheaper
+  // - Same-model retry doesn't help provider-specific failures
+
   const prompt = buildExplorerPrompt(dataSummary);
 
-  for (let attempt = 0; attempt < 2; attempt++) {
+  // Build model cascade: primary (3.1 Pro) → fallback (3 Flash)
+  const primaryModel = getModelById(undefined); // Uses DEFAULT_MODEL_ID (gemini-3.1-pro-preview)
+  const fallbackModel = getCascadeFallbackModel();
+
+  const attempts: Array<{ label: string; model: any; temp: number }> = [
+    { label: 'gemini-3.1-pro-preview', model: primaryModel, temp: 0.3 },
+  ];
+  if (fallbackModel) {
+    attempts.push({ label: 'gemini-3-flash-preview (cascade)', model: fallbackModel, temp: 0 });
+  }
+
+  for (let i = 0; i < attempts.length; i++) {
+    const { label, model, temp } = attempts[i];
     try {
+      console.log(`[goalExplorer] Attempt ${i + 1}/${attempts.length} using ${label}...`);
+
       const result = await generateObject({
         model,
         schema: GoalExplorerOutputSchema,
         prompt,
-        temperature: attempt === 0 ? 0.3 : 0, // Retry with temp 0
+        temperature: temp,
         maxOutputTokens: 1500,
+        abortSignal: goalExplorerTimeout(),
       });
 
       const elapsed = Date.now() - start;
       const obj = result.object;
-      console.log(`[goalExplorer] LLM responded in ${elapsed}ms (attempt ${attempt + 1})`);
+      console.log(`[goalExplorer] LLM responded in ${elapsed}ms (${label})`);
 
       // ── Validate goals against actual data ───────────────────────
-      // Enforce data-richness caps regardless of what the LLM says
       let proposalCount = obj.proposalCount;
       if (data.totalEvents < 10) proposalCount = Math.min(proposalCount, 1);
       else if (data.totalEvents < 50 || data.dataRichness === 'sparse') proposalCount = Math.min(proposalCount, 2);
 
       const goals: ProposalGoal[] = obj.goals.slice(0, proposalCount).map((goal) => {
-        // Validate focusMetrics exist in actual data
         const focusMetrics = goal.focusMetrics.filter((m) =>
           data.availableFields.includes(m) || ['totalEvents', 'eventTypes'].includes(m)
         );
 
-        // Normalize emphasis to sum to 1.0
         const d = goal.emphasis.dashboard || 0;
         const p = goal.emphasis.product || 0;
         const a = goal.emphasis.analytics || 0;
@@ -362,11 +401,11 @@ export async function exploreGoals(
       });
 
       if (goals.length === 0) {
-        console.warn(`[goalExplorer] LLM returned 0 valid goals (attempt ${attempt + 1})`);
-        continue; // Retry
+        console.warn(`[goalExplorer] ${label} returned 0 valid goals — trying next`);
+        continue;
       }
 
-      console.log(`[goalExplorer] ✅ LLM classified as "${obj.category}" (${obj.confidence}) with ${goals.length} goals`);
+      console.log(`[goalExplorer] ✅ ${label} classified as "${obj.category}" (${obj.confidence}) with ${goals.length} goals`);
 
       return {
         category: VALID_ARCHETYPES.includes(obj.category) ? obj.category : 'general',
@@ -380,19 +419,33 @@ export async function exploreGoals(
       };
     } catch (err: unknown) {
       const elapsed = Date.now() - start;
-      const message = err instanceof Error ? err.message : String(err);
-      console.error(`[goalExplorer] LLM call failed (attempt ${attempt + 1}) after ${elapsed}ms:`, message);
+      const errMsg = err instanceof Error ? err.message : String(err);
+      const isTimeout = errMsg.includes('abort') || errMsg.includes('timeout') || errMsg.includes('TimeoutError');
+      const isRateLimit = errMsg.includes('429') || errMsg.includes('503') || errMsg.includes('UNAVAILABLE');
 
-      if (attempt === 0) {
-        console.log('[goalExplorer] Retrying with temperature 0...');
+      console.error(
+        `[goalExplorer] ${label} failed after ${elapsed}ms:`,
+        isTimeout ? 'TIMEOUT (20s limit)' : isRateLimit ? 'RATE LIMITED / OVERLOADED' : errMsg.slice(0, 200),
+      );
+
+      // If more attempts remain, cascade to next model
+      if (i < attempts.length - 1) {
+        console.log(`[goalExplorer] Cascading to next model...`);
         continue;
       }
 
-      // Both attempts failed — fall back
-      return buildFallbackResult(workflowName, platformType, selectedEntities, data, dataSummary, elapsed);
+      // ALL attempts exhausted → FAIL HARD. No silent fallback.
+      const failureReason = isTimeout
+        ? 'All LLM models timed out (20s limit each). The AI service may be experiencing high demand.'
+        : isRateLimit
+          ? 'All LLM models returned rate-limit or overload errors. Please try again in a moment.'
+          : `All LLM models failed: ${errMsg.slice(0, 300)}`;
+
+      console.error(`[goalExplorer] ❌ FATAL: ${failureReason}`);
+      throw new Error(`[goalExplorer] ${failureReason}`);
     }
   }
 
-  // Should not reach here, but safety fallback
-  return buildFallbackResult(workflowName, platformType, selectedEntities, data, dataSummary, Date.now() - start);
+  // Safety: should not reach here, but fail hard if it does
+  throw new Error('[goalExplorer] No LLM attempts were made — check model configuration');
 }
