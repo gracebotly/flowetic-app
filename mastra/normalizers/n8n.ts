@@ -75,6 +75,25 @@ export const n8nNormalizer: PlatformNormalizer = {
       platform: 'n8n',
     };
 
+    // Preserve extra fields from rich payload extraction (Phase 2).
+    // These were extracted by extractPayloadFields() and spread into the raw event
+    // by the import route or fetchPlatformEvents tool. They arrive as top-level
+    // keys on `raw` that aren't part of the base schema.
+    const BASE_KEYS = new Set([
+      'type', 'name', 'value', 'labels', 'timestamp', 'startedAt', 'stoppedAt',
+      'createdAt', 'finishedAt', 'endedAt', 'tenant_id', 'source_id',
+      'platform_event_id', 'id', 'data', 'status', 'workflow_id', 'workflowId',
+      'workflow_name', 'execution_id', 'run_id', 'interface_id', 'created_at',
+    ]);
+
+    for (const [key, value] of Object.entries(raw)) {
+      if (BASE_KEYS.has(key)) continue;
+      if (key.startsWith('_')) continue;
+      if (state[key] !== undefined) continue; // Don't overwrite base state fields
+      if (value === null || value === undefined) continue;
+      state[key] = value;
+    }
+
     return {
       type: 'state',
       name: `n8n:${workflowName || workflowId || 'workflow'}:execution`,
