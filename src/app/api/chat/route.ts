@@ -1534,7 +1534,12 @@ export async function POST(req: Request) {
         }
         if (sessionRow?.selected_entities) {
           requestContext.set('selectedEntities', sessionRow.selected_entities);
+          // Propagate workflow name for event scoping — when the user selects a
+          // specific workflow entity, downstream queries must filter by this name.
+          // selected_entities contains the workflow name (e.g., "Template 2: Website Chatbot Analytics Aggregator")
+          requestContext.set('selectedWorkflowName', sessionRow.selected_entities);
           console.log('[api/chat] Loaded selectedEntities from DB:', sessionRow.selected_entities);
+          console.log('[api/chat] Loaded selectedWorkflowName from DB:', sessionRow.selected_entities);
         }
         if (sessionRow?.source_id) {
           requestContext.set('sourceId', sessionRow.source_id);
@@ -1658,12 +1663,24 @@ export async function POST(req: Request) {
                 // The current session's interface is authoritative.
                 // Old behavior: .is('interface_id', null) — failed because events were
                 // already claimed by old interfaces. Result: 0 events backfilled every time.
-                const { error: backfillErr } = await supabase
+                // Build backfill query — scope to selected workflow if known
+                let backfillQuery = supabase
                   .from('events')
                   .update({ interface_id: newInterface.id })
                   .eq('tenant_id', tenantId)
                   .eq('source_id', sessionRow.source_id)
                   .neq('interface_id', newInterface.id);
+
+                // ✅ FIX: Only link events belonging to the selected workflow, not ALL
+                // events from the source. An n8n source sends executions from ALL
+                // workflows through one webhook — we must scope to the user's chosen workflow.
+                const selectedWorkflow = sessionRow.selected_entities;
+                if (selectedWorkflow && typeof selectedWorkflow === 'string' && selectedWorkflow.trim()) {
+                  backfillQuery = backfillQuery.eq('state->>workflow_name', selectedWorkflow);
+                  console.log('[api/chat] Scoping backfill to workflow:', selectedWorkflow);
+                }
+
+                const { error: backfillErr } = await backfillQuery;
 
                 if (backfillErr) {
                   console.warn('[api/chat] Events backfill failed (non-fatal):', backfillErr.message);

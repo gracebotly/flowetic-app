@@ -832,8 +832,11 @@ const generateUISpecStep = createStep({
         const supabase = createAuthenticatedClient(supabaseToken);
         let events: any[] | null = null;
 
-        // Primary: query by interface_id
-        const { data: primaryEvents } = await supabase
+        // ✅ FIX: Also filter by workflow_name when available — the interface_id
+        // backfill may have linked events from multiple workflows.
+        const selectedWorkflowName = requestContext.get('selectedWorkflowName') as string | undefined;
+
+        let eventsQuery = supabase
           .from('events')
           .select('*')
           .eq('tenant_id', tenantId)
@@ -841,6 +844,13 @@ const generateUISpecStep = createStep({
           .not('type', 'in', '("state","tool_event")')
           .order('created_at', { ascending: false })
           .limit(500);
+
+        if (selectedWorkflowName) {
+          eventsQuery = eventsQuery.eq('state->>workflow_name', selectedWorkflowName);
+          console.log(`[generateUISpecStep] Scoping events to workflow: "${selectedWorkflowName}"`);
+        }
+
+        const { data: primaryEvents } = await eventsQuery;
 
         events = primaryEvents;
 
