@@ -110,6 +110,23 @@ export const analyzeSchema = createTool({
           } else {
             field.samples.push(value);
           }
+
+          // Flatten one level of nested objects (e.g., state.body.user_name, state.research.summary)
+          // This exposes webhook input fields and structured output data as individual mappable fields
+          if (value && typeof value === 'object' && !Array.isArray(value)) {
+            Object.entries(value as Record<string, unknown>).forEach(([nestedKey, nestedValue]) => {
+              const flatKey = `${key}.${nestedKey}`;
+              if (!fieldMap.has(flatKey)) {
+                fieldMap.set(flatKey, { type: typeof nestedValue, samples: [], nullCount: 0 });
+              }
+              const nestedField = fieldMap.get(flatKey)!;
+              if (nestedValue === null || nestedValue === undefined || nestedValue === '') {
+                nestedField.nullCount++;
+              } else {
+                nestedField.samples.push(nestedValue);
+              }
+            });
+          }
         });
       }
 
