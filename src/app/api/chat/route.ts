@@ -11,6 +11,13 @@ import { getMastraSingleton } from '@/mastra/singleton';
 import { ensureMastraThreadId } from '@/mastra/lib/ensureMastraThread';
 import { safeUuid } from "@/mastra/lib/safeUuid";
 import { PhaseToolGatingProcessor } from '@/mastra/processors/phase-tool-gating';
+import { analyzeSchema } from '@/mastra/tools/analyzeSchema';
+import { selectTemplate } from '@/mastra/tools/selectTemplate';
+import { generateMapping } from '@/mastra/tools/generateMapping';
+import { generateUISpec } from '@/mastra/tools/generateUISpec';
+import { validateSpec } from '@/mastra/tools/validateSpec';
+import { persistPreviewVersion } from '@/mastra/tools/persistPreviewVersion';
+import { callTool } from '@/mastra/lib/callTool';
 
 export const maxDuration = 300; // Fluid Compute + Hobby = 300s max
 
@@ -1108,7 +1115,7 @@ async function handleDeterministicBuildPreview(params: {
     // Read session data for workflow context
     const { data: session } = await supabase
       .from('journey_sessions')
-      .select('source_id, entity_id, selected_entities, selected_outcome, design_tokens')
+      .select('source_id, entity_id, selected_entities, selected_outcome, design_tokens, preview_interface_id')
       .eq('thread_id', journeyThreadId)
       .eq('tenant_id', tenantId)
       .maybeSingle();
@@ -1117,14 +1124,6 @@ async function handleDeterministicBuildPreview(params: {
       console.log('[deterministic-build-preview] No source_id found, falling back to agent');
       return null;
     }
-
-    // ─── FIX: Use BOTH sources table and source_entities table ───────
-    // journey_sessions.source_id → sources table (has platform type as 'type')
-    // journey_sessions.entity_id → source_entities table (has workflow name)
-    //
-    // Previous bug: queried source_entities with source_id UUID, which belongs
-    // to the sources table. Columns were also wrong (platform_type doesn't exist,
-    // it's 'type'). Result was always null → "Source not found, falling back to agent".
 
     // Step 1: Get platform type from sources table
     const { data: sourceRow } = await supabase
@@ -1180,12 +1179,20 @@ async function handleDeterministicBuildPreview(params: {
       workflowName: workflowName.substring(0, 60),
     });
 
-    // Set up RequestContext for the workflow
+    // Set up RequestContext for the tools
     requestContext.set('sourceId', sourceId);
     requestContext.set('platformType', platformType);
     requestContext.set('workflowName', workflowName);
 
-    console.log('[deterministic-build-preview] Starting preview workflow:', {
+    // Serialize design_tokens for generateUISpec
+    if (session.design_tokens) {
+      requestContext.set('designTokens', JSON.stringify(session.design_tokens));
+    }
+    if (session.selected_outcome) {
+      requestContext.set('selectedOutcome', session.selected_outcome);
+    }
+
+    console.log('[deterministic-build-preview] Starting preview generation (in-process):', {
       sourceId,
       platformType,
       workflowName: workflowName.substring(0, 50),
@@ -1196,45 +1203,125 @@ async function handleDeterministicBuildPreview(params: {
       } : 'NONE',
     });
 
-    // Call the platform API endpoint directly (same as delegateToPlatformMapper)
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL
-      || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+    // ─── IN-PROCESS TOOL PIPELINE (replaces HTTP self-fetch) ─────────
+    // Previously this did fetch(`${baseUrl}/api/agent/platform`) which
+    // returned HTML on Vercel preview deployments. Now we call tools
+    // directly — same as /api/agent/platform does internally.
+    const toolContext = { requestContext };
 
-    const platformResponse = await fetch(`${baseUrl}/api/agent/platform`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        tenantId,
-        userId,
-        sourceId,
-        platformType,
-        task: 'Generate dashboard preview',
-        interfaceId: sourceId, // Use sourceId as interfaceId for new dashboards
-        design_tokens: session.design_tokens || null,
-        selected_outcome: session.selected_outcome || 'dashboard',
-      }),
+    // Step 1: Analyze schema
+    const analyzeResult = await callTool(
+      analyzeSchema,
+      { tenantId, sourceId, sampleSize: 100, platformType },
+      toolContext,
+    );
+    console.log('[deterministic-build-preview] analyzeSchema:', {
+      fields: analyzeResult.fields?.length || 0,
+      eventTypes: analyzeResult.eventTypes?.length || 0,
     });
 
-    const platformResult = await platformResponse.json();
-    const elapsed = Date.now() - startTime;
+    // Step 2: Select template
+    const selectResult = await callTool(
+      selectTemplate,
+      {
+        platformType,
+        eventTypes: analyzeResult.eventTypes,
+        fields: analyzeResult.fields,
+      },
+      toolContext,
+    );
+    console.log('[deterministic-build-preview] selectTemplate:', {
+      templateId: selectResult.templateId,
+      confidence: selectResult.confidence,
+    });
 
-    if (!platformResponse.ok || platformResult.type === 'error') {
-      console.error(`[deterministic-build-preview] Workflow failed in ${elapsed}ms:`, platformResult);
-      return null;
+    // Step 3: Generate mapping
+    const mappingResult = await callTool(
+      generateMapping,
+      {
+        templateId: selectResult.templateId,
+        fields: analyzeResult.fields,
+        platformType,
+      },
+      toolContext,
+    );
+    console.log('[deterministic-build-preview] generateMapping:', {
+      mappings: mappingResult.mappings?.length || 0,
+    });
+
+    // Step 4: Generate UI spec
+    const uiSpecResult = await callTool(
+      generateUISpec,
+      {
+        templateId: selectResult.templateId,
+        mappings: mappingResult.mappings,
+        platformType,
+      },
+      toolContext,
+    );
+    console.log('[deterministic-build-preview] generateUISpec: spec generated');
+
+    // Step 5: Validate spec
+    const validationResult = await callTool(
+      validateSpec,
+      { spec_json: uiSpecResult.spec_json },
+      toolContext,
+    );
+    console.log('[deterministic-build-preview] validateSpec:', {
+      valid: validationResult.valid,
+      score: validationResult.score,
+    });
+
+    if (!validationResult.valid || validationResult.score < 0.8) {
+      console.error('[deterministic-build-preview] Spec validation failed:', {
+        score: validationResult.score,
+        errors: validationResult.errors?.slice(0, 3),
+      });
+      // Don't return null — show user a meaningful message instead of infinite loading
+      const stream = createUIMessageStream({
+        execute: async ({ writer }) => {
+          const textId = generateId();
+          await writer.write({ type: 'text-start', id: textId });
+          await writer.write({
+            type: 'text-delta',
+            id: textId,
+            delta: `I generated a dashboard spec but it didn't pass validation (score: ${validationResult.score?.toFixed(2) || 'N/A'}). Let me try a different approach — just say "generate preview" to retry, or tell me what you'd like to adjust.`,
+          });
+          await writer.write({ type: 'text-end', id: textId });
+        },
+      });
+      return stream;
     }
 
+    // Step 6: Persist preview version
+    const interfaceId = session.preview_interface_id || sourceId;
+    const persistResult = await callTool(
+      persistPreviewVersion,
+      {
+        tenantId,
+        userId,
+        interfaceId,
+        spec_json: uiSpecResult.spec_json,
+        design_tokens: uiSpecResult.design_tokens || session.design_tokens,
+        platformType,
+      },
+      toolContext,
+    );
+
+    const elapsed = Date.now() - startTime;
     console.log(`[deterministic-build-preview] ✅ Preview generated in ${elapsed}ms:`, {
-      previewUrl: platformResult.result?.previewUrl,
-      interfaceId: platformResult.result?.interfaceId,
+      previewUrl: persistResult.previewUrl,
+      interfaceId: persistResult.interfaceId,
+      versionId: persistResult.versionId,
     });
 
-    // Update session with preview artifacts so autoAdvancePhase can advance to interactive_edit
-    if (platformResult.result?.interfaceId && platformResult.result?.versionId) {
+    // Update session with preview artifacts
+    if (persistResult.interfaceId && persistResult.versionId) {
       await supabase
         .from('journey_sessions')
         .update({
-          preview_interface_id: platformResult.result.interfaceId,
-          preview_version_id: platformResult.result.versionId,
+          preview_interface_id: persistResult.interfaceId,
+          preview_version_id: persistResult.versionId,
           updated_at: new Date().toISOString(),
         })
         .eq('thread_id', journeyThreadId)
@@ -1242,7 +1329,7 @@ async function handleDeterministicBuildPreview(params: {
     }
 
     // Build stream response
-    const previewUrl = platformResult.result?.previewUrl || '';
+    const previewUrl = persistResult.previewUrl || '';
     const styleName = session.design_tokens?.style?.name || 'your design system';
 
     const responseText = [
@@ -1294,10 +1381,31 @@ async function handleDeterministicBuildPreview(params: {
     console.log(`[deterministic-build-preview] ✅ Bypassed agent loop in ${elapsed}ms`);
     return stream;
   } catch (err: any) {
-    console.error('[deterministic-build-preview] Unexpected error:', err?.message || err);
-    return null;
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    console.error('[deterministic-build-preview] Unexpected error:', errorMessage);
+
+    // ── NEVER return null — that causes agent fallback + infinite loading ──
+    // Instead, show user a recoverable error message.
+    const stream = createUIMessageStream({
+      execute: async ({ writer }) => {
+        const textId = generateId();
+        await writer.write({ type: 'text-start', id: textId });
+        await writer.write({
+          type: 'text-delta',
+          id: textId,
+          delta: `I hit a snag generating your dashboard preview. This is usually temporary.\n\n` +
+            `**What to try:**\n` +
+            `- Say "generate preview" to retry\n` +
+            `- If it persists, try refreshing the page\n\n` +
+            `_Technical: ${errorMessage.substring(0, 100)}_`,
+        });
+        await writer.write({ type: 'text-end', id: textId });
+      },
+    });
+    return stream;
   }
 }
+
 
 
 /**
