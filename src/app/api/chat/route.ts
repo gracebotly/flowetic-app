@@ -11,13 +11,6 @@ import { getMastraSingleton } from '@/mastra/singleton';
 import { ensureMastraThreadId } from '@/mastra/lib/ensureMastraThread';
 import { safeUuid } from "@/mastra/lib/safeUuid";
 import { PhaseToolGatingProcessor } from '@/mastra/processors/phase-tool-gating';
-import { analyzeSchema } from '@/mastra/tools/analyzeSchema';
-import { selectTemplate } from '@/mastra/tools/selectTemplate';
-import { generateMapping } from '@/mastra/tools/generateMapping';
-import { generateUISpec } from '@/mastra/tools/generateUISpec';
-import { validateSpec } from '@/mastra/tools/validateSpec';
-import { persistPreviewVersion } from '@/mastra/tools/persistPreviewVersion';
-import { callTool } from '@/mastra/lib/callTool';
 
 export const maxDuration = 300; // Fluid Compute + Hobby = 300s max
 
@@ -1115,7 +1108,7 @@ async function handleDeterministicBuildPreview(params: {
     // Read session data for workflow context
     const { data: session } = await supabase
       .from('journey_sessions')
-      .select('source_id, entity_id, selected_entities, selected_outcome, design_tokens, preview_interface_id')
+      .select('source_id, entity_id, selected_entities, selected_outcome, design_tokens, preview_interface_id, selected_wireframe')
       .eq('thread_id', journeyThreadId)
       .eq('tenant_id', tenantId)
       .maybeSingle();
@@ -1203,194 +1196,120 @@ async function handleDeterministicBuildPreview(params: {
       } : 'NONE',
     });
 
-    // ─── IN-PROCESS TOOL PIPELINE (replaces HTTP self-fetch) ─────────
-    // Previously this did fetch(`${baseUrl}/api/agent/platform`) which
-    // returned HTML on Vercel preview deployments. Now we call tools
-    // directly — same as /api/agent/platform does internally.
-    const toolContext = { requestContext };
+    // ─── UNIFIED PIPELINE: Use generatePreviewWorkflow ─────────────────
+    // Replaces inline callTool chain which duplicated the workflow's logic
+    // and was missing: checkMappingCompleteness, retrieveDesignPatterns,
+    // validateSpec, and persistPreviewVersion.
+    //
+    // Mastra v1 API: createRun() + run.start()
+    // Workflow inputData: { tenantId, userId, userRole, interfaceId, instructions }
+    // Workflow result: result.result = { runId, previewVersionId, previewUrl, interfaceId }
+    const { generatePreviewWorkflow } = await import('@/mastra/workflows/generatePreview');
 
-    // Step 1: Analyze schema
-    const analyzeResult = await callTool(
-      analyzeSchema,
-      { tenantId, sourceId, sampleSize: 100, platformType },
-      toolContext,
-    );
-    console.log('[deterministic-build-preview] analyzeSchema:', {
-      fields: analyzeResult.fields?.length || 0,
-      eventTypes: analyzeResult.eventTypes?.length || 0,
-    });
+    // Ensure RequestContext has everything the workflow steps need
+    if (!requestContext.get('tenantId')) requestContext.set('tenantId', tenantId);
+    if (!requestContext.get('sourceId')) requestContext.set('sourceId', sourceId);
+    if (!requestContext.get('platformType')) requestContext.set('platformType', platformType);
+    if (!requestContext.get('journeyThreadId')) requestContext.set('journeyThreadId', journeyThreadId);
+    if (!requestContext.get('workflowName')) requestContext.set('workflowName', workflowName);
 
-    // Step 2: Select template
-    const selectResult = await callTool(
-      selectTemplate,
-      {
-        platformType,
-        eventTypes: analyzeResult.eventTypes,
-        fields: analyzeResult.fields,
-      },
-      toolContext,
-    );
-    console.log('[deterministic-build-preview] selectTemplate:', {
-      templateId: selectResult.templateId,
-      confidence: selectResult.confidence,
-    });
-
-    // Step 3: Generate mapping
-    const mappingResult = await callTool(
-      generateMapping,
-      {
-        templateId: selectResult.templateId,
-        fields: analyzeResult.fields,
-        platformType,
-      },
-      toolContext,
-    );
-
-    // Extract rich data from mapping result (mirrors generatePreview.ts Step 5)
-    const fieldAnalysis = (mappingResult as any).fieldAnalysis;
-    const mappingChartRecs = (mappingResult as any).chartRecommendations;
-    const mappingDataSignals = (mappingResult as any).dataSignals;
-
-    console.log('[deterministic-build-preview] generateMapping:', {
-      mappings: Object.keys(mappingResult.mappings || {}).length,
-      hasDataSignals: !!mappingDataSignals,
-      hasChartRecs: !!mappingChartRecs,
-      hasFieldAnalysis: !!fieldAnalysis,
-    });
-
-    // Step 3.5: Load proposal wireframe from session if available
-    // NOTE(tech-debt-3): This index-based lookup is fragile. Future fix:
-    // write selected wireframe to journey_sessions.selected_proposal_wireframe
-    // when user selects a proposal, then read it directly here.
-    let proposalWireframe: any = undefined;
-    if (session.selected_outcome) {
-      try {
-        const { data: sessionFull } = await supabase
-          .from('journey_sessions')
-          .select('proposals')
-          .eq('thread_id', journeyThreadId)
-          .eq('tenant_id', tenantId)
-          .maybeSingle();
-        if (sessionFull?.proposals?.proposals) {
-          const selectedIdx = sessionFull.proposals.selected_proposal_index ?? 0;
-          const selectedProposal = sessionFull.proposals.proposals[selectedIdx];
-          if (selectedProposal?.wireframe?.components?.length) {
-            proposalWireframe = selectedProposal.wireframe;
-            console.log('[deterministic-build-preview] Loaded proposal wireframe:', {
-              name: proposalWireframe.name,
-              components: proposalWireframe.components.length,
-            });
-          }
-        }
-      } catch (e) {
-        console.warn('[deterministic-build-preview] Failed to load proposal wireframe (non-fatal):', e);
-      }
+    // Tech Debt 3 Fix: Load wireframe from the dedicated DB column.
+    // The old code did: proposals.proposals[proposals.selected_proposal_index].wireframe
+    // which was double-broken:
+    //   - selected_proposal_index is a DB column, NOT inside the proposals JSONB
+    //   - the field is wireframeLayout, not wireframe
+    // selected_wireframe is already written correctly at proposal selection time.
+    if (session.selected_wireframe) {
+      requestContext.set('proposalWireframe', JSON.stringify(session.selected_wireframe));
     }
 
-    // Step 3.6: Map selected_outcome → uiType (mirrors generatePreview.ts)
-    let resolvedUiType: string = 'dashboard';
+    // Map selected_outcome → uiType for skeleton selector
     if (session.selected_outcome === 'product') {
-      resolvedUiType = 'landing-page';
+      requestContext.set('selectedOutcome', 'product');
     } else if (session.selected_outcome === 'admin') {
-      resolvedUiType = 'admin-crud';
+      requestContext.set('selectedOutcome', 'admin');
+    } else if (session.selected_outcome) {
+      requestContext.set('selectedOutcome', session.selected_outcome);
     }
 
-    // Step 4: Generate UI spec — pass ALL rich data from mapping result
-    // This mirrors what generatePreview.ts workflow does in its generateUISpecStep.
-    // Without dataSignals, chartRecommendations, and fieldAnalysis, generateUISpec
-    // falls back to a generic skeleton with empty placeholders.
-    const uiSpecResult = await callTool(
-      generateUISpec,
-      {
-        templateId: selectResult.templateId,
-        mappings: mappingResult.mappings,
-        platformType,
-        // Rich data from generateMapping — drives skeleton selection + component building
-        dataSignals: mappingDataSignals || undefined,
-        chartRecommendations: mappingChartRecs || (() => {
-          // Fallback: try to get chart recs from design tokens (same as workflow)
-          if (session.design_tokens?.charts) return session.design_tokens.charts;
-          return undefined;
-        })(),
-        fieldAnalysis: fieldAnalysis || undefined,
-        // Entity name for dashboard title
-        entityName: workflowName || undefined,
-        // Proposal wireframe (skeleton system is preferred but wireframe is passed for reference)
-        proposalWireframe: proposalWireframe || undefined,
-        preferWireframe: false, // Always use skeleton system for premium layouts
-        // UI type from selected outcome
-        uiType: resolvedUiType,
-        mode: 'internal',
-      },
-      toolContext,
-    );
-    console.log('[deterministic-build-preview] generateUISpec:', {
-      components: uiSpecResult.spec_json?.components?.length || 0,
-      hasDesignTokens: !!uiSpecResult.design_tokens,
-      skeletonUsed: uiSpecResult.spec_json?.layoutSkeletonId || 'none',
-    });
-
-    // Step 5: Validate spec
-    const validationResult = await callTool(
-      validateSpec,
-      { spec_json: uiSpecResult.spec_json },
-      toolContext,
-    );
-    console.log('[deterministic-build-preview] validateSpec:', {
-      valid: validationResult.valid,
-      score: validationResult.score,
-    });
-
-    if (!validationResult.valid || validationResult.score < 0.8) {
-      console.error('[deterministic-build-preview] Spec validation failed:', {
-        score: validationResult.score,
-        errors: validationResult.errors?.slice(0, 3),
-      });
-      // Don't return null — show user a meaningful message instead of infinite loading
-      const stream = createUIMessageStream({
-        execute: async ({ writer }) => {
-          const textId = generateId();
-          await writer.write({ type: 'text-start', id: textId });
-          await writer.write({
-            type: 'text-delta',
-            id: textId,
-            delta: `I generated a dashboard spec but it didn't pass validation (score: ${validationResult.score?.toFixed(2) || 'N/A'}). Let me try a different approach — just say "generate preview" to retry, or tell me what you'd like to adjust.`,
-          });
-          await writer.write({ type: 'text-end', id: textId });
-        },
-      });
-      return stream;
+    // Serialize design_tokens for generateUISpec step
+    if (session.design_tokens) {
+      requestContext.set('designTokens', JSON.stringify(session.design_tokens));
+      requestContext.set('designSystemGenerated', 'true');
     }
 
-    // Step 6: Persist preview version
-    const interfaceId = session.preview_interface_id || sourceId;
-    const persistResult = await callTool(
-      persistPreviewVersion,
-      {
+    const workflowRun = await generatePreviewWorkflow.createRun();
+    const workflowResult = await workflowRun.start({
+      inputData: {
         tenantId,
         userId,
-        interfaceId,
-        spec_json: uiSpecResult.spec_json,
-        design_tokens: uiSpecResult.design_tokens || session.design_tokens,
-        platformType,
+        userRole: 'admin' as const,
+        interfaceId: session.preview_interface_id || tenantId, // persistPreviewVersion auto-creates if invalid
+        instructions: '',
       },
-      toolContext,
-    );
+      requestContext,
+    });
+
+    if (!workflowResult || workflowResult.status === 'failed') {
+      console.error('[deterministic-build-preview] Workflow failed:', (workflowResult as any)?.error);
+      return null;
+    }
+
+    if (workflowResult.status === 'suspended') {
+      console.warn('[deterministic-build-preview] Workflow suspended (needs HITL)');
+      return null;
+    }
+
+    if (workflowResult.status !== 'success') {
+      console.warn('[deterministic-build-preview] Workflow did not complete successfully:', workflowResult.status);
+      return null;
+    }
+
+    // result.result comes from finalizeStep: { runId, previewVersionId, previewUrl, interfaceId }
+    const finalOutput = workflowResult.result;
+    if (!finalOutput?.previewVersionId) {
+      console.error('[deterministic-build-preview] Workflow produced no preview version');
+      return null;
+    }
+
+    console.log('[deterministic-build-preview] Workflow completed:', {
+      interfaceId: finalOutput.interfaceId,
+      versionId: finalOutput.previewVersionId,
+      previewUrl: finalOutput.previewUrl,
+      durationMs: Date.now() - startTime,
+    });
+
+    // Variables for the stream response section (downstream code expects these names)
+    const interfaceId = finalOutput.interfaceId;
+    const versionId = finalOutput.previewVersionId;
+    const previewUrl = finalOutput.previewUrl;
+
+    // Fetch the persisted spec for the stream response
+    // (the workflow persisted it via persistPreviewVersion)
+    const { data: persistedVersion } = await supabase
+      .from('interface_versions')
+      .select('spec_json, design_tokens')
+      .eq('id', versionId)
+      .eq('interface_id', interfaceId)
+      .maybeSingle();
+
+    const specForStream = persistedVersion?.spec_json || {};
+    const tokensForStream = persistedVersion?.design_tokens || session.design_tokens || {};
 
     const elapsed = Date.now() - startTime;
     console.log(`[deterministic-build-preview] ✅ Preview generated in ${elapsed}ms:`, {
-      previewUrl: persistResult.previewUrl,
-      interfaceId: persistResult.interfaceId,
-      versionId: persistResult.versionId,
+      previewUrl,
+      interfaceId,
+      versionId,
     });
 
     // Update session with preview artifacts
-    if (persistResult.interfaceId && persistResult.versionId) {
+    if (interfaceId && versionId) {
       await supabase
         .from('journey_sessions')
         .update({
-          preview_interface_id: persistResult.interfaceId,
-          preview_version_id: persistResult.versionId,
+          preview_interface_id: interfaceId,
+          preview_version_id: versionId,
           updated_at: new Date().toISOString(),
         })
         .eq('thread_id', journeyThreadId)
@@ -1398,13 +1317,13 @@ async function handleDeterministicBuildPreview(params: {
     }
 
     // Build stream response
-    const previewUrl = persistResult.previewUrl || '';
+    const safePreviewUrl = previewUrl || '';
     const styleName = session.design_tokens?.style?.name || 'your design system';
 
     const responseText = [
       `Your **${styleName}** dashboard is ready! 🎉`,
       '',
-      previewUrl ? `[View your dashboard preview](${previewUrl})` : '',
+      safePreviewUrl ? `[View your dashboard preview](${safePreviewUrl})` : '',
       '',
       'You can now edit any part of your dashboard — layout, colors, chart types, labels. Just tell me what you\'d like to change.',
     ].filter(Boolean).join('\n');
@@ -1444,6 +1363,17 @@ async function handleDeterministicBuildPreview(params: {
           });
         }
         await writer.write({ type: 'text-end', id: textId });
+
+        await writer.write({
+          type: 'data-dashboard-preview',
+          data: {
+            interfaceId,
+            versionId,
+            previewUrl: safePreviewUrl,
+            spec_json: specForStream,
+            design_tokens: tokensForStream,
+          },
+        } as any);
       },
     });
 
