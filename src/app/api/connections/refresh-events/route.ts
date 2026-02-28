@@ -121,12 +121,12 @@ export async function POST(req: NextRequest) {
 
       const { data: entityRow } = await supabase
         .from("source_entities")
-        .select("name")
+        .select("display_name, external_id")
         .eq("source_id", sourceId)
         .eq("external_id", wfId)
         .eq("tenant_id", tenantId)
         .maybeSingle();
-      const workflowName = entityRow?.name || wfId;
+      const workflowName = entityRow?.display_name || wfId;
 
       const eventRows: any[] = [];
 
