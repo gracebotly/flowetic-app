@@ -87,12 +87,21 @@ export const validatePreviewReadiness = createSupaTool<z.infer<typeof outputSche
     }
     
     // Check 2: Has minimum events
-    // Events always scoped to the specific sourceId — no tenant-wide fallback
+    // Events scoped to sourceId AND selectedWorkflowName (if available).
+    // Without workflow scoping, a source with 3 workflows returns combined counts,
+    // contradicting getEventStats which DOES scope by workflow.
     let eventsQuery = supabase
       .from('events')
       .select('id, type')
       .eq('tenant_id', tenantId)
       .eq('source_id', sourceId);
+
+    // ✅ FIX: Scope to selected workflow to match getEventStats behavior
+    const selectedWorkflowName = context.requestContext?.get('selectedWorkflowName') as string | undefined;
+    if (selectedWorkflowName) {
+      eventsQuery = eventsQuery.eq('state->>workflow_name', selectedWorkflowName);
+      console.log(`[validatePreviewReadiness] Scoping events to workflow: "${selectedWorkflowName}"`);
+    }
     
     const { data: events, error: eventsError } = await eventsQuery;
 
@@ -176,7 +185,6 @@ export const validatePreviewReadiness = createSupaTool<z.infer<typeof outputSche
     };
   },
 });
-
 
 
 

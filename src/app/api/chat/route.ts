@@ -783,9 +783,32 @@ async function handleDeterministicPropose(params: {
 
     console.log(`[deterministic-propose] ✅ Generated ${result.proposals.length} proposals in ${Date.now() - startTime}ms`);
     return stream;
-  } catch (err) {
-    console.error('[deterministic-propose] Unexpected error, falling back to agent:', err);
-    return null;
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    console.error('[deterministic-propose] Unexpected error:', errorMessage);
+
+    // ── ARCHITECTURAL FIX: Do NOT fall back to agent ──────────────────
+    // The agent lacks RequestContext data needed for propose-phase decisions
+    // (sourceId, workflowName, etc.) and will call tools with wrong/missing
+    // parameters, producing contradictory results (0 events vs 61 events).
+    // Instead, show a user-facing message and let them retry.
+    const stream = createUIMessageStream({
+      execute: async ({ writer }) => {
+        const textId = generateId();
+        await writer.write({ type: 'text-start', id: textId });
+        await writer.write({
+          type: 'text-delta',
+          id: textId,
+          delta: `I ran into an issue generating your dashboard proposals. This is usually temporary.\n\n` +
+            `**What to try:**\n` +
+            `- Send another message (like "generate proposals") to retry\n` +
+            `- If the issue persists, try refreshing the page\n\n` +
+            `_Technical detail: proposal generation encountered a parsing error._`,
+        });
+        await writer.write({ type: 'text-end', id: textId });
+      },
+    });
+    return stream;
   }
 }
 
