@@ -2814,10 +2814,15 @@ export async function POST(req: Request) {
         .maybeSingle();
 
       // For build_edit: only auto-generate if a proposal was selected (meaning we just
-      // transitioned from propose) AND no preview exists yet. This prevents re-triggering
+      // transitioned from propose) AND no preview VERSION exists yet. This prevents re-triggering
       // on subsequent build_edit messages (edit requests should go to the agent).
+      // 
+      // BUG FIX: Was checking !preview_interface_id, but the interface SHELL record is created
+      // during proposal selection (before any preview is generated). This caused the guard to
+      // think a preview already existed when only an empty interface record was present.
+      // The correct check is preview_version_id — set only when persistPreviewVersion succeeds.
       const shouldAutoGenerate = previewCheckSession
-        && !previewCheckSession.preview_interface_id
+        && !previewCheckSession.preview_version_id
         && previewCheckSession.source_id
         && (finalPhase === 'build_preview' || previewCheckSession.selected_proposal_index != null);
 
