@@ -26,6 +26,10 @@ export const ComponentType = z.enum([
   "Pagination",
   "AuthForm",
   "EmptyStateCard",
+  // Record-browser types (Phase 4)
+  "ContentCard",
+  "RecordList",
+  "FilteredChart",
 ]);
 
 export type ComponentType = z.infer<typeof ComponentType>;
@@ -58,6 +62,10 @@ const TYPE_ALIASES: Record<string, string> = {
   "section-header": "SectionHeader",
   "auth-form": "AuthForm",
   "brand-visual": "BrandVisual",
+  // Record-browser types (Phase 4)
+  "content-card": "ContentCard", content_card: "ContentCard",
+  "record-list": "RecordList", record_list: "RecordList",
+  "filtered-chart": "FilteredChart", filtered_chart: "FilteredChart",
 };
 
 function resolveTypeAlias(rawType: string): string {
