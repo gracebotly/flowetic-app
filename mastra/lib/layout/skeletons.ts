@@ -28,6 +28,7 @@ export type SkeletonId =
   | 'analytical-breakdown'     // C: Deep-dive, Mixpanel/Amplitude
   | 'table-first'              // D: Data-heavy, internal ops
   | 'storyboard-insight'       // E: Client portal, Linear Insights
+  | 'record-browser'           // L: Hybrid records + metrics
   | 'saas-landing-page'        // F: Product marketing
   | 'workflow-input-form'      // G: Multi-step wizard
   | 'results-display'          // H: Workflow output display
@@ -60,6 +61,8 @@ export type SectionType =
   | 'feed'
   | 'insight-card'
   | 'filters'
+  | 'record-list'
+  | 'content-panel'
   // Product page sections
   | 'hero'
   | 'proof-bar'
@@ -883,6 +886,67 @@ const authenticationFlow: LayoutSkeleton = {
   },
 };
 
+const recordBrowser: LayoutSkeleton = {
+  id: 'record-browser',
+  name: 'Record Browser',
+  description: 'Hybrid layout for workflows that produce rich records with both metrics and browsable content. Ideal for AI agents, research tools, and content pipelines.',
+  category: 'dashboard',
+  personality: 'Notion Database View',
+  sections: [
+    {
+      id: 'summary-kpis',
+      type: 'kpi-grid',
+      columns: 12,
+      dominant: false,
+      maxItems: 4,
+      compact: true,
+      minHeight: 2,
+      description: 'Quick summary stats: total records, success rate, avg processing time',
+    },
+    {
+      id: 'record-list',
+      type: 'record-list',
+      columns: 12,
+      dominant: true,
+      minHeight: 5,
+      description: 'Scrollable list of individual records with expandable details',
+    },
+    {
+      id: 'content-detail',
+      type: 'content-panel',
+      columns: 12,
+      dominant: false,
+      minHeight: 4,
+      description: 'Rich text content display for AI-generated summaries and reports',
+    },
+    {
+      id: 'filtered-charts',
+      type: 'chart-grid',
+      columns: 12,
+      dominant: false,
+      maxItems: 2,
+      minHeight: 3,
+      description: 'Filtered charts showing non-null data subsets only',
+    },
+  ],
+  spacing: 'comfortable',
+  visualHierarchy: 'record-list',
+  maxKPIs: 4,
+  gridSystem: '12-column',
+  spacingPx: 20,
+  maxSecondaryCharts: 2,
+  breakpoints: {
+    mobile: {
+      stackSections: true,
+      hideSections: ['filtered-charts'],
+    },
+    tablet: {
+      stackSections: true,
+    },
+    desktop: {},
+  },
+};
+
 // ============================================================================
 // Skeleton Registry
 // ============================================================================
@@ -894,6 +958,7 @@ const SKELETON_MAP: Record<SkeletonId, LayoutSkeleton> = {
   'analytical-breakdown': analyticalBreakdown,
   'table-first': tableFirst,
   'storyboard-insight': storyboardInsight,
+  'record-browser': recordBrowser,
   'saas-landing-page': saasLandingPage,
   'workflow-input-form': workflowInputForm,
   'results-display': resultsDisplay,

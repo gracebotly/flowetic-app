@@ -100,8 +100,17 @@ export function useEditActions({
       setPendingActions((current) => {
         // Dedupe: Replace existing action of same type for same widget
         const filtered = current.filter(
-          (a) =>
-            !(a.type === action.type && a.widgetId === action.widgetId)
+          (a) => {
+            // For widget-specific actions, dedupe by type + widgetId
+            if (a.widgetId && action.widgetId) {
+              return !(a.type === action.type && a.widgetId === action.widgetId);
+            }
+            // For global actions (density, palette, reorder), dedupe by type only
+            if (!a.widgetId && !action.widgetId) {
+              return a.type !== action.type;
+            }
+            return true;
+          }
         );
         return [...filtered, action];
       });

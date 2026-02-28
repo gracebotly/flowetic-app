@@ -6,14 +6,18 @@ import type { EditAction } from "./types";
 import { InterfaceContextSchema } from "../../lib/REQUEST_CONTEXT_CONTRACT";
 import { normalizeSpec } from "../../lib/spec/uiSpecSchema";
 
-const densityToSpacingBase = (density: "compact" | "normal" | "relaxed") => {
+const densityToSpacingBase = (density: string): number => {
   switch (density) {
     case "compact":
       return 4;
-    case "normal":
+    case "comfortable":
+    case "normal":  // Legacy support
       return 8;
-    case "relaxed":
+    case "spacious":
+    case "relaxed":  // Legacy support
       return 12;
+    default:
+      return 8;
   }
 };
 
@@ -24,11 +28,20 @@ export const applyInteractiveEdits = createTool({
   inputSchema: z.object({
     actions: z.array(
       z.object({
-        type: z.enum(["toggle_widget", "rename_widget", "switch_chart_type", "set_density"]),
+        type: z.enum([
+          "toggle_widget",
+          "rename_widget",
+          "switch_chart_type",
+          "set_density",
+          "set_palette",
+          "reorder_widgets",
+        ]),
         widgetId: z.string().optional(),
         title: z.string().optional(),
-        chartType: z.enum(["bar", "line", "pie", "area", "scatter"]).optional(),
-        density: z.enum(["compact", "normal", "relaxed"]).optional(),
+        chartType: z.enum(["bar", "line", "area", "pie", "donut"]).optional(),
+        density: z.enum(["compact", "comfortable", "spacious"]).optional(),
+        paletteId: z.string().optional(),
+        order: z.array(z.string()).optional(),
       })
     ).describe("The edit actions to apply"),
   }),
@@ -58,38 +71,110 @@ export const applyInteractiveEdits = createTool({
     let nextSpec = normalizeSpec((current as any).spec_json ?? {}) as Record<string, any>;
     let nextTokens = (current as any).design_tokens ?? {};
 
-    // Note: reorder functionality removed due to non-existent import
-    // const reorderAction = actions.find((a) => a.type === "reorder_widgets") as any;
-    // if (reorderAction?.orderedIds?.length) {
-    //   Future implementation needed for component reordering
-    // }
+    // ── Process reorder FIRST (before patch ops) ────────────────
+    // Reorder changes component array order in spec directly,
+    // not via patch operations.
+    const reorderAction = actions.find((a) => a.type === "reorder_widgets");
+    if (reorderAction?.order?.length && Array.isArray(nextSpec.components)) {
+      const orderedIds = reorderAction.order;
+      const componentMap = new Map<string, any>();
+      for (const comp of nextSpec.components) {
+        if (comp?.id) componentMap.set(comp.id, comp);
+      }
 
+      // Build reordered array: known IDs first in specified order,
+      // then any remaining components not in the order list
+      const reordered: any[] = [];
+      for (const id of orderedIds) {
+        const comp = componentMap.get(id);
+        if (comp) {
+          reordered.push(comp);
+          componentMap.delete(id);
+        }
+      }
+      // Append remaining components not in the reorder list
+      for (const comp of componentMap.values()) {
+        reordered.push(comp);
+      }
+
+      // Reassign grid positions based on new order
+      // Each component gets sequential row positions
+      let currentRow = 0;
+      for (const comp of reordered) {
+        if (comp.layout) {
+          comp.layout = {
+            ...comp.layout,
+            row: currentRow,
+            col: comp.layout.col ?? 0,
+          };
+          currentRow += comp.layout.h ?? 2;
+        }
+      }
+
+      nextSpec.components = reordered;
+    }
+
+    // ── Build patch operations for all other actions ────────────
     const ops: any[] = [];
     for (const a of actions) {
+      if (a.type === "reorder_widgets") {
+        // Already handled above
+        continue;
+      }
+
       if (a.type === "toggle_widget") {
+        // FIX: Actually toggle — read current hidden state and flip it
+        const comp = Array.isArray(nextSpec.components)
+          ? nextSpec.components.find((c: any) => c?.id === a.widgetId)
+          : undefined;
+        const currentlyHidden = comp?.props?.hidden === true;
         ops.push({
           op: "updateComponentProps",
           componentId: a.widgetId,
-          propsPatch: { hidden: true }, // Just set hidden, don't toggle
+          propsPatch: { hidden: !currentlyHidden },
         });
-      } else if (a.type === "rename_widget") {
+        continue;
+      }
+
+      if (a.type === "rename_widget") {
         ops.push({
           op: "updateComponentProps",
           componentId: a.widgetId,
           propsPatch: { title: a.title },
         });
-      } else if (a.type === "switch_chart_type") {
+        continue;
+      }
+
+      if (a.type === "switch_chart_type") {
         ops.push({
           op: "updateComponentProps",
           componentId: a.widgetId,
           propsPatch: { chartType: a.chartType },
         });
-      } else if (a.type === "set_density") {
+        continue;
+      }
+
+      if (a.type === "set_density") {
         ops.push({
           op: "setDesignToken",
           tokenPath: "theme.spacing.base",
-          tokenValue: a.density ? densityToSpacingBase(a.density) : 8, // Default to 8
+          tokenValue: a.density ? densityToSpacingBase(a.density) : 8,
         });
+        continue;
+      }
+
+      if (a.type === "set_palette") {
+        // Palette changes are handled by design tokens
+        // The paletteId maps to colors in the frontend palettes array
+        // For now, just store the palette selection as a token
+        if (a.paletteId) {
+          ops.push({
+            op: "setDesignToken",
+            tokenPath: "theme.activePaletteId",
+            tokenValue: a.paletteId,
+          });
+        }
+        continue;
       }
     }
 
