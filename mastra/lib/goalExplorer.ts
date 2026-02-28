@@ -30,9 +30,11 @@ import type {
 
 // ─── Timeout + Cascade Fallback ──────────────────────────────────────────
 
-/** Create a 20-second AbortSignal. Keeps us well within Vercel's 60s limit. */
+/** Create a 45-second AbortSignal. Gemini 3.1 Pro Preview needs 25-35s for
+ *  structured output. 45s keeps us within Vercel's 60s limit (45s LLM +
+ *  ~10s overhead). The cascade to Flash still fires if Pro truly hangs. */
 function goalExplorerTimeout(): AbortSignal {
-  return AbortSignal.timeout(20_000);
+  return AbortSignal.timeout(45_000);
 }
 
 /** Gemini 3 Flash — fast, cheap fallback for cascade retry. Same Gemini 3 family. */
@@ -329,7 +331,7 @@ export async function exploreGoals(
   //
   // Strategy: Try primary (Gemini 3.1 Pro) → fallback (Gemini 3 Flash).
   // Both are Gemini 3 family with native structured output support.
-  // Each attempt has a 20s timeout to stay within Vercel's 60s limit.
+  // Each attempt has a 45s timeout to stay within Vercel's 60s limit.
   //
   // If BOTH fail → throw. No silent keyword fallback. Fail hard.
   //
@@ -425,7 +427,7 @@ export async function exploreGoals(
 
       console.error(
         `[goalExplorer] ${label} failed after ${elapsed}ms:`,
-        isTimeout ? 'TIMEOUT (20s limit)' : isRateLimit ? 'RATE LIMITED / OVERLOADED' : errMsg.slice(0, 200),
+        isTimeout ? 'TIMEOUT (45s limit)' : isRateLimit ? 'RATE LIMITED / OVERLOADED' : errMsg.slice(0, 200),
       );
 
       // If more attempts remain, cascade to next model
@@ -436,7 +438,7 @@ export async function exploreGoals(
 
       // ALL attempts exhausted → FAIL HARD. No silent fallback.
       const failureReason = isTimeout
-        ? 'All LLM models timed out (20s limit each). The AI service may be experiencing high demand.'
+        ? 'All LLM models timed out (45s limit each). The AI service may be experiencing high demand.'
         : isRateLimit
           ? 'All LLM models returned rate-limit or overload errors. Please try again in a moment.'
           : `All LLM models failed: ${errMsg.slice(0, 300)}`;
