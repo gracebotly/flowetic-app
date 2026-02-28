@@ -352,6 +352,7 @@ export async function exploreGoals(
   if (fallbackModel) {
     attempts.push({ label: 'gemini-3-flash-preview (cascade)', model: fallbackModel, temp: 0 });
   }
+  let lastError: unknown = null;
 
   for (let i = 0; i < attempts.length; i++) {
     const { label, model, temp } = attempts[i];
@@ -420,6 +421,7 @@ export async function exploreGoals(
         source: 'llm' as const,
       };
     } catch (err: unknown) {
+      lastError = err;
       const elapsed = Date.now() - start;
       const errMsg = err instanceof Error ? err.message : String(err);
       const isTimeout = errMsg.includes('abort') || errMsg.includes('timeout') || errMsg.includes('TimeoutError');
@@ -436,18 +438,18 @@ export async function exploreGoals(
         continue;
       }
 
-      // ALL attempts exhausted → FAIL HARD. No silent fallback.
-      const failureReason = isTimeout
-        ? 'All LLM models timed out (45s limit each). The AI service may be experiencing high demand.'
-        : isRateLimit
-          ? 'All LLM models returned rate-limit or overload errors. Please try again in a moment.'
-          : `All LLM models failed: ${errMsg.slice(0, 300)}`;
-
-      console.error(`[goalExplorer] ❌ FATAL: ${failureReason}`);
-      throw new Error(`[goalExplorer] ${failureReason}`);
+      console.error(`[goalExplorer] Exhausted model attempts; falling back to keyword classification.`);
     }
   }
 
-  // Safety: should not reach here, but fail hard if it does
-  throw new Error('[goalExplorer] No LLM attempts were made — check model configuration');
+  // If we get here, all attempts failed — use keyword fallback instead of throwing.
+  // The fallback produces data-aware proposals with proper chart types and focus metrics.
+  // Throwing here would trigger agent fallback in handleDeterministicPropose, which is
+  // architecturally wrong: the agent lacks the context to make propose-phase decisions.
+  const lastErrorMessage = lastError instanceof Error ? lastError.message : String(lastError ?? 'Unknown error');
+  console.warn(
+    `[goalExplorer] ⚠️ All LLM models failed: ${lastErrorMessage}. ` +
+    `Using keyword-based fallback (still produces data-aware proposals).`
+  );
+  return buildFallbackResult(workflowName, platformType, selectedEntities, data, dataSummary, Date.now() - start);
 }
