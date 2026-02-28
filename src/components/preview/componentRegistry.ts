@@ -89,6 +89,10 @@ const TYPE_ALIASES: Record<string, string> = {
   "crud-table": "CRUDTable", CRUDTable: "CRUDTable",
   "ui-header": "UIHeader", UIHeader: "UIHeader",
   "section-header": "SectionHeader", SectionHeader: "SectionHeader",
+  // Record-browser types (Phase 4)
+  "content-card": "ContentCard", ContentCard: "ContentCard", content_card: "ContentCard",
+  "record-list": "RecordList", RecordList: "RecordList", record_list: "RecordList",
+  "filtered-chart": "FilteredChart", FilteredChart: "FilteredChart", filtered_chart: "FilteredChart",
   // Auth types
   "auth-form": "AuthForm", AuthForm: "AuthForm",
   "brand-visual": "BrandVisual", BrandVisual: "BrandVisual",
@@ -101,6 +105,7 @@ const KNOWN_TYPES = new Set([
   "HeroSection", "FeatureGrid", "PricingCards", "CTASection",
   "PageHeader", "FilterBar", "CRUDTable",
   "UIHeader", "SectionHeader",
+  "ContentCard", "RecordList", "FilteredChart",
   "AuthForm",
   "EmptyStateCard",
 ]);

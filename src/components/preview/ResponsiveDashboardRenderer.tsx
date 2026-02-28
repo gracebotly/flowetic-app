@@ -29,6 +29,9 @@ const CRUDTableRenderer = dynamic(() => import("./components/CRUDTable"), { ssr:
 const AuthFormRenderer = dynamic(() => import("./components/AuthForm"), { ssr: false });
 const UIHeaderRenderer = dynamic(() => import("./components/UIHeader"), { ssr: false });
 const SectionHeaderRenderer = dynamic(() => import("./components/SectionHeader"), { ssr: false });
+const ContentCardRenderer = dynamic(() => import("./components/ContentCard"), { ssr: false });
+const RecordListRenderer = dynamic(() => import("./components/RecordList"), { ssr: false });
+const FilteredChartRenderer = dynamic(() => import("./components/FilteredChart"), { ssr: false });
 
 // ── Renderer map ──
 const RENDERER_MAP: Record<string, React.ComponentType<RendererProps>> = {
@@ -45,6 +48,9 @@ const RENDERER_MAP: Record<string, React.ComponentType<RendererProps>> = {
   AuthForm: AuthFormRenderer as any,
   UIHeader: UIHeaderRenderer as any,
   SectionHeader: SectionHeaderRenderer as any,
+  ContentCard: ContentCardRenderer as any,
+  RecordList: RecordListRenderer as any,
+  FilteredChart: FilteredChartRenderer as any,
   EmptyStateCard,
 };
 

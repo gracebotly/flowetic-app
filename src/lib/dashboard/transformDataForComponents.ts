@@ -52,6 +52,15 @@ export function transformDataForComponents(
     if (normalizedType === "CRUDTable") {
       return enrichCRUDTable(component, events);
     }
+    if (normalizedType === "ContentCard") {
+      return enrichContentCard(component, events);
+    }
+    if (normalizedType === "RecordList") {
+      return enrichRecordList(component, events);
+    }
+    if (normalizedType === "FilteredChart") {
+      return enrichFilteredChart(component, events);
+    }
 
     if (normalizedType === "UIHeader" || normalizedType === "SectionHeader") {
       return component;
@@ -367,6 +376,146 @@ function enrichCRUDTable(component: ComponentSpec, events: FlatEvent[]): Compone
   return { ...enriched, props: { ...enriched.props, showActions: true } };
 }
 
+function enrichContentCard(component: ComponentSpec, events: FlatEvent[]): ComponentSpec {
+  const { props } = component;
+  if (!events.length) return component;
+
+  const contentField = props?.contentField;
+  if (!contentField) return component;
+
+  // Read content from the first event that has the field populated
+  const eventWithContent = events.find((e) => {
+    const val = e[contentField];
+    return val != null && String(val).trim().length > 0;
+  });
+
+  if (!eventWithContent) return component;
+
+  const rawContent = String(eventWithContent[contentField]);
+
+  return {
+    ...component,
+    props: {
+      ...props,
+      content: rawContent,
+      _enrichmentNote: `Content read from field "${contentField}" (first non-empty event)`,
+    },
+  };
+}
+
+function enrichRecordList(component: ComponentSpec, events: FlatEvent[]): ComponentSpec {
+  const { props } = component;
+  if (!events.length) return component;
+
+  // Internal fields to exclude from auto-detected columns
+  const INTERNAL_FIELDS = new Set([
+    'id', 'tenant_id', 'source_id', 'interface_id', 'run_id',
+    'platform_event_id', 'created_at', '_enrichmentNote',
+  ]);
+
+  // Use provided columns or auto-detect from event keys
+  const rawColumns = props?.columns;
+  const hasColumns = Array.isArray(rawColumns) && rawColumns.length > 0;
+
+  const columns = hasColumns
+    ? rawColumns
+    : Object.keys(events[0])
+        .filter((key) => !INTERNAL_FIELDS.has(key))
+        .slice(0, 10)
+        .map((key) => ({
+          key,
+          label: key
+            .replace(/[_-]/g, " ")
+            .replace(/\b\w/g, (c) => c.toUpperCase()),
+        }));
+
+  const columnKeys: string[] = columns.map((c: any) => (typeof c === "string" ? c : c.key));
+
+  // Build rows from events — include ALL fields (not just visible columns)
+  // so the expanded detail view can show extra fields
+  const maxRows = (props?.maxRows as number) ?? 15;
+  const rows = events.slice(0, maxRows).map((e) => {
+    const row: Record<string, any> = {};
+    // First, add all non-internal fields
+    for (const [key, val] of Object.entries(e)) {
+      if (INTERNAL_FIELDS.has(key)) continue;
+      // Format timestamps
+      if (val && typeof val === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(val)) {
+        row[key] = new Date(val).toLocaleString();
+      } else {
+        row[key] = val ?? "—";
+      }
+    }
+    return row;
+  });
+
+  return {
+    ...component,
+    props: {
+      ...props,
+      columns,
+      rows,
+      maxRows,
+    },
+  };
+}
+
+function enrichFilteredChart(component: ComponentSpec, events: FlatEvent[]): ComponentSpec {
+  const { props } = component;
+  if (!events.length) return component;
+
+  const categoryField = props?.categoryField;
+  const valueField = props?.valueField || "count";
+  const filterNulls = props?.filterNulls !== false;
+
+  if (!categoryField) return component;
+
+  // Aggregate by category
+  const counts = new Map<string, number>();
+  for (const e of events) {
+    const rawVal = e[categoryField];
+    const key = String(rawVal ?? "null");
+
+    if (valueField === "count") {
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    } else {
+      const num = Number(e[valueField]);
+      if (!isNaN(num)) {
+        counts.set(key, (counts.get(key) ?? 0) + num);
+      }
+    }
+  }
+
+  // Convert to array and optionally filter nulls
+  let data = Array.from(counts.entries())
+    .map(([name, value]) => ({
+      name: name
+        .replace(/[_-]/g, " ")
+        .replace(/\b\w/g, (c) => c.toUpperCase()),
+      value,
+    }))
+    .sort((a, b) => b.value - a.value);
+
+  if (filterNulls) {
+    data = data.filter((d) => {
+      const lower = d.name.toLowerCase().trim();
+      return lower !== "" && lower !== "null" && lower !== "undefined" && lower !== "unknown" && lower !== "—";
+    });
+  }
+
+  // Cap at 15 categories to keep chart readable
+  data = data.slice(0, 15);
+
+  return {
+    ...component,
+    props: {
+      ...props,
+      data,
+      _enrichmentNote: `Aggregated ${events.length} events by "${categoryField}"${filterNulls ? " (nulls filtered)" : ""}`,
+    },
+  };
+}
+
 function normalizeType(rawType: string): string {
   const map: Record<string, string> = {
     "kpi-card": "MetricCard", kpi_card: "MetricCard", kpi: "MetricCard",
@@ -386,6 +535,10 @@ function normalizeType(rawType: string): string {
     "crud-table": "CRUDTable", CRUDTable: "CRUDTable",
     "ui-header": "UIHeader", UIHeader: "UIHeader",
     "section-header": "SectionHeader", SectionHeader: "SectionHeader",
+    // Record-browser types (Phase 4)
+    "content-card": "ContentCard", ContentCard: "ContentCard", content_card: "ContentCard",
+    "record-list": "RecordList", RecordList: "RecordList", record_list: "RecordList",
+    "filtered-chart": "FilteredChart", FilteredChart: "FilteredChart", filtered_chart: "FilteredChart",
   };
   return map[rawType] || rawType;
 }
