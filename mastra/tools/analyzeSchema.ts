@@ -53,10 +53,14 @@ export const analyzeSchema = createTool({
     if (sourceId) query = query.eq('source_id', sourceId);
 
     // ✅ FIX: Scope to workflow when provided — prevents cross-workflow data contamination
+    // Events may store workflow_name as display name while workflow_id stores external id.
+    // Match both workflow_name and workflow_id for robust scoping.
     const selectedWorkflowName = workflowName || ((context.requestContext as any)?.get('selectedWorkflowName') as string | undefined);
     if (selectedWorkflowName) {
-      query = query.eq('state->>workflow_name', selectedWorkflowName);
-      console.log(`[analyzeSchema] Scoping to workflow: "${selectedWorkflowName}"`);
+      query = query.or(
+        `state->>workflow_name.eq.${selectedWorkflowName},state->>workflow_id.eq.${selectedWorkflowName}`
+      );
+      console.log(`[analyzeSchema] Scoping to workflow (dual-match): "${selectedWorkflowName}"`);
     }
 
     const { data: events, error } = await query;

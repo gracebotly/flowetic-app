@@ -98,7 +98,9 @@ const analyzeSchemaStep = createStep({
     // ── Bug 3 Fix: Cache analyzeSchema result in requestContext ──────
     // The platformMappingMaster agent may have already called analyzeSchema
     // before invoking this workflow. Reuse the cached result if available.
-    const cacheKey = `analyzeSchema_${tenantId}_${sourceId}`;
+    // Include workflow in cache key to avoid stale schema reuse across workflows
+    const selectedWorkflowName = requestContext.get('selectedWorkflowName') as string | undefined;
+    const cacheKey = `analyzeSchema_${tenantId}_${sourceId}_${selectedWorkflowName || 'all'}`;
     const cachedResult = requestContext.get(cacheKey) as string | undefined;
     let result: any;
 
@@ -116,6 +118,7 @@ const analyzeSchemaStep = createStep({
     }
 
     if (!result) {
+      // Pass selected workflow explicitly to enforce workflow-scoped analysis
       result = await callTool(
         analyzeSchema,
         {
@@ -123,6 +126,7 @@ const analyzeSchemaStep = createStep({
           sourceId,
           sampleSize,
           platformType: requestContext.get('platformType') || 'make',
+          ...(selectedWorkflowName ? { workflowName: selectedWorkflowName } : {}),
         },
         { requestContext }
       );
