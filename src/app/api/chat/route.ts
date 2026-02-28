@@ -11,6 +11,7 @@ import { getMastraSingleton } from '@/mastra/singleton';
 import { ensureMastraThreadId } from '@/mastra/lib/ensureMastraThread';
 import { safeUuid } from "@/mastra/lib/safeUuid";
 import { PhaseToolGatingProcessor } from '@/mastra/processors/phase-tool-gating';
+import { callTool } from '@/mastra/lib/callTool';
 
 export const maxDuration = 300; // Fluid Compute + Hobby = 300s max
 
