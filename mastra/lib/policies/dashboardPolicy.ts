@@ -19,7 +19,7 @@ import type { DashboardField, FieldRole } from '../types/dashboardField';
 // Policy Version (increment when rules change)
 // ============================================================================
 
-export const POLICY_VERSION = 1;
+export const POLICY_VERSION = 2;
 
 // ============================================================================
 // Configurable Thresholds
@@ -275,6 +275,51 @@ export function enforceDashboardPolicies(
         rule: 'detail_fields_table_only',
         severity: 'warning',
         action: `${f.shape} → DataTable`,
+        before: snapshot,
+        after: { component: f.component, role: f.role, aggregation: f.aggregation, skip: f.skip },
+      });
+    }
+
+    // ── Rule 7a: Sparse field guard (Phase 3) ───────────────────────
+    // Fields with >50% null values should not be visualized as charts.
+    // Sparse data produces misleading aggregations (e.g., avg of 3 non-null
+    // values out of 100 rows). Downgrade to DataTable for detail viewing.
+    if (
+      f.nullRate !== undefined &&
+      f.nullRate > 0.5 &&
+      f.sparseField === true &&
+      isChartComponent(f.component)
+    ) {
+      f.component = 'DataTable';
+      f.role = 'detail';
+      f.policyActions!.push('sparse_field_chart_blocked');
+      violations.push({
+        field: f.name,
+        rule: 'sparse_field_guard',
+        severity: 'warning',
+        action: `Sparse field (nullRate=${f.nullRate.toFixed(2)}) → DataTable`,
+        before: snapshot,
+        after: { component: f.component, role: f.role, aggregation: f.aggregation, skip: f.skip },
+      });
+    }
+
+    // ── Rule 7b: Rich text guard (Phase 3) ──────────────────────────
+    // Fields classified as rich_text should never be charted — they contain
+    // free-form content (AI summaries, research reports, etc.) that has no
+    // meaningful aggregation. Force to ContentCard with aggregation='none'.
+    if (
+      f.shape === 'rich_text' &&
+      isChartComponent(f.component)
+    ) {
+      f.component = 'ContentCard';
+      f.aggregation = 'none';
+      f.role = 'detail';
+      f.policyActions!.push('rich_text_chart_blocked→ContentCard');
+      violations.push({
+        field: f.name,
+        rule: 'rich_text_guard',
+        severity: 'warning',
+        action: `rich_text field → ContentCard (aggregation=none)`,
         before: snapshot,
         after: { component: f.component, role: f.role, aggregation: f.aggregation, skip: f.skip },
       });
