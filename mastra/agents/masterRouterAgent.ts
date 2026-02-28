@@ -137,11 +137,18 @@ export const masterRouterAgent: Agent = new Agent({
     const platformSkillSummary = `## Platform: ${safePlatformType.toUpperCase()}
 
 MANDATORY SEARCH RULES (NEVER SKIP):
-- Before ANY design recommendation → searchSkillKnowledge(domain: "design", query: "<topic>")
-- Before answering "what dashboard should I build?" → searchSkillKnowledge(domain: "platform", query: "${safePlatformType} dashboard template")
-- Before making style suggestions → searchSkillKnowledge(domain: "design", query: "<style keywords>")
-- If user says "make it premium/dark/minimal/etc" → searchSkillKnowledge(domain: "design", query: "<exact words>")
-- Before recommending layouts or components → searchSkillKnowledge(domain: "design", query: "<layout type> <industry>")
+- Before ANY design recommendation → searchSkillKnowledge(domain: "design", query: "<2-4 keywords>")
+- Before answering "what dashboard should I build?" → searchSkillKnowledge(domain: "platform", query: "${safePlatformType} dashboard")
+- Before making style suggestions → searchSkillKnowledge(domain: "design", query: "<style keyword>")
+- If user says "make it premium/dark/minimal/etc" → searchSkillKnowledge(domain: "design", query: "<exact 1-2 words>")
+- Before recommending layouts or components → searchSkillKnowledge(domain: "design", query: "<layout> <industry>")
+
+⚠️ BM25 QUERY RULES (CRITICAL — violations cause 0 results):
+- MAX 4 WORDS per query. BM25 is keyword matching, NOT natural language.
+- GOOD: "dark mode dashboard", "SaaS monitoring style", "chart time series"
+- BAD: "AI Research Agent Productized Workflow dashboard layout skeleton executive overview operational monitoring analytical breakdown"
+- NEVER put workflow names, parenthetical content, or full sentences in queries.
+- Extract the 2-3 most specific terms from the user's request.
 
 NEVER invent design tokens, color palettes, or layout recommendations from training data.
 ALWAYS ground recommendations in searchSkillKnowledge results.
@@ -155,8 +162,10 @@ Every response you give MUST include the searchSkillKnowledge result that inform
 If you find yourself writing design recommendations WITHOUT having called searchSkillKnowledge first, STOP.
 Call the tool. Wait for results. THEN respond.
 
-If searchSkillKnowledge returns 0 results, you may use your training knowledge but MUST prefix with:
-"[No skill match found — using general knowledge]"
+If searchSkillKnowledge returns 0 results:
+1. FIRST retry with a shorter/different 2-3 word query (e.g., "dark dashboard" instead of "dark mode executive dashboard layout")
+2. If still 0, try domain: "all" instead of a specific domain
+3. Only after 2 failed attempts, use training knowledge with prefix: "[No skill match — using general knowledge]"
 
 This prefix is monitored. If it appears too often, instructions will be updated.`;
 
@@ -182,9 +191,11 @@ NEVER invent revenue claims or market data from training data. Ground all busine
 
 MANDATORY DESIGN SEARCH RULES (NEVER SKIP):
 1. Before ANY color, font, or spacing recommendation → call getStyleRecommendations or getTypographyRecommendations
-2. Before ANY layout suggestion → searchSkillKnowledge(domain: "design", query: "<layout intent> <industry>")
+2. Before ANY layout suggestion → searchSkillKnowledge(domain: "design", query: "<2-3 keywords>")
 3. Before ANY chart type recommendation → call getChartRecommendations with the data context
-4. For industry-specific patterns → searchSkillKnowledge(domain: "design", query: "<industry> <ui-type> layout")
+4. For industry-specific patterns → searchSkillKnowledge(domain: "design", query: "<industry> <pattern>")
+
+⚠️ Keep ALL searchSkillKnowledge queries to 2-4 words MAX. BM25 returns 0 on long queries.
 
 SKELETON-AWARE LAYOUT SYSTEM (Phase 1-4 refactor):
 The system now uses 11 deterministic layout skeletons selected by data shape, not LLM choice.
