@@ -168,18 +168,38 @@ const selectTemplateStep = createStep({
     templateId: z.string(),
     confidence: z.number(),
     reason: z.string(),
+    archetype: z.string(),
   }),
   async execute({ inputData, requestContext, getStepResult, getInitData, suspend, runId }) {
     const platformType = (requestContext.get("platformType") || 'make') as SelectTemplatePlatformType;
-    
+
+    // Resolve workflow name for archetype classification
+    const workflowName = (requestContext.get('workflowName') as string) || '';
+    const entityNames = (requestContext.get('selectedEntities') as string) || '';
+
     const result = await callTool(selectTemplate, 
       {
         platformType,
         eventTypes: inputData.eventTypes,
         fields: inputData.fields,
+        workflowName,
+        entityNames,
       },
       { requestContext }
     );
+
+    // Propagate archetype to RequestContext for downstream tools
+    if (result.archetype) {
+      try { requestContext.set('archetype', result.archetype); } catch { /* non-fatal */ }
+    }
+
+    console.log('[selectTemplateStep] Result:', {
+      templateId: result.templateId,
+      confidence: result.confidence,
+      archetype: result.archetype,
+      reason: result.reason,
+    });
+
     return result;
   },
 });
