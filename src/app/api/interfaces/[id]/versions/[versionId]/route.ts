@@ -1,13 +1,13 @@
-// src/app/api/interfaces/[interfaceId]/versions/[versionId]/route.ts
+// src/app/api/interfaces/[id]/versions/[versionId]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { normalizeSpec } from '@/mastra/lib/spec/uiSpecSchema';
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: Promise<{ interfaceId: string; versionId: string }> }
+  { params }: { params: Promise<{ id: string; versionId: string }> }
 ) {
-  const { interfaceId, versionId } = await params;
+  const { id: interfaceId, versionId } = await params;
   console.log('[GET /versions] Request:', { interfaceId, versionId });
 
   // Validate UUIDs
