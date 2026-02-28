@@ -237,13 +237,23 @@ export async function POST(req: Request) {
 
       // Update customer usage
       if (customerId) {
-        await supabase.rpc("increment_customer_runs", { cid: customerId }).catch(() => {});
-        // Fallback: direct update
-        await supabase
-          .from("product_customers")
-          .update({ total_runs: (await supabase.from("product_customers").select("total_runs").eq("id", customerId).single()).data?.total_runs + 1 || 1, last_run_at: now })
-          .eq("id", customerId)
-          .catch(() => {});
+        try {
+          const { data: custData } = await supabase
+            .from("product_customers")
+            .select("total_runs")
+            .eq("id", customerId)
+            .single();
+
+          await supabase
+            .from("product_customers")
+            .update({
+              total_runs: (custData?.total_runs ?? 0) + 1,
+              last_run_at: now,
+            })
+            .eq("id", customerId);
+        } catch {
+          // Non-critical — execution still succeeded
+        }
       }
 
       return json(200, { ok: true, executionId, status: "success", mapped_results: mappedResults });
