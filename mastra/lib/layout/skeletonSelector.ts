@@ -7,8 +7,8 @@
 //   0. Explicit UI type (landing-page, form-wizard, etc.)
 //   1. Client-facing mode → Storyboard (always)
 //   2. Operational monitoring signals (status + timestamp + high density)
-//   3. Table-heavy data (>60% table-suitable or >15 fields)
-//   4. High categorical diversity (3+ categories, 8+ fields, analyze/compare intent)
+//   3. High categorical diversity (3+ categories, 6+ fields, breakdown data)
+//   4. Table-heavy data (>60% table-suitable ratio, or >40% + >20 fields)
 //   5. Default → Executive Overview (clean, professional)
 
 import { SkeletonId } from './skeletons';
@@ -250,12 +250,11 @@ function selectSkeletonCandidate(context: SelectionContext): SkeletonId {
     return 'operational-monitoring';
   }
 
-  // ── PRIORITY 3: Table-heavy data ──────────────────────────────────
-  if (context.dataShape.tableSuitableRatio > 0.6 || context.dataShape.fieldCount > 15) {
-    return 'table-first';
-  }
-
-  // ── PRIORITY 4: High categorical diversity ────────────────────────
+  // ── PRIORITY 3: High categorical diversity (analytical data) ──────
+  // Moved ABOVE table-first. Data with rich categorical fields (source,
+  // industry, country, status) should get analytical layouts, not tables.
+  // Enriched n8n workflows often have 17-25 fields but are analytically
+  // rich — they need breakdown charts, not just a giant data table.
   if (
     context.dataShape.categoricalFields >= 2 &&
     context.dataShape.fieldCount >= 6 &&
@@ -263,10 +262,26 @@ function selectSkeletonCandidate(context: SelectionContext): SkeletonId {
     (
       intentLower.includes('analyze') || intentLower.includes('compare') ||
       intentLower.includes('breakdown') || intentLower.includes('segment') ||
-      context.dataShape.categoricalFields >= 3
+      context.dataShape.categoricalFields >= 3 ||
+      // Strong analytical signal: many categories relative to total fields
+      (context.dataShape.categoricalFields >= 4 && context.dataShape.tableSuitableRatio < 0.5)
     )
   ) {
     return 'analytical-breakdown';
+  }
+
+  // ── PRIORITY 4: Table-heavy data ──────────────────────────────────
+  // Tightened: requires genuinely table-suitable data shape, not just
+  // high field count. Modern n8n workflows routinely have 17-25 fields
+  // but most are chartable (scores, budgets, categories), not table-only.
+  // Old condition: `tableSuitableRatio > 0.6 || fieldCount > 15`
+  // New condition: tableSuitableRatio must be dominant (>0.6), OR
+  //   both moderately table-like (>0.4) AND field-rich (>20).
+  if (
+    context.dataShape.tableSuitableRatio > 0.6 ||
+    (context.dataShape.tableSuitableRatio > 0.4 && context.dataShape.fieldCount > 20)
+  ) {
+    return 'table-first';
   }
 
   // ── PRIORITY 5: Default → Executive Overview ──────────────────────
@@ -297,11 +312,11 @@ export function getSelectionReason(context: SelectionContext, selectedId: Skelet
     case 'operational-monitoring':
       return `Operational signals: hasTimestamp=${context.dataShape.hasTimestamp}, statusFields=${context.dataShape.statusFields}, hasTimeSeries=${context.dataShape.hasTimeSeries}, eventDensity=${context.dataShape.eventDensity}`;
 
-    case 'table-first':
-      return `Data-heavy: tableSuitableRatio=${context.dataShape.tableSuitableRatio.toFixed(2)}, fieldCount=${context.dataShape.fieldCount}${context.dataShape.fieldCount > 15 ? ' (>15)' : ''}`;
-
     case 'analytical-breakdown':
-      return `Analytical: categoricalFields=${context.dataShape.categoricalFields}, fieldCount=${context.dataShape.fieldCount}, intent includes analysis keywords`;
+      return `Analytical: categoricalFields=${context.dataShape.categoricalFields}, fieldCount=${context.dataShape.fieldCount}, hasBreakdown=${context.dataShape.hasBreakdown}, tableSuitableRatio=${context.dataShape.tableSuitableRatio.toFixed(2)}`;
+
+    case 'table-first':
+      return `Table-heavy: tableSuitableRatio=${context.dataShape.tableSuitableRatio.toFixed(2)}, fieldCount=${context.dataShape.fieldCount}`;
 
     case 'executive-overview':
       return `Executive overview: clean layout for ${context.dataShape.fieldCount} fields (${context.dataShape.eventDensity} density)`;
