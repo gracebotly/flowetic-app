@@ -2260,7 +2260,7 @@ export async function POST(req: Request) {
                   });
                 }
               } catch (buildErr: any) {
-                console.warn('[api/chat] Auto build_preview after intent confirm failed:', buildErr?.message);
+                console.warn('[api/chat] Auto build_preview after intent confirm failed:', buildErr instanceof Error ? buildErr.message : String(buildErr));
               }
             }
 
@@ -2484,6 +2484,35 @@ export async function POST(req: Request) {
               if (advResult?.advanced) {
                 requestContext.set('phase', advResult.to!);
                 console.log('[api/chat] Auto-advanced after proposal selection:', advResult);
+
+                // ── AUTO-GENERATE PREVIEW ON PROPOSAL→BUILD_EDIT TRANSITION ──
+                // The shouldAutoGenerate guard (above) already ran when finalPhase
+                // was still 'propose', so it didn't trigger. Now that we've advanced
+                // to build_edit, trigger the deterministic preview pipeline immediately.
+                // This mirrors the style→build_preview path that does the same thing.
+                if (advResult.to === 'build_edit') {
+                  console.log('[api/chat] 🚀 Auto-generating preview after proposal selection → build_edit');
+                  try {
+                    const buildPreviewStream = await handleDeterministicBuildPreview({
+                      mastra,
+                      supabase,
+                      tenantId,
+                      userId,
+                      journeyThreadId: cleanJourneyThreadId,
+                      mastraThreadId: cleanMastraThreadId,
+                      requestContext,
+                    });
+                    if (buildPreviewStream) {
+                      console.log('[api/chat] 🚀 Using deterministic build_edit preview bypass (post-proposal)');
+                      return createUIMessageStreamResponse({
+                        stream: buildPreviewStream,
+                      });
+                    }
+                  } catch (buildErr: unknown) {
+                    console.warn('[api/chat] Auto build_preview after proposal selection failed, falling through to agent:', buildErr instanceof Error ? buildErr.message : String(buildErr));
+                    // Fall through to agent — it will try to generate via tool calls
+                  }
+                }
               }
             } catch (advErr) {
               console.warn('[api/chat] autoAdvance after proposal selection failed:', advErr);
@@ -2643,7 +2672,7 @@ export async function POST(req: Request) {
               });
             }
           } catch (buildErr: any) {
-            console.warn('[api/chat] Intent-triggered build_preview failed:', buildErr?.message);
+            console.warn('[api/chat] Intent-triggered build_preview failed:', buildErr instanceof Error ? buildErr.message : String(buildErr));
             // Fall through to agent
           }
         }
@@ -2867,7 +2896,7 @@ export async function POST(req: Request) {
             });
           }
         } catch (buildErr: any) {
-          console.warn('[api/chat] Deterministic build_edit preview failed, falling through to agent:', buildErr?.message);
+          console.warn('[api/chat] Deterministic build_edit preview failed, falling through to agent:', buildErr instanceof Error ? buildErr.message : String(buildErr));
         }
       }
     }
