@@ -817,6 +817,16 @@ export function ChatWorkspace({
   }, [loadedSpec]);
 
   const validatedSpec = validationResult?.spec ?? loadedSpec;
+
+  // Filter hidden components from spec for rendering
+  const renderSpec = useMemo(() => {
+    const spec = validatedSpec || loadedSpec;
+    if (!spec?.components) return spec;
+    return {
+      ...spec,
+      components: spec.components.filter((comp: any) => !comp.props?.hidden),
+    };
+  }, [validatedSpec, loadedSpec]);
   const [loadedDesignTokens, setLoadedDesignTokens] = useState<any>(null);
   const [editPalettes, setEditPalettes] = useState<Palette[]>([]);
   const [editDensity, setEditDensity] = useState<Density>("comfortable");
@@ -1056,23 +1066,29 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
-  // Auto-open edit panel when in interactive_edit mode
+  // Auto-open edit panel and sync widgets when entering build_edit mode
   useEffect(() => {
     if (journeyMode === "build_edit") {
       setEditPanelOpen(true);
       setView("edit");
-      // Auto-populate widgets from spec if showInteractiveEditPanel wasn't called
-      if (editWidgets.length === 0 && loadedSpec?.components?.length > 0) {
-        const derived: WidgetConfig[] = loadedSpec.components.map((comp: any, idx: number) => ({
-          id: comp.id || `widget-${idx}`,
-          title: comp.props?.title || comp.type || `Widget ${idx + 1}`,
-          kind: classifyWidgetKind(comp.type),
-          enabled: !comp.props?.hidden,
-        }));
-        setEditWidgets(derived);
-      }
     }
-  }, [journeyMode, loadedSpec]);
+  }, [journeyMode]);
+
+  // Sync edit widgets from loaded spec whenever spec changes
+  // This ensures the edit panel reflects the latest spec after both
+  // agent edits (via applySpecPatch) and panel edits (via applyInteractiveEdits)
+  useEffect(() => {
+    if (loadedSpec?.components?.length > 0) {
+      const derived: WidgetConfig[] = loadedSpec.components.map((comp: any, idx: number) => ({
+        id: comp.id || `widget-${idx}`,
+        title: comp.props?.title || comp.type || `Widget ${idx + 1}`,
+        kind: classifyWidgetKind(comp.type),
+        enabled: !comp.props?.hidden,
+        ...(comp.props?.chartType ? { chartType: comp.props.chartType } : {}),
+      }));
+      setEditWidgets(derived);
+    }
+  }, [loadedSpec]);
 
   // ── Fetch dashboard spec + events when interfaceId/versionId are set ──
   // NOTE(tech-debt-2): This business logic (event fetching, JSONB flattening,
@@ -2274,7 +2290,7 @@ return (
                         </div>
                       )}
                       <ResponsiveDashboardRenderer
-                        spec={validatedSpec || loadedSpec}
+                        spec={renderSpec}
                         designTokens={effectiveDesignTokens}
                         deviceMode={deviceMode}
                         isEditing={journeyMode === "build_edit"}
