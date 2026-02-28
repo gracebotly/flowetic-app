@@ -19,9 +19,23 @@ export async function GET(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // Get tenant_id from user metadata
-  const tenantId = user.user_metadata?.tenant_id;
-  if (!tenantId) {
+  // Get tenant_id from memberships table (matches all other API routes)
+  // user_metadata.tenant_id is not reliably set in all auth flows
+  const tenantId = user.user_metadata?.tenant_id
+    || user.user_metadata?.tenantId;
+
+  let resolvedTenantId = tenantId;
+  if (!resolvedTenantId) {
+    const { data: membership } = await supabase
+      .from('memberships')
+      .select('tenant_id')
+      .eq('user_id', user.id)
+      .limit(1)
+      .maybeSingle();
+    resolvedTenantId = membership?.tenant_id;
+  }
+
+  if (!resolvedTenantId) {
     return NextResponse.json({ error: 'No tenant' }, { status: 403 });
   }
 
@@ -60,7 +74,7 @@ export async function GET(
           .from('journey_sessions')
           .select('source_id')
           .eq('preview_interface_id', interfaceId)
-          .eq('tenant_id', tenantId)
+          .eq('tenant_id', resolvedTenantId)
           .order('updated_at', { ascending: false })
           .limit(1)
           .maybeSingle();
