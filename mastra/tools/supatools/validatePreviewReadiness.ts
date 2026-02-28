@@ -96,11 +96,15 @@ export const validatePreviewReadiness = createSupaTool<z.infer<typeof outputSche
       .eq('tenant_id', tenantId)
       .eq('source_id', sourceId);
 
-    // ✅ FIX: Scope to selected workflow to match getEventStats behavior
+    // ✅ FIX: Scope to selected workflow — use dual-match for consistency with analyzeSchema.
+    // Events may store workflow_name as either external ID or display name,
+    // while workflow_id is always the external ID.
     const selectedWorkflowName = context.requestContext?.get('selectedWorkflowName') as string | undefined;
     if (selectedWorkflowName) {
-      eventsQuery = eventsQuery.eq('state->>workflow_name', selectedWorkflowName);
-      console.log(`[validatePreviewReadiness] Scoping events to workflow: "${selectedWorkflowName}"`);
+      eventsQuery = eventsQuery.or(
+        `state->>workflow_name.eq.${selectedWorkflowName},state->>workflow_id.eq.${selectedWorkflowName}`
+      );
+      console.log(`[validatePreviewReadiness] Scoping events to workflow (dual-match): "${selectedWorkflowName}"`);
     }
     
     const { data: events, error: eventsError } = await eventsQuery;
@@ -185,6 +189,5 @@ export const validatePreviewReadiness = createSupaTool<z.infer<typeof outputSche
     };
   },
 });
-
 
 

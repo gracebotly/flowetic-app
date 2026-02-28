@@ -217,9 +217,14 @@ async function assessDataAvailability(
 
     // ✅ FIX: Scope to specific workflow when the user selected one.
     // Without this, a single n8n source with 3 workflows returns all events.
+    // Use dual-match: events may store workflow_name as either the external ID
+    // or the display name, while workflow_id is always the external ID.
+    // Must match BOTH forms for accurate event counts.
     if (workflowName) {
-      query = query.eq('state->>workflow_name', workflowName);
-      console.log(`[assessDataAvailability] Scoping to workflow: "${workflowName}"`);
+      query = query.or(
+        `state->>workflow_name.eq.${workflowName},state->>workflow_id.eq.${workflowName}`
+      );
+      console.log(`[assessDataAvailability] Scoping to workflow (dual-match): "${workflowName}"`);
     }
 
     const { data: events, count } = await query;
