@@ -43,11 +43,14 @@ function classifyField(field: {
   nullable: boolean;
   uniqueValues: number;
   totalRows: number;
+  nullCount?: number;
   avgLength?: number;
+  arrayItemType?: string;
 }): BaseClassifiedField {
   const { name, type, sample, nullable, uniqueValues, totalRows } = field;
   const avgLength = field.avgLength ?? 0;
   const cardinalityRatio = totalRows > 0 ? uniqueValues / totalRows : 0;
+  const nullRate = (field.nullCount ?? 0) / Math.max(field.totalRows ?? 1, 1);
 
   let shape: FieldShape = 'unknown';
   let component = 'DataTable';
@@ -138,21 +141,43 @@ function classifyField(field: {
     aggregation = 'avg';
     role = 'supporting';
   }
-  // 7. Long text (avg length > 100)
+  // 7. Rich text: long-form AI-generated content (summaries, reports)
+  // Must be checked BEFORE long_text (which catches avgLength > 100)
+  else if (type === 'string' && avgLength > 200) {
+    shape = 'rich_text';
+    component = 'ContentCard';
+    aggregation = 'none';
+    role = 'detail';
+  }
+  // 8. Nested object: complex structured data that wasn't fully flattened
+  else if (type === 'object') {
+    shape = 'nested_object';
+    component = 'DataTable';
+    aggregation = 'none';
+    role = 'detail';
+  }
+  // 9. Array field: lists of items (key_findings[], recommendations[])
+  else if (type === 'array') {
+    shape = 'array_field';
+    component = 'DataTable';
+    aggregation = 'none';
+    role = 'detail';
+  }
+  // 10. Long text (avg length > 100)
   else if (type === 'string' && avgLength > 100) {
     shape = 'long_text';
     component = 'DataTable';
     aggregation = 'none';
     role = 'detail';
   }
-  // 8. High cardinality text (>50 unique string values)
+  // 11. High cardinality text (>50 unique string values)
   else if (type === 'string' && uniqueValues > 50) {
     shape = 'high_cardinality_text';
     component = 'DataTable';
     aggregation = 'none';
     role = 'detail';
   }
-  // 9. Label (medium cardinality categorical, 3-50 values)
+  // 12. Label (medium cardinality categorical, 3-50 values)
   else if (type === 'string' && uniqueValues >= 3 && uniqueValues <= 50) {
     shape = 'label';
     // Skill Section 7: 2-6 → PieChart, 7-15 → horizontal BarChart, 16+ → DataTable
@@ -166,20 +191,32 @@ function classifyField(field: {
     aggregation = 'count_per_category';
     role = 'breakdown';
   }
-  // 10. Low cardinality string (2 values, non-status)
+  // 13. Low cardinality string (2 values, non-status)
   else if (type === 'string' && uniqueValues === 2) {
     shape = 'binary';
     component = 'MetricCard';
     aggregation = 'percentage';
     role = 'supporting';
   }
-  // 11. Generic numeric
+  // 14. Generic numeric
   else if (type === 'number') {
     shape = 'numeric';
     component = 'MetricCard';
     aggregation = 'avg';
     role = 'supporting';
   }
+
+  // Sparse field guard: fields with >50% null rate should not be charted
+  const sparseField = nullRate > 0.5;
+  if (sparseField && ['BarChart', 'PieChart', 'DonutChart', 'LineChart', 'TimeseriesChart', 'AreaChart'].includes(component)) {
+    // Downgrade chart to table — charting sparse data produces "Unknown: N" slices
+    component = 'DataTable';
+    role = 'detail';
+  }
+
+  // Field group tagging: fields with dot-notation get tagged with their prefix
+  const dotIndex = name.indexOf('.');
+  const fieldGroup = dotIndex > 0 ? name.substring(0, dotIndex) : undefined;
 
   return {
     name,
@@ -194,6 +231,10 @@ function classifyField(field: {
     sample,
     skip,
     skipReason,
+    fieldGroup,
+    sparseField,
+    nullRate: Math.round(nullRate * 100) / 100,
+    ...(shape === 'array_field' && field.arrayItemType ? { arrayItemType: field.arrayItemType } : {}),
   };
 }
 
@@ -302,7 +343,9 @@ export const generateMapping = createTool({
       nullable: z.boolean().optional(),
       uniqueValues: z.number().optional(),
       totalRows: z.number().optional(),
+      nullCount: z.number().optional(),
       avgLength: z.number().optional(),
+      arrayItemType: z.string().optional(),
     })),
     platformType: z.string(),
   }),
@@ -319,6 +362,10 @@ export const generateMapping = createTool({
       totalRows: z.number(),
       skip: z.boolean(),
       skipReason: z.string().optional(),
+      fieldGroup: z.string().optional(),
+      sparseField: z.boolean().optional(),
+      nullRate: z.number().optional(),
+      arrayItemType: z.string().optional(),
       semanticSource: z.enum(['heuristic', 'skill_override']).optional(),
       references: z.string().optional(),
       displayName: z.string().optional(),
@@ -339,6 +386,14 @@ export const generateMapping = createTool({
       tableSuitableRatio: z.number(),
       eventDensity: z.enum(['low', 'medium', 'high']),
       dataStory: z.enum(['healthy', 'warning', 'critical', 'unknown']),
+      dataDisplayMode: z.enum(['metrics', 'records', 'hybrid']),
+      richTextFields: z.array(z.string()),
+      fieldGroups: z.array(z.object({
+        prefix: z.string(),
+        fields: z.array(z.string()),
+        avgNullRate: z.number(),
+      })),
+      sparseFields: z.array(z.string()),
       layoutQuery: z.string(),
       summary: z.string(),
     }).optional(),
@@ -367,7 +422,9 @@ export const generateMapping = createTool({
       nullable: f.nullable ?? false,
       uniqueValues: f.uniqueValues ?? 1,
       totalRows: f.totalRows ?? 1,
+      nullCount: f.nullCount,
       avgLength: f.avgLength,
+      arrayItemType: f.arrayItemType,
     }));
 
     // ── Step 1.5: Apply semantic overrides from field-semantics.yaml ───
@@ -462,6 +519,10 @@ export const generateMapping = createTool({
       totalRows: f.totalRows,
       skip: f.skip,
       skipReason: f.skipReason,
+      fieldGroup: f.fieldGroup,
+      sparseField: f.sparseField,
+      nullRate: f.nullRate,
+      arrayItemType: f.arrayItemType,
       semanticSource: f.semanticSource,
       references: f.references,
       displayName: f.displayName,

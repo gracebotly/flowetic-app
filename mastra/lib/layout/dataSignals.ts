@@ -32,6 +32,9 @@ export interface ClassifiedFieldInput {
   totalRows: number;
   skip: boolean;
   skipReason?: string;
+  fieldGroup?: string;
+  sparseField?: boolean;
+  nullRate?: number;
 }
 
 /**
@@ -101,6 +104,7 @@ export function computeDataSignals(
 ): DataSignals {
   const active = fieldAnalysis.filter(f => !f.skip);
   const fieldCount = active.length;
+  const classifiedFields = active;
 
   // ── Timestamp / Timeseries detection ──────────────────────────────
   const hasTimestamp = active.some(
@@ -219,6 +223,51 @@ export function computeDataSignals(
     `story=${dataStory}`,
   ].join(', ');
 
+  // Compute data display mode from field classifications
+  const richTextFields = classifiedFields
+    .filter(f => f.shape === 'rich_text' || f.shape === 'nested_object')
+    .map(f => f.name);
+
+  const sparseFields = classifiedFields
+    .filter(f => f.sparseField === true)
+    .map(f => f.name);
+
+  // Build field groups from classified fields
+  const groupMap = new Map<string, { fields: string[]; nullRates: number[] }>();
+  for (const field of classifiedFields) {
+    if (field.fieldGroup) {
+      if (!groupMap.has(field.fieldGroup)) {
+        groupMap.set(field.fieldGroup, { fields: [], nullRates: [] });
+      }
+      const g = groupMap.get(field.fieldGroup)!;
+      g.fields.push(field.name);
+      g.nullRates.push(field.nullRate ?? 0);
+    }
+  }
+
+  const fieldGroups = Array.from(groupMap.entries()).map(([prefix, data]) => ({
+    prefix,
+    fields: data.fields,
+    avgNullRate: data.nullRates.length > 0
+      ? Math.round((data.nullRates.reduce((a, b) => a + b, 0) / data.nullRates.length) * 100) / 100
+      : 0,
+  }));
+
+  // Determine display mode
+  let dataDisplayMode: 'metrics' | 'records' | 'hybrid' = 'metrics';
+
+  const hasRichContent = richTextFields.length > 0;
+  const hasFieldGroupsWithMixedNulls = fieldGroups.some(g =>
+    g.fields.length >= 3 && g.avgNullRate > 0.2 && g.avgNullRate < 0.8
+  );
+  const hasChartableFields = classifiedFields.some(f =>
+    !f.sparseField && ['numeric', 'money', 'rate', 'duration', 'status', 'label'].includes(f.shape)
+  );
+
+  if (hasRichContent || hasFieldGroupsWithMixedNulls) {
+    dataDisplayMode = hasChartableFields ? 'hybrid' : 'records';
+  }
+
   return {
     fieldCount,
     hasTimestamp,
@@ -228,6 +277,10 @@ export function computeDataSignals(
     categoricalFields,
     tableSuitableRatio,
     eventDensity,
+    dataDisplayMode,
+    richTextFields,
+    fieldGroups,
+    sparseFields,
     dataStory,
     layoutQuery,
     summary,

@@ -51,6 +51,18 @@ export interface DataShapeSignals {
   tableSuitableRatio: number;
   /** Event density classification */
   eventDensity: 'low' | 'medium' | 'high';
+  /** Whether data should be displayed as metrics, browsable records, or both */
+  dataDisplayMode: 'metrics' | 'records' | 'hybrid';
+  /** Fields classified as rich_text shape */
+  richTextFields: string[];
+  /** Detected field groups with null rate metadata */
+  fieldGroups: Array<{
+    prefix: string;
+    fields: string[];
+    avgNullRate: number;
+  }>;
+  /** Fields with nullRate > 0.5 */
+  sparseFields: string[];
 }
 
 /**
@@ -61,6 +73,7 @@ export interface SelectionContext {
   uiType: UIType;
   /** Computed data shape signals */
   dataShape: DataShapeSignals;
+  dataDisplayMode?: 'metrics' | 'records' | 'hybrid';
   /** Dashboard mode: internal (agency) or client-facing (customer portal) */
   mode: 'internal' | 'client-facing';
   /** Platform type (vapi, n8n, make, etc.) — informational, not used in selection */
@@ -120,6 +133,12 @@ const SKELETON_CAPACITY: Record<string, SkeletonCapacity> = {
     minActiveFields: 3,
     minDistinctRoles: 1,
     fallback: 'executive-overview', // it IS the final fallback
+  },
+  'record-browser': {
+    minChartableFields: 1,
+    minActiveFields: 3,
+    minDistinctRoles: 1,
+    fallback: 'record-browser',
   },
 };
 
@@ -221,6 +240,22 @@ function selectSkeletonCandidate(context: SelectionContext): SkeletonId {
   if (context.uiType === 'settings') return 'settings-dashboard';
   if (context.uiType === 'auth') return 'authentication-flow';
 
+  // ── PRIORITY 0.5: Record-oriented data → Record Browser ────────
+  // If the data pipeline detected rich text, field groups with mixed nulls,
+  // or hybrid data shapes, route to the record-browser skeleton.
+  // This fires BEFORE dashboard scoring so record-oriented data doesn't
+  // get forced into analytics-oriented skeletons.
+  const displayMode = context.dataShape?.dataDisplayMode
+    ?? context.dataDisplayMode
+    ?? 'metrics';
+
+  if (
+    (displayMode === 'records' || displayMode === 'hybrid') &&
+    (context.uiType === 'dashboard' || !context.uiType)
+  ) {
+    return 'record-browser';
+  }
+
   // ── PRIORITY 1: Client-facing mode → Storyboard (always) ─────────
   if (context.mode === 'client-facing') return 'storyboard-insight';
 
@@ -308,6 +343,9 @@ export function getSelectionReason(context: SelectionContext, selectedId: Skelet
 
     case 'storyboard-insight':
       return 'Client-facing mode → narrative storyboard layout';
+
+    case 'record-browser':
+      return `Record-oriented data: displayMode=${context.dataShape.dataDisplayMode}, richText=${context.dataShape.richTextFields.length}, groups=${context.dataShape.fieldGroups.length}`;
 
     case 'operational-monitoring':
       return `Operational signals: hasTimestamp=${context.dataShape.hasTimestamp}, statusFields=${context.dataShape.statusFields}, hasTimeSeries=${context.dataShape.hasTimeSeries}, eventDensity=${context.dataShape.eventDensity}`;

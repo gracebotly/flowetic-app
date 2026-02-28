@@ -28,7 +28,10 @@ export type FieldShape =
   | 'high_cardinality_text'
   | 'long_text'
   | 'numeric'
-  | 'unknown';
+  | 'unknown'
+  | 'rich_text'
+  | 'nested_object'
+  | 'array_field';
 
 export type FieldRole = 'hero' | 'supporting' | 'trend' | 'breakdown' | 'detail';
 
@@ -51,6 +54,14 @@ export interface BaseClassifiedField {
   sample: unknown;
   skip: boolean;
   skipReason?: string;
+  /** Dot-notation prefix group, e.g. 'body', 'research' */
+  fieldGroup?: string;
+  /** True when nullRate > 0.5 — field is sparse, avoid charts */
+  sparseField?: boolean;
+  /** 0-1 ratio of null/undefined values across all rows */
+  nullRate?: number;
+  /** For array_field shape: the type of items in the array */
+  arrayItemType?: string;
 }
 
 // ============================================================================

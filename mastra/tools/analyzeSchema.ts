@@ -5,6 +5,7 @@ import { createAuthenticatedClient } from '../lib/supabase';
 import { extractTenantContext } from '../lib/tenant-verification';
 import { getExpectedFieldsForPlatform } from '../normalizers';
 import { AuthenticatedContextSchema } from '../lib/REQUEST_CONTEXT_CONTRACT';
+import { detectFieldGroups } from '../lib/layout/fieldGroupDetector';
 
 export const analyzeSchema = createTool({
   id: 'analyzeSchema',
@@ -27,6 +28,13 @@ export const analyzeSchema = createTool({
       totalRows: z.number(),
       avgLength: z.number().optional(),
     })),
+    fieldGroupMeta: z.array(z.object({
+      prefix: z.string(),
+      fieldCount: z.number(),
+      avgNullRate: z.number(),
+      correlatedStatus: z.string().optional(),
+      fields: z.array(z.string()),
+    })).optional().describe('Field groups detected from dot-notation prefixes'),
     eventTypes: z.array(z.string()),
     totalEvents: z.number(),
     confidence: z.number().min(0).max(1),
@@ -70,7 +78,7 @@ export const analyzeSchema = createTool({
     }
 
     // Analyze schema from events
-    const fieldMap = new Map<string, { type: string; samples: unknown[]; nullCount: number }>();
+    const fieldMap = new Map<string, { type: string; samples: unknown[]; nullCount: number; totalRows: number; arrayItemType?: string }>();
     const eventTypes = new Set<string>();
 
     // Detect platform from first event's state or labels
@@ -84,10 +92,11 @@ export const analyzeSchema = createTool({
       if (typeof labels === 'object' && labels !== null) {
         Object.entries(labels).forEach(([key, value]) => {
           if (!fieldMap.has(key)) {
-            fieldMap.set(key, { type: typeof value, samples: [], nullCount: 0 });
+            fieldMap.set(key, { type: typeof value, samples: [], nullCount: 0, totalRows: 0 });
           }
           const field = fieldMap.get(key)!;
-          if (value === null) {
+          field.totalRows++;
+          if (value === null || value === undefined || value === '') {
             field.nullCount++;
           } else {
             field.samples.push(value);
@@ -106,9 +115,10 @@ export const analyzeSchema = createTool({
         Object.entries(state as Record<string, unknown>).forEach(([key, value]) => {
           // Use unprefixed key names so generateMapping finds "workflow_id" not "state.workflow_id"
           if (!fieldMap.has(key)) {
-            fieldMap.set(key, { type: typeof value, samples: [], nullCount: 0 });
+            fieldMap.set(key, { type: typeof value, samples: [], nullCount: 0, totalRows: 0 });
           }
           const field = fieldMap.get(key)!;
+          field.totalRows++;
           if (value === null || value === undefined || value === '') {
             field.nullCount++;
           } else {
@@ -121,15 +131,34 @@ export const analyzeSchema = createTool({
             Object.entries(value as Record<string, unknown>).forEach(([nestedKey, nestedValue]) => {
               const flatKey = `${key}.${nestedKey}`;
               if (!fieldMap.has(flatKey)) {
-                fieldMap.set(flatKey, { type: typeof nestedValue, samples: [], nullCount: 0 });
+                fieldMap.set(flatKey, { type: typeof nestedValue, samples: [], nullCount: 0, totalRows: 0 });
               }
               const nestedField = fieldMap.get(flatKey)!;
+              nestedField.totalRows++;
               if (nestedValue === null || nestedValue === undefined || nestedValue === '') {
                 nestedField.nullCount++;
               } else {
                 nestedField.samples.push(nestedValue);
               }
             });
+          }
+
+
+          // Handle array fields
+          if (Array.isArray(value) && value.length > 0) {
+            const flatKey = `${key}`;
+            if (!fieldMap.has(flatKey)) {
+              fieldMap.set(flatKey, { type: 'array', samples: [], nullCount: 0, totalRows: 0 });
+            }
+            const entry = fieldMap.get(flatKey)!;
+            // Store first item type for downstream classification
+            const firstItem = value[0];
+            if (!entry.arrayItemType) {
+              entry.arrayItemType = typeof firstItem === 'object' ? 'object' : typeof firstItem;
+            }
+            if (entry.samples.length < 5) {
+              entry.samples.push(value);
+            }
           }
         });
       }
@@ -145,16 +174,20 @@ export const analyzeSchema = createTool({
       // ── 3. Standard columns (existing behavior) ──
       if (event.value !== null && event.value !== undefined) {
         if (!fieldMap.has('value')) {
-          fieldMap.set('value', { type: 'number', samples: [], nullCount: 0 });
+          fieldMap.set('value', { type: 'number', samples: [], nullCount: 0, totalRows: 0 });
         }
-        fieldMap.get('value')!.samples.push(event.value);
+        const valueField = fieldMap.get('value')!;
+        valueField.totalRows++;
+        valueField.samples.push(event.value);
       }
 
       if (event.text) {
         if (!fieldMap.has('text')) {
-          fieldMap.set('text', { type: 'string', samples: [], nullCount: 0 });
+          fieldMap.set('text', { type: 'string', samples: [], nullCount: 0, totalRows: 0 });
         }
-        fieldMap.get('text')!.samples.push(event.text);
+        const textField = fieldMap.get('text')!;
+        textField.totalRows++;
+        textField.samples.push(event.text);
       }
     });
 
@@ -171,7 +204,7 @@ export const analyzeSchema = createTool({
         sample: data.samples[0],
         nullable: data.nullCount > 0,
         uniqueValues: uniqueSet.size,
-        totalRows,
+        totalRows: data.totalRows || totalRows,
         ...(avgLength !== undefined ? { avgLength } : {}),
       };
     });
@@ -196,8 +229,26 @@ export const analyzeSchema = createTool({
       }
     }
 
+    // Compute field groups from the analyzed fields
+    const fieldInputsForGrouping = Array.from(fieldMap.entries()).map(([name, info]) => ({
+      name,
+      nullCount: info.nullCount ?? 0,
+      totalRows: info.totalRows ?? events.length,
+    }));
+
+    const fieldGroups = detectFieldGroups(fieldInputsForGrouping, events as Array<Record<string, unknown>>);
+
+    const fieldGroupMeta = fieldGroups.map(g => ({
+      prefix: g.prefix,
+      fieldCount: g.fields.length,
+      avgNullRate: g.avgNullRate,
+      correlatedStatus: g.correlatedStatus,
+      fields: g.fields,
+    }));
+
     const result = {
       fields,
+      fieldGroupMeta,
       eventTypes: Array.from(eventTypes),
       totalEvents: events.length,
       confidence,
