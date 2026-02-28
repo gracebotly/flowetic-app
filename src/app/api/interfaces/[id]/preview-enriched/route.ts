@@ -2,6 +2,34 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { transformDataForComponents } from '@/lib/dashboard/transformDataForComponents';
 
+/**
+ * Recursively flatten a nested object into dot-notation keys.
+ * e.g. { body: { topic: "AI", industry: "tech" } }
+ * → { "body": {...}, "body.topic": "AI", "body.industry": "tech" }
+ *
+ * Preserves both the nested object AND creates flat dot-notation keys
+ * so both access patterns work (e[field] and traversal).
+ */
+function deepFlattenWithDotNotation(
+  obj: Record<string, any>,
+  target: Record<string, any>,
+  prefix = ''
+): void {
+  for (const [key, value] of Object.entries(obj)) {
+    const fullKey = prefix ? `${prefix}.${key}` : key;
+
+    if (!prefix && (target[key] == null || target[key] === '')) {
+      target[key] = value;
+    }
+
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      deepFlattenWithDotNotation(value, target, fullKey);
+    } else if (target[fullKey] == null || target[fullKey] === '') {
+      target[fullKey] = value;
+    }
+  }
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -56,15 +84,43 @@ export async function GET(
   // 2. Fetch events and enrich
   if (spec?.components?.length) {
     try {
-      // Try via interface_id first
       let events: any[] = [];
-      const { data: interfaceEvents } = await supabase
+
+      let selectedWorkflowId: string | null = null;
+      const { data: journeySession } = await supabase
+        .from('journey_sessions')
+        .select('entity_id')
+        .eq('preview_interface_id', interfaceId)
+        .eq('tenant_id', resolvedTenantId)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (journeySession?.entity_id) {
+        const { data: entity } = await supabase
+          .from('source_entities')
+          .select('external_id')
+          .eq('id', journeySession.entity_id)
+          .maybeSingle();
+        selectedWorkflowId = entity?.external_id || null;
+      }
+
+      let eventsQuery = supabase
         .from('events')
         .select('id, type, name, value, unit, text, state, labels, timestamp, created_at, source_id')
         .eq('interface_id', interfaceId)
         .not('type', 'in', '("state","tool_event")')
         .order('timestamp', { ascending: false })
         .limit(200);
+
+      if (selectedWorkflowId) {
+        eventsQuery = eventsQuery.or(
+          `state->>workflow_id.eq.${selectedWorkflowId},state->>workflow_name.eq.${selectedWorkflowId}`
+        );
+        console.log(`[preview-enriched] Scoping events to workflow: ${selectedWorkflowId}`);
+      }
+
+      const { data: interfaceEvents } = await eventsQuery;
 
       if (interfaceEvents && interfaceEvents.length > 0) {
         events = interfaceEvents;
@@ -95,17 +151,16 @@ export async function GET(
         // Flatten state + labels JSONB to top-level fields
         const flatEvents = events.map((evt: any) => {
           const flat: Record<string, any> = { ...evt };
+
           if (evt.state && typeof evt.state === 'object') {
-            for (const [key, value] of Object.entries(evt.state)) {
-              if (flat[key] == null || flat[key] === '') flat[key] = value;
-            }
+            deepFlattenWithDotNotation(evt.state, flat);
             if (flat.duration_ms != null) flat.duration_ms = Number(flat.duration_ms);
           }
+
           if (evt.labels && typeof evt.labels === 'object') {
-            for (const [key, value] of Object.entries(evt.labels)) {
-              if (flat[key] == null || flat[key] === '') flat[key] = value;
-            }
+            deepFlattenWithDotNotation(evt.labels, flat);
           }
+
           return flat;
         });
 
