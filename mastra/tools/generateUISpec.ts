@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { selectSkeleton, type SelectionContext, type UIType } from '../lib/layout/skeletonSelector';
 import { getSkeleton, SKELETON_VERSION, type LayoutSkeleton, type SkeletonId } from '../lib/layout/skeletons';
 import type { DataSignals } from '../lib/layout/dataSignals';
+import { buildHybridComponentsFromSkeleton } from '../lib/layout/builders/hybridBuilder';
 
 // ============================================================================
 // Style bundle catalog
@@ -1889,14 +1890,26 @@ export const generateUISpec = createTool({
 
         // Route to the correct builder based on skeleton category
         if (skeleton.category === 'dashboard') {
-          blueprints = buildDashboardComponentsFromSkeleton(
-            skeleton,
-            mappings,
-            chartRecs as Array<{ type: string; bestFor: string; fieldName?: string }>,
-            resolvedEntityName,
-            inputData.fieldAnalysis,
-            (inputData.designPatterns ?? []) as Array<{ content: string; source: string; score: number }>,
-          );
+          if (skeletonId === 'record-browser') {
+            // ── Record-browser: hybrid builder for record-oriented data ──
+            blueprints = buildHybridComponentsFromSkeleton(
+              skeleton,
+              mappings,
+              chartRecs as Array<{ type: string; bestFor: string; fieldName?: string }>,
+              resolvedEntityName,
+              inputData.fieldAnalysis,
+              inputData.dataSignals as unknown as { dataDisplayMode: 'metrics' | 'records' | 'hybrid'; richTextFields: string[]; fieldGroups: Array<{ prefix: string; fields: string[]; avgNullRate: number }>; sparseFields: string[] } | undefined,
+            );
+          } else {
+            blueprints = buildDashboardComponentsFromSkeleton(
+              skeleton,
+              mappings,
+              chartRecs as Array<{ type: string; bestFor: string; fieldName?: string }>,
+              resolvedEntityName,
+              inputData.fieldAnalysis,
+              (inputData.designPatterns ?? []) as Array<{ content: string; source: string; score: number }>,
+            );
+          }
         } else if (skeleton.category === 'product') {
           blueprints = buildProductComponentsFromSkeleton(skeleton, {
             entityName: resolvedEntityName,
