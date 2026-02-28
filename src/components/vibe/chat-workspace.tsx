@@ -238,6 +238,11 @@ export function ChatWorkspace({
 
   // Guard against concurrent init + user sends
   const initSendInFlight = useRef(false);
+  // Guard: only fetch dashboard spec once per interfaceId+versionId pair.
+  // vibeContext is an object that gets replaced on every chat update,
+  // so the useEffect deps fire even when interfaceId/versionId haven't changed.
+  const hasFetchedSpecRef = useRef(false);
+  const lastFetchedKeyRef = useRef<string>('');
 
   const { messages: uiMessages, sendMessage: sendUiMessage, status: uiStatus, error: uiError } = useChat({
     transport: new DefaultChatTransport({
@@ -1069,35 +1074,135 @@ async function loadSkillMD(platformType: string, sourceId: string, entityId?: st
     }
   }, [journeyMode, loadedSpec]);
 
-  // ── Fetch dashboard spec when interfaceId/versionId are set ──
+  // ── Fetch dashboard spec + events when interfaceId/versionId are set ──
+  // NOTE(tech-debt-2): This business logic (event fetching, JSONB flattening,
+  // transformDataForComponents) should move to a server API route:
+  //   GET /api/interfaces/[id]/preview-enriched
+  // That route fetches spec → events → flattens → enriches → returns.
+  // Client becomes a single fetch call. Testable, cacheable, reusable.
   useEffect(() => {
     const fetchDashboardSpec = async () => {
-      if (!vibeContext?.interfaceId || !vibeContext?.previewVersionId) {
+      const interfaceId = vibeContext?.interfaceId;
+      const versionId = vibeContext?.previewVersionId;
+      if (!interfaceId || !versionId) return;
+
+      // Guard: don't re-fetch if we already loaded this exact pair.
+      // vibeContext is replaced on every chat update, but interfaceId
+      // and versionId only change when a new preview is generated.
+      const fetchKey = `${interfaceId}::${versionId}`;
+      if (hasFetchedSpecRef.current && lastFetchedKeyRef.current === fetchKey) {
         return;
       }
+      hasFetchedSpecRef.current = true;
+      lastFetchedKeyRef.current = fetchKey;
 
       try {
         const res = await fetch(
-          `/api/interfaces/${vibeContext.interfaceId}/versions/${vibeContext.previewVersionId}`,
-          { credentials: 'include' }  // CRITICAL: Include cookies for auth
+          `/api/interfaces/${interfaceId}/versions/${versionId}`,
+          { credentials: 'include' }
         );
 
         if (!res.ok) {
           console.error('[fetchDashboardSpec] Failed to fetch spec:', res.status);
+          hasFetchedSpecRef.current = false; // Allow retry on error
           return;
         }
 
         const data = await res.json();
         console.log('[fetchDashboardSpec] Loaded spec:', {
-          interfaceId: vibeContext.interfaceId,
-          versionId: vibeContext.previewVersionId,
+          interfaceId,
+          versionId,
           componentCount: data.spec_json?.components?.length ?? 0,
         });
 
-        setLoadedSpec(data.spec_json);
-        setLoadedDesignTokens(data.design_tokens);
-      } catch (error) {
-        console.error('[fetchDashboardSpec] Error:', error);
+        let spec = data.spec_json;
+
+        // ── Fetch events and enrich spec with real data ──
+        // Without this, MetricCards show "—", tables show "0 rows",
+        // and charts are empty placeholders.
+        if (spec?.components?.length) {
+          try {
+            const { createClient } = await import('@/lib/supabase/client');
+            const supabase = createClient();
+
+            // Try fetching events via interface_id first
+            let events: any[] = [];
+            const { data: interfaceEvents } = await supabase
+              .from('events')
+              .select('id, type, name, value, unit, text, state, labels, timestamp, created_at, source_id')
+              .eq('interface_id', interfaceId)
+              .not('type', 'in', '("state","tool_event")')
+              .order('timestamp', { ascending: false })
+              .limit(200);
+
+            if (interfaceEvents && interfaceEvents.length > 0) {
+              events = interfaceEvents;
+            } else {
+              // Fallback: fetch via source_id from journey session
+              const { data: sessionData } = await supabase
+                .from('journey_sessions')
+                .select('source_id')
+                .eq('preview_interface_id', interfaceId)
+                .order('updated_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+              if (sessionData?.source_id) {
+                const { data: sourceEvents } = await supabase
+                  .from('events')
+                  .select('id, type, name, value, unit, text, state, labels, timestamp, created_at, source_id')
+                  .eq('source_id', sessionData.source_id)
+                  .not('type', 'in', '("state","tool_event")')
+                  .order('timestamp', { ascending: false })
+                  .limit(200);
+                if (sourceEvents) events = sourceEvents;
+              }
+            }
+
+            if (events.length > 0) {
+              // Flatten state + labels JSONB to top-level fields
+              const flatEvents = events.map((evt: any) => {
+                const flat: Record<string, any> = { ...evt };
+                if (evt.state && typeof evt.state === 'object') {
+                  for (const [key, value] of Object.entries(evt.state)) {
+                    if (flat[key] == null || flat[key] === '') flat[key] = value;
+                  }
+                  if (flat.duration_ms != null) flat.duration_ms = Number(flat.duration_ms);
+                }
+                if (evt.labels && typeof evt.labels === 'object') {
+                  for (const [key, value] of Object.entries(evt.labels)) {
+                    if (flat[key] == null || flat[key] === '') flat[key] = value;
+                  }
+                }
+                return flat;
+              });
+
+              // Enrich spec with real event data
+              const { transformDataForComponents } = await import('@/lib/dashboard/transformDataForComponents');
+              spec = transformDataForComponents(spec, flatEvents);
+
+              console.log('[fetchDashboardSpec] Enriched spec with events:', {
+                eventCount: flatEvents.length,
+                enrichedComponents: spec.components?.length ?? 0,
+              });
+            } else {
+              console.warn('[fetchDashboardSpec] No events found for dashboard — preview will show placeholders');
+            }
+          } catch (eventErr) {
+            console.warn('[fetchDashboardSpec] Event fetch failed (non-fatal):', eventErr);
+            // Continue with un-enriched spec — better than nothing
+          }
+        }
+
+        if (spec) {
+          setLoadedSpec(spec);
+        }
+        if (data.design_tokens) {
+          setLoadedDesignTokens(data.design_tokens);
+        }
+      } catch (err) {
+        console.error('[fetchDashboardSpec] Error:', err);
+        hasFetchedSpecRef.current = false; // Allow retry on error
       }
     };
 
