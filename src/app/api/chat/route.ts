@@ -1245,21 +1245,90 @@ async function handleDeterministicBuildPreview(params: {
       },
       toolContext,
     );
+
+    // Extract rich data from mapping result (mirrors generatePreview.ts Step 5)
+    const fieldAnalysis = (mappingResult as any).fieldAnalysis;
+    const mappingChartRecs = (mappingResult as any).chartRecommendations;
+    const mappingDataSignals = (mappingResult as any).dataSignals;
+
     console.log('[deterministic-build-preview] generateMapping:', {
-      mappings: mappingResult.mappings?.length || 0,
+      mappings: Object.keys(mappingResult.mappings || {}).length,
+      hasDataSignals: !!mappingDataSignals,
+      hasChartRecs: !!mappingChartRecs,
+      hasFieldAnalysis: !!fieldAnalysis,
     });
 
-    // Step 4: Generate UI spec
+    // Step 3.5: Load proposal wireframe from session if available
+    // NOTE(tech-debt-3): This index-based lookup is fragile. Future fix:
+    // write selected wireframe to journey_sessions.selected_proposal_wireframe
+    // when user selects a proposal, then read it directly here.
+    let proposalWireframe: any = undefined;
+    if (session.selected_outcome) {
+      try {
+        const { data: sessionFull } = await supabase
+          .from('journey_sessions')
+          .select('proposals')
+          .eq('thread_id', journeyThreadId)
+          .eq('tenant_id', tenantId)
+          .maybeSingle();
+        if (sessionFull?.proposals?.proposals) {
+          const selectedIdx = sessionFull.proposals.selected_proposal_index ?? 0;
+          const selectedProposal = sessionFull.proposals.proposals[selectedIdx];
+          if (selectedProposal?.wireframe?.components?.length) {
+            proposalWireframe = selectedProposal.wireframe;
+            console.log('[deterministic-build-preview] Loaded proposal wireframe:', {
+              name: proposalWireframe.name,
+              components: proposalWireframe.components.length,
+            });
+          }
+        }
+      } catch (e) {
+        console.warn('[deterministic-build-preview] Failed to load proposal wireframe (non-fatal):', e);
+      }
+    }
+
+    // Step 3.6: Map selected_outcome → uiType (mirrors generatePreview.ts)
+    let resolvedUiType: string = 'dashboard';
+    if (session.selected_outcome === 'product') {
+      resolvedUiType = 'landing-page';
+    } else if (session.selected_outcome === 'admin') {
+      resolvedUiType = 'admin-crud';
+    }
+
+    // Step 4: Generate UI spec — pass ALL rich data from mapping result
+    // This mirrors what generatePreview.ts workflow does in its generateUISpecStep.
+    // Without dataSignals, chartRecommendations, and fieldAnalysis, generateUISpec
+    // falls back to a generic skeleton with empty placeholders.
     const uiSpecResult = await callTool(
       generateUISpec,
       {
         templateId: selectResult.templateId,
         mappings: mappingResult.mappings,
         platformType,
+        // Rich data from generateMapping — drives skeleton selection + component building
+        dataSignals: mappingDataSignals || undefined,
+        chartRecommendations: mappingChartRecs || (() => {
+          // Fallback: try to get chart recs from design tokens (same as workflow)
+          if (session.design_tokens?.charts) return session.design_tokens.charts;
+          return undefined;
+        })(),
+        fieldAnalysis: fieldAnalysis || undefined,
+        // Entity name for dashboard title
+        entityName: workflowName || undefined,
+        // Proposal wireframe (skeleton system is preferred but wireframe is passed for reference)
+        proposalWireframe: proposalWireframe || undefined,
+        preferWireframe: false, // Always use skeleton system for premium layouts
+        // UI type from selected outcome
+        uiType: resolvedUiType,
+        mode: 'internal',
       },
       toolContext,
     );
-    console.log('[deterministic-build-preview] generateUISpec: spec generated');
+    console.log('[deterministic-build-preview] generateUISpec:', {
+      components: uiSpecResult.spec_json?.components?.length || 0,
+      hasDesignTokens: !!uiSpecResult.design_tokens,
+      skeletonUsed: uiSpecResult.spec_json?.layoutSkeletonId || 'none',
+    });
 
     // Step 5: Validate spec
     const validationResult = await callTool(
