@@ -9,6 +9,27 @@ import { validateBeforeRender } from "@/lib/spec/validateBeforeRender";
 
 export const dynamic = "force-dynamic";
 
+
+function deepFlattenWithDotNotation(
+  obj: Record<string, any>,
+  target: Record<string, any>,
+  prefix = ""
+): void {
+  for (const [key, value] of Object.entries(obj)) {
+    const fullKey = prefix ? `${prefix}.${key}` : key;
+
+    if (!prefix && (target[key] == null || target[key] === "")) {
+      target[key] = value;
+    }
+
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      deepFlattenWithDotNotation(value as Record<string, any>, target, fullKey);
+    } else if (target[fullKey] == null || target[fullKey] === "") {
+      target[fullKey] = value;
+    }
+  }
+}
+
 interface PreviewPageProps {
   params: Promise<{
     dashboardId: string;
@@ -94,15 +115,11 @@ export default async function PreviewPage({ params }: PreviewPageProps) {
       resolvedEvents = (fallbackEvents || []).map((evt: any) => {
         const flat: Record<string, any> = { ...evt };
         if (evt.state && typeof evt.state === 'object') {
-          for (const [key, value] of Object.entries(evt.state)) {
-            if (flat[key] == null || flat[key] === '') flat[key] = value;
-          }
+          deepFlattenWithDotNotation(evt.state, flat);
           if (flat.duration_ms != null) flat.duration_ms = Number(flat.duration_ms);
         }
         if (evt.labels && typeof evt.labels === 'object') {
-          for (const [key, value] of Object.entries(evt.labels)) {
-            if (flat[key] == null || flat[key] === '') flat[key] = value;
-          }
+          deepFlattenWithDotNotation(evt.labels, flat);
         }
         return flat;
       });
@@ -111,15 +128,11 @@ export default async function PreviewPage({ params }: PreviewPageProps) {
       resolvedEvents = (events || []).map((evt: any) => {
         const flat: Record<string, any> = { ...evt };
         if (evt.state && typeof evt.state === 'object') {
-          for (const [key, value] of Object.entries(evt.state)) {
-            if (flat[key] == null || flat[key] === '') flat[key] = value;
-          }
+          deepFlattenWithDotNotation(evt.state, flat);
           if (flat.duration_ms != null) flat.duration_ms = Number(flat.duration_ms);
         }
         if (evt.labels && typeof evt.labels === 'object') {
-          for (const [key, value] of Object.entries(evt.labels)) {
-            if (flat[key] == null || flat[key] === '') flat[key] = value;
-          }
+          deepFlattenWithDotNotation(evt.labels, flat);
         }
         return flat;
       });
@@ -129,12 +142,22 @@ export default async function PreviewPage({ params }: PreviewPageProps) {
     if (resolvedEvents.length === 0) {
       const { data: session } = await svc
         .from("journey_sessions")
-        .select("source_id")
+        .select("source_id, entity_id")
         .eq("preview_interface_id", dashboardId)
         .maybeSingle();
 
       if (session?.source_id) {
-        const { data: sourceEvents, error: sourceEventsError } = await svc
+        let selectedWorkflowId: string | null = null;
+        if (session.entity_id) {
+          const { data: entity } = await svc
+            .from("source_entities")
+            .select("external_id")
+            .eq("id", session.entity_id)
+            .maybeSingle();
+          selectedWorkflowId = entity?.external_id || null;
+        }
+
+        let sourceEventsQuery = svc
           .from("events_flat")
           .select(
             "id, type, name, value, unit, text, state, timestamp, created_at, workflow_id, status, duration_ms, mode, workflow_name, execution_id, error_message"
@@ -144,14 +167,30 @@ export default async function PreviewPage({ params }: PreviewPageProps) {
           .order("timestamp", { ascending: false })
           .limit(200);
 
+        if (selectedWorkflowId) {
+          sourceEventsQuery = sourceEventsQuery.or(
+            `state->>workflow_id.eq.${selectedWorkflowId},state->>workflow_name.eq.${selectedWorkflowId}`
+          );
+        }
+
+        const { data: sourceEvents, error: sourceEventsError } = await sourceEventsQuery;
+
         if (sourceEventsError?.message?.includes("events_flat")) {
-          const { data: fallbackSourceEvents } = await svc
+          let fallbackSourceQuery = svc
             .from("events")
             .select("id, type, name, value, unit, text, state, labels, timestamp, created_at")
             .eq("source_id", session.source_id)
             .not("type", "in", '("state","tool_event")')
             .order("timestamp", { ascending: false })
             .limit(200);
+
+          if (selectedWorkflowId) {
+            fallbackSourceQuery = fallbackSourceQuery.or(
+              `state->>workflow_id.eq.${selectedWorkflowId},state->>workflow_name.eq.${selectedWorkflowId}`
+            );
+          }
+
+          const { data: fallbackSourceEvents } = await fallbackSourceQuery;
           // ✅ FIX (BUG 6c): ALWAYS flatten state JSONB to top-level fields.
           // All platforms (n8n, Make, Vapi) store important fields like status,
           // duration_ms, workflow_id inside the state JSONB column. Without
@@ -160,15 +199,11 @@ export default async function PreviewPage({ params }: PreviewPageProps) {
           resolvedEvents = (fallbackSourceEvents || []).map((evt: any) => {
             const flat: Record<string, any> = { ...evt };
             if (evt.state && typeof evt.state === 'object') {
-              for (const [key, value] of Object.entries(evt.state)) {
-                if (flat[key] == null || flat[key] === '') flat[key] = value;
-              }
+              deepFlattenWithDotNotation(evt.state, flat);
               if (flat.duration_ms != null) flat.duration_ms = Number(flat.duration_ms);
             }
             if (evt.labels && typeof evt.labels === 'object') {
-              for (const [key, value] of Object.entries(evt.labels)) {
-                if (flat[key] == null || flat[key] === '') flat[key] = value;
-              }
+              deepFlattenWithDotNotation(evt.labels, flat);
             }
             return flat;
           });
@@ -177,15 +212,11 @@ export default async function PreviewPage({ params }: PreviewPageProps) {
           resolvedEvents = (sourceEvents || []).map((evt: any) => {
             const flat: Record<string, any> = { ...evt };
             if (evt.state && typeof evt.state === 'object') {
-              for (const [key, value] of Object.entries(evt.state)) {
-                if (flat[key] == null || flat[key] === '') flat[key] = value;
-              }
+              deepFlattenWithDotNotation(evt.state, flat);
               if (flat.duration_ms != null) flat.duration_ms = Number(flat.duration_ms);
             }
             if (evt.labels && typeof evt.labels === 'object') {
-              for (const [key, value] of Object.entries(evt.labels)) {
-                if (flat[key] == null || flat[key] === '') flat[key] = value;
-              }
+              deepFlattenWithDotNotation(evt.labels, flat);
             }
             return flat;
           });

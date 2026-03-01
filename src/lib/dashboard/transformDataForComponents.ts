@@ -16,6 +16,23 @@ export interface DashboardSpec {
   metadata?: Record<string, any>;
 }
 
+/**
+ * Resolve a dot-notation field path from a flat event object.
+ * Tries direct key first (e.g. event["body.topic"]), then nested traversal.
+ * This handles both pre-flattened keys and nested objects.
+ */
+function resolveField(event: FlatEvent, fieldPath: string): any {
+  if (fieldPath in event) return event[fieldPath];
+
+  const parts = fieldPath.split('.');
+  let current: any = event;
+  for (const part of parts) {
+    if (current == null || typeof current !== 'object') return undefined;
+    current = current[part];
+  }
+  return current;
+}
+
 export function transformDataForComponents(
   spec: DashboardSpec,
   events: FlatEvent[]
@@ -76,7 +93,7 @@ function enrichMetricCard(component: ComponentSpec, events: FlatEvent[]): Compon
   const { props } = component;
   if (!props?.valueField || !props?.aggregation) return component;
 
-  const values = events.map((e) => e[props.valueField]).filter((v) => v != null);
+  const values = events.map((e) => resolveField(e, props.valueField)).filter((v) => v != null);
 
   let computedValue: string | number = "—";
 
@@ -163,7 +180,7 @@ function enrichTimeseriesChart(component: ComponentSpec, events: FlatEvent[]): C
 
   const grouped: Record<string, FlatEvent[]> = {};
   events.forEach((e) => {
-    const raw = e[dateField] || e.created_at;
+    const raw = resolveField(e, dateField) || e.created_at;
     if (!raw) return;
     const date = new Date(raw);
     const key = `${date.getMonth() + 1}/${date.getDate()}`;
@@ -185,13 +202,13 @@ function enrichTimeseriesChart(component: ComponentSpec, events: FlatEvent[]): C
           : effectiveAggregation === "avg"
             ? Math.round(
                 items
-                  .map((i) => Number(i[valueField]))
+                  .map((i) => Number(resolveField(i, valueField)))
                   .filter((n) => !isNaN(n))
                   .reduce((a, b) => a + b, 0) /
-                  Math.max(items.filter((i) => !isNaN(Number(i[valueField]))).length, 1)
+                  Math.max(items.filter((i) => !isNaN(Number(resolveField(i, valueField)))).length, 1)
               )
             : items
-                .map((i) => Number(i[valueField]))
+                .map((i) => Number(resolveField(i, valueField)))
                 .filter((n) => !isNaN(n))
                 .reduce((a, b) => a + b, 0),
     }));
@@ -210,7 +227,7 @@ function enrichCategoryChart(component: ComponentSpec, events: FlatEvent[]): Com
 
   const counts: Record<string, number> = {};
   events.forEach((e) => {
-    const val = String(e[categoryField] || "unknown");
+    const val = String(resolveField(e, categoryField) || "unknown");
     counts[val] = (counts[val] || 0) + 1;
   });
 
@@ -235,11 +252,11 @@ function enrichBarChart(component: ComponentSpec, events: FlatEvent[]): Componen
   if (categoryField && events.length > 0) {
     const grouped = new Map<string, number>();
     for (const e of events) {
-      const key = String(e[categoryField] ?? "unknown");
+      const key = String(resolveField(e, categoryField) ?? "unknown");
       if (valueField === "count") {
         grouped.set(key, (grouped.get(key) ?? 0) + 1);
       } else {
-        const val = Number(e[valueField]);
+        const val = Number(resolveField(e, valueField));
         if (!isNaN(val)) {
           grouped.set(key, (grouped.get(key) ?? 0) + val);
         }
@@ -473,13 +490,13 @@ function enrichFilteredChart(component: ComponentSpec, events: FlatEvent[]): Com
   // Aggregate by category
   const counts = new Map<string, number>();
   for (const e of events) {
-    const rawVal = e[categoryField];
+    const rawVal = resolveField(e, categoryField);
     const key = String(rawVal ?? "null");
 
     if (valueField === "count") {
       counts.set(key, (counts.get(key) ?? 0) + 1);
     } else {
-      const num = Number(e[valueField]);
+      const num = Number(resolveField(e, valueField));
       if (!isNaN(num)) {
         counts.set(key, (counts.get(key) ?? 0) + num);
       }

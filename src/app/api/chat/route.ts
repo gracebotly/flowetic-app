@@ -2020,43 +2020,47 @@ export async function POST(req: Request) {
             // interface_id find the events.
             if (sessionRow?.source_id && newInterface.id) {
               try {
-                // FIX: Re-link ALL events for this source to the new interface.
-                // Events may already be linked to stale interfaces from previous sessions.
-                // The current session's interface is authoritative.
-                // Old behavior: .is('interface_id', null) — failed because events were
-                // already claimed by old interfaces. Result: 0 events backfilled every time.
-                // Build backfill query — scope to selected workflow if known
+                // ── CLEANUP: Remove stale interface_id from events for this interface ──
+                // If the user re-generates a preview, the old interface_id may be stale.
+                // Clear it so the backfill below applies fresh workflow-scoped filtering.
+                await supabase
+                  .from('events')
+                  .update({ interface_id: null })
+                  .eq('tenant_id', tenantId)
+                  .eq('source_id', sessionRow.source_id)
+                  .eq('interface_id', newInterface.id);
+
                 let backfillQuery = supabase
                   .from('events')
                   .update({ interface_id: newInterface.id })
                   .eq('tenant_id', tenantId)
                   .eq('source_id', sessionRow.source_id)
-                  .neq('interface_id', newInterface.id);
+                  .is('interface_id', null);
 
-                // ✅ FIX: Only link events belonging to the selected workflow, not ALL
-                // events from the source. An n8n source sends executions from ALL
-                // workflows through one webhook — we must scope to the user's chosen workflow.
-                //
-                // Events may store workflow_name as either display name or external ID,
-                // while workflow_id is consistently the external ID. Match both forms.
                 const selectedWorkflow = sessionRow.selected_entities;
                 const externalWorkflowId = requestContext.get('selectedWorkflowName') as string | undefined;
 
-                if (selectedWorkflow && typeof selectedWorkflow === 'string' && selectedWorkflow.trim()) {
-                  if (externalWorkflowId && externalWorkflowId !== selectedWorkflow) {
-                    backfillQuery = backfillQuery.or(
-                      `state->>workflow_name.eq.${selectedWorkflow},state->>workflow_name.eq.${externalWorkflowId},state->>workflow_id.eq.${externalWorkflowId}`
-                    );
-                    console.log('[api/chat] Scoping backfill to workflow (dual-match):', {
-                      displayName: selectedWorkflow,
-                      externalId: externalWorkflowId,
-                    });
-                  } else {
-                    backfillQuery = backfillQuery.or(
-                      `state->>workflow_name.eq.${selectedWorkflow},state->>workflow_id.eq.${selectedWorkflow}`
-                    );
-                    console.log('[api/chat] Scoping backfill to workflow:', selectedWorkflow);
-                  }
+                // Get the external_id from source_entities (authoritative workflow identifier)
+                let workflowExternalId = externalWorkflowId;
+                if (!workflowExternalId && sessionRow.entity_id) {
+                  const { data: entityData } = await supabase
+                    .from('source_entities')
+                    .select('external_id')
+                    .eq('id', sessionRow.entity_id)
+                    .maybeSingle();
+                  workflowExternalId = entityData?.external_id || undefined;
+                }
+
+                if (workflowExternalId) {
+                  backfillQuery = backfillQuery.or(
+                    `state->>workflow_name.eq.${workflowExternalId},state->>workflow_id.eq.${workflowExternalId}`
+                  );
+                  console.log('[api/chat] Scoping backfill to workflow external_id:', workflowExternalId);
+                } else if (selectedWorkflow && typeof selectedWorkflow === 'string' && selectedWorkflow.trim()) {
+                  backfillQuery = backfillQuery.or(
+                    `state->>workflow_name.eq.${selectedWorkflow},state->>workflow_id.eq.${selectedWorkflow}`
+                  );
+                  console.log('[api/chat] Scoping backfill to workflow display name:', selectedWorkflow);
                 }
 
                 const { error: backfillErr } = await backfillQuery;
