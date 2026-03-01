@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { getSkeletonDescription } from "@/lib/portals/platformToSkeleton";
+import { getSkeletonDescription, type SkeletonId } from "@/lib/portals/platformToSkeleton";
 import { transformDataForSkeleton, type PortalEvent } from "@/lib/portals/transformData";
 import { VoicePerformanceSkeleton } from "@/components/portals/skeletons/VoicePerformanceSkeleton";
 import { WorkflowOperationsSkeleton } from "@/components/portals/skeletons/WorkflowOperationsSkeleton";
@@ -179,7 +179,7 @@ export default function PortalDetailsPage() {
               <select value={skeletonId} onChange={(e) => setSkeletonId(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2">
                 {skeletonOptions.map((option) => <option value={option} key={option}>{option}</option>)}
               </select>
-              <p className="mt-1 text-xs text-gray-500">{getSkeletonDescription(skeletonId)}</p>
+              <p className="mt-1 text-xs text-gray-500">{getSkeletonDescription(skeletonId as SkeletonId)}</p>
             </label>
             <label className="text-sm">Expires
               <select className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2" value={expires} onChange={(e) => setExpires(e.target.value)}>
