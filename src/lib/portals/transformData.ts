@@ -5,10 +5,13 @@ import { getVoiceFieldMapping, getWorkflowFieldMapping } from './fieldMappings';
 export interface PortalEvent {
   id: string;
   type: string;
-  state: Record<string, unknown>;
-  labels: Record<string, unknown>;
+  name?: string | null;
+  value?: number | null;
+  state: Record<string, unknown> | null;
+  labels: Record<string, unknown> | null;
   timestamp: string;
-  created_at: string;
+  platform_event_id?: string | null;
+  created_at?: string;
 }
 
 export interface HeadlineMetrics {
@@ -56,8 +59,70 @@ export interface SkeletonData {
 
 // ─── Helpers ─────────────────────────────────────────────────
 
-function getStateField(event: PortalEvent, fieldName: string): unknown {
-  return event.state?.[fieldName] ?? event.labels?.[fieldName] ?? undefined;
+/**
+ * Safely read a field from the event's state JSONB.
+ * 
+ * The events table stores platform-specific data in the `state` column:
+ *   - event.state.duration_ms
+ *   - event.state.cost
+ *   - event.state.ended_reason
+ *   - event.state.call_summary
+ *   - etc.
+ * 
+ * The event-level columns are:
+ *   - event.type          → 'workflow_execution' | 'message' | 'metric' | etc.
+ *   - event.name          → event name (nullable)
+ *   - event.value         → numeric value (nullable)
+ *   - event.timestamp     → when the event occurred
+ *   - event.platform_event_id → original platform ID (e.g., vapi call_id)
+ *   - event.labels        → { platform: 'vapi', ... }
+ */
+export function getStateField(
+  event: { state?: Record<string, unknown> | null },
+  fieldPath: string
+): unknown {
+  if (!event.state) return undefined;
+  
+  // Support dot-notation: 'cost_breakdown.total'
+  const parts = fieldPath.split('.');
+  let current: unknown = event.state;
+  
+  for (const part of parts) {
+    if (current == null || typeof current !== 'object') return undefined;
+    current = (current as Record<string, unknown>)[part];
+  }
+  
+  return current;
+}
+
+/**
+ * Get the platform from an event.
+ * The platform is stored in event.labels.platform
+ */
+export function getEventPlatform(
+  event: { labels?: Record<string, unknown> | null }
+): string | undefined {
+  return event.labels?.platform as string | undefined;
+}
+
+/**
+ * Get the status from an event's state JSONB.
+ * Import routes store normalized status in state.status
+ */
+export function getEventStatus(
+  event: { state?: Record<string, unknown> | null }
+): string {
+  return (event.state?.status as string) ?? 'unknown';
+}
+
+/**
+ * Get workflow/assistant name from state.
+ * Stored as state.workflow_name by import routes.
+ */
+export function getEventWorkflowName(
+  event: { state?: Record<string, unknown> | null }
+): string {
+  return (event.state?.workflow_name as string) ?? 'Unknown';
 }
 
 function toNumber(val: unknown): number {
