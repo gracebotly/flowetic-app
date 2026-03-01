@@ -6,15 +6,6 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-export interface PortalBranding {
-  logo_url: string | null;
-  primary_color: string;
-  secondary_color: string;
-  custom_domain: string | null;
-  // Plus any overrides from client_portals.branding JSONB
-  [key: string]: unknown;
-}
-
 export interface ResolvedPortal {
   portal: {
     id: string;
@@ -29,6 +20,9 @@ export interface ResolvedPortal {
     client_id: string | null;
     created_at: string;
     expires_at: string | null;
+    // V4 additions
+    surface_type: string;
+    access_type: string;
   };
   tenant: {
     id: string;
@@ -51,30 +45,31 @@ export interface ResolvedPortal {
 }
 
 /**
- * Resolve a portal by its public token.
+ * Resolve a portal/offering by its public token.
  *
+ * V4: Now queries the `offerings` table instead of `client_portals`.
  * Uses service role key because portal viewers have no Supabase session.
- * The token IS the auth — validated here + RLS allows anon SELECT on active portals.
+ * The token IS the auth.
  */
 export async function resolvePortal(
   token: string
 ): Promise<ResolvedPortal | null> {
-  // 1. Look up portal by token
+  // 1. Look up offering by token
   const { data: portal, error: portalError } = await supabaseAdmin
-    .from('client_portals')
+    .from('offerings')
     .select('*')
     .eq('token', token)
     .eq('status', 'active')
     .single();
 
   if (portalError || !portal) {
-    console.error('[resolvePortal] Portal not found:', portalError?.message);
+    console.error('[resolvePortal] Offering not found:', portalError?.message);
     return null;
   }
 
   // 2. Check expiry
   if (portal.expires_at && new Date(portal.expires_at) < new Date()) {
-    console.warn('[resolvePortal] Portal expired:', portal.id);
+    console.warn('[resolvePortal] Offering expired:', portal.id);
     return null;
   }
 
@@ -90,13 +85,7 @@ export async function resolvePortal(
     return null;
   }
 
-  // 4. Fetch events for this portal's source
-  //    Table: events (NOT platform_events)
-  //    Columns: id, type, name, value, state (jsonb), labels (jsonb),
-  //             timestamp, platform_event_id
-  //    Filtered by: source_id matching portal.source_id
-  //    Ordered by: timestamp DESC (most recent first)
-  //    Limit: 500 (sufficient for 30d at typical volumes)
+  // 4. Fetch events for this offering's source
   const { data: events, error: eventsError } = await supabaseAdmin
     .from('events')
     .select('id, type, name, value, state, labels, timestamp, platform_event_id')
@@ -106,12 +95,11 @@ export async function resolvePortal(
 
   if (eventsError) {
     console.error('[resolvePortal] Events fetch error:', eventsError.message);
-    // Don't fail — return portal with empty events
   }
 
   // 5. Update last_viewed_at (fire-and-forget)
   supabaseAdmin
-    .from('client_portals')
+    .from('offerings')
     .update({ last_viewed_at: new Date().toISOString() })
     .eq('id', portal.id)
     .then(({ error }) => {
