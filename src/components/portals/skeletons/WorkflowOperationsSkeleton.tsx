@@ -41,9 +41,40 @@ const fadeUp = {
 };
 
 function StatusBadge({ status }: { status: string }) {
-  const color = status === 'success' ? 'emerald' : status === 'error' ? 'red' : status === 'waiting' ? 'amber' : 'gray';
-  const label = status === 'success' ? 'Success' : status === 'error' ? 'Failed' : status;
-  return <Badge color={color} size="xs">{label}</Badge>;
+  const config: Record<string, { bg: string; text: string; dot: string; label: string }> = {
+    success: {
+      bg: 'bg-emerald-50 dark:bg-emerald-950/40',
+      text: 'text-emerald-700 dark:text-emerald-300',
+      dot: 'bg-emerald-500',
+      label: 'Success',
+    },
+    error: {
+      bg: 'bg-red-50 dark:bg-red-950/40',
+      text: 'text-red-700 dark:text-red-300',
+      dot: 'bg-red-500',
+      label: 'Failed',
+    },
+    waiting: {
+      bg: 'bg-amber-50 dark:bg-amber-950/40',
+      text: 'text-amber-700 dark:text-amber-300',
+      dot: 'bg-amber-500',
+      label: 'Waiting',
+    },
+  };
+
+  const c = config[status] ?? {
+    bg: 'bg-gray-100 dark:bg-gray-800',
+    text: 'text-gray-600 dark:text-gray-400',
+    dot: 'bg-gray-400',
+    label: status,
+  };
+
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${c.bg} ${c.text}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${c.dot}`} />
+      {c.label}
+    </span>
+  );
 }
 
 export function WorkflowOperationsSkeleton({ data }: WorkflowOperationsProps) {
@@ -122,14 +153,15 @@ export function WorkflowOperationsSkeleton({ data }: WorkflowOperationsProps) {
               <Title>Workflow Performance</Title>
               <Text>Executions per workflow</Text>
               <BarChart
-                className="mt-4 h-52"
-                data={workflowBreakdown.slice(0, 8)}
+                className="mt-4 h-72"
+                data={workflowBreakdown.slice(0, 6)}
                 index="name"
                 categories={['count']}
                 colors={['blue']}
                 valueFormatter={(v: number) => v.toLocaleString()}
                 showAnimation
                 layout="vertical"
+                showGridLines={false}
               />
             </Card>
           </motion.div>

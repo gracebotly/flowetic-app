@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { getSkeletonDescription, type SkeletonId } from "@/lib/portals/platformToSkeleton";
+import { getSkeletonDescription, getSkeletonDisplayName, type SkeletonId } from "@/lib/portals/platformToSkeleton";
 import { transformDataForSkeleton, type PortalEvent } from "@/lib/portals/transformData";
 import { VoicePerformanceSkeleton } from "@/components/portals/skeletons/VoicePerformanceSkeleton";
 import { WorkflowOperationsSkeleton } from "@/components/portals/skeletons/WorkflowOperationsSkeleton";
@@ -29,8 +29,6 @@ type Portal = {
 
 type Source = { id: string; name: string; type: string };
 type Tenant = { name: string; logo_url: string | null; primary_color: string; secondary_color: string };
-
-const skeletonOptions = ["voice-performance", "workflow-operations", "roi-summary", "combined-overview"];
 
 export default function PortalDetailsPage() {
   const { id } = useParams<{ id: string }>();
@@ -172,21 +170,38 @@ export default function PortalDetailsPage() {
             </div>
           </div>
 
+          {/* ─── Dashboard Info (read-only, premium feel) ─── */}
+          <div className="rounded-xl border border-gray-100 bg-gradient-to-br from-gray-50 to-white p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wider text-gray-400">Dashboard Type</p>
+                <p className="mt-1 text-sm font-semibold text-gray-900">{getSkeletonDisplayName(skeletonId as SkeletonId)}</p>
+                <p className="mt-0.5 text-xs text-gray-500">{getSkeletonDescription(skeletonId as SkeletonId)}</p>
+              </div>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+                <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+                Auto-configured
+              </span>
+            </div>
+          </div>
+
+          {/* ─── Editable Fields ─── */}
           <div className="grid gap-4 md:grid-cols-2">
-            <label className="text-sm">Portal Name<input value={name} onChange={(e) => setName(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2" /></label>
-            <label className="text-sm">Client<input value={clientId} onChange={(e) => setClientId(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2" /></label>
-            <label className="text-sm">Skeleton
-              <select value={skeletonId} onChange={(e) => setSkeletonId(e.target.value as SkeletonId)} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2">
-                {skeletonOptions.map((option) => <option value={option} key={option}>{option}</option>)}
+            <div>
+              <label className="block text-xs font-medium uppercase tracking-wider text-gray-400">Portal Name</label>
+              <input value={name} onChange={(e) => setName(e.target.value)} className="mt-1.5 w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-900 shadow-sm transition focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium uppercase tracking-wider text-gray-400">Client</label>
+              <input value={clientId} onChange={(e) => setClientId(e.target.value)} placeholder="Assign to a client" className="mt-1.5 w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm transition focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium uppercase tracking-wider text-gray-400">Link Expiry</label>
+              <select className="mt-1.5 w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm transition focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100" value={expires} onChange={(e) => setExpires(e.target.value)}>
+                <option value="never">Never expires</option>
+                <option value="custom">Custom expiration</option>
               </select>
-              <p className="mt-1 text-xs text-gray-500">{getSkeletonDescription(skeletonId as SkeletonId)}</p>
-            </label>
-            <label className="text-sm">Expires
-              <select className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2" value={expires} onChange={(e) => setExpires(e.target.value)}>
-                <option value="never">Never</option>
-                <option value="custom">Custom</option>
-              </select>
-            </label>
+            </div>
           </div>
 
           <div className="flex gap-2">
