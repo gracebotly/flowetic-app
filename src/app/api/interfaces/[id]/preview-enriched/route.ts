@@ -136,13 +136,27 @@ export async function GET(
           .maybeSingle();
 
         if (sessionData?.source_id) {
-          const { data: sourceEvents } = await supabase
+          let sourceEventsQuery = supabase
             .from('events')
             .select('id, type, name, value, unit, text, state, labels, timestamp, created_at, source_id')
             .eq('source_id', sessionData.source_id)
             .not('type', 'in', '("state","tool_event")')
             .order('timestamp', { ascending: false })
             .limit(200);
+
+          // BUG 1 FIX: Apply workflow filter to source_id fallback path.
+          // Without this, ALL events for the source are returned (across all
+          // workflows), drowning the selected workflow's rich data in 
+          // irrelevant events that resolve to "unknown" — which then triggers
+          // the hallucination detector in enrichBarChart (BUG 2).
+          if (selectedWorkflowId) {
+            sourceEventsQuery = sourceEventsQuery.or(
+              `state->>workflow_id.eq.${selectedWorkflowId},state->>workflow_name.eq.${selectedWorkflowId}`
+            );
+            console.log(`[preview-enriched] Fallback: scoping source events to workflow: ${selectedWorkflowId}`);
+          }
+
+          const { data: sourceEvents } = await sourceEventsQuery;
           if (sourceEvents) events = sourceEvents;
         }
       }
