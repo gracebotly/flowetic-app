@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { createBrowserClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/supabase/client";
 import { Plus, BarChart3, Play, Layers, Link2, CreditCard } from "lucide-react";
 
 type Offering = {
@@ -37,7 +37,7 @@ export default function OfferingsPage() {
 
   useEffect(() => {
     async function load() {
-      const supabase = createBrowserClient();
+      const supabase = createClient();
       const {
         data: { session },
       } = await supabase.auth.getSession();
