@@ -8,9 +8,8 @@ import { useLocalStorageBoolean } from "@/lib/use-local-storage"
 import { AccountCardPanel } from "./account-popover"
 import {
   Users,
-  LayoutDashboard,
+  Layers,
   Zap,
-  Package,
   ClipboardList,
   Settings as SettingsIcon,
   ChevronLeft,
@@ -22,8 +21,7 @@ type NavItem = { href: string; label: string; icon: React.ComponentType<{ size?:
 
 const NAV: NavItem[] = [
   { href: "/control-panel/connections", label: "Connections", icon: Zap },
-  { href: "/control-panel/portals", label: "Portals", icon: LayoutDashboard },
-  { href: "/control-panel/products", label: "Products", icon: Package },
+  { href: "/control-panel/offerings", label: "Offerings", icon: Layers },
   { href: "/control-panel/clients", label: "Clients", icon: Users },
   { href: "/control-panel/activity", label: "Activity", icon: ClipboardList },
   { href: "/control-panel/settings", label: "Settings", icon: SettingsIcon },
