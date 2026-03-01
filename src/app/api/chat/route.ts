@@ -2020,27 +2020,21 @@ export async function POST(req: Request) {
             // interface_id find the events.
             if (sessionRow?.source_id && newInterface.id) {
               try {
-                // ── CLEANUP: Remove stale interface_id from events for this interface ──
-                // If the user re-generates a preview, the old interface_id may be stale.
-                // Clear it so the backfill below applies fresh workflow-scoped filtering.
-                await supabase
-                  .from('events')
-                  .update({ interface_id: null })
-                  .eq('tenant_id', tenantId)
-                  .eq('source_id', sessionRow.source_id)
-                  .eq('interface_id', newInterface.id);
-
-                let backfillQuery = supabase
-                  .from('events')
-                  .update({ interface_id: newInterface.id })
-                  .eq('tenant_id', tenantId)
-                  .eq('source_id', sessionRow.source_id)
-                  .is('interface_id', null);
+                // ── CLEANUP: Clear stale interface_id from THIS WORKFLOW's events ──
+                // When re-generating a preview, events may still be stamped with an
+                // OLD interface_id from a previous session. The backfill below uses
+                // .is('interface_id', null), so we must first NULL-out the old value.
+                //
+                // BUG FIX: Previously this cleared .eq('interface_id', newInterface.id)
+                // which matched NOTHING — the new interface was just created, so 0
+                // events had it. The 9 workflow events kept their old interface_id
+                // and the backfill skipped them all (they weren't null).
+                // Fix: resolve the workflow filter FIRST, then use it for both
+                // cleanup (clear old) and backfill (stamp new).
 
                 const selectedWorkflow = sessionRow.selected_entities;
                 const externalWorkflowId = requestContext.get('selectedWorkflowName') as string | undefined;
 
-                // Get the external_id from source_entities (authoritative workflow identifier)
                 let workflowExternalId = externalWorkflowId;
                 if (!workflowExternalId && sessionRow.entity_id) {
                   const { data: entityData } = await supabase
@@ -2050,6 +2044,37 @@ export async function POST(req: Request) {
                     .maybeSingle();
                   workflowExternalId = entityData?.external_id || undefined;
                 }
+
+                // Step 1: Clear old interface_id from events matching this workflow
+                let cleanupQuery = supabase
+                  .from('events')
+                  .update({ interface_id: null })
+                  .eq('tenant_id', tenantId)
+                  .eq('source_id', sessionRow.source_id)
+                  .not('interface_id', 'is', null);
+
+                if (workflowExternalId) {
+                  cleanupQuery = cleanupQuery.or(
+                    `state->>workflow_name.eq.${workflowExternalId},state->>workflow_id.eq.${workflowExternalId}`
+                  );
+                } else if (selectedWorkflow && typeof selectedWorkflow === 'string' && selectedWorkflow.trim()) {
+                  cleanupQuery = cleanupQuery.or(
+                    `state->>workflow_name.eq.${selectedWorkflow},state->>workflow_id.eq.${selectedWorkflow}`
+                  );
+                }
+
+                const { error: cleanupErr } = await cleanupQuery;
+                if (cleanupErr) {
+                  console.warn('[api/chat] Cleanup of stale interface_id failed (non-fatal):', cleanupErr.message);
+                }
+
+                // Step 2: Stamp new interface_id on events that are now NULL
+                let backfillQuery = supabase
+                  .from('events')
+                  .update({ interface_id: newInterface.id })
+                  .eq('tenant_id', tenantId)
+                  .eq('source_id', sessionRow.source_id)
+                  .is('interface_id', null);
 
                 if (workflowExternalId) {
                   backfillQuery = backfillQuery.or(
