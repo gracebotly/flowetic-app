@@ -8,18 +8,36 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import type { InputField } from "@/lib/products/types";
+import { ProductThemeProvider, ThemeToggle } from "@/lib/products/ThemeProvider";
+
+interface DesignTokens {
+  colors?: {
+    primary?: string;
+    background?: string;
+    text?: string;
+    surface?: string;
+  };
+}
 
 interface FormWizardProps {
   productId: string;
   productName: string;
   productSlug: string;
   inputSchema: InputField[];
-  designTokens: Record<string, any>;
+  designTokens: DesignTokens;
 }
 
 type FormValues = Record<string, string | string[]>;
 
-export function FormWizard({
+export function FormWizard(props: FormWizardProps) {
+  return (
+    <ProductThemeProvider designTokens={props.designTokens}>
+      <FormWizardInner {...props} />
+    </ProductThemeProvider>
+  );
+}
+
+function FormWizardInner({
   productId,
   productName,
   productSlug,
@@ -93,21 +111,7 @@ export function FormWizard({
     }
   }, [step]);
 
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        if (step === totalSteps - 1) {
-          handleSubmit();
-        } else {
-          goNext();
-        }
-      }
-    },
-    [goNext, step, totalSteps],
-  );
-
-  const handleSubmit = async () => {
+  const handleSubmit = useCallback(async () => {
     // Validate all fields
     for (const field of fields) {
       const val = values[field.name] ?? "";
@@ -150,7 +154,21 @@ export function FormWizard({
       setIsSubmitting(false);
       setErrors({ _form: "Network error. Please check your connection and try again." });
     }
-  };
+  }, [fields, primary, productId, productSlug, router, validateField, values]);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        if (step === totalSteps - 1) {
+          handleSubmit();
+        } else {
+          goNext();
+        }
+      }
+    },
+    [goNext, handleSubmit, step, totalSteps],
+  );
 
   const setValue = (name: string, value: string | string[]) => {
     setValues((prev) => ({ ...prev, [name]: value }));
@@ -199,9 +217,12 @@ export function FormWizard({
       {/* Header */}
       <header className="flex items-center justify-between px-6 py-4">
         <span className="text-sm font-medium opacity-70">{productName}</span>
-        <span className="text-sm opacity-50">
-          {step + 1} of {totalSteps}
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="text-sm opacity-50">
+            {step + 1} of {totalSteps}
+          </span>
+          <ThemeToggle />
+        </div>
       </header>
 
       {/* Form body */}
