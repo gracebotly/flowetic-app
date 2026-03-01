@@ -4,6 +4,8 @@ import { transformDataForSkeleton } from '@/lib/portals/transformData';
 import { PortalShell } from '@/components/portals/PortalShell';
 import { VoicePerformanceSkeleton } from '@/components/portals/skeletons/VoicePerformanceSkeleton';
 import { WorkflowOperationsSkeleton } from '@/components/portals/skeletons/WorkflowOperationsSkeleton';
+import { ROISummarySkeleton } from '@/components/portals/skeletons/ROISummarySkeleton';
+import { CombinedOverviewSkeleton } from '@/components/portals/skeletons/CombinedOverviewSkeleton';
 
 interface PageProps {
   params: Promise<{ token: string }>;
@@ -39,6 +41,12 @@ export default async function ClientPortalPage({ params }: PageProps) {
       )}
       {(portal.skeleton_id === 'workflow-operations') && (
         <WorkflowOperationsSkeleton data={data} branding={branding} />
+      )}
+      {(portal.skeleton_id === 'roi-summary') && (
+        <ROISummarySkeleton data={data} branding={branding} />
+      )}
+      {(portal.skeleton_id === 'combined-overview') && (
+        <CombinedOverviewSkeleton data={data} branding={branding} />
       )}
     </PortalShell>
   );

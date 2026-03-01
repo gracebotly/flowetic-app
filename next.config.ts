@@ -44,6 +44,16 @@ const nextConfig: NextConfig = {
         destination: "/control-panel/settings",
         permanent: true,
       },
+      {
+        source: "/control-panel/projects",
+        destination: "/control-panel/portals",
+        permanent: true,
+      },
+      {
+        source: "/control-panel/chat",
+        destination: "/control-panel/portals",
+        permanent: true,
+      },
     ];
   },
 };
