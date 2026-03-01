@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
-import { ActivepiecesLogo, MakeLogo, N8nLogo, RetellLogo, VapiLogo } from "@/components/connections/platform-icons";
+import { MakeLogo, N8nLogo, RetellLogo, VapiLogo } from "@/components/connections/platform-icons";
 import { Copy, Eye, MoreVertical, Pause, Play, Plus, Search, Trash2 } from "lucide-react";
 
 type PortalRow = {
@@ -22,7 +22,7 @@ type PortalRow = {
 
 type SourceRow = { id: string; name: string; type: string };
 
-const platformOptions = ["all", "vapi", "retell", "n8n", "make", "activepieces"] as const;
+const platformOptions = ["all", "vapi", "retell", "n8n", "make"] as const;
 const statusOptions = ["all", "active", "paused", "expired"] as const;
 
 function platformIcon(platform: string) {
@@ -31,7 +31,7 @@ function platformIcon(platform: string) {
   if (platform === "retell") return <RetellLogo {...props} />;
   if (platform === "n8n") return <N8nLogo {...props} />;
   if (platform === "make") return <MakeLogo {...props} />;
-  return <ActivepiecesLogo {...props} />;
+  return <MakeLogo {...props} />; // fallback
 }
 
 function timeAgo(value: string | null): string {

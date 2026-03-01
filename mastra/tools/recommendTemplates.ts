@@ -11,7 +11,7 @@ export const recommendTemplates = createTool({
   id: "recommendTemplates",
   description: "Recommend up to 3 dashboard templates deterministically based on platform type and schema.",
   inputSchema: z.object({
-    platformType: z.enum(["vapi", "retell", "n8n", "mastra", "crewai", "activepieces", "make"]),
+    platformType: z.enum(["vapi", "retell", "n8n", "mastra", "crewai", "make"]),
     schemaSummary: z.object({
       eventTypes: z.array(z.string()),
       fields: z.array(
@@ -46,7 +46,6 @@ export const recommendTemplates = createTool({
       n8n: [{ id: "workflow-monitor", required: ["status"] }],
       mastra: [{ id: "workflow-monitor", required: ["status"] }],
       crewai: [{ id: "workflow-monitor", required: ["status"] }],
-      activepieces: [{ id: "workflow-monitor", required: ["status"] }],
       make: [{ id: "general-analytics", required: [] }],
     };
 

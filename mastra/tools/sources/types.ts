@@ -2,7 +2,7 @@
 import { z } from "zod";
 
 export const SourcePlatformType = z
-  .enum(["vapi", "retell", "n8n", "make", "activepieces", "mastra", "crewai", "other"])
+  .enum(["vapi", "retell", "n8n", "make", "mastra", "crewai", "other"])
   .describe("Supported connection platform types.");
 
 export const SourceMethod = z
@@ -23,7 +23,7 @@ export const SourcePublic = z.object({
   createdAt: z.string(),
 });
 
-export type SourcePlatformType = "vapi" | "retell" | "n8n" | "make" | "activepieces" | "mastra" | "crewai" | "other";
+export type SourcePlatformType = "vapi" | "retell" | "n8n" | "make" | "mastra" | "crewai" | "other";
 
 export type SourceMethod = "api" | "webhook";
 

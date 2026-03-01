@@ -10,7 +10,7 @@ import { callTool } from '../lib/callTool';
 import { transformDataForComponents } from '@/lib/dashboard/transformDataForComponents';
 
 // Platform type derived from selectTemplate tool schema
-type SelectTemplatePlatformType = "vapi" | "retell" | "n8n" | "mastra" | "crewai" | "activepieces" | "make";
+type SelectTemplatePlatformType = "vapi" | "retell" | "n8n" | "mastra" | "crewai" | "make";
 
 // Input/Output schemas
 export const GeneratePreviewInput = z.object({
