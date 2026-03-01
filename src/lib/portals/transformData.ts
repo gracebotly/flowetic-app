@@ -450,6 +450,141 @@ export function transformWorkflowData(events: PortalEvent[], platform: 'n8n' | '
   };
 }
 
+export function transformROIData(events: PortalEvent[], platformType: string): SkeletonData {
+  const now = new Date();
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const sixtyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
+
+  const currentEvents = events.filter((e) => new Date(e.timestamp) >= thirtyDaysAgo);
+  const previousEvents = events.filter((e) => {
+    const d = new Date(e.timestamp);
+    return d >= sixtyDaysAgo && d < thirtyDaysAgo;
+  });
+
+  const avgMinutes = platformType === 'vapi' || platformType === 'retell' ? 15 : 30;
+  const tasks = currentEvents.length;
+  const hoursSaved = (tasks * avgMinutes) / 60;
+  const estSavings = hoursSaved * 35;
+
+  const totalAutomationCost = currentEvents.reduce((acc, event) => acc + toNumber(getStateField(event, 'cost') || event.value), 0);
+  const costPerTask = tasks > 0 ? totalAutomationCost / tasks : 0;
+
+  const previousTasks = previousEvents.length;
+  const previousHours = (previousTasks * avgMinutes) / 60;
+  const previousSavings = previousHours * 35;
+  const percentChange = calculatePercentChange(estSavings, previousSavings);
+
+  const daySavings = new Map<string, number>();
+  for (const event of currentEvents) {
+    const day = toDateString(event.timestamp);
+    if (!day) continue;
+    daySavings.set(day, (daySavings.get(day) ?? 0) + (avgMinutes / 60) * 35);
+  }
+
+  let running = 0;
+  const trend = Array.from(daySavings.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([date, savings]) => {
+      running += savings;
+      return { date, count: Number(running.toFixed(2)) };
+    });
+
+  const typeBreakdown = new Map<string, number>();
+  for (const event of currentEvents) {
+    const type = event.type || getEventPlatform(event) || 'event';
+    typeBreakdown.set(type, (typeBreakdown.get(type) ?? 0) + 1);
+  }
+
+  const recentRows: TableRow[] = Array.from(typeBreakdown.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([type, count]) => {
+      const rowHours = (count * avgMinutes) / 60;
+      const rowSavings = rowHours * 35;
+      return {
+        id: type,
+        type,
+        count,
+        estSavings: formatCost(rowSavings),
+        costPerTask: formatCost(costPerTask),
+      };
+    });
+
+  return {
+    headline: {
+      total: Math.round(estSavings),
+      totalLabel: 'saved',
+      percentChange,
+      periodLabel: 'last 30 days',
+    },
+    kpis: [
+      { label: 'Tasks Done', value: tasks.toLocaleString(), color: 'blue' },
+      { label: 'Hours Saved', value: `${hoursSaved.toFixed(0)} hrs`, color: 'green' },
+      { label: 'Cost per Task', value: formatCost(costPerTask), color: 'neutral' },
+    ],
+    trend,
+    recentRows,
+  };
+}
+
+export function transformCombinedData(events: PortalEvent[], platformType: string): SkeletonData {
+  const now = new Date();
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const sixtyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
+
+  const currentEvents = events.filter((e) => new Date(e.timestamp) >= thirtyDaysAgo);
+  const previousEvents = events.filter((e) => {
+    const d = new Date(e.timestamp);
+    return d >= sixtyDaysAgo && d < thirtyDaysAgo;
+  });
+
+  const success = currentEvents.filter((e) => getEventStatus(e) === 'success').length;
+  const successRate = currentEvents.length > 0 ? Math.round((success / currentEvents.length) * 100) : 0;
+
+  const durations = currentEvents.map((e) => toNumber(getStateField(e, 'duration_ms'))).filter((d) => d > 0);
+  const avgDuration = durations.length > 0 ? durations.reduce((a, b) => a + b, 0) / durations.length : 0;
+  const totalCost = currentEvents.reduce((acc, e) => acc + toNumber(getStateField(e, 'cost') || e.value), 0);
+
+  const dayBuckets = new Map<string, number>();
+  for (const event of currentEvents) {
+    const day = toDateString(event.timestamp);
+    if (!day) continue;
+    dayBuckets.set(day, (dayBuckets.get(day) ?? 0) + 1);
+  }
+
+  const trend = Array.from(dayBuckets.entries())
+    .map(([date, count]) => ({ date, count }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const recentRows = [...currentEvents]
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+    .slice(0, 20)
+    .map((event) => ({
+      id: event.id,
+      name: event.name || getEventWorkflowName(event),
+      status: getEventStatus(event),
+      type: event.type,
+      time: new Date(event.timestamp).toLocaleString(),
+    }));
+
+  return {
+    headline: {
+      total: currentEvents.length,
+      totalLabel: 'total ops',
+      percentChange: calculatePercentChange(currentEvents.length, previousEvents.length),
+      periodLabel: 'last 30 days',
+    },
+    kpis: [
+      { label: 'Total Operations', value: currentEvents.length.toLocaleString(), color: 'blue' },
+      { label: 'Avg Duration', value: avgDuration > 0 ? formatDuration(avgDuration) : '—', color: 'neutral' },
+      { label: 'Success Rate', value: `${successRate}%`, color: successRate > 90 ? 'green' : 'amber' },
+      { label: 'Total Cost', value: formatCost(totalCost), color: 'neutral' },
+      { label: 'Platform', value: platformType.toUpperCase(), color: 'neutral' },
+    ],
+    trend,
+    recentRows,
+  };
+}
+
 // ── Dispatcher ───────────────────────────────────────────────
 
 export function transformDataForSkeleton(
@@ -462,6 +597,10 @@ export function transformDataForSkeleton(
       return transformVoiceData(events, platformType as 'vapi' | 'retell');
     case 'workflow-operations':
       return transformWorkflowData(events, platformType as 'n8n' | 'make');
+    case 'roi-summary':
+      return transformROIData(events, platformType);
+    case 'combined-overview':
+      return transformCombinedData(events, platformType);
     default:
       return transformWorkflowData(events, platformType as 'n8n' | 'make');
   }

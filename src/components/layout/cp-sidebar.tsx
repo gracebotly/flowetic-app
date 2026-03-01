@@ -7,10 +7,10 @@ import { cn } from "@/lib/utils"
 import { useLocalStorageBoolean } from "@/lib/use-local-storage"
 import { AccountCardPanel } from "./account-popover"
 import {
-  MessageSquare,
   Users,
   LayoutDashboard,
   Zap,
+  Package,
   ClipboardList,
   Settings as SettingsIcon,
   ChevronLeft,
@@ -22,8 +22,8 @@ type NavItem = { href: string; label: string; icon: React.ComponentType<{ size?:
 
 const NAV: NavItem[] = [
   { href: "/control-panel/connections", label: "Connections", icon: Zap },
-  { href: "/control-panel/chat", label: "Chat", icon: MessageSquare },
-  { href: "/control-panel/projects", label: "Projects", icon: LayoutDashboard },
+  { href: "/control-panel/portals", label: "Portals", icon: LayoutDashboard },
+  { href: "/control-panel/products", label: "Products", icon: Package },
   { href: "/control-panel/clients", label: "Clients", icon: Users },
   { href: "/control-panel/activity", label: "Activity", icon: ClipboardList },
   { href: "/control-panel/settings", label: "Settings", icon: SettingsIcon },
@@ -36,7 +36,7 @@ export function ControlPanelSidebar({ userEmail, plan }: { userEmail: string; pl
 
   const width = collapsed ? 64 : 120
 
-  const NavEntry = ({ href, label, Icon, active }: { href: string; label: string; Icon: any; active: boolean }) => {
+  const NavEntry = ({ href, label, Icon, active }: { href: string; label: string; Icon: React.ComponentType<{ size?: number; className?: string }>; active: boolean }) => {
     const base = (
       <Link
         href={href}
