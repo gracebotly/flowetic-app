@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { getSkeletonDescription, getSkeletonDisplayName, getSkeletonForPlatform } from "@/lib/portals/platformToSkeleton";
+import { getSkeletonDescription, getSkeletonDisplayName, getSkeletonForPlatform, type SkeletonId } from "@/lib/portals/platformToSkeleton";
 import { ActivepiecesLogo, MakeLogo, N8nLogo, RetellLogo, VapiLogo } from "@/components/connections/platform-icons";
 import { CheckCircle2, ChevronDown, Copy, ExternalLink } from "lucide-react";
 
@@ -34,7 +34,7 @@ export default function CreatePortalPage() {
   const [portalName, setPortalName] = useState("");
   const [clientId, setClientId] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [skeletonId, setSkeletonId] = useState<string>("workflow-operations");
+  const [skeletonId, setSkeletonId] = useState<SkeletonId>("workflow-operations");
   const [expiry, setExpiry] = useState("never");
 
   const [createdToken, setCreatedToken] = useState<string | null>(null);
@@ -191,10 +191,10 @@ export default function CreatePortalPage() {
                 <div className="space-y-4 rounded-xl border border-gray-200 p-4">
                   <div>
                     <label className="mb-1 block text-sm font-medium text-gray-700">Skeleton Override</label>
-                    <select className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" value={skeletonId} onChange={(e) => setSkeletonId(e.target.value)}>
+                    <select className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" value={skeletonId} onChange={(e) => setSkeletonId(e.target.value as SkeletonId)}>
                       {SKELETONS.map((skel) => <option value={skel} key={skel}>{skel}</option>)}
                     </select>
-                    <p className="mt-1 text-xs text-gray-500">{getSkeletonDescription(skeletonId)}</p>
+                    <p className="mt-1 text-xs text-gray-500">{getSkeletonDescription(skeletonId as SkeletonId)}</p>
                   </div>
                   <div>
                     <label className="mb-1 block text-sm font-medium text-gray-700">Expires</label>

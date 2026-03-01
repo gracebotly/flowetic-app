@@ -47,7 +47,7 @@ export default function PortalDetailsPage() {
 
   const [name, setName] = useState("");
   const [clientId, setClientId] = useState("");
-  const [skeletonId, setSkeletonId] = useState("workflow-operations");
+  const [skeletonId, setSkeletonId] = useState<SkeletonId>("workflow-operations");
   const [expires, setExpires] = useState("never");
 
   useEffect(() => {
@@ -81,7 +81,7 @@ export default function PortalDetailsPage() {
       setTenant(tenantData as Tenant);
       setName(portalData.name);
       setClientId(portalData.client_id ?? "");
-      setSkeletonId(portalData.skeleton_id);
+      setSkeletonId(portalData.skeleton_id as SkeletonId);
       setExpires(portalData.expires_at ? "custom" : "never");
       setLoading(false);
     })();
@@ -176,7 +176,7 @@ export default function PortalDetailsPage() {
             <label className="text-sm">Portal Name<input value={name} onChange={(e) => setName(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2" /></label>
             <label className="text-sm">Client<input value={clientId} onChange={(e) => setClientId(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2" /></label>
             <label className="text-sm">Skeleton
-              <select value={skeletonId} onChange={(e) => setSkeletonId(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2">
+              <select value={skeletonId} onChange={(e) => setSkeletonId(e.target.value as SkeletonId)} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2">
                 {skeletonOptions.map((option) => <option value={option} key={option}>{option}</option>)}
               </select>
               <p className="mt-1 text-xs text-gray-500">{getSkeletonDescription(skeletonId as SkeletonId)}</p>
