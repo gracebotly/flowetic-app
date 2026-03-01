@@ -46,12 +46,32 @@ const nextConfig: NextConfig = {
       },
       {
         source: "/control-panel/projects",
-        destination: "/control-panel/portals",
+        destination: "/control-panel/offerings",
         permanent: true,
       },
       {
         source: "/control-panel/chat",
-        destination: "/control-panel/portals",
+        destination: "/control-panel/offerings",
+        permanent: true,
+      },
+      {
+        source: "/control-panel/portals",
+        destination: "/control-panel/offerings",
+        permanent: true,
+      },
+      {
+        source: "/control-panel/portals/:path*",
+        destination: "/control-panel/offerings",
+        permanent: true,
+      },
+      {
+        source: "/control-panel/products",
+        destination: "/control-panel/offerings",
+        permanent: true,
+      },
+      {
+        source: "/control-panel/products/:path*",
+        destination: "/control-panel/offerings",
         permanent: true,
       },
     ];
