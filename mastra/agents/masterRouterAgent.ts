@@ -81,7 +81,7 @@ export const masterRouterAgent: Agent = new Agent({
     journeyThreadId: z.string(),
 
     // Platform context (OPTIONAL)
-    platformType: z.enum(['vapi', 'retell', 'n8n', 'make', 'mastra', 'crewai', 'pydantic_ai', 'activepieces', 'other']).optional(),
+    platformType: z.enum(['vapi', 'retell', 'n8n', 'make', 'mastra', 'crewai', 'pydantic_ai', 'other']).optional(),
     sourceId: z.string().uuid().optional(),
     entityId: z.string().optional(),
     externalId: z.string().optional(),

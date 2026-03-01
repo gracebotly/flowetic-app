@@ -21,7 +21,6 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
   N8nLogo,
   MakeLogo,
-  ActivepiecesLogo,
   VapiLogo,
   RetellLogo,
 } from "@/components/connections/platform-icons";
@@ -99,11 +98,6 @@ const PLATFORM_META = {
     label: "Make", 
     Icon: MakeLogo,
     description: "Visual automation builder"
-  },
-  activepieces: { 
-    label: "Activepieces", 
-    Icon: ActivepiecesLogo,
-    description: "Open-source automation tool"
   },
   vapi: { 
     label: "Vapi", 
@@ -2080,7 +2074,7 @@ export default function ConnectionsPage() {
       </div>
     ) : null}
 
-    {(selectedPlatform === "n8n" || selectedPlatform === "activepieces") ? (
+    {(selectedPlatform === "n8n") ? (
       <div>
         <div className="flex items-center justify-between">
           <label className="text-sm font-semibold text-gray-900">
