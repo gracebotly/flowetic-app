@@ -30,7 +30,7 @@ export async function POST(
   // ── Validate execution exists ──────────────────────────────────────────
   const { data: execution, error: execErr } = await supabase
     .from("workflow_executions")
-    .select("id, product_id, status, started_at, customer_id")
+    .select("id, product_id, status, started_at, customer_id, tenant_id")
     .eq("id", executionId)
     .maybeSingle();
 
@@ -100,6 +100,47 @@ export async function POST(
         last_run_at: now,
       })
       .eq("id", execution.customer_id);
+  }
+
+  // ── Phase 5C: Report usage for usage_based offerings ───────────────────
+  if (!isError && execution.customer_id) {
+    // Load offering pricing_type and meter info
+    const { data: offeringData } = await supabase
+      .from("offerings")
+      .select("id, tenant_id, pricing_type, stripe_meter_event_name")
+      .eq("id", execution.product_id)
+      .single();
+
+    if (offeringData?.pricing_type === "usage_based" && offeringData.stripe_meter_event_name) {
+      // Load customer's Stripe ID
+      const { data: customerData } = await supabase
+        .from("offering_customers")
+        .select("stripe_customer_id")
+        .eq("id", execution.customer_id)
+        .single();
+
+      // Load tenant's Stripe account ID
+      const tenantId = execution.tenant_id ?? offeringData.tenant_id;
+      const { data: tenantData } = tenantId
+        ? await supabase
+            .from("tenants")
+            .select("stripe_account_id")
+            .eq("id", tenantId)
+            .single()
+        : { data: null };
+
+      // Resolve tenant_id: execution may not have tenant_id directly,
+      // so fall back to the offering's tenant context
+      if (customerData?.stripe_customer_id && tenantData?.stripe_account_id) {
+        const { reportUsageEvent } = await import("@/lib/stripe/reportUsage");
+        await reportUsageEvent(
+          offeringData,
+          customerData.stripe_customer_id,
+          tenantData.stripe_account_id,
+          executionId
+        );
+      }
+    }
   }
 
   return NextResponse.json({ ok: true, status: isError ? "error" : "success" });

@@ -232,8 +232,17 @@ export async function POST(request: NextRequest) {
         break;
       }
 
-      default:
-        console.log(`[stripe/webhooks] Unhandled event type: ${event.type}`);
+      default: {
+        const eventType = event.type as string;
+        if (eventType === "billing.meter.error_report_triggered") {
+          console.error(
+            `[stripe/webhooks] billing.meter.error_report_triggered:`,
+            JSON.stringify(event.data.object, null, 2)
+          );
+        } else {
+          console.log(`[stripe/webhooks] Unhandled event type: ${eventType}`);
+        }
+      }
     }
 
     // 5. Mark event as processed

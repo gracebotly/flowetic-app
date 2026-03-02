@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
     const { data: offering, error: offErr } = await supabaseAdmin
       .from('offerings')
       .select(
-        'id, tenant_id, name, slug, pricing_type, price_cents, stripe_product_id, stripe_price_id'
+        'id, tenant_id, name, slug, pricing_type, price_cents, stripe_product_id, stripe_price_id, stripe_meter_event_name'
       )
       .eq('id', offeringId)
       .eq('status', 'active')
@@ -50,12 +50,6 @@ export async function POST(request: NextRequest) {
 
     if (offering.pricing_type === 'free') {
       return json(400, { error: 'Free offerings do not require checkout' });
-    }
-
-    if (!offering.stripe_price_id) {
-      return json(400, {
-        error: 'Offering has not been synced to Stripe. Republish the offering.',
-      });
     }
 
     // 2. Load tenant + validate Stripe is connected
@@ -108,6 +102,12 @@ export async function POST(request: NextRequest) {
     let session;
 
     if (offering.pricing_type === 'per_run') {
+      if (!offering.stripe_price_id) {
+        return json(400, {
+          error: 'Offering has not been synced to Stripe. Republish the offering.',
+        });
+      }
+
       session = await stripe.checkout.sessions.create(
         {
           mode: 'payment',
@@ -129,11 +129,44 @@ export async function POST(request: NextRequest) {
         { stripeAccount: tenant.stripe_account_id }
       );
     } else if (offering.pricing_type === 'monthly') {
+      if (!offering.stripe_price_id) {
+        return json(400, {
+          error: 'Offering has not been synced to Stripe. Republish the offering.',
+        });
+      }
+
       session = await stripe.checkout.sessions.create(
         {
           mode: 'subscription',
           customer: stripeCustomerId,
           line_items: [{ price: offering.stripe_price_id, quantity: 1 }],
+          subscription_data: {
+            application_fee_percent: feePercent,
+            metadata: { offering_id: offering.id },
+          },
+          success_url: `${baseUrl}/products/${offering.slug}/run?subscribed=true`,
+          cancel_url: `${baseUrl}/products/${offering.slug}?cancelled=true`,
+          metadata: {
+            offering_id: offering.id,
+            customer_email: customerEmail,
+          },
+        },
+        { stripeAccount: tenant.stripe_account_id }
+      );
+    } else if (offering.pricing_type === 'usage_based') {
+      // Phase 5C: Usage-based creates a metered subscription (no upfront charge)
+      if (!offering.stripe_price_id) {
+        return json(400, {
+          error:
+            'Usage-based offering is missing Stripe metered price. Re-publish the offering.',
+        });
+      }
+
+      session = await stripe.checkout.sessions.create(
+        {
+          mode: 'subscription',
+          customer: stripeCustomerId,
+          line_items: [{ price: offering.stripe_price_id }],
           subscription_data: {
             application_fee_percent: feePercent,
             metadata: { offering_id: offering.id },
