@@ -26,6 +26,8 @@ interface EventFeedProps {
   hasMore: boolean;
   loadingMore: boolean;
   onLoadMore: () => void;
+  selectedEventId: string | null;
+  onSelectEvent: (eventId: string) => void;
 }
 
 export function EventFeed({
@@ -33,6 +35,8 @@ export function EventFeed({
   hasMore,
   loadingMore,
   onLoadMore,
+  selectedEventId,
+  onSelectEvent,
 }: EventFeedProps) {
   const sentinelRef = useRef<HTMLDivElement>(null);
 
@@ -85,7 +89,12 @@ export function EventFeed({
 
       <div className="divide-y divide-gray-50">
         {events.map((event) => (
-          <EventRow key={event.id} event={event} />
+          <EventRow
+            key={event.id}
+            event={event}
+            isSelected={event.id === selectedEventId}
+            onClick={() => onSelectEvent(event.id)}
+          />
         ))}
       </div>
 
