@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { logActivity } from "@/lib/activity/logActivity";
+import { getUserId } from "@/lib/activity/getUserId";
 
 export const runtime = "nodejs";
 
@@ -149,6 +151,21 @@ export async function POST(req: Request) {
     console.error("[POST /api/clients] Insert failed:", error);
     return json(500, { ok: false, code: "INSERT_FAILED", message: error.message });
   }
+
+  // Log activity event (fire-and-forget)
+  const userId = await getUserId(supabase);
+  logActivity(supabase, {
+    tenantId,
+    actorId: userId,
+    actorType: "user",
+    category: "client",
+    action: "created",
+    status: "success",
+    entityType: "client",
+    entityId: client.id,
+    entityName: client.name,
+    message: `Added client "${client.name}"`,
+  });
 
   return json(201, { ok: true, client });
 }
