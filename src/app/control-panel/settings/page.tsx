@@ -13,6 +13,8 @@ import {
 import { WorkspaceTab } from "@/components/settings/WorkspaceTab";
 import { BrandingTab } from "@/components/settings/BrandingTab";
 import { TeamTab } from "@/components/settings/TeamTab";
+import { BillingTab } from "@/components/settings/BillingTab";
+import { DangerTab } from "@/components/settings/DangerTab";
 
 // ── Tab definitions ─────────────────────────────────────────
 type TabKey = "workspace" | "branding" | "billing" | "team" | "danger";
@@ -79,31 +81,11 @@ export default function SettingsPage() {
         <div className="mt-6">
           {activeTab === "workspace" && <WorkspaceTab />}
           {activeTab === "branding" && <BrandingTab />}
-          {activeTab === "billing" && (
-            <PlaceholderTab
-              title="Billing & Stripe Connect"
-              description="Connect your Stripe account to collect payments from your products. Coming in a future update."
-            />
-          )}
+          {activeTab === "billing" && <BillingTab />}
           {activeTab === "team" && <TeamTab />}
-          {activeTab === "danger" && (
-            <PlaceholderTab
-              title="Danger Zone"
-              description="Export data and delete workspace. Coming in Phase 4."
-            />
-          )}
+          {activeTab === "danger" && <DangerTab />}
         </div>
       </div>
-    </div>
-  );
-}
-
-// Temporary placeholder for Phase 3/4 tabs
-function PlaceholderTab({ title, description }: { title: string; description: string }) {
-  return (
-    <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-12 text-center">
-      <h3 className="text-base font-semibold text-gray-900">{title}</h3>
-      <p className="mt-2 text-sm text-gray-500">{description}</p>
     </div>
   );
 }
