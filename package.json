@@ -54,7 +54,8 @@
     "zod": "^3.25.76",
     "yaml": "^2.8.1",
     "html2canvas": "^1.4.1",
-    "jspdf": "^2.5.2"
+    "jspdf": "^2.5.2",
+    "stripe": "^18.5.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
