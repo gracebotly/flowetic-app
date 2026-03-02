@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { WorkspaceTab } from "@/components/settings/WorkspaceTab";
 import { BrandingTab } from "@/components/settings/BrandingTab";
+import { TeamTab } from "@/components/settings/TeamTab";
 
 // ── Tab definitions ─────────────────────────────────────────
 type TabKey = "workspace" | "branding" | "billing" | "team" | "danger";
@@ -84,12 +85,7 @@ export default function SettingsPage() {
               description="Connect your Stripe account to collect payments from your products. Coming in a future update."
             />
           )}
-          {activeTab === "team" && (
-            <PlaceholderTab
-              title="Team Members"
-              description="Invite team members and manage roles. Coming in Phase 3."
-            />
-          )}
+          {activeTab === "team" && <TeamTab />}
           {activeTab === "danger" && (
             <PlaceholderTab
               title="Danger Zone"
