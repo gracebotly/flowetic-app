@@ -232,6 +232,18 @@ export async function POST(request: NextRequest) {
         break;
       }
 
+      // ── Phase 5C: Meter error reporting ─────────────────────
+      case "billing.meter.error_report_triggered": {
+        const meterError = event.data.object;
+        console.error(
+          `[stripe/webhooks] billing.meter.error_report_triggered:`,
+          JSON.stringify(meterError, null, 2)
+        );
+        // Log for debugging — no DB action needed.
+        // Meter errors indicate issues with event_name, customer_id, or meter config.
+        break;
+      }
+
       default:
         console.log(`[stripe/webhooks] Unhandled event type: ${event.type}`);
     }

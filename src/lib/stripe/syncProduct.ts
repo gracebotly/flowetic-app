@@ -15,6 +15,8 @@ interface OfferingForSync {
 interface SyncResult {
   stripe_product_id: string;
   stripe_price_id: string | null;
+  stripe_meter_id?: string;
+  stripe_meter_event_name?: string;
 }
 
 /**
@@ -55,6 +57,10 @@ export async function syncOfferingToStripe(
     stripeProductId = stripeProduct.id;
   }
 
+  if (!stripeProductId) {
+    throw new Error('Failed to create or resolve Stripe product id');
+  }
+
   // 2. Create Stripe Price based on pricing_type
   let stripePriceId: string | null = offering.stripe_price_id;
 
@@ -89,18 +95,33 @@ export async function syncOfferingToStripe(
         stripePriceId = stripePrice.id;
         break;
 
-      case 'usage_based':
-        // Handled in Phase 5C — skip price creation here
-        break;
+      case 'usage_based': {
+        // Phase 5C: Provision meter + metered price
+        const { provisionMeter } = await import('@/lib/stripe/meterSetup');
+        const meterResult = await provisionMeter(
+          {
+            id: offering.id,
+            name: offering.name,
+            price_cents: offering.price_cents,
+            stripe_product_id: stripeProductId,
+          },
+          tenantStripeAccountId
+        );
+        stripePriceId = meterResult.stripe_price_id;
+
+        // Return early — include meter fields in addition to standard fields
+        return {
+          stripe_product_id: stripeProductId,
+          stripe_price_id: meterResult.stripe_price_id,
+          stripe_meter_id: meterResult.stripe_meter_id,
+          stripe_meter_event_name: meterResult.stripe_meter_event_name,
+        };
+      }
 
       case 'free':
         // No Stripe price needed
         break;
     }
-  }
-
-  if (!stripeProductId) {
-    throw new Error('Failed to create or resolve Stripe product id');
   }
 
   return {
