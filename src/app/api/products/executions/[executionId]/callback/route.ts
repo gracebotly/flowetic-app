@@ -30,7 +30,7 @@ export async function POST(
   // ── Validate execution exists ──────────────────────────────────────────
   const { data: execution, error: execErr } = await supabase
     .from("workflow_executions")
-    .select("id, product_id, status, started_at, customer_id, tenant_id")
+    .select("id, offering_id, status, started_at, customer_id, tenant_id")
     .eq("id", executionId)
     .maybeSingle();
 
@@ -56,9 +56,9 @@ export async function POST(
 
   // ── Load product for result_mapping ────────────────────────────────────
   const { data: product } = await supabase
-    .from("workflow_products")
+    .from("offerings")
     .select("execution_config")
-    .eq("id", execution.product_id)
+    .eq("id", execution.offering_id)
     .single();
 
   const resultMapping = (product?.execution_config as Record<string, unknown>)?.result_mapping as
@@ -88,13 +88,13 @@ export async function POST(
   // ── Update customer usage ──────────────────────────────────────────────
   if (!isError && execution.customer_id) {
     const { data: customer } = await supabase
-      .from("product_customers")
+      .from("offering_customers")
       .select("total_runs")
       .eq("id", execution.customer_id)
       .single();
 
     await supabase
-      .from("product_customers")
+      .from("offering_customers")
       .update({
         total_runs: (customer?.total_runs ?? 0) + 1,
         last_run_at: now,
@@ -108,7 +108,7 @@ export async function POST(
     const { data: offeringData } = await supabase
       .from("offerings")
       .select("id, tenant_id, pricing_type, stripe_meter_event_name")
-      .eq("id", execution.product_id)
+      .eq("id", execution.offering_id)
       .single();
 
     if (offeringData?.pricing_type === "usage_based" && offeringData.stripe_meter_event_name) {
