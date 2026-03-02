@@ -1,10 +1,18 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { PageHeader } from "@/components/layout/page-header";
 import { SummaryCards } from "@/components/activity/SummaryCards";
+import { FilterBar } from "@/components/activity/FilterBar";
 import { EventFeed } from "@/components/activity/EventFeed";
 import { Loader2, RefreshCw } from "lucide-react";
+import {
+  parseFiltersFromParams,
+  filtersToApiParams,
+  filtersToParams,
+  type ActivityFilters,
+} from "@/lib/activity/filterHelpers";
 
 interface ActivityEvent {
   id: string;
@@ -35,13 +43,32 @@ interface SummaryData {
 }
 
 export default function ActivityPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [summary, setSummary] = useState<SummaryData | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [filters, setFilters] = useState<ActivityFilters>(() =>
+    parseFiltersFromParams(searchParams),
+  );
   const hasFetched = useRef(false);
+
+  // ── Sync filters → URL ────────────────────────────────────
+  const syncFiltersToUrl = useCallback(
+    (f: ActivityFilters) => {
+      const params = filtersToParams(f);
+      const qs = params.toString();
+      const newUrl = qs
+        ? `/control-panel/activity?${qs}`
+        : "/control-panel/activity";
+      router.replace(newUrl, { scroll: false });
+    },
+    [router],
+  );
 
   // ── Fetch summary ─────────────────────────────────────────
   const fetchSummary = useCallback(async () => {
@@ -62,16 +89,17 @@ export default function ActivityPage() {
     }
   }, []);
 
-  // ── Fetch events (initial or refresh) ─────────────────────
-  const fetchEvents = useCallback(async (cursor?: string) => {
-    const params = new URLSearchParams({ limit: "50" });
-    if (cursor) params.set("cursor", cursor);
-
+  // ── Fetch events with filters ─────────────────────────────
+  const fetchEvents = useCallback(async (f: ActivityFilters, cursor?: string) => {
+    const params = filtersToApiParams(f, { cursor });
     const res = await fetch(`/api/activity?${params}`);
     const json = await res.json();
 
     if (!json.ok) return { events: [] as ActivityEvent[], has_more: false };
-    return { events: json.events as ActivityEvent[], has_more: json.has_more as boolean };
+    return {
+      events: json.events as ActivityEvent[],
+      has_more: json.has_more as boolean,
+    };
   }, []);
 
   // ── Initial load ──────────────────────────────────────────
@@ -81,9 +109,12 @@ export default function ActivityPage() {
 
     async function load() {
       setLoading(true);
+      const initialFilters = parseFiltersFromParams(searchParams);
+      setFilters(initialFilters);
+
       const [, eventsResult] = await Promise.allSettled([
         fetchSummary(),
-        fetchEvents(),
+        fetchEvents(initialFilters),
       ]);
 
       if (eventsResult.status === "fulfilled") {
@@ -93,7 +124,23 @@ export default function ActivityPage() {
       setLoading(false);
     }
     load();
-  }, [fetchSummary, fetchEvents]);
+  }, [fetchSummary, fetchEvents, searchParams]);
+
+  // ── Handle filter change ──────────────────────────────────
+  const handleFiltersChange = useCallback(
+    async (newFilters: ActivityFilters) => {
+      setFilters(newFilters);
+      syncFiltersToUrl(newFilters);
+
+      // Re-fetch events with new filters (reset pagination)
+      setLoading(true);
+      const result = await fetchEvents(newFilters);
+      setEvents(result.events);
+      setHasMore(result.has_more);
+      setLoading(false);
+    },
+    [fetchEvents, syncFiltersToUrl],
+  );
 
   // ── Load more (infinite scroll) ───────────────────────────
   const loadMore = useCallback(async () => {
@@ -101,18 +148,18 @@ export default function ActivityPage() {
     setLoadingMore(true);
 
     const lastEvent = events[events.length - 1];
-    const result = await fetchEvents(lastEvent.created_at);
+    const result = await fetchEvents(filters, lastEvent.created_at);
     setEvents((prev) => [...prev, ...result.events]);
     setHasMore(result.has_more);
     setLoadingMore(false);
-  }, [loadingMore, hasMore, events, fetchEvents]);
+  }, [loadingMore, hasMore, events, fetchEvents, filters]);
 
   // ── Refresh ───────────────────────────────────────────────
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     const [, eventsResult] = await Promise.allSettled([
       fetchSummary(),
-      fetchEvents(),
+      fetchEvents(filters),
     ]);
 
     if (eventsResult.status === "fulfilled") {
@@ -120,7 +167,7 @@ export default function ActivityPage() {
       setHasMore(eventsResult.value.has_more);
     }
     setRefreshing(false);
-  }, [fetchSummary, fetchEvents]);
+  }, [fetchSummary, fetchEvents, filters]);
 
   // ── Render ────────────────────────────────────────────────
   return (
@@ -134,7 +181,9 @@ export default function ActivityPage() {
             disabled={refreshing}
             className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3.5 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:opacity-50"
           >
-            <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+            <RefreshCw
+              className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
+            />
             Refresh
           </button>
         }
@@ -143,6 +192,9 @@ export default function ActivityPage() {
       <div className="mx-auto max-w-6xl space-y-6 px-6 py-8">
         {/* Summary Cards */}
         <SummaryCards data={summary} loading={loading} />
+
+        {/* Filter Bar */}
+        <FilterBar filters={filters} onFiltersChange={handleFiltersChange} />
 
         {/* Event Feed */}
         {loading ? (
