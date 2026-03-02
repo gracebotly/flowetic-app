@@ -99,12 +99,138 @@ export async function POST(request: NextRequest) {
         break;
       }
 
-      // ── Phase 5B events (added in Push 6) ──────────────
-      // case "checkout.session.completed":
-      // case "customer.subscription.updated":
-      // case "customer.subscription.deleted":
-      // case "invoice.paid":
-      // case "invoice.payment_failed":
+      // ── Phase 5B: Checkout & subscription events ──────────
+      case "checkout.session.completed": {
+        const session = event.data.object as Stripe.Checkout.Session;
+        const offeringId = session.metadata?.offering_id;
+        const customerEmail =
+          session.metadata?.customer_email ??
+          session.customer_details?.email;
+
+        if (!offeringId || !customerEmail) break;
+
+        // Resolve tenant from offering
+        const { data: offeringData } = await supabaseAdmin
+          .from("offerings")
+          .select("tenant_id, pricing_type")
+          .eq("id", offeringId)
+          .maybeSingle();
+
+        if (!offeringData) break;
+        resolvedTenantId = offeringData.tenant_id;
+
+        // Update offering_customers with Stripe IDs
+        const checkoutUpdate: Record<string, unknown> = {
+          stripe_customer_id: session.customer as string,
+        };
+
+        if (session.mode === "subscription") {
+          checkoutUpdate.subscription_status = "active";
+          checkoutUpdate.stripe_subscription_id =
+            session.subscription as string;
+        }
+
+        await supabaseAdmin
+          .from("offering_customers")
+          .update(checkoutUpdate)
+          .eq("offering_id", offeringId)
+          .eq("email", customerEmail);
+
+        console.log(
+          `[stripe/webhooks] checkout.session.completed → offering ${offeringId}, mode=${session.mode}`
+        );
+        break;
+      }
+
+      case "customer.subscription.updated": {
+        const subscription = event.data.object as Stripe.Subscription;
+        const subOfferingId = subscription.metadata?.offering_id;
+        if (!subOfferingId) break;
+
+        const statusMap: Record<string, string> = {
+          active: "active",
+          past_due: "paused",
+          unpaid: "paused",
+          canceled: "cancelled",
+          incomplete: "paused",
+          incomplete_expired: "expired",
+          trialing: "active",
+          paused: "paused",
+        };
+
+        await supabaseAdmin
+          .from("offering_customers")
+          .update({
+            subscription_status:
+              statusMap[subscription.status] ?? "paused",
+            subscription_current_period_end: subscription.items.data[0]?.current_period_end
+              ? new Date(
+                  subscription.items.data[0].current_period_end * 1000
+                ).toISOString()
+              : null,
+            stripe_subscription_item_id:
+              subscription.items.data[0]?.id ?? null,
+          })
+          .eq("stripe_subscription_id", subscription.id);
+
+        console.log(
+          `[stripe/webhooks] subscription.updated → ${subscription.id}, status=${subscription.status}`
+        );
+        break;
+      }
+
+      case "customer.subscription.deleted": {
+        const deletedSub = event.data.object as Stripe.Subscription;
+
+        await supabaseAdmin
+          .from("offering_customers")
+          .update({ subscription_status: "cancelled" })
+          .eq("stripe_subscription_id", deletedSub.id);
+
+        console.log(
+          `[stripe/webhooks] subscription.deleted → ${deletedSub.id}`
+        );
+        break;
+      }
+
+      case "invoice.paid": {
+        const invoice = event.data.object as Stripe.Invoice;
+        const invoiceSubId =
+          invoice.parent?.type === "subscription_details"
+            ? (invoice.parent.subscription_details?.subscription as string)
+            : null;
+        if (!invoiceSubId) break;
+
+        // Use RPC for atomic revenue increment
+        await supabaseAdmin.rpc("increment_revenue", {
+          p_subscription_id: invoiceSubId,
+          p_amount: invoice.amount_paid,
+        });
+
+        console.log(
+          `[stripe/webhooks] invoice.paid → sub ${invoiceSubId}, amount=${invoice.amount_paid}`
+        );
+        break;
+      }
+
+      case "invoice.payment_failed": {
+        const failedInvoice = event.data.object as Stripe.Invoice;
+        const failedSubId =
+          failedInvoice.parent?.type === "subscription_details"
+            ? (failedInvoice.parent.subscription_details?.subscription as string)
+            : null;
+        if (!failedSubId) break;
+
+        await supabaseAdmin
+          .from("offering_customers")
+          .update({ subscription_status: "paused" })
+          .eq("stripe_subscription_id", failedSubId);
+
+        console.log(
+          `[stripe/webhooks] invoice.payment_failed → sub ${failedSubId}`
+        );
+        break;
+      }
 
       default:
         console.log(`[stripe/webhooks] Unhandled event type: ${event.type}`);

@@ -44,7 +44,7 @@ export async function POST(req: Request) {
 
   // ── Load product ───────────────────────────────────────────────────────
   const { data: product, error: prodErr } = await supabase
-    .from("workflow_products")
+    .from("offerings")
     .select("*")
     .eq("id", productId)
     .eq("status", "active")
@@ -62,7 +62,7 @@ export async function POST(req: Request) {
   const { count: dailyCount } = await supabase
     .from("workflow_executions")
     .select("id", { count: "exact", head: true })
-    .eq("product_id", productId)
+    .eq("offering_id", productId)
     .gte("started_at", `${today}T00:00:00Z`);
 
   if ((dailyCount ?? 0) >= (wp.max_runs_per_day ?? 100)) {
@@ -74,7 +74,7 @@ export async function POST(req: Request) {
     const { count: customerDailyCount } = await supabase
       .from("workflow_executions")
       .select("id", { count: "exact", head: true })
-      .eq("product_id", productId)
+      .eq("offering_id", productId)
       .gte("started_at", `${today}T00:00:00Z`)
       .contains("inputs", { _customer_email: customerEmail });
 
@@ -83,19 +83,109 @@ export async function POST(req: Request) {
     }
   }
 
+  // ── PHASE 5B: PAYMENT GATE ─────────────────────────────────────────────
+  const pricingType = (wp as WorkflowProduct & { pricing_type?: string }).pricing_type ?? "free";
+
+  if (pricingType === "per_run") {
+    const sessionId =
+      typeof body.checkoutSessionId === "string"
+        ? body.checkoutSessionId.trim()
+        : "";
+
+    if (!sessionId) {
+      return json(402, {
+        ok: false,
+        code: "PAYMENT_REQUIRED",
+        message: "Per-run offering requires payment.",
+      });
+    }
+
+    // Load tenant's Stripe account
+    const { data: tenantData } = await supabase
+      .from("tenants")
+      .select("stripe_account_id")
+      .eq("id", wp.tenant_id)
+      .single();
+
+    if (!tenantData?.stripe_account_id) {
+      return json(402, {
+        ok: false,
+        code: "STRIPE_NOT_CONNECTED",
+        message: "Agency has not connected Stripe.",
+      });
+    }
+
+    // Verify session is paid on connected account
+    const { stripe } = await import("@/lib/stripe/client");
+    const session = await stripe.checkout.sessions.retrieve(sessionId, {
+      stripeAccount: tenantData.stripe_account_id,
+    });
+
+    if (
+      session.payment_status !== "paid" ||
+      session.metadata?.offering_id !== productId
+    ) {
+      return json(402, {
+        ok: false,
+        code: "PAYMENT_NOT_VERIFIED",
+        message: "Payment verification failed.",
+      });
+    }
+  }
+
+  if (pricingType === "monthly") {
+    if (!customerEmail) {
+      return json(402, {
+        ok: false,
+        code: "EMAIL_REQUIRED",
+        message: "Email required for subscription offerings.",
+      });
+    }
+
+    const { data: custRecord } = await supabase
+      .from("offering_customers")
+      .select("subscription_status, subscription_current_period_end")
+      .eq("offering_id", productId)
+      .eq("email", customerEmail)
+      .maybeSingle();
+
+    if (!custRecord || custRecord.subscription_status !== "active") {
+      return json(402, {
+        ok: false,
+        code: "SUBSCRIPTION_REQUIRED",
+        message: "Active subscription required.",
+      });
+    }
+
+    // Belt + suspenders: check period hasn't expired
+    if (
+      custRecord.subscription_current_period_end &&
+      new Date(custRecord.subscription_current_period_end) < new Date()
+    ) {
+      return json(402, {
+        ok: false,
+        code: "SUBSCRIPTION_EXPIRED",
+        message: "Subscription has expired.",
+      });
+    }
+  }
+
+  // usage_based: no gate here — runs are metered post-execution (Phase 5C)
+  // free: no gate
+
   // ── Upsert customer record ─────────────────────────────────────────────
   let customerId: string | null = null;
   if (customerEmail) {
     const { data: customer } = await supabase
-      .from("product_customers")
+      .from("offering_customers")
       .upsert(
         {
-          product_id: productId,
+          offering_id: productId,
           tenant_id: wp.tenant_id,
           email: customerEmail,
           name: customerName || null,
         },
-        { onConflict: "product_id,email" },
+        { onConflict: "offering_id,email" },
       )
       .select("id")
       .single();
@@ -113,11 +203,16 @@ export async function POST(req: Request) {
   const { data: execution, error: execInsertErr } = await supabase
     .from("workflow_executions")
     .insert({
-      product_id: productId,
+      offering_id: productId,
       tenant_id: wp.tenant_id,
       customer_id: customerId,
       inputs: executionInputs,
       status: "pending",
+      payment_status: pricingType === "free" ? "free" : "paid",
+      stripe_checkout_session_id:
+        typeof body.checkoutSessionId === "string"
+          ? body.checkoutSessionId
+          : null,
       started_at: new Date().toISOString(),
     })
     .select("id")
@@ -239,13 +334,13 @@ export async function POST(req: Request) {
       if (customerId) {
         try {
           const { data: custData } = await supabase
-            .from("product_customers")
+            .from("offering_customers")
             .select("total_runs")
             .eq("id", customerId)
             .single();
 
           await supabase
-            .from("product_customers")
+            .from("offering_customers")
             .update({
               total_runs: (custData?.total_runs ?? 0) + 1,
               last_run_at: now,
