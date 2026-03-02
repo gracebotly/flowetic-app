@@ -195,7 +195,10 @@ export async function POST(request: NextRequest) {
 
       case "invoice.paid": {
         const invoice = event.data.object as Stripe.Invoice;
-        const invoiceSubId = invoice.subscription as string;
+        const invoiceSubId =
+          invoice.parent?.type === "subscription_details"
+            ? (invoice.parent.subscription_details?.subscription as string)
+            : null;
         if (!invoiceSubId) break;
 
         // Use RPC for atomic revenue increment
@@ -212,7 +215,10 @@ export async function POST(request: NextRequest) {
 
       case "invoice.payment_failed": {
         const failedInvoice = event.data.object as Stripe.Invoice;
-        const failedSubId = failedInvoice.subscription as string;
+        const failedSubId =
+          failedInvoice.parent?.type === "subscription_details"
+            ? (failedInvoice.parent.subscription_details?.subscription as string)
+            : null;
         if (!failedSubId) break;
 
         await supabaseAdmin
