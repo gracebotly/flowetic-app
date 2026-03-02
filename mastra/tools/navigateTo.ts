@@ -7,6 +7,8 @@ const Page = z.enum([
   "chat",
   "projects",
   "clients",
+  "client_detail",
+  "offerings",
   "activity",
   "settings",
   "project_detail",
@@ -48,6 +50,13 @@ export const navigateTo = createTool({
         break;
       case "clients":
         url = "/control-panel/clients";
+        break;
+      case "client_detail":
+        if (!resourceId) throw new Error("MISSING_RESOURCE_ID");
+        url = `/control-panel/clients/${resourceId}`;
+        break;
+      case "offerings":
+        url = "/control-panel/offerings";
         break;
       case "activity":
         url = "/control-panel/activity";

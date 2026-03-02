@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Check } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { getSkeletonForPlatform } from "@/lib/portals/platformToSkeleton";
@@ -83,8 +83,13 @@ const STEPS = [
 
 export default function CreateOfferingPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const prefilledClientId = searchParams.get("client_id") ?? "";
   const [currentStep, setCurrentStep] = useState(1);
-  const [wizard, setWizard] = useState<WizardState>(INITIAL_STATE);
+  const [wizard, setWizard] = useState<WizardState>({
+    ...INITIAL_STATE,
+    clientId: prefilledClientId,
+  });
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 

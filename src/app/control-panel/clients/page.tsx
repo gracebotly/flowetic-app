@@ -48,6 +48,7 @@ export default function ClientsPage() {
   const [sortBy, setSortBy] = useState("updated_at");
   const [showCreate, setShowCreate] = useState(false);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const fetchClients = async () => {
     setLoading(true);
@@ -66,6 +67,7 @@ export default function ClientsPage() {
   };
 
   useEffect(() => {
+    queueMicrotask(() => setSelectedIds(new Set()));
     const run = async () => {
       await fetchClients();
     };
@@ -88,6 +90,47 @@ export default function ClientsPage() {
     if (!confirm("Archive this client? Their offerings will be unassigned.")) return;
     await fetch(`/api/clients/${clientId}`, { method: "DELETE" });
     setMenuOpenId(null);
+    await fetchClients();
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === clients.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(clients.map((c) => c.id)));
+    }
+  };
+
+  const handleBulkAction = async (action: "activate" | "pause" | "archive") => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+
+    if (action === "archive" && !confirm(`Archive ${ids.length} client(s)? Their offerings will be unassigned.`)) {
+      return;
+    }
+
+    for (const cid of ids) {
+      if (action === "archive") {
+        await fetch(`/api/clients/${cid}`, { method: "DELETE" });
+      } else {
+        await fetch(`/api/clients/${cid}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: action === "activate" ? "active" : "paused" }),
+        });
+      }
+    }
+
+    setSelectedIds(new Set());
     await fetchClients();
   };
 
@@ -117,6 +160,15 @@ export default function ClientsPage() {
       </div>
 
       <div className="mt-6 flex flex-wrap items-center gap-3">
+        {clients.length > 0 && (
+          <input
+            type="checkbox"
+            checked={clients.length > 0 && selectedIds.size === clients.length}
+            onChange={toggleSelectAll}
+            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            title="Select all"
+          />
+        )}
         <div className="relative flex-1 min-w-[200px] max-w-xs">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <input
@@ -167,6 +219,16 @@ export default function ClientsPage() {
               className="group relative flex cursor-pointer items-center justify-between rounded-xl border border-gray-200 bg-white px-5 py-4 shadow-sm transition hover:border-blue-200 hover:shadow-md"
             >
               <div className="flex items-center gap-4 min-w-0">
+                <input
+                  type="checkbox"
+                  checked={selectedIds.has(client.id)}
+                  onChange={(e) => {
+                    e.stopPropagation();
+                    toggleSelect(client.id);
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
                 <div
                   className={`h-2.5 w-2.5 shrink-0 rounded-full ${
                     client.status === "active" ? "bg-emerald-500" : "bg-gray-300"
@@ -262,6 +324,41 @@ export default function ClientsPage() {
           <span>{totalOfferings} active offerings</span>
           <span>·</span>
           <span>Avg health: {avgHealth}</span>
+        </div>
+      )}
+
+
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-xl border border-gray-200 bg-white px-5 py-3 shadow-xl">
+          <div className="flex items-center gap-4">
+            <span className="text-sm font-medium text-gray-700">
+              {selectedIds.size} selected
+            </span>
+            <button
+              onClick={() => handleBulkAction("activate")}
+              className="rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+            >
+              Activate
+            </button>
+            <button
+              onClick={() => handleBulkAction("pause")}
+              className="rounded-lg bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-100"
+            >
+              Pause
+            </button>
+            <button
+              onClick={() => handleBulkAction("archive")}
+              className="rounded-lg bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100"
+            >
+              Archive
+            </button>
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              className="text-xs text-gray-400 hover:text-gray-600"
+            >
+              Clear
+            </button>
+          </div>
         </div>
       )}
 
