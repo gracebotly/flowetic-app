@@ -5,6 +5,7 @@ import { Search, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { DateRangePicker } from "@/components/activity/DateRangePicker";
 import { ExportButton } from "@/components/activity/ExportButton";
+import { RetentionBadge } from "@/components/activity/RetentionBadge";
 import type { ActivityFilters } from "@/lib/activity/filterHelpers";
 import { getDateRangePreset, hasActiveFilters } from "@/lib/activity/filterHelpers";
 
@@ -237,16 +238,19 @@ export function FilterBar({ filters, onFiltersChange }: FilterBarProps) {
         )}
       </div>
 
-      {/* Row 2: Date range + Export */}
+      {/* Row 2: Date range + Retention badge + Export */}
       <div className="flex items-center justify-between">
-        <DateRangePicker
-          from={filters.from}
-          to={filters.to}
-          activePreset={datePreset}
-          onPresetSelect={handlePresetSelect}
-          onCustomRange={handleCustomRange}
-          onClear={handleClearDateRange}
-        />
+        <div className="flex items-center gap-3">
+          <DateRangePicker
+            from={filters.from}
+            to={filters.to}
+            activePreset={datePreset}
+            onPresetSelect={handlePresetSelect}
+            onCustomRange={handleCustomRange}
+            onClear={handleClearDateRange}
+          />
+          <RetentionBadge />
+        </div>
 
         <ExportButton filters={filters} />
       </div>

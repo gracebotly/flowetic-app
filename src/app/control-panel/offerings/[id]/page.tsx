@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { SurfaceBadge } from "@/components/offerings/SurfaceBadge";
 import { AccessBadge } from "@/components/offerings/AccessBadge";
+import { ScopedActivityFeed } from "@/components/activity/ScopedActivityFeed";
 
 // ── Types ───────────────────────────────────────────────────
 type Offering = {
@@ -698,17 +699,7 @@ export default function OfferingDetailPage() {
       {/* ═══════════════════════════════════════════════════════ */}
       {activeTab === "activity" && (
         <div className="mt-6">
-          <div className="flex flex-col items-center py-16 text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gray-100">
-              <Activity className="h-7 w-7 text-gray-400" />
-            </div>
-            <h3 className="mt-4 text-sm font-semibold text-gray-900">
-              Activity tracking coming soon
-            </h3>
-            <p className="mt-1 max-w-sm text-sm text-gray-500">
-              View counts, access events, and usage analytics for this offering will appear here.
-            </p>
-          </div>
+          <ScopedActivityFeed offeringId={id} limit={50} />
         </div>
       )}
     </div>
