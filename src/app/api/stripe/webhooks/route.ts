@@ -163,9 +163,11 @@ export async function POST(request: NextRequest) {
           .update({
             subscription_status:
               statusMap[subscription.status] ?? "paused",
-            subscription_current_period_end: new Date(
-              subscription.current_period_end * 1000
-            ).toISOString(),
+            subscription_current_period_end: subscription.items.data[0]?.current_period_end
+              ? new Date(
+                  subscription.items.data[0].current_period_end * 1000
+                ).toISOString()
+              : null,
             stripe_subscription_item_id:
               subscription.items.data[0]?.id ?? null,
           })
