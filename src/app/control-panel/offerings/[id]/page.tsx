@@ -21,6 +21,7 @@ import {
   Activity,
   Save,
   AlertTriangle,
+  Users,
 } from "lucide-react";
 import { SurfaceBadge } from "@/components/offerings/SurfaceBadge";
 import { AccessBadge } from "@/components/offerings/AccessBadge";
@@ -424,6 +425,19 @@ export default function OfferingDetailPage() {
               )}
             </div>
           </div>
+
+          {/* Client link */}
+          {offering.client_id && (
+            <div className="mt-4 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3">
+              <Link
+                href={`/control-panel/clients/${offering.client_id}`}
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-700 hover:text-blue-800"
+              >
+                <Users className="h-4 w-4" />
+                View Client →
+              </Link>
+            </div>
+          )}
 
           {/* Pricing (read-only for now) */}
           {offering.access_type === "stripe_gate" && (
