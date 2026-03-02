@@ -23,7 +23,7 @@ export async function GET() {
     return json(500, { ok: false, code: "FETCH_FAILED" });
   }
 
-  return json(200, { ok: true, workspace: tenant });
+  return json(200, { ok: true, workspace: tenant, role: auth.role });
 }
 
 // ── PATCH /api/settings/workspace ───────────────────────────

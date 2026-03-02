@@ -11,6 +11,11 @@ const Page = z.enum([
   "offerings",
   "activity",
   "settings",
+  "settings_workspace",
+  "settings_branding",
+  "settings_billing",
+  "settings_team",
+  "settings_danger",
   "project_detail",
 ]);
 
@@ -63,6 +68,21 @@ export const navigateTo = createTool({
         break;
       case "settings":
         url = "/control-panel/settings";
+        break;
+      case "settings_workspace":
+        url = "/control-panel/settings?tab=workspace";
+        break;
+      case "settings_branding":
+        url = "/control-panel/settings?tab=branding";
+        break;
+      case "settings_billing":
+        url = "/control-panel/settings?tab=billing";
+        break;
+      case "settings_team":
+        url = "/control-panel/settings?tab=team";
+        break;
+      case "settings_danger":
+        url = "/control-panel/settings?tab=danger";
         break;
       default:
         url = "/";
