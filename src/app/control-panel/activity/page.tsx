@@ -7,6 +7,7 @@ import { SummaryCards } from "@/components/activity/SummaryCards";
 import { FilterBar } from "@/components/activity/FilterBar";
 import { EventFeed } from "@/components/activity/EventFeed";
 import { Loader2, RefreshCw } from "lucide-react";
+import { EventDrawer } from "@/components/activity/EventDrawer";
 import {
   parseFiltersFromParams,
   filtersToApiParams,
@@ -56,6 +57,12 @@ export default function ActivityPage() {
     parseFiltersFromParams(searchParams),
   );
   const hasFetched = useRef(false);
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+
+  // Resolve the selected event object
+  const selectedEvent = selectedEventId
+    ? events.find((e) => e.id === selectedEventId) ?? null
+    : null;
 
   // ── Sync filters → URL ────────────────────────────────────
   const syncFiltersToUrl = useCallback(
@@ -169,6 +176,29 @@ export default function ActivityPage() {
     setRefreshing(false);
   }, [fetchSummary, fetchEvents, filters]);
 
+  // ── Keyboard navigation (↑↓ arrows) ──────────────────────
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!selectedEventId || events.length === 0) return;
+
+      const currentIndex = events.findIndex((ev) => ev.id === selectedEventId);
+      if (currentIndex === -1) return;
+
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        const nextIndex = Math.min(currentIndex + 1, events.length - 1);
+        setSelectedEventId(events[nextIndex].id);
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        const prevIndex = Math.max(currentIndex - 1, 0);
+        setSelectedEventId(events[prevIndex].id);
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [selectedEventId, events]);
+
   // ── Render ────────────────────────────────────────────────
   return (
     <div className="min-h-screen">
@@ -207,9 +237,17 @@ export default function ActivityPage() {
             hasMore={hasMore}
             loadingMore={loadingMore}
             onLoadMore={loadMore}
+            selectedEventId={selectedEventId}
+            onSelectEvent={setSelectedEventId}
           />
         )}
       </div>
+
+      {/* Event Detail Drawer */}
+      <EventDrawer
+        event={selectedEvent}
+        onClose={() => setSelectedEventId(null)}
+      />
     </div>
   );
 }

@@ -33,6 +33,8 @@ interface ActivityEvent {
 
 interface EventRowProps {
   event: ActivityEvent;
+  isSelected?: boolean;
+  onClick?: () => void;
 }
 
 const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -73,11 +75,26 @@ function formatFullTimestamp(iso: string): string {
   });
 }
 
-export function EventRow({ event }: EventRowProps) {
+export function EventRow({ event, isSelected, onClick }: EventRowProps) {
   const Icon = ICON_MAP[event._icon] ?? Activity;
 
   return (
-    <div className="group flex items-start gap-3 rounded-lg px-4 py-3 transition hover:bg-gray-50">
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick?.();
+        }
+      }}
+      className={`group flex items-start gap-3 rounded-lg px-4 py-3 transition cursor-pointer ${
+        isSelected
+          ? "bg-blue-50 ring-1 ring-blue-200"
+          : "hover:bg-gray-50"
+      }`}
+    >
       {/* Status dot */}
       <div className="mt-0.5 shrink-0">
         <StatusDot color={event._color} />
