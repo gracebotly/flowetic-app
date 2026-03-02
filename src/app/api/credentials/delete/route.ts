@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { logActivity } from "@/lib/activity/logActivity";
 
 export const runtime = "nodejs";
 
@@ -25,7 +26,7 @@ export async function POST(req: Request) {
   // NOTE: This does not leak secrets; we only read tenant_id.
   const { data: source, error: sourceLookupErr } = await supabase
     .from("sources")
-    .select("id, tenant_id")
+    .select("id, tenant_id, name")
     .eq("id", sourceId)
     .maybeSingle();
 
@@ -100,6 +101,22 @@ export async function POST(req: Request) {
       { status: 409 },
     );
   }
+
+  void logActivity(supabase, {
+    tenantId: source.tenant_id,
+    actorId: user.id,
+    actorType: "user",
+    category: "connection",
+    action: "disconnected",
+    status: "info",
+    entityType: "source",
+    entityId: sourceId,
+    entityName: source.name ?? null,
+    message: source.name
+      ? `Disconnected source connection "${source.name}"`
+      : "Disconnected a source connection",
+    details: { source_id: sourceId },
+  });
 
   return NextResponse.json({ ok: true });
 }

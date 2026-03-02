@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { encryptSecret } from "@/lib/secrets";
+import { logActivity } from "@/lib/activity/logActivity";
 
 
 export const runtime = "nodejs";
@@ -731,10 +732,26 @@ export async function POST(req: Request) {
     (globalThis as any).__VAPI_CALL_ROWS__ = undefined;
   }
 
+  const logConnectionCreated = () =>
+    void logActivity(supabase, {
+      tenantId: membership.tenant_id,
+      actorId: user.id,
+      actorType: "user",
+      category: "connection",
+      action: "connected",
+      status: "success",
+      entityType: "source",
+      entityId: source.id,
+      entityName: source.name || platformType,
+      message: `Connected ${platformType} source "${source.name || platformType}"`,
+      details: { platform_type: platformType, method: source.method },
+    });
+
   if (platformType === "make" && method === "api") {
     const region = (secretJson?.region as MakeRegion | undefined) ?? null;
 
     if (!region) {
+      logConnectionCreated();
       return NextResponse.json({ ok: true, sourceId: source.id });
     }
 
@@ -850,6 +867,7 @@ export async function POST(req: Request) {
       entityKind: "scenario",
     }));
 
+    logConnectionCreated();
     return NextResponse.json({
       ok: true,
       sourceId: source.id,
@@ -860,6 +878,8 @@ export async function POST(req: Request) {
   }
 
   // Default return for non-Make platforms
+
+  logConnectionCreated();
 
   return NextResponse.json({
     ok: true,
