@@ -109,6 +109,49 @@ export async function PATCH(
     return json(500, { ok: false, code: 'UPDATE_FAILED' });
   }
 
+  // ── Phase 5B: Sync to Stripe when publishing a paid offering ──
+  if (
+    updates.status === 'active' &&
+    offering.pricing_type &&
+    offering.pricing_type !== 'free' &&
+    offering.access_type === 'stripe_gate'
+  ) {
+    try {
+      const { data: tenant } = await supabase
+        .from('tenants')
+        .select('stripe_account_id, stripe_charges_enabled')
+        .eq('id', tenantId)
+        .single();
+
+      if (tenant?.stripe_charges_enabled && tenant.stripe_account_id) {
+        const { syncOfferingToStripe } = await import(
+          '@/lib/stripe/syncProduct'
+        );
+        const stripeIds = await syncOfferingToStripe(
+          offering,
+          tenant.stripe_account_id
+        );
+
+        // Save Stripe IDs back to the offering
+        await supabase
+          .from('offerings')
+          .update({
+            stripe_product_id: stripeIds.stripe_product_id,
+            stripe_price_id: stripeIds.stripe_price_id,
+          })
+          .eq('id', id)
+          .eq('tenant_id', tenantId);
+
+        // Merge Stripe IDs into the response
+        offering.stripe_product_id = stripeIds.stripe_product_id;
+        offering.stripe_price_id = stripeIds.stripe_price_id;
+      }
+    } catch (syncErr) {
+      // Non-blocking: log but don't fail the update
+      console.error('[PATCH /api/offerings] Stripe sync error:', syncErr);
+    }
+  }
+
   return json(200, { ok: true, offering });
 }
 
