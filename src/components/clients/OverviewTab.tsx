@@ -173,7 +173,7 @@ export function OverviewTab({ client, assignedOfferingsCount, totalOfferings, on
             />
             {client.contact_email && (
               <button
-                onClick={() => copyToClipboard(client.contact_email, "email")}
+                onClick={() => copyToClipboard(client.contact_email!, "email")}
                 className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
                 title="Copy email"
               >
@@ -200,7 +200,7 @@ export function OverviewTab({ client, assignedOfferingsCount, totalOfferings, on
             />
             {client.contact_phone && (
               <button
-                onClick={() => copyToClipboard(client.contact_phone, "phone")}
+                onClick={() => copyToClipboard(client.contact_phone!, "phone")}
                 className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
                 title="Copy phone"
               >
