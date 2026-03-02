@@ -15,6 +15,7 @@ import {
   Settings as SettingsIcon,
   ChevronLeft,
   ChevronRight,
+  DollarSign,
 } from "lucide-react"
 import * as Popover from "@radix-ui/react-popover"
 
@@ -23,6 +24,7 @@ type NavItem = { href: string; label: string; icon: React.ComponentType<{ size?:
 const NAV: NavItem[] = [
   { href: "/control-panel/connections", label: "Connections", icon: Zap },
   { href: "/control-panel/offerings", label: "Offerings", icon: Layers },
+  { href: "/control-panel/revenue", label: "Revenue", icon: DollarSign },
   { href: "/control-panel/clients", label: "Clients", icon: Users },
   { href: "/control-panel/activity", label: "Activity", icon: ClipboardList },
   { href: "/control-panel/settings", label: "Settings", icon: SettingsIcon },
