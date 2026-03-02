@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { logActivity } from "@/lib/activity/logActivity";
+import { getUserId } from "@/lib/activity/getUserId";
 
 export const runtime = "nodejs";
 
@@ -123,6 +125,22 @@ export async function PATCH(
     return json(500, { ok: false, code: "UPDATE_FAILED" });
   }
 
+  // Log activity event
+  const userId = await getUserId(supabase);
+  logActivity(supabase, {
+    tenantId,
+    actorId: userId,
+    actorType: "user",
+    category: "client",
+    action: "updated",
+    status: "success",
+    entityType: "client",
+    entityId: id,
+    entityName: client.name as string,
+    message: `Updated client "${client.name}"`,
+    details: { updated_fields: Object.keys(updates).filter((k) => k !== "updated_at") },
+  });
+
   return json(200, { ok: true, client });
 }
 
@@ -151,6 +169,20 @@ export async function DELETE(
     console.error("[DELETE /api/clients] Archive failed:", error);
     return json(500, { ok: false, code: "DELETE_FAILED" });
   }
+
+  // Log activity event
+  const userId = await getUserId(supabase);
+  logActivity(supabase, {
+    tenantId,
+    actorId: userId,
+    actorType: "user",
+    category: "client",
+    action: "archived",
+    status: "info",
+    entityType: "client",
+    entityId: id,
+    message: `Archived client`,
+  });
 
   // Unassign offerings from this client
   await supabase

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getSkeletonForPlatform } from '@/lib/portals/platformToSkeleton';
+import { logActivity } from '@/lib/activity/logActivity';
 
 const VALID_SKELETONS = [
   'voice-performance',
@@ -141,6 +142,25 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
+  // Log activity event (fire-and-forget)
+  logActivity(supabase, {
+    tenantId: membership.tenant_id,
+    actorId: user.id,
+    actorType: "user",
+    category: "offering",
+    action: "created",
+    status: "success",
+    entityType: "offering",
+    entityId: offering.id,
+    entityName: offering.name,
+    clientId: offering.client_id ?? null,
+    message: `Created offering "${offering.name}"`,
+    details: {
+      surface_type: offering.surface_type,
+      access_type: offering.access_type,
+      platform_type: offering.platform_type,
+    },
+  });
 
   return NextResponse.json({
     ok: true,

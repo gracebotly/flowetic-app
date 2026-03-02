@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { logActivity } from '@/lib/activity/logActivity';
+import { getUserId } from '@/lib/activity/getUserId';
 
 export const runtime = 'nodejs';
 
@@ -109,6 +111,24 @@ export async function PATCH(
     return json(500, { ok: false, code: 'UPDATE_FAILED' });
   }
 
+
+  // Log activity event
+  const userId = await getUserId(supabase);
+  logActivity(supabase, {
+    tenantId,
+    actorId: userId,
+    actorType: "user",
+    category: "offering",
+    action: "updated",
+    status: "success",
+    entityType: "offering",
+    entityId: id,
+    entityName: offering.name as string,
+    offeringId: id,
+    message: `Updated offering "${offering.name}"`,
+    details: { updated_fields: Object.keys(updates).filter((k) => k !== "updated_at") },
+  });
+
   // ── Phase 5B: Sync to Stripe when publishing a paid offering ──
   if (
     updates.status === 'active' &&
@@ -176,6 +196,21 @@ export async function DELETE(
     console.error('[DELETE /api/offerings] Archive failed:', error);
     return json(500, { ok: false, code: 'DELETE_FAILED' });
   }
+
+
+  // Log activity event
+  const userId = await getUserId(supabase);
+  logActivity(supabase, {
+    tenantId,
+    actorId: userId,
+    actorType: "user",
+    category: "offering",
+    action: "archived",
+    status: "info",
+    entityType: "offering",
+    entityId: id,
+    message: `Archived offering`,
+  });
 
   return json(200, { ok: true });
 }

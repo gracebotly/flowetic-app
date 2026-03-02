@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { logActivity } from '@/lib/activity/logActivity';
+import { getUserId } from '@/lib/activity/getUserId';
 
 function json(status: number, data: Record<string, unknown>) {
   return NextResponse.json(data, { status });
@@ -49,6 +51,22 @@ export async function POST(
     return json(500, { ok: false, code: 'TOKEN_GENERATE_FAILED' });
   }
 
+
+  // Log activity event
+  const userId = await getUserId(supabase);
+  logActivity(supabase, {
+    tenantId,
+    actorId: userId,
+    actorType: "user",
+    category: "access",
+    action: "token_generated",
+    status: "success",
+    entityType: "offering",
+    entityId: id,
+    offeringId: id,
+    message: `Generated magic link for offering`,
+  });
+
   return json(200, {
     ok: true,
     token: newToken,
@@ -79,6 +97,22 @@ export async function DELETE(
     console.error('[DELETE /api/offerings/[id]/token] Failed:', error);
     return json(500, { ok: false, code: 'TOKEN_REVOKE_FAILED' });
   }
+
+
+  // Log activity event
+  const userId = await getUserId(supabase);
+  logActivity(supabase, {
+    tenantId,
+    actorId: userId,
+    actorType: "user",
+    category: "access",
+    action: "token_revoked",
+    status: "info",
+    entityType: "offering",
+    entityId: id,
+    offeringId: id,
+    message: `Revoked magic link for offering`,
+  });
 
   return json(200, { ok: true });
 }
