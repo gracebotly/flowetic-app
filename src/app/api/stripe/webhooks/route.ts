@@ -116,7 +116,7 @@ export async function POST(request: NextRequest) {
       type: event.type,
       tenant_id: resolvedTenantId,
       processed: true,
-      payload: event.data.object as Record<string, unknown>,
+      payload: event.data.object as unknown as Record<string, unknown>,
       received_at: new Date().toISOString(),
       processed_at: new Date().toISOString(),
     });
@@ -132,7 +132,7 @@ export async function POST(request: NextRequest) {
       tenant_id: resolvedTenantId,
       processed: false,
       error_message: errorMessage,
-      payload: event.data.object as Record<string, unknown>,
+      payload: event.data.object as unknown as Record<string, unknown>,
       received_at: new Date().toISOString(),
     });
 
