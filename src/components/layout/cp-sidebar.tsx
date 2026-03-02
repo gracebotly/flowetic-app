@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { useState, useEffect } from "react"
 import { usePathname } from "next/navigation"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
@@ -32,9 +33,38 @@ export function ControlPanelSidebar({ userEmail, plan }: { userEmail: string; pl
   // collapsed = true -> 64px icons-only; false -> 120px icons + tiny labels
   const [collapsed, setCollapsed] = useLocalStorageBoolean("cp_collapsed", true)
 
+  // ── Settings badge: warn if branding incomplete ───────────
+  const [settingsBadge, setSettingsBadge] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      try {
+        const res = await fetch("/api/settings/branding")
+        const json = await res.json()
+        if (!active) return
+        if (json.ok && json.branding) {
+          const b = json.branding
+          // Show badge if logo missing OR colors are defaults
+          const incomplete =
+            !b.logo_url ||
+            b.primary_color === "#3B82F6" ||
+            b.welcome_message === "Welcome to your dashboard" ||
+            b.brand_footer === "Powered by Your Agency"
+          setSettingsBadge(incomplete)
+        }
+      } catch {
+        // ignore — don't show badge on error
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [])
+
   const width = collapsed ? 64 : 120
 
-  const NavEntry = ({ href, label, Icon, active }: { href: string; label: string; Icon: React.ComponentType<{ size?: number; className?: string }>; active: boolean }) => {
+  const NavEntry = ({ href, label, Icon, active, badge }: { href: string; label: string; Icon: React.ComponentType<{ size?: number; className?: string }>; active: boolean; badge?: boolean }) => {
     const base = (
       <Link
         href={href}
@@ -45,7 +75,12 @@ export function ControlPanelSidebar({ userEmail, plan }: { userEmail: string; pl
           active ? "bg-blue-500 text-white" : "text-gray-400 hover:bg-white/5"
         )}
       >
-        <Icon size={22} className={cn(active ? "text-white" : "text-gray-300")} />
+        <div className="relative">
+          <Icon size={22} className={cn(active ? "text-white" : "text-gray-300")} />
+          {badge && (
+            <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-amber-400 ring-2 ring-[hsl(var(--sidebar-bg))]" />
+          )}
+        </div>
         {!collapsed && <span className="text-[11px] font-medium leading-4 text-center">{label}</span>}
       </Link>
     )
@@ -53,7 +88,7 @@ export function ControlPanelSidebar({ userEmail, plan }: { userEmail: string; pl
     return collapsed ? (
       <Tooltip>
         <TooltipTrigger asChild>{base}</TooltipTrigger>
-        <TooltipContent side="right">{label}</TooltipContent>
+        <TooltipContent side="right">{label}{badge ? " (setup incomplete)" : ""}</TooltipContent>
       </Tooltip>
     ) : (
       base
@@ -87,7 +122,8 @@ export function ControlPanelSidebar({ userEmail, plan }: { userEmail: string; pl
           {NAV.map((item) => {
             const Icon = item.icon
             const active = pathname.startsWith(item.href)
-            return <NavEntry key={item.href} href={item.href} label={item.label} Icon={Icon} active={active} />
+            const badge = item.label === "Settings" ? settingsBadge : false
+            return <NavEntry key={item.href} href={item.href} label={item.label} Icon={Icon} active={active} badge={badge} />
           })}
         </nav>
 
