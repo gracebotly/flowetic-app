@@ -99,3 +99,38 @@ export interface WorkflowExecution {
   duration_ms: number | null;
   created_at: string;
 }
+
+// ── Level 5D: Revenue Analytics Types ─────────────────────────
+
+export interface TenantStripeConfig {
+  stripe_account_id: string | null;
+  stripe_onboarding_complete: boolean;
+  stripe_charges_enabled: boolean;
+  stripe_payouts_enabled: boolean;
+  stripe_application_fee_percent: number;
+  stripe_connected_at: string | null;
+}
+
+export interface RevenueOverview {
+  total_revenue_cents: number;
+  total_customers: number;
+  active_subscriptions: number;
+  total_executions: number;
+  mrr_cents: number;
+}
+
+export interface OfferingRevenue {
+  offering_id: string;
+  offering_name: string;
+  pricing_type: string;
+  revenue_cents: number;
+  customers: number;
+  executions: number;
+}
+
+export interface PaymentEvent {
+  customer_email: string;
+  offering_name: string;
+  amount_cents: number;
+  paid_at: string;
+}
