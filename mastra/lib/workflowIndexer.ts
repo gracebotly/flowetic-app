@@ -8,10 +8,31 @@ interface WorkflowData {
   content: string;
 }
 
+/**
+ * Safely check if workspace filesystem is writable.
+ * On Vercel serverless, LocalFilesystem is readOnly: true,
+ * so all write operations should gracefully skip.
+ */
+function isWritable(workspace: Workspace): boolean {
+  const fs = workspace.filesystem as any;
+  if (!fs) return false;
+  // LocalFilesystem exposes readOnly as a property
+  if (fs.readOnly === true) return false;
+  if (fs._readOnly === true) return false;
+  // If config object exists, check there too
+  if (fs.config?.readOnly === true) return false;
+  return true;
+}
+
 export async function indexWorkflowToWorkspace(
   workspace: Workspace,
   workflow: WorkflowData
 ) {
+  // Skip filesystem operations if workspace is read-only (Vercel serverless)
+  if (!isWritable(workspace)) {
+    return `/data/${workflow.sourceId}/${workflow.externalId}.json`;
+  }
+
   const filePath = `/data/${workflow.sourceId}/${workflow.externalId}.json`;
   const fileContent = JSON.stringify({
     name: workflow.displayName,
@@ -27,7 +48,9 @@ export async function indexWorkflowToWorkspace(
   // Index for search
   await workspace.index(
     filePath,
-    `# ${workflow.displayName}\n\n${workflow.content}`,
+    `# ${workflow.displayName}
+
+${workflow.content}`,
     {
       metadata: {
         sourceId: workflow.sourceId,
@@ -46,6 +69,9 @@ export async function removeWorkflowFromWorkspace(
   sourceId: string,
   externalId: string
 ) {
+  // Skip if read-only
+  if (!isWritable(workspace)) return;
+
   const filePath = `/data/${sourceId}/${externalId}.json`;
   await workspace.filesystem?.deleteFile(filePath, { force: true });
 }
@@ -54,9 +80,20 @@ export async function clearSourceWorkflows(
   workspace: Workspace,
   sourceId: string
 ) {
+  // Skip if read-only
+  if (!isWritable(workspace)) return;
+
   const dirPath = `/data/${sourceId}`;
-  const entries = await workspace.filesystem?.readdir(dirPath);
-  
+
+  let entries: any[] | undefined;
+  try {
+    entries = await workspace.filesystem?.readdir(dirPath);
+  } catch (e: any) {
+    // Directory doesn't exist — nothing to clear
+    if (e?.code === 'ENOENT') return;
+    throw e;
+  }
+
   // Delete all files
   for (const entry of entries || []) {
     if (entry.type === 'file') {

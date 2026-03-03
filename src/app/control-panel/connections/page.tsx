@@ -27,7 +27,6 @@ import {
 import {
   CredentialsLoadingSkeleton,
   EntitiesLoadingSkeleton,
-  InventoryImportLoader,
   CredentialSavingOverlay,
 } from "@/components/connections/ConnectionSkeletons";
 
@@ -315,6 +314,7 @@ export default function ConnectionsPage() {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const [openCredentialMenuId, setOpenCredentialMenuId] = useState<string | null>(null);
+  const [manageIndexedLoading, setManageIndexedLoading] = useState(false);
 
   // Connect modal state
   const [connectOpen, setConnectOpen] = useState(false);
@@ -591,8 +591,15 @@ export default function ConnectionsPage() {
     setSelectedMethod("api");
     setCreatedSourceId(sourceId);
     setIsPostConnectSelection(false);
+    setEditingSourceId(sourceId);
 
+    // Show loading overlay IMMEDIATELY so user gets feedback
+    setManageIndexedLoading(true);
     setInventoryLoading(true);
+
+    // Open modal right away with loading state visible
+    setConnectOpen(true);
+    setStep("entities");
 
     try {
       await importInventory(platform, sourceId);
@@ -601,19 +608,14 @@ export default function ConnectionsPage() {
 
       const indexedSet = await getIndexedExternalIdsForSource(sourceId);
       setSelectedExternalIds(indexedSet);
-
-      setConnectOpen(true);
-      setStep("entities");
     } catch (e: any) {
       setInventoryEntities([]);
       setSelectedExternalIds(new Set());
       const errorMessage = String(e?.message ?? e);
       setInventoryErr(errorMessage);
-      // Still open the modal so the user can SEE the error
-      setConnectOpen(true);
-      setStep("entities");
     } finally {
       setInventoryLoading(false);
+      setManageIndexedLoading(false);
     }
   }
 
@@ -799,6 +801,7 @@ export default function ConnectionsPage() {
     setShowApiKeyEditor(false);
     setApiKeySaved(false);
     setInstanceUrlSaved(false);
+    setManageIndexedLoading(false);
 
     setCreatedSourceId(null);
     setConnectEntities([]);
@@ -1623,14 +1626,15 @@ export default function ConnectionsPage() {
                (openCred.platformType === "retell") ? (
                 <button
                   type="button"
+                  disabled={manageIndexedLoading}
                   onClick={async () => {
                     setOpenCredentialMenuId(null);
                     setMenuPos(null);
-                    
+
                     // Use the generalized inventory management function
                     openManageIndexed(String(openCred.platformType), String(openCred.id));
                   }}
-                  className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                  className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <Settings className="h-4 w-4" />
                   Manage Indexed
@@ -2171,90 +2175,95 @@ export default function ConnectionsPage() {
 ) : null}
 {step === "entities" ? (
   <div className="space-y-4">
-
-    {inventoryErr ? (
-      <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{inventoryErr}</div>
-    ) : null}
-
     {inventoryLoading ? (
-      <InventoryImportLoader platform={String(selectedPlatform ?? "")} />
-    ) : null}
-
-    {!inventoryLoading ? (
-      <>
-      <div className="flex items-center justify-between gap-3">
-        <div className="relative w-[420px]">
-          <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-          <input
-            value={inventorySearch}
-            onChange={(e) => setInventorySearch(e.target.value)}
-            className="w-full rounded-lg border border-gray-300 py-2.5 pl-10 pr-4 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder={
-              selectedPlatform === "vapi"
-                ? "Search assistants..."
-                : selectedPlatform === "retell"
-                ? "Search agents..."
-                : "Search workflows..."
-            }
-          />
+      <div className="flex flex-col items-center justify-center py-12">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-blue-500" />
+        <div className="mt-3 text-sm font-medium text-gray-600">
+          Loading {entityNoun(String(selectedPlatform))}...
+        </div>
+        <div className="mt-1 text-xs text-gray-400">
+          Syncing with your {selectedPlatform ? (getPlatformMeta(String(selectedPlatform))?.label ?? selectedPlatform) : 'platform'}
         </div>
       </div>
+    ) : (
+      <>
+        {inventoryErr ? (
+          <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{inventoryErr}</div>
+        ) : null}
 
-      <div className="max-h-[320px] overflow-auto rounded-lg border border-gray-200 bg-white">
-        {!inventoryErr && displayedSelectable.length === 0 ? (
-          <div className="p-4 text-sm text-gray-600">
-            {selectedPlatform === "make"
-              ? "No scenarios found in this Make account."
-              : selectedPlatform === "vapi"
-              ? "No assistants found in this Vapi account."
-              : selectedPlatform === "retell"
-              ? "No agents found in this Retell account."
-              : "No workflows found in this n8n instance."}
+        <div className="flex items-center justify-between gap-3">
+          <div className="relative w-[420px]">
+            <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <input
+              value={inventorySearch}
+              onChange={(e) => setInventorySearch(e.target.value)}
+              className="w-full rounded-lg border border-gray-300 py-2.5 pl-10 pr-4 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder={
+                selectedPlatform === "vapi"
+                  ? "Search assistants..."
+                  : selectedPlatform === "retell"
+                  ? "Search agents..."
+                  : "Search workflows..."
+              }
+            />
           </div>
-        ) : (
-          <div className="divide-y divide-gray-200">
-            {displayedSelectable.map((e) => {
-              const checked = selectedExternalIds.has(e.externalId);
-              return (
-                <label key={e.id} className="flex cursor-pointer items-center justify-between px-4 py-3 hover:bg-gray-50">
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-semibold text-gray-900">{e.name}</div>
-                    <div className="truncate text-xs text-gray-500">ID: {e.externalId}</div>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => {
-                      setSelectedExternalIds((prev) => {
-                        const next = new Set(prev);
-                        if (next.has(e.externalId)) next.delete(e.externalId);
-                        else next.add(e.externalId);
-                        return next;
-                      });
-                    }}
-                    className="h-4 w-4"
-                  />
-                </label>
-              );
-            })}
-          </div>
-        )}
-      </div>
+        </div>
+
+        <div className="max-h-[320px] overflow-auto rounded-lg border border-gray-200 bg-white">
+          {!inventoryErr && displayedSelectable.length === 0 ? (
+            <div className="p-4 text-sm text-gray-600">
+              {selectedPlatform === "make"
+                ? "No scenarios found in this Make account."
+                : selectedPlatform === "vapi"
+                ? "No assistants found in this Vapi account."
+                : selectedPlatform === "retell"
+                ? "No agents found in this Retell account."
+                : "No workflows found in this n8n instance."}
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-200">
+              {displayedSelectable.map((e) => {
+                const checked = selectedExternalIds.has(e.externalId);
+                return (
+                  <label key={e.id} className="flex cursor-pointer items-center justify-between px-4 py-3 hover:bg-gray-50">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-semibold text-gray-900">{e.name}</div>
+                      <div className="truncate text-xs text-gray-500">ID: {e.externalId}</div>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => {
+                        setSelectedExternalIds((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(e.externalId)) next.delete(e.externalId);
+                          else next.add(e.externalId);
+                          return next;
+                        });
+                      }}
+                      className="h-4 w-4"
+                    />
+                  </label>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-2 pt-2">
+          <button
+            type="button"
+            onClick={async () => {
+              await saveEntitiesSelection();
+            }}
+            disabled={saving || inventoryLoading || selectedExternalIds.size === 0}
+            className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600 disabled:opacity-50"
+          >
+            {saving ? "Saving..." : "Continue"}
+          </button>
+        </div>
       </>
-    ) : null}
-
-    <div className="flex justify-end gap-2 pt-2">
-      <button
-        type="button"
-        onClick={async () => {
-          await saveEntitiesSelection();
-        }}
-        disabled={saving || inventoryLoading || selectedExternalIds.size === 0}
-        className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600 disabled:opacity-50"
-      >
-        {saving ? "Saving..." : "Continue"}
-      </button>
-    </div>
+    )}
   </div>
 ) : null}
 {step === "success" ? (
