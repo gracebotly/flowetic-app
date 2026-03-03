@@ -100,7 +100,7 @@ export function ControlPanelSidebar({ userEmail, plan }: { userEmail: string; pl
   return (
     <TooltipProvider>
       <aside
-        className="flex h-screen flex-col justify-between"
+        className="sticky top-0 flex h-screen flex-col justify-between"
         style={{ width, backgroundColor: "hsl(var(--sidebar-bg))" }}
         aria-label="Control Panel Sidebar"
       >
@@ -120,7 +120,7 @@ export function ControlPanelSidebar({ userEmail, plan }: { userEmail: string; pl
         </div>
 
         {/* Nav */}
-        <nav className="flex flex-1 flex-col items-stretch py-1">
+        <nav className="flex flex-1 flex-col items-stretch overflow-y-auto py-1">
           {NAV.map((item) => {
             const Icon = item.icon
             const active = pathname.startsWith(item.href)
