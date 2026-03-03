@@ -12,7 +12,7 @@ export default async function ControlPanelLayout({ children }: { children: React
   return (
     <div className="flex min-h-screen">
       <ControlPanelSidebar userEmail={email} plan={plan} />
-      <main className="flex-1 bg-[hsl(var(--main-bg))]">
+      <main className="flex-1 bg-[hsl(var(--main-bg))] min-h-screen">
         {children}
       </main>
     </div>
