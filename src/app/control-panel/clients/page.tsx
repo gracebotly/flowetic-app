@@ -145,21 +145,22 @@ export default function ClientsPage() {
 
   return (
     <div className="min-h-screen">
-      <div className="flex items-center justify-between">
-        <PageHeader
-          title="Clients"
-          subtitle="Manage your client accounts and engagement health."
-        />
-        <button
-          onClick={() => setShowCreate(true)}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
-        >
-          <Plus className="h-4 w-4" />
-          New Client
-        </button>
-      </div>
+      <PageHeader
+        title="Clients"
+        subtitle="Manage your client accounts and engagement health."
+        rightSlot={
+          <button
+            onClick={() => setShowCreate(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
+          >
+            <Plus className="h-4 w-4" />
+            New Client
+          </button>
+        }
+      />
 
-      <div className="mt-6 flex flex-wrap items-center gap-3">
+      <div className="px-6 pt-6 pb-6">
+        <div className="flex flex-wrap items-center gap-3">
         {clients.length > 0 && (
           <input
             type="checkbox"
@@ -361,6 +362,7 @@ export default function ClientsPage() {
           </div>
         </div>
       )}
+      </div>
 
       {showCreate && (
         <CreateClientModal
