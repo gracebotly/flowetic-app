@@ -794,6 +794,11 @@ export default function ConnectionsPage() {
     setInstanceUrl("");
     setAuthHeader("");
     setConnectionName("");
+    setEditingSourceId(null);
+    setEditingMeta(null);
+    setShowApiKeyEditor(false);
+    setApiKeySaved(false);
+    setInstanceUrlSaved(false);
 
     setCreatedSourceId(null);
     setConnectEntities([]);
