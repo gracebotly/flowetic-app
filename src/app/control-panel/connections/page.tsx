@@ -24,6 +24,12 @@ import {
   VapiLogo,
   RetellLogo,
 } from "@/components/connections/platform-icons";
+import {
+  CredentialsLoadingSkeleton,
+  EntitiesLoadingSkeleton,
+  InventoryImportLoader,
+  CredentialSavingOverlay,
+} from "@/components/connections/ConnectionSkeletons";
 
 type EntityType = "workflow" | "agent" | "voice_agent" | "automation";
 
@@ -1312,7 +1318,7 @@ export default function ConnectionsPage() {
             <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{indexedErr}</div>
           ) : null}
 
-          {indexedLoading ? <div className="mt-6 text-sm text-gray-600">Loading…</div> : null}
+          {indexedLoading ? <EntitiesLoadingSkeleton /> : null}
 
           {!indexedLoading ? (
             <div className="mt-6 max-h-[calc(100vh-320px)] overflow-auto space-y-3 pb-6">
@@ -1494,9 +1500,7 @@ export default function ConnectionsPage() {
             </div>
           ) : null}
 
-          {credentialsLoading ? (
-            <div className="mt-8 text-sm text-gray-600">Loading credentials…</div>
-          ) : null}
+          {credentialsLoading ? <CredentialsLoadingSkeleton /> : null}
 
           {!credentialsLoading ? (
             <div className="mt-6 max-h-[calc(100vh-320px)] overflow-auto space-y-3 pb-6">
@@ -2123,15 +2127,10 @@ export default function ConnectionsPage() {
     ) : null}
 
     {saving ? (
-      <div className="flex items-center justify-center gap-3 rounded-lg border border-blue-100 bg-blue-50 p-4">
-        <svg className="h-5 w-5 animate-spin text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-        </svg>
-        <span className="text-sm font-medium text-blue-700">
-          {editingSourceId ? "Saving changes..." : "Validating credentials and importing inventory..."}
-        </span>
-      </div>
+      <CredentialSavingOverlay
+        isEditing={!!editingSourceId}
+        platform={String(selectedPlatform ?? "")}
+      />
     ) : null}
 
     <div className="flex justify-end gap-2 pt-2">
@@ -2173,9 +2172,7 @@ export default function ConnectionsPage() {
     ) : null}
 
     {inventoryLoading ? (
-      <div className="text-sm text-gray-600">
-        {selectedPlatform === "vapi" ? "Loading assistants…" : selectedPlatform === "retell" ? "Loading agents…" : "Loading workflows…"}
-      </div>
+      <InventoryImportLoader platform={String(selectedPlatform ?? "")} />
     ) : null}
 
     {!inventoryLoading ? (
