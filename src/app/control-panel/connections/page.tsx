@@ -427,15 +427,12 @@ export default function ConnectionsPage() {
     const json = await res.json().catch(() => ({}));
 
     if (!res.ok || !json?.ok) {
+      // Use the friendly message from backend directly — no raw codes appended
       const msg =
         typeof json?.message === "string" && json.message.trim()
           ? json.message
           : "Failed to delete credential.";
-      const code =
-        typeof json?.code === "string" && json.code.trim()
-          ? ` (${json.code})`
-          : "";
-      setErrMsg(`${msg}${code}`);
+      setErrMsg(msg);
       setSaving(false);
       return false;
     }
@@ -2472,8 +2469,16 @@ export default function ConnectionsPage() {
               </div>
 
               {errMsg ? (
-                <div className="whitespace-pre-wrap select-text rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-                  {errMsg}
+                <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+                  <div className="flex gap-3">
+                    <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-red-100">
+                      <span className="text-xs text-red-600">!</span>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-sm font-medium text-red-800">Unable to delete</div>
+                      <div className="text-sm text-red-700">{errMsg}</div>
+                    </div>
+                  </div>
                 </div>
               ) : null}
 
