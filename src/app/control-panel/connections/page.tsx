@@ -27,7 +27,6 @@ import {
 import {
   CredentialsLoadingSkeleton,
   EntitiesLoadingSkeleton,
-  InventoryImportLoader,
   CredentialSavingOverlay,
 } from "@/components/connections/ConnectionSkeletons";
 
@@ -315,6 +314,7 @@ export default function ConnectionsPage() {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const [openCredentialMenuId, setOpenCredentialMenuId] = useState<string | null>(null);
+  const [manageIndexedLoading, setManageIndexedLoading] = useState(false);
 
   // Connect modal state
   const [connectOpen, setConnectOpen] = useState(false);
@@ -379,6 +379,8 @@ export default function ConnectionsPage() {
 
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [selectedEntity, setSelectedEntity] = useState<IndexedEntityRow | null>(null);
+  const [drawerTab, setDrawerTab] = useState<"activity" | "portals" | "offerings" | "details">("activity");
+  const [drawerVisible, setDrawerVisible] = useState(false);
 
   // Inventory state for n8n workflows
   const [inventoryLoading, setInventoryLoading] = useState(false);
@@ -427,15 +429,12 @@ export default function ConnectionsPage() {
     const json = await res.json().catch(() => ({}));
 
     if (!res.ok || !json?.ok) {
+      // Use the friendly message from backend directly — no raw codes appended
       const msg =
         typeof json?.message === "string" && json.message.trim()
           ? json.message
           : "Failed to delete credential.";
-      const code =
-        typeof json?.code === "string" && json.code.trim()
-          ? ` (${json.code})`
-          : "";
-      setErrMsg(`${msg}${code}`);
+      setErrMsg(msg);
       setSaving(false);
       return false;
     }
@@ -591,8 +590,15 @@ export default function ConnectionsPage() {
     setSelectedMethod("api");
     setCreatedSourceId(sourceId);
     setIsPostConnectSelection(false);
+    setEditingSourceId(sourceId);
 
+    // Show loading overlay IMMEDIATELY so user gets feedback
+    setManageIndexedLoading(true);
     setInventoryLoading(true);
+
+    // Open modal right away with loading state visible
+    setConnectOpen(true);
+    setStep("entities");
 
     try {
       await importInventory(platform, sourceId);
@@ -601,19 +607,14 @@ export default function ConnectionsPage() {
 
       const indexedSet = await getIndexedExternalIdsForSource(sourceId);
       setSelectedExternalIds(indexedSet);
-
-      setConnectOpen(true);
-      setStep("entities");
     } catch (e: any) {
       setInventoryEntities([]);
       setSelectedExternalIds(new Set());
       const errorMessage = String(e?.message ?? e);
       setInventoryErr(errorMessage);
-      // Still open the modal so the user can SEE the error
-      setConnectOpen(true);
-      setStep("entities");
     } finally {
       setInventoryLoading(false);
+      setManageIndexedLoading(false);
     }
   }
 
@@ -694,10 +695,25 @@ export default function ConnectionsPage() {
   }, []);
 
   useEffect(() => {
+    if (detailsOpen) {
+      requestAnimationFrame(() => setDrawerVisible(true));
+    } else {
+      setDrawerVisible(false);
+    }
+  }, [detailsOpen]);
+
+  function closeDrawer() {
+    setDrawerVisible(false);
+    setTimeout(() => {
+      setDetailsOpen(false);
+      setSelectedEntity(null);
+    }, 300);
+  }
+
+  useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") {
-        setDetailsOpen(false);
-        setSelectedEntity(null);
+        closeDrawer();
       }
     }
     if (detailsOpen) {
@@ -794,6 +810,12 @@ export default function ConnectionsPage() {
     setInstanceUrl("");
     setAuthHeader("");
     setConnectionName("");
+    setEditingSourceId(null);
+    setEditingMeta(null);
+    setShowApiKeyEditor(false);
+    setApiKeySaved(false);
+    setInstanceUrlSaved(false);
+    setManageIndexedLoading(false);
 
     setCreatedSourceId(null);
     setConnectEntities([]);
@@ -1399,6 +1421,7 @@ export default function ConnectionsPage() {
                 type="button"
                 onClick={() => {
                   setSelectedEntity(openEntity);
+                  setDrawerTab("activity");
                   setDetailsOpen(true);
                   setOpenEntityMenuId(null);
                   setDeleteConfirmId(null);
@@ -1618,14 +1641,15 @@ export default function ConnectionsPage() {
                (openCred.platformType === "retell") ? (
                 <button
                   type="button"
+                  disabled={manageIndexedLoading}
                   onClick={async () => {
                     setOpenCredentialMenuId(null);
                     setMenuPos(null);
-                    
+
                     // Use the generalized inventory management function
                     openManageIndexed(String(openCred.platformType), String(openCred.id));
                   }}
-                  className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                  className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <Settings className="h-4 w-4" />
                   Manage Indexed
@@ -2166,90 +2190,95 @@ export default function ConnectionsPage() {
 ) : null}
 {step === "entities" ? (
   <div className="space-y-4">
-
-    {inventoryErr ? (
-      <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{inventoryErr}</div>
-    ) : null}
-
     {inventoryLoading ? (
-      <InventoryImportLoader platform={String(selectedPlatform ?? "")} />
-    ) : null}
-
-    {!inventoryLoading ? (
-      <>
-      <div className="flex items-center justify-between gap-3">
-        <div className="relative w-[420px]">
-          <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-          <input
-            value={inventorySearch}
-            onChange={(e) => setInventorySearch(e.target.value)}
-            className="w-full rounded-lg border border-gray-300 py-2.5 pl-10 pr-4 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder={
-              selectedPlatform === "vapi"
-                ? "Search assistants..."
-                : selectedPlatform === "retell"
-                ? "Search agents..."
-                : "Search workflows..."
-            }
-          />
+      <div className="flex flex-col items-center justify-center py-12">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-blue-500" />
+        <div className="mt-3 text-sm font-medium text-gray-600">
+          Loading {entityNoun(String(selectedPlatform))}...
+        </div>
+        <div className="mt-1 text-xs text-gray-400">
+          Syncing with your {selectedPlatform ? (getPlatformMeta(String(selectedPlatform))?.label ?? selectedPlatform) : 'platform'}
         </div>
       </div>
+    ) : (
+      <>
+        {inventoryErr ? (
+          <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{inventoryErr}</div>
+        ) : null}
 
-      <div className="max-h-[320px] overflow-auto rounded-lg border border-gray-200 bg-white">
-        {!inventoryErr && displayedSelectable.length === 0 ? (
-          <div className="p-4 text-sm text-gray-600">
-            {selectedPlatform === "make"
-              ? "No scenarios found in this Make account."
-              : selectedPlatform === "vapi"
-              ? "No assistants found in this Vapi account."
-              : selectedPlatform === "retell"
-              ? "No agents found in this Retell account."
-              : "No workflows found in this n8n instance."}
+        <div className="flex items-center justify-between gap-3">
+          <div className="relative w-[420px]">
+            <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <input
+              value={inventorySearch}
+              onChange={(e) => setInventorySearch(e.target.value)}
+              className="w-full rounded-lg border border-gray-300 py-2.5 pl-10 pr-4 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder={
+                selectedPlatform === "vapi"
+                  ? "Search assistants..."
+                  : selectedPlatform === "retell"
+                  ? "Search agents..."
+                  : "Search workflows..."
+              }
+            />
           </div>
-        ) : (
-          <div className="divide-y divide-gray-200">
-            {displayedSelectable.map((e) => {
-              const checked = selectedExternalIds.has(e.externalId);
-              return (
-                <label key={e.id} className="flex cursor-pointer items-center justify-between px-4 py-3 hover:bg-gray-50">
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-semibold text-gray-900">{e.name}</div>
-                    <div className="truncate text-xs text-gray-500">ID: {e.externalId}</div>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => {
-                      setSelectedExternalIds((prev) => {
-                        const next = new Set(prev);
-                        if (next.has(e.externalId)) next.delete(e.externalId);
-                        else next.add(e.externalId);
-                        return next;
-                      });
-                    }}
-                    className="h-4 w-4"
-                  />
-                </label>
-              );
-            })}
-          </div>
-        )}
-      </div>
+        </div>
+
+        <div className="max-h-[320px] overflow-auto rounded-lg border border-gray-200 bg-white">
+          {!inventoryErr && displayedSelectable.length === 0 ? (
+            <div className="p-4 text-sm text-gray-600">
+              {selectedPlatform === "make"
+                ? "No scenarios found in this Make account."
+                : selectedPlatform === "vapi"
+                ? "No assistants found in this Vapi account."
+                : selectedPlatform === "retell"
+                ? "No agents found in this Retell account."
+                : "No workflows found in this n8n instance."}
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-200">
+              {displayedSelectable.map((e) => {
+                const checked = selectedExternalIds.has(e.externalId);
+                return (
+                  <label key={e.id} className="flex cursor-pointer items-center justify-between px-4 py-3 hover:bg-gray-50">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-semibold text-gray-900">{e.name}</div>
+                      <div className="truncate text-xs text-gray-500">ID: {e.externalId}</div>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => {
+                        setSelectedExternalIds((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(e.externalId)) next.delete(e.externalId);
+                          else next.add(e.externalId);
+                          return next;
+                        });
+                      }}
+                      className="h-4 w-4"
+                    />
+                  </label>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-2 pt-2">
+          <button
+            type="button"
+            onClick={async () => {
+              await saveEntitiesSelection();
+            }}
+            disabled={saving || inventoryLoading || selectedExternalIds.size === 0}
+            className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600 disabled:opacity-50"
+          >
+            {saving ? "Saving..." : "Continue"}
+          </button>
+        </div>
       </>
-    ) : null}
-
-    <div className="flex justify-end gap-2 pt-2">
-      <button
-        type="button"
-        onClick={async () => {
-          await saveEntitiesSelection();
-        }}
-        disabled={saving || inventoryLoading || selectedExternalIds.size === 0}
-        className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600 disabled:opacity-50"
-      >
-        {saving ? "Saving..." : "Continue"}
-      </button>
-    </div>
+    )}
   </div>
 ) : null}
 {step === "success" ? (
@@ -2296,124 +2325,199 @@ export default function ConnectionsPage() {
       ) : null}
 
       {detailsOpen && selectedEntity ? (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-          onClick={() => {
-            setDetailsOpen(false);
-            setSelectedEntity(null);
-          }}
-        >
+        <>
+          {/* Backdrop */}
           <div
-            className="w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-2xl"
+            onClick={closeDrawer}
+            className="fixed inset-0 z-50 transition-opacity duration-300"
+            style={{
+              backgroundColor: drawerVisible ? "rgba(0,0,0,0.25)" : "rgba(0,0,0,0)",
+            }}
+          />
+
+          {/* Bottom Drawer */}
+          <div
+            className="fixed inset-x-0 bottom-0 z-50 flex flex-col rounded-t-2xl bg-white shadow-2xl transition-transform duration-300 ease-out"
+            style={{
+              maxHeight: "70vh",
+              transform: drawerVisible ? "translateY(0)" : "translateY(100%)",
+            }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="border-b px-6 py-4 flex items-center justify-between">
-              <div className="text-lg font-semibold text-gray-900">Details</div>
-              <button
-                type="button"
-                onClick={() => {
-                  setDetailsOpen(false);
-                  setSelectedEntity(null);
-                }}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200"
-                aria-label="Close"
-              >
-                ×
-              </button>
+            {/* Drag handle */}
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="h-1 w-10 rounded-full bg-gray-300" />
             </div>
 
-            {/* KEEP your existing details modal body content below */}
-            <div className="px-6 py-5 space-y-6">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-800">
+            {/* Header */}
+            <div className="flex items-start justify-between border-b border-gray-100 px-6 pb-4 pt-2">
+              <div className="flex items-center gap-4">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-800">
                   {getPlatformMeta(selectedEntity.platform)?.Icon ? (
                     (() => {
-                      const Icon = getPlatformMeta(selectedEntity.platform)?.Icon!;
+                      const Icon = getPlatformMeta(selectedEntity.platform)!.Icon!;
                       return <Icon className="h-5 w-5" />;
                     })()
                   ) : null}
                 </div>
                 <div>
-                  <div className="text-lg font-semibold text-gray-900">{selectedEntity.name}</div>
-                  <div className="text-sm text-gray-600">
-                    {selectedEntity.kind} • {getPlatformMeta(selectedEntity.platform)?.label ?? selectedEntity.platform}
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-lg font-semibold text-gray-900">{selectedEntity.name}</h2>
+                    <span className="inline-block h-2 w-2 rounded-full bg-emerald-400" title="Healthy" />
+                  </div>
+                  <div className="mt-0.5 flex items-center gap-2">
+                    <span className="inline-flex items-center rounded-md bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 capitalize">
+                      {selectedEntity.kind}
+                    </span>
+                    <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium ${
+                      selectedEntity.platform === "vapi" ? "bg-violet-50 text-violet-700 border-violet-200" :
+                      selectedEntity.platform === "retell" ? "bg-rose-50 text-rose-700 border-rose-200" :
+                      selectedEntity.platform === "n8n" ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
+                      selectedEntity.platform === "make" ? "bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200" :
+                      "bg-gray-50 text-gray-700 border-gray-200"
+                    }`}>
+                      {getPlatformMeta(selectedEntity.platform)?.label ?? selectedEntity.platform}
+                    </span>
+                    <span className="text-xs text-gray-400">·</span>
+                    <span className="text-xs text-gray-400">Last seen {formatRelativeFromTs(selectedEntity.lastUpdatedTs)}</span>
                   </div>
                 </div>
               </div>
-              <div>
-                <button
-                  type="button"
-                  className="w-full rounded-lg bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700"
-                  // NOTE: no wiring to VibeChat yet as requested
-                  onClick={() => {
-                    console.log("Build dashboard in Chat (TODO):", selectedEntity);
-                    setDetailsOpen(false);
-                  }}
-                >
-                  Build dashboard in Chat
-                </button>
-                <p className="mt-2 text-xs text-gray-500 text-center">
-                  Opens VibeChat with this agent pre-loaded so you can design its UI.
-                </p>
+
+              <button
+                onClick={closeDrawer}
+                className="rounded-lg p-1.5 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
+                aria-label="Close"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Stats bar */}
+            <div className="grid grid-cols-4 divide-x divide-gray-100 border-b border-gray-100 bg-gray-50/50">
+              <div className="px-6 py-3">
+                <div className="text-xs text-gray-400">Connection</div>
+                <div className="text-sm font-semibold text-emerald-600">Healthy</div>
               </div>
-
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-                  <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Index status</div>
-                  <div className="mt-1 flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-green-500" />
-                    <span className="text-sm font-semibold text-gray-900">Indexed</span>
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-                  <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Dashboard</div>
-                  <div className="mt-1 text-sm font-semibold text-gray-900">Not created</div>
-                </div>
-
-                <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-                  <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Client access</div>
-                  <div className="mt-1 text-sm font-semibold text-gray-900">Not shared</div>
-                </div>
+              <div className="px-6 py-3">
+                <div className="text-xs text-gray-400">Indexed</div>
+                <div className="text-sm font-semibold text-blue-600">Active</div>
               </div>
-
-              <div className="rounded-xl border border-gray-200 bg-white p-4">
-                <div className="mb-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Details</div>
-                <div className="grid grid-cols-2 gap-y-2 text-sm">
-                  <div className="text-gray-500">Platform</div>
-                  <div className="font-medium text-gray-900">
-                    {getPlatformMeta(selectedEntity.platform)?.label ?? selectedEntity.platform}
-                  </div>
-
-                  <div className="text-gray-500">Type</div>
-                  <div className="font-medium text-gray-900">{selectedEntity.kind}</div>
-
-                  <div className="text-gray-500">External ID</div>
-                  <div className="font-mono text-xs text-gray-900">{selectedEntity.externalId}</div>
-
-                  <div className="text-gray-500">Last seen</div>
-                  <div className="font-medium text-gray-900">{formatRelativeFromTs(selectedEntity.lastUpdatedTs)}</div>
-
-                  <div className="text-gray-500">Created</div>
-                  <div className="font-medium text-gray-900">{formatDateFromTs(selectedEntity.createdAtTs)}</div>
-                </div>
+              <div className="px-6 py-3">
+                <div className="text-xs text-gray-400">Portals</div>
+                <div className="text-sm font-semibold text-gray-900">0</div>
               </div>
-
-              <div className="rounded-xl border border-gray-200 bg-white">
-                <div className="border-b px-4 py-3">
-                  <div className="text-sm font-semibold text-gray-900">Dashboards</div>
-                  <div className="text-xs text-gray-500">Dashboards created from this agent/workflow</div>
-                </div>
-                <div className="p-4 text-sm text-gray-500">
-                  No dashboards yet. Click &quot;Build dashboard in Chat&quot; to create one.
-                </div>
+              <div className="px-6 py-3">
+                <div className="text-xs text-gray-400">Offerings</div>
+                <div className="text-sm font-semibold text-gray-900">0</div>
               </div>
             </div>
+
+            {/* Tabs */}
+            <div className="border-b border-gray-100 px-6">
+              <nav className="flex gap-6">
+                {([
+                  { id: "activity" as const, label: "Activity" },
+                  { id: "portals" as const, label: "Portals" },
+                  { id: "offerings" as const, label: "Offerings" },
+                ] as const).map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setDrawerTab(tab.id)}
+                    className={`relative py-3 text-sm font-medium transition ${
+                      drawerTab === tab.id
+                        ? "text-gray-900"
+                        : "text-gray-400 hover:text-gray-600"
+                    }`}
+                  >
+                    {tab.label}
+                    {drawerTab === tab.id && (
+                      <span className="absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-gray-900" />
+                    )}
+                  </button>
+                ))}
+                <button
+                  onClick={() => setDrawerTab("details")}
+                  className={`relative ml-auto py-3 text-sm font-medium transition ${
+                    drawerTab === "details"
+                      ? "text-gray-900"
+                      : "text-gray-400 hover:text-gray-600"
+                  }`}
+                >
+                  Details
+                  {drawerTab === "details" && (
+                    <span className="absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-gray-900" />
+                  )}
+                </button>
+              </nav>
+            </div>
+
+            {/* Tab content — scrollable */}
+            <div className="flex-1 overflow-y-auto px-6 py-4">
+
+              {/* Activity tab */}
+              {drawerTab === "activity" ? (
+                <div className="py-8 text-center">
+                  <div className="text-sm text-gray-400">No recent activity for this {selectedEntity.kind}.</div>
+                  <div className="mt-1 text-xs text-gray-300">Activity will appear here once events are recorded.</div>
+                </div>
+              ) : null}
+
+              {/* Portals tab */}
+              {drawerTab === "portals" ? (
+                <div className="py-8 text-center">
+                  <div className="text-sm text-gray-400">No portals linked to this {selectedEntity.kind}.</div>
+                  <div className="mt-1 text-xs text-gray-300">Create a portal from the Portals tab to see it here.</div>
+                </div>
+              ) : null}
+
+              {/* Offerings tab */}
+              {drawerTab === "offerings" ? (
+                <div className="py-8 text-center">
+                  <div className="text-sm text-gray-400">No offerings linked to this {selectedEntity.kind}.</div>
+                  <div className="mt-1 text-xs text-gray-300">Create an offering from the Offerings tab to see it here.</div>
+                </div>
+              ) : null}
+
+              {/* Details tab */}
+              {drawerTab === "details" ? (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-x-8 gap-y-3 rounded-xl border border-gray-100 bg-gray-50/50 p-4">
+                    <div>
+                      <div className="text-xs text-gray-400">Platform</div>
+                      <div className="mt-0.5 text-sm font-medium text-gray-900 capitalize">
+                        {getPlatformMeta(selectedEntity.platform)?.label ?? selectedEntity.platform}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-gray-400">Type</div>
+                      <div className="mt-0.5 text-sm font-medium text-gray-900 capitalize">{selectedEntity.kind}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-gray-400">External ID</div>
+                      <div className="mt-0.5 font-mono text-xs text-gray-600 break-all">{selectedEntity.externalId}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-gray-400">Source ID</div>
+                      <div className="mt-0.5 font-mono text-xs text-gray-600 break-all">{selectedEntity.sourceId}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-gray-400">Last seen</div>
+                      <div className="mt-0.5 text-sm font-medium text-gray-900">{formatRelativeFromTs(selectedEntity.lastUpdatedTs)}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-gray-400">Created</div>
+                      <div className="mt-0.5 text-sm font-medium text-gray-900">{formatDateFromTs(selectedEntity.createdAtTs)}</div>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+            </div>
           </div>
-        </div>
+        </>
       ) : null}
 
-      
 
       {credentialDeleteId ? (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4">
@@ -2458,8 +2562,16 @@ export default function ConnectionsPage() {
               </div>
 
               {errMsg ? (
-                <div className="whitespace-pre-wrap select-text rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-                  {errMsg}
+                <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+                  <div className="flex gap-3">
+                    <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-red-100">
+                      <span className="text-xs text-red-600">!</span>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-sm font-medium text-red-800">Unable to delete</div>
+                      <div className="text-sm text-red-700">{errMsg}</div>
+                    </div>
+                  </div>
                 </div>
               ) : null}
 

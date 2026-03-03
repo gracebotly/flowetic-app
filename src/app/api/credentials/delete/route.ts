@@ -83,6 +83,38 @@ export async function POST(req: Request) {
     .select("id");
 
   if (sourceErr) {
+    // Detect FK constraint violations and return friendly messages
+    const isFkViolation =
+      sourceErr.code === "23503" ||
+      sourceErr.message?.includes("violates foreign key constraint");
+
+    if (isFkViolation) {
+      // Determine which table is blocking the delete
+      let friendlyMessage = "This connection can't be deleted because it's used by other resources. Remove those first, then try again.";
+      let blockingResource = "resources";
+
+      if (sourceErr.message?.includes("offerings")) {
+        friendlyMessage = "This connection can't be deleted because it's used by one or more offerings. Delete or reassign those offerings first.";
+        blockingResource = "offerings";
+      } else if (sourceErr.message?.includes("portals") || sourceErr.message?.includes("interfaces")) {
+        friendlyMessage = "This connection can't be deleted because it's used by one or more portals. Delete or reassign those portals first.";
+        blockingResource = "portals";
+      } else if (sourceErr.message?.includes("events")) {
+        friendlyMessage = "This connection can't be deleted because it has associated event data. Clear the events first.";
+        blockingResource = "events";
+      }
+
+      return NextResponse.json(
+        {
+          ok: false,
+          code: "CONNECTION_IN_USE",
+          message: friendlyMessage,
+          blockingResource,
+        },
+        { status: 409 },
+      );
+    }
+
     return NextResponse.json(
       { ok: false, code: "PERSISTENCE_FAILED", message: sourceErr.message },
       { status: 400 },
