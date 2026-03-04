@@ -379,7 +379,7 @@ function renderField(
       return (
         <input
           ref={inputRef as React.MutableRefObject<HTMLInputElement>}
-          type={field.type === "email" ? "email" : field.type === "number" ? "number" : field.type === "url" ? "url" : field.type === "phone" ? "tel" : "text"}
+          type={field.type === "email" ? "email" : field.type === "number" ? "number" : field.type === "url" ? "url" : field.type === "phone" ? "tel" : field.type === "date" ? "date" : "text"}
           value={strValue}
           onChange={(e) => setValue(field.name, e.target.value)}
           onKeyDown={onKeyDown}
