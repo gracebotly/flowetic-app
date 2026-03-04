@@ -9,7 +9,7 @@ import { createClient } from "@/lib/supabase/client";
 import AgentPicker from "@/components/portals/wizard/AgentPicker";
 import type { SelectedEntity, EntityItem } from "@/components/portals/wizard/AgentPicker";
 import { WizardStepSurface } from "@/components/offerings/WizardStepSurface";
-import { WizardStepPreview } from "@/components/offerings/WizardStepPreview";
+import PortalPreview from "@/components/portals/wizard/PortalPreview";
 import { WizardStepConfigure } from "@/components/offerings/WizardStepConfigure";
 import { WizardStepSuccess } from "@/components/offerings/WizardStepSuccess";
 
@@ -103,7 +103,6 @@ export default function CreateOfferingPage() {
   const [entities, setEntities] = useState<EntityItem[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
   const [stripeConnected, setStripeConnected] = useState(false);
-  const [schemaLoading, setSchemaLoading] = useState(false);
 
   const update = useCallback(
     (partial: Partial<WizardState>) =>
@@ -209,7 +208,6 @@ export default function CreateOfferingPage() {
       wizard.selectedEntityUuid &&
       wizard.inputSchema.length === 0
     ) {
-      setSchemaLoading(true);
       fetch(`/api/entities/${wizard.selectedEntityUuid}/schema`)
         .then((r) => r.json())
         .then((json) => {
@@ -217,8 +215,7 @@ export default function CreateOfferingPage() {
             update({ inputSchema: json.inputSchema });
           }
         })
-        .catch(() => {})
-        .finally(() => setSchemaLoading(false));
+        .catch(() => {});
     }
   }, [
     currentStep,
@@ -377,11 +374,7 @@ export default function CreateOfferingPage() {
     setSubmitError(null);
   };
 
-  // ── Entity name for preview ───────────────────────────────
-  const selectedEntity = entities.find((e) => e.id === wizard.selectedEntityUuid);
-  const entityName = selectedEntity?.display_name ?? "";
-
-  // ── Render ────────────────────────────────────────────────
+    // ── Render ────────────────────────────────────────────────
   return (
     <div className="mx-auto max-w-3xl px-6 py-8">
       {/* Back link */}
@@ -476,14 +469,12 @@ export default function CreateOfferingPage() {
               />
             )}
             {currentStep === 3 && (
-              <WizardStepPreview
+              <PortalPreview
+                platformType={wizard.selectedPlatform || "vapi"}
+                sourceId={wizard.selectedSourceId || ""}
+                entityName={wizard.selectedEntities?.[0]?.displayName || wizard.name || "Your Portal"}
                 surfaceType={wizard.surfaceType}
-                platform={wizard.selectedPlatform}
-                entityName={entityName}
-                entityUuid={wizard.selectedEntityUuid}
                 inputSchema={wizard.inputSchema}
-                onSchemaLoaded={(fields) => update({ inputSchema: fields })}
-                schemaLoading={schemaLoading}
               />
             )}
             {currentStep === 4 && (
