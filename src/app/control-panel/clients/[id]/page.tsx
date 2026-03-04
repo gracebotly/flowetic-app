@@ -50,7 +50,7 @@ type TabKey = "overview" | "offerings" | "access" | "activity";
 
 const TABS: { key: TabKey; label: string; icon: typeof User }[] = [
   { key: "overview", label: "Overview", icon: User },
-  { key: "offerings", label: "Offerings", icon: LayoutDashboard },
+  { key: "offerings", label: "Portals", icon: LayoutDashboard },
   { key: "access", label: "Access", icon: Link2 },
   { key: "activity", label: "Activity", icon: Clock },
 ];

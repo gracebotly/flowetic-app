@@ -99,7 +99,7 @@ export function OfferingsTab({ clientId, assignedOfferings, onChanged }: Offerin
         <h3 className="text-sm font-semibold text-gray-900">Assigned ({assignedOfferings.length})</h3>
         {assignedOfferings.length === 0 ? (
           <div className="mt-2 rounded-xl border border-dashed border-gray-200 bg-gray-50 p-6 text-center text-sm text-gray-500">
-            No offerings assigned to this client yet.
+            No portals assigned to this client yet.
           </div>
         ) : (
           <div className="mt-2 space-y-2">
@@ -152,7 +152,7 @@ export function OfferingsTab({ clientId, assignedOfferings, onChanged }: Offerin
           </div>
         ) : unassigned.length === 0 ? (
           <div className="mt-2 rounded-xl border border-dashed border-gray-200 bg-gray-50 p-6 text-center text-sm text-gray-500">
-            All offerings are assigned or none exist.
+            All portals are assigned or none exist.
           </div>
         ) : (
           <div className="mt-2 space-y-2">
@@ -194,7 +194,7 @@ export function OfferingsTab({ clientId, assignedOfferings, onChanged }: Offerin
         className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:text-blue-700"
       >
         <Plus className="h-4 w-4" />
-        Create New Offering for This Client
+        Create New Portal for This Client
         <ExternalLink className="h-3 w-3" />
       </Link>
     </div>

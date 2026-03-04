@@ -68,6 +68,18 @@ const PRICING_LABELS: Record<string, string> = {
 
 const STATUS_OPTIONS = ["active", "paused", "draft"] as const;
 
+
+function getLabel(surfaceType: string): string {
+  switch (surfaceType) {
+    case "runner":
+      return "Product";
+    case "both":
+      return "Portal + Product";
+    default:
+      return "Portal";
+  }
+}
+
 // ── Component ───────────────────────────────────────────────
 export default function OfferingDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -222,9 +234,9 @@ export default function OfferingDetailPage() {
   if (!offering) {
     return (
       <div className="mx-auto max-w-4xl px-6 py-8">
-        <p className="text-gray-500">Offering not found.</p>
+        <p className="text-gray-500">Portal not found.</p>
         <Link href="/control-panel/offerings" className="mt-2 text-sm text-blue-600 hover:text-blue-700">
-          ← Back to Offerings
+          ← Back to Client Portals
         </Link>
       </div>
     );
@@ -251,13 +263,14 @@ export default function OfferingDetailPage() {
         className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700"
       >
         <ArrowLeft className="h-4 w-4" />
-        Back to Offerings
+        Back to Client Portals
       </Link>
 
       {/* Title + badges */}
       <div className="mt-4 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">{offering.name}</h1>
+          <p className="mt-1 text-sm text-gray-500">{getLabel(offering.surface_type)}</p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <SurfaceBadge surfaceType={offering.surface_type} size="md" />
             <AccessBadge accessType={offering.access_type} size="md" />
@@ -542,7 +555,7 @@ export default function OfferingDetailPage() {
               </p>
               <p className="mt-1 text-sm text-amber-600">
                 {offering.access_type === "magic_link"
-                  ? "Generate a magic link in the Access tab to enable preview."
+                  ? "Generate a client link in the Access tab to enable preview."
                   : "Set up a product slug to enable preview."}
               </p>
             </div>
@@ -555,10 +568,10 @@ export default function OfferingDetailPage() {
       {/* ═══════════════════════════════════════════════════════ */}
       {activeTab === "access" && (
         <div className="mt-6 space-y-6">
-          {/* Magic Link section */}
+          {/* Client Link section */}
           {offering.access_type === "magic_link" && (
             <div className="rounded-xl border border-gray-200 bg-white p-5">
-              <h3 className="text-sm font-semibold text-gray-900">Magic Link</h3>
+              <h3 className="text-sm font-semibold text-gray-900">Client Link</h3>
               <p className="mt-1 text-xs text-gray-500">
                 Share this link with your client — no login required.
               </p>
@@ -614,7 +627,7 @@ export default function OfferingDetailPage() {
               ) : (
                 <div className="mt-4">
                   <p className="text-sm text-gray-500">
-                    No active magic link. Generate one to share with your client.
+                    No active client link. Generate one to share with your client.
                   </p>
                   <button
                     onClick={regenerateToken}
@@ -622,7 +635,7 @@ export default function OfferingDetailPage() {
                     className="mt-3 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
                   >
                     <Link2 className="h-4 w-4" />
-                    {tokenAction === "regenerating" ? "Generating…" : "Generate Magic Link"}
+                    {tokenAction === "regenerating" ? "Generating…" : "Generate Client Link"}
                   </button>
                 </div>
               )}
