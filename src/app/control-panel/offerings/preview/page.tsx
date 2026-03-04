@@ -10,12 +10,10 @@ import { WorkflowOperationsSkeleton } from "@/components/portals/skeletons/Workf
 import { ROISummarySkeleton } from "@/components/portals/skeletons/ROISummarySkeleton";
 import { CombinedOverviewSkeleton } from "@/components/portals/skeletons/CombinedOverviewSkeleton";
 import { getSkeletonForPlatform } from "@/lib/portals/platformToSkeleton";
-import { transformDataForSkeleton } from "@/lib/portals/transformData";
-import type { SkeletonData } from "@/lib/portals/transformData";
-import { getVoiceFieldMapping, getWorkflowFieldMapping } from "@/lib/portals/fieldMappings";
+import { transformDataForSkeleton, type SkeletonData, type PortalEvent } from "@/lib/portals/transformData";
 import { FormWizard } from "@/components/products/FormWizard";
 
-type PreviewEvent = Record<string, unknown>;
+type PreviewEvent = PortalEvent;
 type SkeletonProps = {
   data: SkeletonData;
   branding: {
@@ -50,8 +48,8 @@ function generateSampleVoiceData(): PreviewEvent[] {
     value: Math.random() > 0.15 ? 1 : 0,
     unit: "count",
     text: `Sample call ${i + 1}`,
-    state: Math.random() > 0.15 ? "completed" : "failed",
-    labels: { duration_seconds: Math.floor(45 + Math.random() * 300) },
+    state: { status: Math.random() > 0.15 ? "completed" : "failed", duration_seconds: Math.floor(45 + Math.random() * 300) },
+    labels: { platform: "vapi" },
     timestamp: new Date(now - i * 3600000).toISOString(),
   }));
 }
@@ -65,8 +63,8 @@ function generateSampleWorkflowData(): PreviewEvent[] {
     value: Math.random() > 0.08 ? 1 : 0,
     unit: "count",
     text: `Execution ${i + 1}`,
-    state: Math.random() > 0.08 ? "success" : "error",
-    labels: { duration_ms: Math.floor(800 + Math.random() * 4000) },
+    state: { status: Math.random() > 0.08 ? "success" : "error", duration_ms: Math.floor(800 + Math.random() * 4000) },
+    labels: { platform: "make" },
     timestamp: new Date(now - i * 1800000).toISOString(),
   }));
 }
@@ -123,11 +121,7 @@ export default function PreviewPage() {
   const transformedData = useMemo(() => {
     if (!events || !skeletonId) return null;
     try {
-      const mappings =
-        platform === "vapi" || platform === "retell"
-          ? getVoiceFieldMapping(platform)
-          : getWorkflowFieldMapping(platform);
-      return transformDataForSkeleton(events, skeletonId, mappings);
+      return transformDataForSkeleton(events, skeletonId, platform);
     } catch {
       return null;
     }
