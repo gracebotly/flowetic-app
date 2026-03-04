@@ -15,7 +15,8 @@ export type FieldType =
   | "multi_select"
   | "textarea"
   | "url"
-  | "phone";
+  | "phone"
+  | "date";
 
 export interface FieldValidation {
   min?: number;
