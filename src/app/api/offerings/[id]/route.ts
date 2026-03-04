@@ -96,6 +96,21 @@ export async function PATCH(
     return json(400, { ok: false, code: 'NO_UPDATES' });
   }
 
+  const { data: existingOffering, error: existingError } = await supabase
+    .from('offerings')
+    .select('id, published_at')
+    .eq('id', id)
+    .eq('tenant_id', tenantId)
+    .maybeSingle();
+
+  if (existingError || !existingOffering) {
+    return json(404, { ok: false, code: 'OFFERING_NOT_FOUND' });
+  }
+
+  if (updates.status === 'active' && !existingOffering.published_at) {
+    updates.published_at = new Date().toISOString();
+  }
+
   updates.updated_at = new Date().toISOString();
 
   const { data: offering, error } = await supabase
