@@ -22,6 +22,7 @@ import { ROISummarySkeleton } from "@/components/portals/skeletons/ROISummarySke
 import { CombinedOverviewSkeleton } from "@/components/portals/skeletons/CombinedOverviewSkeleton";
 import { getSkeletonForPlatform } from "@/lib/portals/platformToSkeleton";
 import { transformDataForSkeleton } from "@/lib/portals/transformData";
+import type { SkeletonData } from "@/lib/portals/transformData";
 import { getVoiceFieldMapping, getWorkflowFieldMapping } from "@/lib/portals/fieldMappings";
 
 import { FormWizard } from "@/components/products/FormWizard";
@@ -32,12 +33,12 @@ type DeviceMode = "desktop" | "tablet" | "mobile";
 type PreviewEvent = Record<string, unknown>;
 
 type SkeletonProps = {
-  data: unknown;
-  branding?: {
+  data: SkeletonData;
+  branding: {
     primary_color: string;
     secondary_color: string;
     logo_url?: string | null;
-    portalName?: string;
+    portalName: string;
   };
 };
 
@@ -377,7 +378,15 @@ export default function PortalPreview({
                   }}
                 >
                   {SkeletonComponent && transformedData ? (
-                    <SkeletonComponent data={transformedData} />
+                    <SkeletonComponent
+                      data={transformedData}
+                      branding={{
+                        primary_color: branding?.primary_color || "#3b82f6",
+                        secondary_color: branding?.secondary_color || "#1e40af",
+                        logo_url: branding?.logo_url || null,
+                        portalName: branding?.tenant_name || entityName,
+                      }}
+                    />
                   ) : (
                     <div className="flex h-64 items-center justify-center text-sm text-gray-500">
                       Unable to render preview for this platform.
