@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
 
     const { data: offerings } = await supabaseAdmin
       .from("offerings")
-      .select("id, name, pricing_type, price_cents, status")
+      .select("id, name, pricing_type, price_cents, status, surface_type, view_count, published_at")
       .eq("tenant_id", tenantId);
 
     const { data: executions } = await supabaseAdmin
@@ -87,6 +87,9 @@ export async function GET(request: NextRequest) {
           offering_id: o.id,
           offering_name: o.name,
           pricing_type: o.pricing_type,
+          surface_type: o.surface_type || "analytics",
+          view_count: o.view_count || 0,
+          published_at: o.published_at || null,
           revenue_cents: oRevenue,
           customers: oCusts.length,
           executions: oExecs.length,

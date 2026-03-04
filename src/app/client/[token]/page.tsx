@@ -6,6 +6,7 @@ import { VoicePerformanceSkeleton } from '@/components/portals/skeletons/VoicePe
 import { WorkflowOperationsSkeleton } from '@/components/portals/skeletons/WorkflowOperationsSkeleton';
 import { ROISummarySkeleton } from '@/components/portals/skeletons/ROISummarySkeleton';
 import { CombinedOverviewSkeleton } from '@/components/portals/skeletons/CombinedOverviewSkeleton';
+import { createClient } from '@/lib/supabase/server';
 
 interface PageProps {
   params: Promise<{ token: string }>;
@@ -18,6 +19,9 @@ export default async function ClientPortalPage({ params }: PageProps) {
   if (!resolved) notFound();
 
   const { portal, tenant, events } = resolved;
+
+  const supabase = await createClient();
+  void supabase.rpc('increment_view_count', { p_offering_id: portal.id });
 
   const data = transformDataForSkeleton(events, portal.skeleton_id, portal.platform_type);
 

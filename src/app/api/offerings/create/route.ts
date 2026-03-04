@@ -52,6 +52,7 @@ export async function POST(request: Request) {
     inputSchema,
     executionConfig,
     expiresAt,
+    status,
   } = body;
 
   // ── Validate required fields ──────────────────────────────
@@ -108,6 +109,8 @@ export async function POST(request: Request) {
         ? name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
         : null;
 
+  const finalStatus = status === 'draft' ? 'draft' : 'active';
+
   // ── Insert ────────────────────────────────────────────────
   const { data: offering, error: insertError } = await supabase
     .from('offerings')
@@ -128,8 +131,8 @@ export async function POST(request: Request) {
       input_schema: inputSchema || [],
       execution_config: executionConfig || {},
       branding: {},
-      status: 'active',
-      published_at: new Date().toISOString(),
+      status: finalStatus,
+      published_at: finalStatus === 'active' ? new Date().toISOString() : null,
       client_id: clientId?.trim() || null,
       expires_at: expiresAt || null,
     })

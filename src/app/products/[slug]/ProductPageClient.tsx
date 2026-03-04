@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2, CheckCircle2, AlertCircle, ArrowRight, Download } from 'lucide-react';
 import { selectResultTemplate, formatOutputValue } from '@/lib/products/selectResultTemplate';
@@ -45,6 +45,12 @@ export function ProductPageClient({ product, branding }: ProductProps) {
   const [executionState, setExecutionState] = useState<ExecutionState>('idle');
   const [result, setResult] = useState<ExecutionResult | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>('');
+
+  useEffect(() => {
+    if (product?.id) {
+      fetch(`/api/offerings/${product.id}/view`, { method: 'POST' }).catch(() => {});
+    }
+  }, [product?.id]);
 
   function validate(): boolean {
     const newErrors: Record<string, string> = {};
