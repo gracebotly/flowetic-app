@@ -2408,7 +2408,7 @@ export default function ConnectionsPage() {
                 <div className="text-sm font-semibold text-gray-900">0</div>
               </div>
               <div className="px-6 py-3">
-                <div className="text-xs text-gray-400">Offerings</div>
+                <div className="text-xs text-gray-400">Products</div>
                 <div className="text-sm font-semibold text-gray-900">0</div>
               </div>
             </div>
@@ -2419,7 +2419,7 @@ export default function ConnectionsPage() {
                 {([
                   { id: "activity" as const, label: "Activity" },
                   { id: "portals" as const, label: "Portals" },
-                  { id: "offerings" as const, label: "Offerings" },
+                  { id: "offerings" as const, label: "Products" },
                 ] as const).map((tab) => (
                   <button
                     key={tab.id}
@@ -2474,8 +2474,8 @@ export default function ConnectionsPage() {
               {/* Offerings tab */}
               {drawerTab === "offerings" ? (
                 <div className="py-8 text-center">
-                  <div className="text-sm text-gray-400">No offerings linked to this {selectedEntity.kind}.</div>
-                  <div className="mt-1 text-xs text-gray-300">Create an offering from the Offerings tab to see it here.</div>
+                  <div className="text-sm text-gray-400">No products linked to this {selectedEntity.kind}.</div>
+                  <div className="mt-1 text-xs text-gray-300">Create a product from the Products tab to see it here.</div>
                 </div>
               ) : null}
 

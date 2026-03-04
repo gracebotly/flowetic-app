@@ -77,7 +77,7 @@ export function AccessTab({ assignedOfferings }: AccessTabProps) {
   if (assignedOfferings.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-8 text-center text-sm text-gray-500">
-        No offerings assigned. Assign offerings in the Offerings tab first.
+        No portals assigned. Assign portals in the Portals tab, or create one above.
       </div>
     );
   }
@@ -88,7 +88,7 @@ export function AccessTab({ assignedOfferings }: AccessTabProps) {
         <div>
           <h3 className="flex items-center gap-1.5 text-sm font-semibold text-gray-900">
             <Link2 className="h-4 w-4" />
-            Magic Links
+            Client Links
           </h3>
           <div className="mt-2 space-y-2">
             {magicLinks.map((o) => {
@@ -142,7 +142,7 @@ export function AccessTab({ assignedOfferings }: AccessTabProps) {
                     </>
                   ) : (
                     <div className="mt-2 text-xs text-amber-600">
-                      No token generated. Regenerate from the Offerings detail page.
+                      No link generated. Regenerate from the portal detail page.
                     </div>
                   )}
                 </div>

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { X, Plus, ExternalLink } from "lucide-react";
+import { X, Plus } from "lucide-react";
 import { SurfaceBadge } from "@/components/offerings/SurfaceBadge";
 import { AccessBadge } from "@/components/offerings/AccessBadge";
 
@@ -191,11 +191,10 @@ export function OfferingsTab({ clientId, assignedOfferings, onChanged }: Offerin
 
       <Link
         href={`/control-panel/offerings/create?client_id=${clientId}`}
-        className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:text-blue-700"
+        className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 active:scale-[0.98]"
       >
         <Plus className="h-4 w-4" />
-        Create New Portal for This Client
-        <ExternalLink className="h-3 w-3" />
+        Create Portal for This Client
       </Link>
     </div>
   );

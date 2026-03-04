@@ -149,10 +149,10 @@ export default function ClientDetailPage() {
         <div className="flex flex-col items-end gap-3">
           <Link
             href={`/control-panel/offerings/create?client_id=${id}`}
-            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 active:scale-[0.98]"
           >
             <Plus className="h-4 w-4" />
-            Create Portal for This Client
+            Create Portal
           </Link>
           <div className="w-40">
             <div className="text-xs font-medium uppercase tracking-wider text-gray-400">Health Score</div>
