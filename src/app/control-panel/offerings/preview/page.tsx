@@ -4,15 +4,15 @@ import { useEffect, useState, useMemo, type ComponentType } from "react";
 import { useSearchParams } from "next/navigation";
 import { Eye, Loader2 } from "lucide-react";
 
-import PortalShell from "@/components/portals/PortalShell";
-import VoicePerformanceSkeleton from "@/components/portals/skeletons/VoicePerformanceSkeleton";
-import WorkflowOperationsSkeleton from "@/components/portals/skeletons/WorkflowOperationsSkeleton";
-import ROISummarySkeleton from "@/components/portals/skeletons/ROISummarySkeleton";
-import CombinedOverviewSkeleton from "@/components/portals/skeletons/CombinedOverviewSkeleton";
+import { PortalShell } from "@/components/portals/PortalShell";
+import { VoicePerformanceSkeleton } from "@/components/portals/skeletons/VoicePerformanceSkeleton";
+import { WorkflowOperationsSkeleton } from "@/components/portals/skeletons/WorkflowOperationsSkeleton";
+import { ROISummarySkeleton } from "@/components/portals/skeletons/ROISummarySkeleton";
+import { CombinedOverviewSkeleton } from "@/components/portals/skeletons/CombinedOverviewSkeleton";
 import { getSkeletonForPlatform } from "@/lib/portals/platformToSkeleton";
 import { transformDataForSkeleton } from "@/lib/portals/transformData";
-import { fieldMappings } from "@/lib/portals/fieldMappings";
-import FormWizard from "@/components/products/FormWizard";
+import { getVoiceFieldMapping, getWorkflowFieldMapping } from "@/lib/portals/fieldMappings";
+import { FormWizard } from "@/components/products/FormWizard";
 
 type PreviewEvent = Record<string, unknown>;
 type SkeletonProps = { data: unknown };
@@ -114,7 +114,10 @@ export default function PreviewPage() {
   const transformedData = useMemo(() => {
     if (!events || !skeletonId) return null;
     try {
-      const mappings = fieldMappings[platform] || {};
+      const mappings =
+        platform === "vapi" || platform === "retell"
+          ? getVoiceFieldMapping(platform)
+          : getWorkflowFieldMapping(platform);
       return transformDataForSkeleton(events, skeletonId, mappings);
     } catch {
       return null;

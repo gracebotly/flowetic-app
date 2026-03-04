@@ -15,16 +15,16 @@ import {
 import { Badge } from "@tremor/react";
 import { motion } from "framer-motion";
 
-import PortalShell from "@/components/portals/PortalShell";
-import VoicePerformanceSkeleton from "@/components/portals/skeletons/VoicePerformanceSkeleton";
-import WorkflowOperationsSkeleton from "@/components/portals/skeletons/WorkflowOperationsSkeleton";
-import ROISummarySkeleton from "@/components/portals/skeletons/ROISummarySkeleton";
-import CombinedOverviewSkeleton from "@/components/portals/skeletons/CombinedOverviewSkeleton";
+import { PortalShell } from "@/components/portals/PortalShell";
+import { VoicePerformanceSkeleton } from "@/components/portals/skeletons/VoicePerformanceSkeleton";
+import { WorkflowOperationsSkeleton } from "@/components/portals/skeletons/WorkflowOperationsSkeleton";
+import { ROISummarySkeleton } from "@/components/portals/skeletons/ROISummarySkeleton";
+import { CombinedOverviewSkeleton } from "@/components/portals/skeletons/CombinedOverviewSkeleton";
 import { getSkeletonForPlatform } from "@/lib/portals/platformToSkeleton";
 import { transformDataForSkeleton } from "@/lib/portals/transformData";
-import { fieldMappings } from "@/lib/portals/fieldMappings";
+import { getVoiceFieldMapping, getWorkflowFieldMapping } from "@/lib/portals/fieldMappings";
 
-import FormWizard from "@/components/products/FormWizard";
+import { FormWizard } from "@/components/products/FormWizard";
 import type { InputField } from "@/lib/products/types";
 
 type DeviceMode = "desktop" | "tablet" | "mobile";
@@ -214,7 +214,10 @@ export default function PortalPreview({
   const transformedData = useMemo(() => {
     if (!events || !skeletonId) return null;
     try {
-      const mappings = fieldMappings[platformType] || {};
+      const mappings =
+        platformType === "vapi" || platformType === "retell"
+          ? getVoiceFieldMapping(platformType)
+          : getWorkflowFieldMapping(platformType);
       return transformDataForSkeleton(events, skeletonId, mappings);
     } catch {
       return null;
