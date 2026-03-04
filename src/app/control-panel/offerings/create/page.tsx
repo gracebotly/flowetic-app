@@ -12,6 +12,7 @@ import { WizardStepSurface } from "@/components/offerings/WizardStepSurface";
 import PortalPreview from "@/components/portals/wizard/PortalPreview";
 import { WizardStepConfigure } from "@/components/offerings/WizardStepConfigure";
 import { WizardStepSuccess } from "@/components/offerings/WizardStepSuccess";
+import type { InputField } from "@/lib/products/types";
 
 // ── Types ───────────────────────────────────────────────────
 
@@ -23,14 +24,6 @@ export type SourceOption = { id: string; type: string; name: string };
 function cleanDisplayName(name: string): string {
   return name.replace(/^\d+-/, "").replace(/[_-]/g, " ").trim();
 }
-
-type InputField = {
-  name: string;
-  type: string;
-  label: string;
-  required: boolean;
-  placeholder?: string;
-};
 
 type CreatedOffering = { id?: string; name?: string; token?: string | null };
 
