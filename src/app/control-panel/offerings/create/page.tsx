@@ -6,7 +6,8 @@ import { useSearchParams } from "next/navigation";
 import { ArrowLeft, Check } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
-import { WizardStepWorkflow } from "@/components/offerings/WizardStepWorkflow";
+import AgentPicker from "@/components/portals/wizard/AgentPicker";
+import type { SelectedEntity, EntityItem } from "@/components/portals/wizard/AgentPicker";
 import { WizardStepSurface } from "@/components/offerings/WizardStepSurface";
 import { WizardStepPreview } from "@/components/offerings/WizardStepPreview";
 import { WizardStepConfigure } from "@/components/offerings/WizardStepConfigure";
@@ -19,14 +20,9 @@ export type AccessType = "magic_link" | "stripe_gate";
 export type PricingType = "free" | "per_run" | "monthly" | "usage_based";
 
 export type SourceOption = { id: string; type: string; name: string };
-export type EntityOption = {
-  entityUuid: string;
-  name: string;
-  platform: string;
-  kind: string;
-  externalId: string;
-  sourceId: string;
-};
+function cleanDisplayName(name: string): string {
+  return name.replace(/^\d+-/, "").replace(/[_-]/g, " ").trim();
+}
 
 type InputField = {
   name: string;
@@ -36,10 +32,13 @@ type InputField = {
   placeholder?: string;
 };
 
+type CreatedOffering = { id?: string; name?: string; token?: string | null };
+
 export type WizardState = {
   selectedSourceId: string | null;
   selectedEntityUuid: string | null;
   selectedPlatform: string | null;
+  selectedEntities: SelectedEntity[];
   surfaceType: SurfaceType;
   accessType: AccessType;
   pricingType: PricingType;
@@ -50,6 +49,8 @@ export type WizardState = {
   clientId: string;
   inputSchema: InputField[];
   createdOffering: { id?: string; name?: string } | null;
+  createdOfferings: CreatedOffering[];
+  creationErrors: { entity: string; error: string }[];
   magicLink: string | null;
   productUrl: string | null;
 };
@@ -58,6 +59,7 @@ const INITIAL_STATE: WizardState = {
   selectedSourceId: null,
   selectedEntityUuid: null,
   selectedPlatform: null,
+  selectedEntities: [],
   surfaceType: "analytics",
   accessType: "magic_link",
   pricingType: "free",
@@ -68,6 +70,8 @@ const INITIAL_STATE: WizardState = {
   clientId: "",
   inputSchema: [],
   createdOffering: null,
+  createdOfferings: [],
+  creationErrors: [],
   magicLink: null,
   productUrl: null,
 };
@@ -96,7 +100,7 @@ export default function CreateOfferingPage() {
 
   // Data
   const [sources, setSources] = useState<SourceOption[]>([]);
-  const [entities, setEntities] = useState<EntityOption[]>([]);
+  const [entities, setEntities] = useState<EntityItem[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
   const [stripeConnected, setStripeConnected] = useState(false);
   const [schemaLoading, setSchemaLoading] = useState(false);
@@ -145,14 +149,34 @@ export default function CreateOfferingPage() {
         const json = await res.json();
         if (json.ok && json.entities) {
           setEntities(
-            json.entities.map((e: { entityUuid: string; name: string; platform: string; kind: string; externalId: string; sourceId: string }) => ({
-              entityUuid: e.entityUuid,
-              name: e.name,
-              platform: e.platform,
-              kind: e.kind,
-              externalId: e.externalId,
-              sourceId: e.sourceId,
-            }))
+            json.entities.map(
+              (e: {
+                id?: string;
+                entityUuid?: string;
+                source_id?: string;
+                sourceId?: string;
+                display_name?: string;
+                name?: string;
+                entity_kind?: string;
+                kind?: string;
+                external_id?: string;
+                externalId?: string;
+                platform_type?: string;
+                platform?: string;
+                source_name?: string;
+                sourceName?: string;
+                last_seen_at?: string | null;
+              }) => ({
+                id: e.id ?? e.entityUuid ?? "",
+                source_id: e.source_id ?? e.sourceId ?? "",
+                display_name: e.display_name ?? e.name ?? "",
+                entity_kind: e.entity_kind ?? e.kind ?? "",
+                external_id: e.external_id ?? e.externalId ?? "",
+                platform_type: e.platform_type ?? e.platform ?? "",
+                source_name: e.source_name ?? e.sourceName ?? e.platform ?? "Unknown",
+                last_seen_at: e.last_seen_at ?? null,
+              })
+            )
           );
         }
 
@@ -207,7 +231,7 @@ export default function CreateOfferingPage() {
   // ── Auto-fill name when source + entity selected ──────────
   useEffect(() => {
     if (wizard.selectedEntityUuid && !wizard.name) {
-      const entity = entities.find((e) => e.entityUuid === wizard.selectedEntityUuid);
+      const entity = entities.find((e) => e.id === wizard.selectedEntityUuid);
       if (entity) {
         const suffix =
           wizard.surfaceType === "runner"
@@ -215,7 +239,7 @@ export default function CreateOfferingPage() {
             : wizard.surfaceType === "both"
               ? ""
               : " Dashboard";
-        update({ name: `${entity.name}${suffix}` });
+        update({ name: `${entity.display_name}${suffix}` });
       }
     }
   }, [wizard.selectedEntityUuid, wizard.surfaceType, wizard.name, entities, update]);
@@ -224,7 +248,7 @@ export default function CreateOfferingPage() {
   const canProceed = useCallback((): boolean => {
     switch (currentStep) {
       case 1:
-        return !!wizard.selectedSourceId;
+        return wizard.selectedEntities.length > 0;
       case 2:
         return !!wizard.surfaceType;
       case 3:
@@ -243,53 +267,77 @@ export default function CreateOfferingPage() {
     setSubmitError(null);
 
     try {
-      const body: Record<string, unknown> = {
-        name: wizard.name.trim(),
-        sourceId: wizard.selectedSourceId,
-        entityId: wizard.selectedEntityUuid,
-        surfaceType: wizard.surfaceType,
-        accessType: stripeConnected ? wizard.accessType : "magic_link",
-        pricingType:
-          stripeConnected && wizard.accessType === "stripe_gate"
-            ? wizard.pricingType
-            : "free",
-        priceCents:
-          stripeConnected && wizard.accessType === "stripe_gate"
-            ? wizard.priceCents
-            : 0,
-        clientId: wizard.clientId.trim() || undefined,
-        description: wizard.description.trim() || undefined,
-      };
+      const results: CreatedOffering[] = [];
+      const errors: { entity: string; error: string }[] = [];
 
-      // Add product-specific fields when runner or both
-      if (wizard.surfaceType === "runner" || wizard.surfaceType === "both") {
-        body.inputSchema = wizard.inputSchema;
-        body.executionConfig = {};
+      for (const entity of wizard.selectedEntities) {
+        const portalName =
+          wizard.selectedEntities.length === 1
+            ? wizard.name.trim()
+            : `${wizard.name.trim()} — ${cleanDisplayName(entity.displayName)}`;
+
+        const body: Record<string, unknown> = {
+          name: portalName,
+          sourceId: entity.sourceId,
+          entityId: entity.id,
+          surfaceType: wizard.surfaceType,
+          accessType: stripeConnected ? wizard.accessType : "magic_link",
+          pricingType:
+            stripeConnected && wizard.accessType === "stripe_gate"
+              ? wizard.pricingType
+              : "free",
+          priceCents:
+            stripeConnected && wizard.accessType === "stripe_gate"
+              ? wizard.priceCents
+              : 0,
+          clientId: wizard.clientId.trim() || undefined,
+          description: wizard.description.trim() || undefined,
+        };
+
+        if (wizard.surfaceType === "runner" || wizard.surfaceType === "both") {
+          body.inputSchema = wizard.inputSchema;
+          body.executionConfig = {};
+        }
+
+        if (wizard.accessType === "stripe_gate" && wizard.slug) {
+          body.slug = wizard.slug;
+        }
+
+        try {
+          const res = await fetch("/api/offerings/create", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          const json = await res.json();
+
+          if (!res.ok || !json.ok) {
+            errors.push({
+              entity: entity.displayName,
+              error: json.error || "Failed to create portal",
+            });
+          } else {
+            results.push({
+              ...(json.offering || {}),
+              token: json.magicLink ? String(json.magicLink).split("/client/").pop() : null,
+            });
+          }
+        } catch {
+          errors.push({ entity: entity.displayName, error: "Network error" });
+        }
       }
 
-      // Add slug for paid products
-      if (wizard.accessType === "stripe_gate" && wizard.slug) {
-        body.slug = wizard.slug;
-      }
-
-      const res = await fetch("/api/offerings/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-
-      const json = await res.json();
-
-      if (!res.ok || !json.ok) {
-        setSubmitError(json.error || "Failed to create portal");
-        setSubmitting(false);
+      if (results.length === 0) {
+        setSubmitError(errors[0]?.error || "Failed to create portal");
         return;
       }
 
       update({
-        createdOffering: json.offering,
-        magicLink: json.magicLink || null,
-        productUrl: json.productUrl || null,
+        createdOffering: results[0] || null,
+        createdOfferings: results,
+        creationErrors: errors,
+        magicLink: results.length === 1 && results[0]?.token ? `${window.location.origin}/client/${results[0].token}` : null,
+        productUrl: null,
       });
       setCurrentStep(5);
     } catch (err: unknown) {
@@ -317,6 +365,7 @@ export default function CreateOfferingPage() {
       selectedSourceId: prev.selectedSourceId,
       selectedEntityUuid: prev.selectedEntityUuid,
       selectedPlatform: prev.selectedPlatform,
+      selectedEntities: prev.selectedEntities,
       surfaceType: prev.surfaceType,
       accessType: prev.accessType,
       pricingType: prev.pricingType,
@@ -329,8 +378,8 @@ export default function CreateOfferingPage() {
   };
 
   // ── Entity name for preview ───────────────────────────────
-  const selectedEntity = entities.find((e) => e.entityUuid === wizard.selectedEntityUuid);
-  const entityName = selectedEntity?.name ?? "";
+  const selectedEntity = entities.find((e) => e.id === wizard.selectedEntityUuid);
+  const entityName = selectedEntity?.display_name ?? "";
 
   // ── Render ────────────────────────────────────────────────
   return (
@@ -403,14 +452,20 @@ export default function CreateOfferingPage() {
         ) : (
           <>
             {currentStep === 1 && (
-              <WizardStepWorkflow
-                sources={sources}
+              <AgentPicker
                 entities={entities}
-                selectedSourceId={wizard.selectedSourceId}
-                selectedEntityUuid={wizard.selectedEntityUuid}
-                onSelect={(sourceId, entityUuid) =>
-                  update({ selectedSourceId: sourceId, selectedEntityUuid: entityUuid })
-                }
+                loading={dataLoading}
+                selected={wizard.selectedEntities}
+                onSelectionChange={(selected) => {
+                  setWizard((prev) => ({
+                    ...prev,
+                    selectedEntities: selected,
+                    selectedSourceId: selected.length > 0 ? selected[0].sourceId : null,
+                    selectedEntityUuid: selected.length > 0 ? selected[0].id : null,
+                    selectedPlatform: selected.length > 0 ? selected[0].platform : null,
+                  }));
+                }}
+                onContinue={() => setCurrentStep(2)}
               />
             )}
             {currentStep === 2 && (
@@ -432,35 +487,92 @@ export default function CreateOfferingPage() {
               />
             )}
             {currentStep === 4 && (
-              <WizardStepConfigure
-                name={wizard.name}
-                description={wizard.description}
-                onChange={(field, value) => update({ [field]: value })}
-                clientId={wizard.clientId}
-                prefilledClientId={prefilledClientId}
-                accessType={wizard.accessType}
-                pricingType={wizard.pricingType}
-                priceCents={wizard.priceCents}
-                slug={wizard.slug}
-                onAccessChange={(accessType) => update({ accessType })}
-                onPricingChange={(pricingType, priceCents) =>
-                  update({ pricingType, priceCents })
-                }
-                stripeConnected={stripeConnected}
-                platform={wizard.selectedPlatform}
-                surfaceType={wizard.surfaceType}
-                submitError={submitError}
-              />
+              <>
+                <WizardStepConfigure
+                  name={wizard.name}
+                  description={wizard.description}
+                  onChange={(field, value) => update({ [field]: value })}
+                  clientId={wizard.clientId}
+                  prefilledClientId={prefilledClientId}
+                  accessType={wizard.accessType}
+                  pricingType={wizard.pricingType}
+                  priceCents={wizard.priceCents}
+                  slug={wizard.slug}
+                  onAccessChange={(accessType) => update({ accessType })}
+                  onPricingChange={(pricingType, priceCents) =>
+                    update({ pricingType, priceCents })
+                  }
+                  stripeConnected={stripeConnected}
+                  platform={wizard.selectedPlatform}
+                  surfaceType={wizard.surfaceType}
+                  submitError={submitError}
+                />
+                {wizard.selectedEntities.length > 1 && (
+                  <p className="mt-1 text-xs text-tremor-content dark:text-dark-tremor-content">
+                    Each portal will be named: &quot;{wizard.name} — [Agent Name]&quot;
+                  </p>
+                )}
+              </>
             )}
             {currentStep === 5 && (
-              <WizardStepSuccess
-                offering={wizard.createdOffering}
-                magicLink={wizard.magicLink}
-                productUrl={wizard.productUrl}
-                accessType={wizard.accessType}
-                surfaceType={wizard.surfaceType}
-                onCreateAnother={handleCreateAnother}
-              />
+              <>
+                {wizard.createdOfferings.length > 1 ? (
+                  <div className="space-y-3">
+                    <h3 className="text-sm font-semibold text-tremor-content-strong dark:text-dark-tremor-content-strong">
+                      {wizard.createdOfferings.length} portals created
+                    </h3>
+                    {wizard.createdOfferings.map((o, i) => (
+                      <div
+                        key={i}
+                        className="flex items-center justify-between rounded-lg border border-tremor-border p-3 dark:border-dark-tremor-border"
+                      >
+                        <span className="text-sm font-medium text-tremor-content-strong dark:text-dark-tremor-content-strong">
+                          {o.name}
+                        </span>
+                        {o.token && (
+                          <button
+                            onClick={() =>
+                              navigator.clipboard.writeText(
+                                `${window.location.origin}/client/${o.token}`
+                              )
+                            }
+                            className="cursor-pointer text-xs font-medium text-tremor-brand"
+                          >
+                            Copy Link
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    {wizard.creationErrors.length > 0 && (
+                      <div className="mt-2 rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/20">
+                        <p className="text-xs font-semibold text-red-600 dark:text-red-400">
+                          {wizard.creationErrors.length} failed:
+                        </p>
+                        {wizard.creationErrors.map((err, i) => (
+                          <p key={i} className="text-xs text-red-600 dark:text-red-400">
+                            {err.entity}: {err.error}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+                    <button
+                      onClick={handleCreateAnother}
+                      className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
+                    >
+                      Create Another
+                    </button>
+                  </div>
+                ) : (
+                  <WizardStepSuccess
+                    offering={wizard.createdOffering}
+                    magicLink={wizard.magicLink}
+                    productUrl={wizard.productUrl}
+                    accessType={wizard.accessType}
+                    surfaceType={wizard.surfaceType}
+                    onCreateAnother={handleCreateAnother}
+                  />
+                )}
+              </>
             )}
           </>
         )}
