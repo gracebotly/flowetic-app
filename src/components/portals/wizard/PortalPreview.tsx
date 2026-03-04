@@ -21,17 +21,23 @@ import { WorkflowOperationsSkeleton } from "@/components/portals/skeletons/Workf
 import { ROISummarySkeleton } from "@/components/portals/skeletons/ROISummarySkeleton";
 import { CombinedOverviewSkeleton } from "@/components/portals/skeletons/CombinedOverviewSkeleton";
 import { getSkeletonForPlatform } from "@/lib/portals/platformToSkeleton";
-import { transformDataForSkeleton } from "@/lib/portals/transformData";
-import { getVoiceFieldMapping, getWorkflowFieldMapping } from "@/lib/portals/fieldMappings";
+import { transformDataForSkeleton, type SkeletonData, type PortalEvent } from "@/lib/portals/transformData";
 
-import { FormWizard } from "@/components/products/FormWizard";
 import type { InputField } from "@/lib/products/types";
 
 type DeviceMode = "desktop" | "tablet" | "mobile";
 
-type PreviewEvent = Record<string, unknown>;
+type PreviewEvent = PortalEvent;
 
-type SkeletonProps = { data: unknown };
+type SkeletonProps = {
+  data: SkeletonData;
+  branding: {
+    primary_color: string;
+    secondary_color: string;
+    logo_url?: string | null;
+    portalName: string;
+  };
+};
 
 interface PortalPreviewProps {
   platformType: string;
@@ -72,8 +78,8 @@ function generateSampleVoiceData(): PreviewEvent[] {
     value: Math.random() > 0.15 ? 1 : 0,
     unit: "count",
     text: `Sample call ${i + 1}`,
-    state: Math.random() > 0.15 ? "completed" : "failed",
-    labels: { duration_seconds: Math.floor(45 + Math.random() * 300) },
+    state: { status: Math.random() > 0.15 ? "completed" : "failed", duration_seconds: Math.floor(45 + Math.random() * 300) },
+    labels: { platform: "vapi" },
     timestamp: new Date(now - i * 3600000).toISOString(),
   }));
 }
@@ -87,8 +93,8 @@ function generateSampleWorkflowData(): PreviewEvent[] {
     value: Math.random() > 0.08 ? 1 : 0,
     unit: "count",
     text: `Execution ${i + 1}`,
-    state: Math.random() > 0.08 ? "success" : "error",
-    labels: { duration_ms: Math.floor(800 + Math.random() * 4000) },
+    state: { status: Math.random() > 0.08 ? "success" : "error", duration_ms: Math.floor(800 + Math.random() * 4000) },
+    labels: { platform: "make" },
     timestamp: new Date(now - i * 1800000).toISOString(),
   }));
 }
@@ -214,11 +220,7 @@ export default function PortalPreview({
   const transformedData = useMemo(() => {
     if (!events || !skeletonId) return null;
     try {
-      const mappings =
-        platformType === "vapi" || platformType === "retell"
-          ? getVoiceFieldMapping(platformType)
-          : getWorkflowFieldMapping(platformType);
-      return transformDataForSkeleton(events, skeletonId, mappings);
+      return transformDataForSkeleton(events, skeletonId, platformType);
     } catch {
       return null;
     }
@@ -227,7 +229,7 @@ export default function PortalPreview({
   const containerMaxWidth = 900;
   const deviceWidth = DEVICES[device].width;
   const scale = Math.min(1, containerMaxWidth / deviceWidth);
-  const scaledHeight = device === "mobile" ? 700 : device === "tablet" ? 800 : 650;
+  const scaledHeight = device === "mobile" ? 900 : device === "tablet" ? 1000 : 850;
 
   const handleRefresh = useCallback(() => {
     setRefreshKey((k) => k + 1);
@@ -264,7 +266,7 @@ export default function PortalPreview({
             const w = DEVICES[device].width;
             const h = device === "mobile" ? 812 : device === "tablet" ? 1024 : 900;
             window.open(
-              `/control-panel/offerings/preview?source_id=${sourceId}&platform=${platformType}&surface=${surfaceType}`,
+              `/portal-preview?source_id=${sourceId}&platform=${platformType}&surface=${surfaceType}&entity_name=${encodeURIComponent(entityName)}`,
               "_blank",
               `width=${w},height=${h},menubar=no,toolbar=no,location=no,status=no`
             );
@@ -352,24 +354,32 @@ export default function PortalPreview({
             <div
               style={{
                 width: deviceWidth,
-                height: scaledHeight,
+                minHeight: scaledHeight,
+                maxHeight: 1200,
                 transform: `scale(${scale})`,
                 transformOrigin: "top left",
-                overflow: "hidden",
+                overflowY: "auto",
+                overflowX: "hidden",
               }}
             >
               {showAnalytics && activeTab === "portal" && (
                 <PortalShell
-                  branding={{
-                    logo_url: branding?.logo_url || null,
-                    primary_color: branding?.primary_color || "#3b82f6",
-                    secondary_color: branding?.secondary_color || "#1e40af",
-                    welcome_message: branding?.welcome_message || `Welcome to your ${entityName} dashboard`,
-                    brand_footer: branding?.brand_footer || branding?.tenant_name || "",
-                  }}
+                  portalName={entityName || "Your Portal"}
+                  tenantName={branding?.tenant_name || "Your Agency"}
+                  logoUrl={branding?.logo_url || null}
+                  primaryColor={branding?.primary_color || "#3b82f6"}
+                  secondaryColor={branding?.secondary_color || "#1e40af"}
                 >
                   {SkeletonComponent && transformedData ? (
-                    <SkeletonComponent data={transformedData} />
+                    <SkeletonComponent
+                      data={transformedData}
+                      branding={{
+                        primary_color: branding?.primary_color || "#3b82f6",
+                        secondary_color: branding?.secondary_color || "#1e40af",
+                        logo_url: branding?.logo_url || null,
+                        portalName: branding?.tenant_name || entityName,
+                      }}
+                    />
                   ) : (
                     <div className="flex h-64 items-center justify-center text-sm text-gray-500">
                       Unable to render preview for this platform.
@@ -400,13 +410,23 @@ export default function PortalPreview({
                     </div>
 
                     {inputSchema && inputSchema.length > 0 ? (
-                      <FormWizard
-                        fields={inputSchema}
-                        onSubmit={() => {
-                          return;
-                        }}
-                        isPreview={true}
-                      />
+                      <div className="space-y-3">
+                        {(inputSchema ?? []).map((field, i) => (
+                          <div key={field.name} className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-2.5">
+                            <span className="flex h-6 w-6 items-center justify-center rounded-md bg-gray-100 text-[10px] font-bold text-gray-500">
+                              {i + 1}
+                            </span>
+                            <div className="flex-1">
+                              <span className="text-sm font-medium text-gray-900">{field.label}</span>
+                              <span className="ml-2 text-[10px] uppercase tracking-wide text-gray-400">{field.type}</span>
+                            </div>
+                            {field.required && (
+                              <span className="text-[10px] font-medium text-red-400">Required</span>
+                            )}
+                          </div>
+                        ))}
+                        <p className="text-xs text-gray-400">Your customers will fill out a step-by-step form.</p>
+                      </div>
                     ) : (
                       <div className="rounded-xl border border-dashed border-gray-300 p-8 text-center">
                         <Info className="mx-auto h-8 w-8 text-gray-400" />

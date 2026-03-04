@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo, type ComponentType } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { Eye, Loader2 } from "lucide-react";
 
 import { PortalShell } from "@/components/portals/PortalShell";
@@ -10,12 +10,18 @@ import { WorkflowOperationsSkeleton } from "@/components/portals/skeletons/Workf
 import { ROISummarySkeleton } from "@/components/portals/skeletons/ROISummarySkeleton";
 import { CombinedOverviewSkeleton } from "@/components/portals/skeletons/CombinedOverviewSkeleton";
 import { getSkeletonForPlatform } from "@/lib/portals/platformToSkeleton";
-import { transformDataForSkeleton } from "@/lib/portals/transformData";
-import { getVoiceFieldMapping, getWorkflowFieldMapping } from "@/lib/portals/fieldMappings";
-import { FormWizard } from "@/components/products/FormWizard";
+import { transformDataForSkeleton, type SkeletonData, type PortalEvent } from "@/lib/portals/transformData";
 
-type PreviewEvent = Record<string, unknown>;
-type SkeletonProps = { data: unknown };
+type PreviewEvent = PortalEvent;
+type SkeletonProps = {
+  data: SkeletonData;
+  branding: {
+    primary_color: string;
+    secondary_color: string;
+    logo_url?: string | null;
+    portalName: string;
+  };
+};
 type Branding = {
   logo_url: string | null;
   primary_color: string | null;
@@ -41,8 +47,8 @@ function generateSampleVoiceData(): PreviewEvent[] {
     value: Math.random() > 0.15 ? 1 : 0,
     unit: "count",
     text: `Sample call ${i + 1}`,
-    state: Math.random() > 0.15 ? "completed" : "failed",
-    labels: { duration_seconds: Math.floor(45 + Math.random() * 300) },
+    state: { status: Math.random() > 0.15 ? "completed" : "failed", duration_seconds: Math.floor(45 + Math.random() * 300) },
+    labels: { platform: "vapi" },
     timestamp: new Date(now - i * 3600000).toISOString(),
   }));
 }
@@ -56,14 +62,25 @@ function generateSampleWorkflowData(): PreviewEvent[] {
     value: Math.random() > 0.08 ? 1 : 0,
     unit: "count",
     text: `Execution ${i + 1}`,
-    state: Math.random() > 0.08 ? "success" : "error",
-    labels: { duration_ms: Math.floor(800 + Math.random() * 4000) },
+    state: { status: Math.random() > 0.08 ? "success" : "error", duration_ms: Math.floor(800 + Math.random() * 4000) },
+    labels: { platform: "make" },
     timestamp: new Date(now - i * 1800000).toISOString(),
   }));
 }
 
 export default function PreviewPage() {
   const params = useSearchParams();
+  const router = useRouter();
+
+  // Auth guard — only agency users can see preview
+  useEffect(() => {
+    fetch("/api/settings/branding").then((res) => {
+      if (res.status === 401) {
+        router.replace("/login");
+      }
+    }).catch(() => {});
+  }, [router]);
+
   const sourceId = params.get("source_id");
   const platform = params.get("platform") || "vapi";
   const surface = params.get("surface") || "analytics";
@@ -114,11 +131,7 @@ export default function PreviewPage() {
   const transformedData = useMemo(() => {
     if (!events || !skeletonId) return null;
     try {
-      const mappings =
-        platform === "vapi" || platform === "retell"
-          ? getVoiceFieldMapping(platform)
-          : getWorkflowFieldMapping(platform);
-      return transformDataForSkeleton(events, skeletonId, mappings);
+      return transformDataForSkeleton(events, skeletonId, platform);
     } catch {
       return null;
     }
@@ -144,16 +157,22 @@ export default function PreviewPage() {
 
       {showAnalytics && (
         <PortalShell
-          branding={{
-            logo_url: branding?.logo_url || null,
-            primary_color: branding?.primary_color || "#3b82f6",
-            secondary_color: branding?.secondary_color || "#1e40af",
-            welcome_message: branding?.welcome_message || "Welcome to your dashboard",
-            brand_footer: branding?.brand_footer || branding?.tenant_name || "",
-          }}
+          portalName={params.get("entity_name") || "Your Portal"}
+          tenantName={branding?.tenant_name || "Your Agency"}
+          logoUrl={branding?.logo_url || null}
+          primaryColor={branding?.primary_color || "#3b82f6"}
+          secondaryColor={branding?.secondary_color || "#1e40af"}
         >
           {SkeletonComponent && transformedData ? (
-            <SkeletonComponent data={transformedData} />
+            <SkeletonComponent
+              data={transformedData}
+              branding={{
+                primary_color: branding?.primary_color || "#3b82f6",
+                secondary_color: branding?.secondary_color || "#1e40af",
+                logo_url: branding?.logo_url || null,
+                portalName: branding?.tenant_name || "Dashboard",
+              }}
+            />
           ) : (
             <div className="flex h-64 items-center justify-center text-gray-500">Unable to load preview.</div>
           )}
@@ -164,26 +183,25 @@ export default function PreviewPage() {
         <div className="mx-auto max-w-2xl p-8">
           <h1 className="text-2xl font-bold text-gray-900">Product Form Preview</h1>
           <p className="mb-8 mt-2 text-sm text-gray-600">This is the form your customers will fill out.</p>
-          <FormWizard
-            fields={[
-              {
-                name: "phone_number",
-                type: "phone",
-                label: "Phone Number",
-                required: true,
-                placeholder: "+1 (555) 123-4567",
-              },
-              {
-                name: "customer_name",
-                type: "text",
-                label: "Name",
-                required: true,
-                placeholder: "Full name",
-              },
-            ]}
-            onSubmit={() => {}}
-            isPreview={true}
-          />
+          <div className="space-y-4">
+            {[
+              { label: "Phone Number", type: "PHONE", required: true },
+              { label: "Customer Name", type: "TEXT", required: true },
+            ].map((field) => (
+              <div key={field.label} className="rounded-lg border border-gray-200 bg-white px-4 py-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-sm font-medium text-gray-900">{field.label}</span>
+                    <span className="ml-2 text-[10px] uppercase tracking-wide text-gray-400">{field.type}</span>
+                  </div>
+                  {field.required && (
+                    <span className="text-[10px] font-medium text-red-400">Required</span>
+                  )}
+                </div>
+              </div>
+            ))}
+            <p className="text-xs text-gray-400">Your customers will fill out a step-by-step form.</p>
+          </div>
         </div>
       )}
     </div>
