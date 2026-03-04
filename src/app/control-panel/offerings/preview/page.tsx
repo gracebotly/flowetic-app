@@ -15,7 +15,15 @@ import { getVoiceFieldMapping, getWorkflowFieldMapping } from "@/lib/portals/fie
 import { FormWizard } from "@/components/products/FormWizard";
 
 type PreviewEvent = Record<string, unknown>;
-type SkeletonProps = { data: unknown };
+type SkeletonProps = {
+  data: unknown;
+  branding?: {
+    primary_color: string;
+    secondary_color: string;
+    logo_url?: string | null;
+    portalName?: string;
+  };
+};
 type Branding = {
   logo_url: string | null;
   primary_color: string | null;

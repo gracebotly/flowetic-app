@@ -31,7 +31,15 @@ type DeviceMode = "desktop" | "tablet" | "mobile";
 
 type PreviewEvent = Record<string, unknown>;
 
-type SkeletonProps = { data: unknown };
+type SkeletonProps = {
+  data: unknown;
+  branding?: {
+    primary_color: string;
+    secondary_color: string;
+    logo_url?: string | null;
+    portalName?: string;
+  };
+};
 
 interface PortalPreviewProps {
   platformType: string;
