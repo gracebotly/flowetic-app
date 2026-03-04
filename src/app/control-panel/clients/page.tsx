@@ -257,7 +257,7 @@ export default function ClientsPage() {
                   <HealthBar score={client.health_score ?? 0} />
                 </div>
                 <div className="text-right w-24">
-                  <div className="text-xs text-gray-500">Offerings</div>
+                  <div className="text-xs text-gray-500">Portals</div>
                   <div className="text-sm font-medium text-gray-900">{client.offering_count}</div>
                 </div>
                 <div className="text-right w-24">
@@ -322,7 +322,7 @@ export default function ClientsPage() {
           <span>·</span>
           <span>{pausedCount} paused</span>
           <span>·</span>
-          <span>{totalOfferings} active offerings</span>
+          <span>{totalOfferings} active portals</span>
           <span>·</span>
           <span>Avg health: {avgHealth}</span>
         </div>

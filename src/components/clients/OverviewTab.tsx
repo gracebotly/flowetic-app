@@ -287,7 +287,7 @@ export function OverviewTab({ client, assignedOfferingsCount, totalOfferings, on
           ) : (
             <div className="flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 text-red-500" />
-              <span className="text-sm text-red-600">Archive? Offerings will be unassigned.</span>
+              <span className="text-sm text-red-600">Archive? Portals will be unassigned.</span>
               <button
                 onClick={handleArchive}
                 disabled={archiving}
@@ -311,7 +311,7 @@ export function OverviewTab({ client, assignedOfferingsCount, totalOfferings, on
           <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400">Quick Stats</h3>
           <div className="mt-3 grid grid-cols-2 gap-4">
             <div>
-              <div className="text-xs text-gray-500">Offerings</div>
+              <div className="text-xs text-gray-500">Portals</div>
               <div className="text-lg font-semibold text-gray-900">{assignedOfferingsCount}</div>
             </div>
             <div>
