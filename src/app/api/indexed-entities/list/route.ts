@@ -62,6 +62,38 @@ export async function GET() {
     sourceById.set(String(s.id), { type: String(s.type), created_at: String(s.created_at) });
   }
 
+  // ── Auto-derive last_seen_at from events for entities missing it ──
+  // Build a map of source_id:external_id → latest event timestamp
+  const entitiesMissingLastSeen = (entities ?? []).filter((e: any) => !e.last_seen_at);
+  const lastSeenFromEvents = new Map<string, string>();
+
+  if (entitiesMissingLastSeen.length > 0) {
+    try {
+      // For each source, get the latest event timestamps grouped by workflow_id label
+      for (const sid of sourceIds) {
+        const { data: latestEvents } = await supabase
+          .from("events")
+          .select("labels, timestamp")
+          .eq("tenant_id", membership.tenant_id)
+          .eq("source_id", sid)
+          .order("timestamp", { ascending: false })
+          .limit(200);
+
+        if (latestEvents) {
+          for (const ev of latestEvents) {
+            const wfId = (ev.labels as any)?.workflow_id;
+            const key = `${sid}:${wfId}`;
+            if (wfId && !lastSeenFromEvents.has(key)) {
+              lastSeenFromEvents.set(key, String(ev.timestamp));
+            }
+          }
+        }
+      }
+    } catch {
+      // Non-fatal — just use stored values
+    }
+  }
+
   const rows: IndexedEntity[] = (entities ?? []).map((e: any) => {
     const sourceId = String(e.source_id);
     const meta = sourceById.get(sourceId);
@@ -69,7 +101,14 @@ export async function GET() {
     const createdAt = meta?.created_at ?? new Date().toISOString();
     const createdAtTs = Date.parse(createdAt);
 
-    const lastSeenAt = e.last_seen_at ? String(e.last_seen_at) : null;
+    // Try stored last_seen_at first, then derive from events table
+    let lastSeenAt = e.last_seen_at ? String(e.last_seen_at) : null;
+    if (!lastSeenAt) {
+      const derivedKey = `${sourceId}:${String(e.external_id)}`;
+      const derived = lastSeenFromEvents.get(derivedKey);
+      if (derived) lastSeenAt = derived;
+    }
+
     const lastSeenTs = lastSeenAt ? Date.parse(lastSeenAt) : NaN;
 
     const lastUpdatedTs = Number.isFinite(lastSeenTs)
@@ -95,5 +134,3 @@ export async function GET() {
 
   return NextResponse.json({ ok: true, entities: rows });
 }
-
-

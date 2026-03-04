@@ -158,6 +158,7 @@ export default function CreateOfferingPage() {
                 source_name?: string;
                 sourceName?: string;
                 last_seen_at?: string | null;
+                lastSeenAt?: string | null;
               }) => ({
                 id: e.id ?? e.entityUuid ?? "",
                 source_id: e.source_id ?? e.sourceId ?? "",
@@ -166,7 +167,7 @@ export default function CreateOfferingPage() {
                 external_id: e.external_id ?? e.externalId ?? "",
                 platform_type: e.platform_type ?? e.platform ?? "",
                 source_name: e.source_name ?? e.sourceName ?? e.platform ?? "Unknown",
-                last_seen_at: e.last_seen_at ?? null,
+                last_seen_at: e.last_seen_at ?? e.lastSeenAt ?? null,
               })
             )
           );

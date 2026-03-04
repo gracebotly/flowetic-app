@@ -708,7 +708,7 @@ export async function POST(req: Request) {
       display_name: String(e.displayName || ""),
       enabled_for_analytics: false,
       enabled_for_actions: false,
-      last_seen_at: null,
+      last_seen_at: now,
       created_at: now,
       updated_at: now,
     }));

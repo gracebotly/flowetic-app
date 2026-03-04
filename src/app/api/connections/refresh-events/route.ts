@@ -216,6 +216,49 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // ── Update source_entities.last_seen_at from latest event timestamps ──
+    // For each workflow that had events refreshed, find the most recent event
+    // timestamp and write it back to source_entities.last_seen_at.
+    if (totalRefreshed > 0) {
+      try {
+        // Get the latest event timestamp per external_id (workflow_id in labels)
+        const { data: latestEvents } = await supabase
+          .from("events")
+          .select("labels, timestamp")
+          .eq("tenant_id", tenantId)
+          .eq("source_id", sourceId)
+          .order("timestamp", { ascending: false })
+          .limit(500);
+
+        if (latestEvents && latestEvents.length > 0) {
+          // Build a map of workflow_id → latest timestamp
+          const latestByWorkflow = new Map<string, string>();
+          for (const ev of latestEvents) {
+            const wfId = (ev.labels as any)?.workflow_id;
+            if (wfId && !latestByWorkflow.has(String(wfId))) {
+              latestByWorkflow.set(String(wfId), String(ev.timestamp));
+            }
+          }
+
+          // Update each source_entity's last_seen_at
+          for (const [externalId, latestTs] of latestByWorkflow) {
+            await supabase
+              .from("source_entities")
+              .update({
+                last_seen_at: latestTs,
+                updated_at: now,
+              })
+              .eq("source_id", sourceId)
+              .eq("external_id", externalId)
+              .eq("tenant_id", tenantId);
+          }
+        }
+      } catch (e) {
+        // Non-fatal — events are already stored, just log
+        console.warn("[refresh-events] Failed to update last_seen_at on source_entities:", e);
+      }
+    }
+
     return NextResponse.json({
       ok: true,
       refreshed: totalRefreshed,
