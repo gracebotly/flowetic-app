@@ -2,14 +2,13 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { ArrowLeft, Check } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { getSkeletonForPlatform } from "@/lib/portals/platformToSkeleton";
 
 import { WizardStepWorkflow } from "@/components/offerings/WizardStepWorkflow";
 import { WizardStepSurface } from "@/components/offerings/WizardStepSurface";
-import { WizardStepAccess } from "@/components/offerings/WizardStepAccess";
+import { WizardStepPreview } from "@/components/offerings/WizardStepPreview";
 import { WizardStepConfigure } from "@/components/offerings/WizardStepConfigure";
 import { WizardStepSuccess } from "@/components/offerings/WizardStepSuccess";
 
@@ -19,12 +18,7 @@ export type SurfaceType = "analytics" | "runner" | "both";
 export type AccessType = "magic_link" | "stripe_gate";
 export type PricingType = "free" | "per_run" | "monthly" | "usage_based";
 
-export type SourceOption = {
-  id: string;
-  type: string;
-  name: string;
-};
-
+export type SourceOption = { id: string; type: string; name: string };
 export type EntityOption = {
   entityUuid: string;
   name: string;
@@ -34,23 +28,28 @@ export type EntityOption = {
   sourceId: string;
 };
 
+type InputField = {
+  name: string;
+  type: string;
+  label: string;
+  required: boolean;
+  placeholder?: string;
+};
+
 export type WizardState = {
-  // Step 1
   selectedSourceId: string | null;
   selectedEntityUuid: string | null;
   selectedPlatform: string | null;
-  // Step 2
   surfaceType: SurfaceType;
-  // Step 3
   accessType: AccessType;
   pricingType: PricingType;
   priceCents: number;
-  // Step 4
+  slug: string;
   name: string;
   description: string;
   clientId: string;
-  // Step 5 (result)
-  createdOffering: any | null;
+  inputSchema: InputField[];
+  createdOffering: { id?: string; name?: string } | null;
   magicLink: string | null;
   productUrl: string | null;
 };
@@ -63,28 +62,30 @@ const INITIAL_STATE: WizardState = {
   accessType: "magic_link",
   pricingType: "free",
   priceCents: 0,
+  slug: "",
   name: "",
   description: "",
   clientId: "",
+  inputSchema: [],
   createdOffering: null,
   magicLink: null,
   productUrl: null,
 };
 
 const STEPS = [
-  { number: 1, label: "Choose Workflow" },
-  { number: 2, label: "Client View" },
-  { number: 3, label: "Access" },
-  { number: 4, label: "Configure" },
-  { number: 5, label: "Launch" },
+  { number: 1, label: "Select Agent" },
+  { number: 2, label: "Choose Type" },
+  { number: 3, label: "Preview" },
+  { number: 4, label: "Name & Price" },
+  { number: 5, label: "Share" },
 ];
 
 // ── Component ───────────────────────────────────────────────
 
 export default function CreateOfferingPage() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const prefilledClientId = searchParams.get("client_id") ?? "";
+
   const [currentStep, setCurrentStep] = useState(1);
   const [wizard, setWizard] = useState<WizardState>({
     ...INITIAL_STATE,
@@ -93,12 +94,20 @@ export default function CreateOfferingPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  // Data loaded on mount
+  // Data
   const [sources, setSources] = useState<SourceOption[]>([]);
   const [entities, setEntities] = useState<EntityOption[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
+  const [stripeConnected, setStripeConnected] = useState(false);
+  const [schemaLoading, setSchemaLoading] = useState(false);
 
-  // ── Load sources + entities on mount ──────────────────────
+  const update = useCallback(
+    (partial: Partial<WizardState>) =>
+      setWizard((prev) => ({ ...prev, ...partial })),
+    []
+  );
+
+  // ── Load sources + entities + Stripe status on mount ──────
   useEffect(() => {
     async function load() {
       try {
@@ -108,16 +117,14 @@ export default function CreateOfferingPage() {
         } = await supabase.auth.getSession();
         if (!session) return;
 
-        // Get tenant
         const { data: membership } = await supabase
           .from("memberships")
           .select("tenant_id")
           .eq("user_id", session.user.id)
           .single();
-
         if (!membership) return;
 
-        // Fetch sources
+        // Sources
         const { data: srcData } = await supabase
           .from("sources")
           .select("id, type, name")
@@ -126,19 +133,19 @@ export default function CreateOfferingPage() {
           .order("created_at", { ascending: false });
 
         setSources(
-          (srcData ?? []).map((s: any) => ({
+          (srcData ?? []).map((s: { id: string; type: string; name: string | null }) => ({
             id: s.id,
             type: s.type,
             name: s.name || s.type,
           }))
         );
 
-        // Fetch indexed entities
+        // Entities
         const res = await fetch("/api/indexed-entities/list");
         const json = await res.json();
         if (json.ok && json.entities) {
           setEntities(
-            json.entities.map((e: any) => ({
+            json.entities.map((e: { entityUuid: string; name: string; platform: string; kind: string; externalId: string; sourceId: string }) => ({
               entityUuid: e.entityUuid,
               name: e.name,
               platform: e.platform,
@@ -148,8 +155,13 @@ export default function CreateOfferingPage() {
             }))
           );
         }
+
+        // Stripe status
+        const stripeRes = await fetch("/api/stripe/connect/status");
+        const stripeJson = await stripeRes.json();
+        setStripeConnected(!!stripeJson.charges_enabled);
       } catch (err) {
-        console.error("[wizard] Failed to load data:", err);
+        console.error("[wizard] Load error:", err);
       } finally {
         setDataLoading(false);
       }
@@ -157,12 +169,56 @@ export default function CreateOfferingPage() {
     load();
   }, []);
 
-  // ── Wizard state updater ──────────────────────────────────
-  const update = useCallback(
-    (partial: Partial<WizardState>) =>
-      setWizard((prev) => ({ ...prev, ...partial })),
-    []
-  );
+  // ── Auto-fill platform when source changes ────────────────
+  useEffect(() => {
+    if (wizard.selectedSourceId) {
+      const source = sources.find((s) => s.id === wizard.selectedSourceId);
+      if (source) update({ selectedPlatform: source.type });
+    }
+  }, [wizard.selectedSourceId, sources, update]);
+
+  // ── Fetch input schema when entering Step 3 with product type ──
+  useEffect(() => {
+    if (
+      currentStep === 3 &&
+      (wizard.surfaceType === "runner" || wizard.surfaceType === "both") &&
+      wizard.selectedEntityUuid &&
+      wizard.inputSchema.length === 0
+    ) {
+      setSchemaLoading(true);
+      fetch(`/api/entities/${wizard.selectedEntityUuid}/schema`)
+        .then((r) => r.json())
+        .then((json) => {
+          if (json.ok && json.inputSchema) {
+            update({ inputSchema: json.inputSchema });
+          }
+        })
+        .catch(() => {})
+        .finally(() => setSchemaLoading(false));
+    }
+  }, [
+    currentStep,
+    wizard.surfaceType,
+    wizard.selectedEntityUuid,
+    wizard.inputSchema.length,
+    update,
+  ]);
+
+  // ── Auto-fill name when source + entity selected ──────────
+  useEffect(() => {
+    if (wizard.selectedEntityUuid && !wizard.name) {
+      const entity = entities.find((e) => e.entityUuid === wizard.selectedEntityUuid);
+      if (entity) {
+        const suffix =
+          wizard.surfaceType === "runner"
+            ? ""
+            : wizard.surfaceType === "both"
+              ? ""
+              : " Dashboard";
+        update({ name: `${entity.name}${suffix}` });
+      }
+    }
+  }, [wizard.selectedEntityUuid, wizard.surfaceType, wizard.name, entities, update]);
 
   // ── Step validation ───────────────────────────────────────
   const canProceed = useCallback((): boolean => {
@@ -172,7 +228,7 @@ export default function CreateOfferingPage() {
       case 2:
         return !!wizard.surfaceType;
       case 3:
-        return !!wizard.accessType;
+        return true; // Preview is informational
       case 4:
         return wizard.name.trim().length >= 3;
       default:
@@ -187,17 +243,34 @@ export default function CreateOfferingPage() {
     setSubmitError(null);
 
     try {
-      const body = {
+      const body: Record<string, unknown> = {
         name: wizard.name.trim(),
         sourceId: wizard.selectedSourceId,
         entityId: wizard.selectedEntityUuid,
         surfaceType: wizard.surfaceType,
-        accessType: wizard.accessType,
-        pricingType: wizard.pricingType,
-        priceCents: wizard.priceCents,
+        accessType: stripeConnected ? wizard.accessType : "magic_link",
+        pricingType:
+          stripeConnected && wizard.accessType === "stripe_gate"
+            ? wizard.pricingType
+            : "free",
+        priceCents:
+          stripeConnected && wizard.accessType === "stripe_gate"
+            ? wizard.priceCents
+            : 0,
         clientId: wizard.clientId.trim() || undefined,
         description: wizard.description.trim() || undefined,
       };
+
+      // Add product-specific fields when runner or both
+      if (wizard.surfaceType === "runner" || wizard.surfaceType === "both") {
+        body.inputSchema = wizard.inputSchema;
+        body.executionConfig = {};
+      }
+
+      // Add slug for paid products
+      if (wizard.accessType === "stripe_gate" && wizard.slug) {
+        body.slug = wizard.slug;
+      }
 
       const res = await fetch("/api/offerings/create", {
         method: "POST",
@@ -208,7 +281,7 @@ export default function CreateOfferingPage() {
       const json = await res.json();
 
       if (!res.ok || !json.ok) {
-        setSubmitError(json.error || "Failed to create offering");
+        setSubmitError(json.error || "Failed to create portal");
         setSubmitting(false);
         return;
       }
@@ -219,16 +292,15 @@ export default function CreateOfferingPage() {
         productUrl: json.productUrl || null,
       });
       setCurrentStep(5);
-    } catch (err: any) {
-      setSubmitError(err.message || "Network error");
+    } catch (err: unknown) {
+      setSubmitError(err instanceof Error ? err.message : "Network error");
     } finally {
       setSubmitting(false);
     }
-  }, [wizard, submitting, update]);
+  }, [wizard, submitting, stripeConnected, update]);
 
   // ── Navigation ────────────────────────────────────────────
   const goBack = () => setCurrentStep((s) => Math.max(1, s - 1));
-
   const goNext = () => {
     if (currentStep === 4) {
       handleSubmit();
@@ -237,15 +309,28 @@ export default function CreateOfferingPage() {
     }
   };
 
-  // ── Auto-fill platform when source changes ────────────────
-  useEffect(() => {
-    if (wizard.selectedSourceId) {
-      const source = sources.find((s) => s.id === wizard.selectedSourceId);
-      if (source) {
-        update({ selectedPlatform: source.type });
-      }
-    }
-  }, [wizard.selectedSourceId, sources, update]);
+  // ── Batch flow: Create Another (Same Config) ─────────────
+  const handleCreateAnother = () => {
+    setWizard((prev) => ({
+      ...INITIAL_STATE,
+      // Preserve agent + type + pricing config
+      selectedSourceId: prev.selectedSourceId,
+      selectedEntityUuid: prev.selectedEntityUuid,
+      selectedPlatform: prev.selectedPlatform,
+      surfaceType: prev.surfaceType,
+      accessType: prev.accessType,
+      pricingType: prev.pricingType,
+      priceCents: prev.priceCents,
+      slug: "",
+      inputSchema: prev.inputSchema,
+    }));
+    setCurrentStep(4); // Jump to Name & Price — agent + type already chosen
+    setSubmitError(null);
+  };
+
+  // ── Entity name for preview ───────────────────────────────
+  const selectedEntity = entities.find((e) => e.entityUuid === wizard.selectedEntityUuid);
+  const entityName = selectedEntity?.name ?? "";
 
   // ── Render ────────────────────────────────────────────────
   return (
@@ -256,21 +341,21 @@ export default function CreateOfferingPage() {
         className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700"
       >
         <ArrowLeft className="h-4 w-4" />
-        Back to Offerings
+        Back to Client Portals
       </Link>
 
       {/* Title */}
-      <h1 className="mt-4 text-2xl font-bold text-gray-900">Create an Offering</h1>
+      <h1 className="mt-4 text-2xl font-bold text-gray-900">Create for Client</h1>
       <p className="mt-1 text-sm text-gray-500">
-        Deliver an analytics dashboard or workflow tool to your client in under 60 seconds.
+        Deliver a branded dashboard or sellable product to your client in under 60
+        seconds.
       </p>
 
-      {/* Progress Stepper — kept identical to Phase 2 shell */}
+      {/* Progress Stepper — EXACT SAME premium styling */}
       <div className="mt-8 flex items-center gap-1">
         {STEPS.map((step, i) => {
           const isComplete = currentStep > step.number;
           const isCurrent = currentStep === step.number;
-
           return (
             <div key={step.number} className="flex flex-1 items-center gap-1">
               <div className="flex flex-col items-center">
@@ -336,25 +421,34 @@ export default function CreateOfferingPage() {
               />
             )}
             {currentStep === 3 && (
-              <WizardStepAccess
-                accessType={wizard.accessType}
-                pricingType={wizard.pricingType}
-                priceCents={wizard.priceCents}
-                onSelect={(accessType) => update({ accessType })}
-                onPricingChange={(pricingType, priceCents) =>
-                  update({ pricingType, priceCents })
-                }
+              <WizardStepPreview
+                surfaceType={wizard.surfaceType}
+                platform={wizard.selectedPlatform}
+                entityName={entityName}
+                entityUuid={wizard.selectedEntityUuid}
+                inputSchema={wizard.inputSchema}
+                onSchemaLoaded={(fields) => update({ inputSchema: fields })}
+                schemaLoading={schemaLoading}
               />
             )}
             {currentStep === 4 && (
               <WizardStepConfigure
                 name={wizard.name}
                 description={wizard.description}
+                onChange={(field, value) => update({ [field]: value })}
                 clientId={wizard.clientId}
+                prefilledClientId={prefilledClientId}
+                accessType={wizard.accessType}
+                pricingType={wizard.pricingType}
+                priceCents={wizard.priceCents}
+                slug={wizard.slug}
+                onAccessChange={(accessType) => update({ accessType })}
+                onPricingChange={(pricingType, priceCents) =>
+                  update({ pricingType, priceCents })
+                }
+                stripeConnected={stripeConnected}
                 platform={wizard.selectedPlatform}
                 surfaceType={wizard.surfaceType}
-                accessType={wizard.accessType}
-                onChange={(field, value) => update({ [field]: value })}
                 submitError={submitError}
               />
             )}
@@ -364,13 +458,15 @@ export default function CreateOfferingPage() {
                 magicLink={wizard.magicLink}
                 productUrl={wizard.productUrl}
                 accessType={wizard.accessType}
+                surfaceType={wizard.surfaceType}
+                onCreateAnother={handleCreateAnother}
               />
             )}
           </>
         )}
       </div>
 
-      {/* Navigation Buttons — hidden on Step 5 (success) */}
+      {/* Navigation Buttons — hidden on Step 5 */}
       {currentStep < 5 && (
         <div className="mt-6 flex items-center justify-between">
           <button
@@ -388,7 +484,7 @@ export default function CreateOfferingPage() {
             {submitting
               ? "Creating…"
               : currentStep === 4
-                ? "Create Offering →"
+                ? "Create Portal →"
                 : "Continue →"}
           </button>
         </div>

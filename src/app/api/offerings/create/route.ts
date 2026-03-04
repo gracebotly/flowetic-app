@@ -129,6 +129,7 @@ export async function POST(request: Request) {
       execution_config: executionConfig || {},
       branding: {},
       status: 'active',
+      published_at: new Date().toISOString(),
       client_id: clientId?.trim() || null,
       expires_at: expiresAt || null,
     })

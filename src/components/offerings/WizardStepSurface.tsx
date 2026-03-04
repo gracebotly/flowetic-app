@@ -20,46 +20,45 @@ const SURFACE_OPTIONS: Array<{
 }> = [
   {
     value: "analytics",
-    title: "Live Analytics Dashboard",
+    title: "Analytics Dashboard",
     description:
-      "Your client sees a branded dashboard with real-time KPIs, charts, and activity tables. Perfect for proving ROI and retaining clients.",
+      "Your client gets a branded dashboard with real-time KPIs, charts, and activity tables. Perfect for proving ROI and keeping clients.",
     icon: BarChart3,
     color: "blue",
   },
   {
     value: "runner",
-    title: "Workflow Runner",
+    title: "SaaS Product",
     description:
-      "Your client fills out a form and triggers a workflow. They see results instantly. Great for lead gen, data enrichment, and report generation.",
+      "Wrap your workflow into a sellable product. Your client fills out a form, triggers the workflow, and sees results instantly.",
     icon: Play,
     color: "emerald",
   },
   {
     value: "both",
-    title: "Analytics + Workflow Runner",
+    title: "Dashboard + Product",
     description:
-      "Full package: your client can view live analytics AND run workflows on demand. The premium offering.",
+      "The full package — your client can view live analytics AND run workflows on demand. The premium tier.",
     icon: Layers,
     color: "violet",
   },
 ];
 
 export function WizardStepSurface({ surfaceType, platform, onSelect }: Props) {
-  // Auto-highlight based on platform
   const platformHint =
     platform === "vapi" || platform === "retell"
-      ? "Analytics dashboards work great for voice AI — show your client call volume, success rates, and costs."
+      ? "Voice agents → show call volume, success rates, and costs. Products → trigger outbound calls via form."
       : platform === "n8n" || platform === "make"
-        ? "Analytics dashboards are ideal for workflow platforms — show execution counts, success rates, and trends."
+        ? "Workflows → show execution counts, success rates, and trends. Products → trigger executions via form."
         : null;
 
   return (
     <div>
       <h2 className="text-lg font-semibold text-gray-900">
-        What should your client see?
+        What should your client get?
       </h2>
       <p className="mt-1 text-sm text-gray-500">
-        Choose what your client gets when they open the link you share.
+        Choose what your client sees when they open the link you share.
       </p>
       {platformHint && (
         <p className="mt-2 rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-700">

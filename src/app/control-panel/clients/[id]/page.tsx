@@ -10,6 +10,7 @@ import {
   Link2,
   Clock,
   Building2,
+  Plus,
 } from "lucide-react";
 import { HealthBar } from "@/components/clients/HealthBar";
 import { TagBadge } from "@/components/clients/TagBadge";
@@ -145,10 +146,19 @@ export default function ClientDetailPage() {
           )}
         </div>
 
-        <div className="w-40">
-          <div className="text-xs font-medium uppercase tracking-wider text-gray-400">Health Score</div>
-          <div className="mt-1">
-            <HealthBar score={client.health_score ?? 0} />
+        <div className="flex flex-col items-end gap-3">
+          <Link
+            href={`/control-panel/offerings/create?client_id=${id}`}
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
+          >
+            <Plus className="h-4 w-4" />
+            Create Portal for This Client
+          </Link>
+          <div className="w-40">
+            <div className="text-xs font-medium uppercase tracking-wider text-gray-400">Health Score</div>
+            <div className="mt-1">
+              <HealthBar score={client.health_score ?? 0} />
+            </div>
           </div>
         </div>
       </div>
