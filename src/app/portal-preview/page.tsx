@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo, type ComponentType } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { Eye, Loader2 } from "lucide-react";
 
 import { PortalShell } from "@/components/portals/PortalShell";
@@ -70,6 +70,17 @@ function generateSampleWorkflowData(): PreviewEvent[] {
 
 export default function PreviewPage() {
   const params = useSearchParams();
+  const router = useRouter();
+
+  // Auth guard — only agency users can see preview
+  useEffect(() => {
+    fetch("/api/settings/branding").then((res) => {
+      if (res.status === 401) {
+        router.replace("/login");
+      }
+    }).catch(() => {});
+  }, [router]);
+
   const sourceId = params.get("source_id");
   const platform = params.get("platform") || "vapi";
   const surface = params.get("surface") || "analytics";

@@ -229,7 +229,7 @@ export default function PortalPreview({
   const containerMaxWidth = 900;
   const deviceWidth = DEVICES[device].width;
   const scale = Math.min(1, containerMaxWidth / deviceWidth);
-  const scaledHeight = device === "mobile" ? 700 : device === "tablet" ? 800 : 650;
+  const scaledHeight = device === "mobile" ? 900 : device === "tablet" ? 1000 : 850;
 
   const handleRefresh = useCallback(() => {
     setRefreshKey((k) => k + 1);
@@ -266,7 +266,7 @@ export default function PortalPreview({
             const w = DEVICES[device].width;
             const h = device === "mobile" ? 812 : device === "tablet" ? 1024 : 900;
             window.open(
-              `/control-panel/offerings/preview?source_id=${sourceId}&platform=${platformType}&surface=${surfaceType}&entity_name=${encodeURIComponent(entityName)}`,
+              `/portal-preview?source_id=${sourceId}&platform=${platformType}&surface=${surfaceType}&entity_name=${encodeURIComponent(entityName)}`,
               "_blank",
               `width=${w},height=${h},menubar=no,toolbar=no,location=no,status=no`
             );
@@ -354,10 +354,12 @@ export default function PortalPreview({
             <div
               style={{
                 width: deviceWidth,
-                height: scaledHeight,
+                minHeight: scaledHeight,
+                maxHeight: 1200,
                 transform: `scale(${scale})`,
                 transformOrigin: "top left",
-                overflow: "hidden",
+                overflowY: "auto",
+                overflowX: "hidden",
               }}
             >
               {showAnalytics && activeTab === "portal" && (
