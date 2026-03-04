@@ -11,7 +11,6 @@ import { ROISummarySkeleton } from "@/components/portals/skeletons/ROISummarySke
 import { CombinedOverviewSkeleton } from "@/components/portals/skeletons/CombinedOverviewSkeleton";
 import { getSkeletonForPlatform } from "@/lib/portals/platformToSkeleton";
 import { transformDataForSkeleton, type SkeletonData, type PortalEvent } from "@/lib/portals/transformData";
-import { FormWizard } from "@/components/products/FormWizard";
 
 type PreviewEvent = PortalEvent;
 type SkeletonProps = {
@@ -147,13 +146,11 @@ export default function PreviewPage() {
 
       {showAnalytics && (
         <PortalShell
-          branding={{
-            logo_url: branding?.logo_url || null,
-            primary_color: branding?.primary_color || "#3b82f6",
-            secondary_color: branding?.secondary_color || "#1e40af",
-            welcome_message: branding?.welcome_message || "Welcome to your dashboard",
-            brand_footer: branding?.brand_footer || branding?.tenant_name || "",
-          }}
+          portalName={params.get("entity_name") || "Your Portal"}
+          tenantName={branding?.tenant_name || "Your Agency"}
+          logoUrl={branding?.logo_url || null}
+          primaryColor={branding?.primary_color || "#3b82f6"}
+          secondaryColor={branding?.secondary_color || "#1e40af"}
         >
           {SkeletonComponent && transformedData ? (
             <SkeletonComponent
@@ -175,26 +172,25 @@ export default function PreviewPage() {
         <div className="mx-auto max-w-2xl p-8">
           <h1 className="text-2xl font-bold text-gray-900">Product Form Preview</h1>
           <p className="mb-8 mt-2 text-sm text-gray-600">This is the form your customers will fill out.</p>
-          <FormWizard
-            fields={[
-              {
-                name: "phone_number",
-                type: "phone",
-                label: "Phone Number",
-                required: true,
-                placeholder: "+1 (555) 123-4567",
-              },
-              {
-                name: "customer_name",
-                type: "text",
-                label: "Name",
-                required: true,
-                placeholder: "Full name",
-              },
-            ]}
-            onSubmit={() => {}}
-            isPreview={true}
-          />
+          <div className="space-y-4">
+            {[
+              { label: "Phone Number", type: "PHONE", required: true },
+              { label: "Customer Name", type: "TEXT", required: true },
+            ].map((field) => (
+              <div key={field.label} className="rounded-lg border border-gray-200 bg-white px-4 py-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-sm font-medium text-gray-900">{field.label}</span>
+                    <span className="ml-2 text-[10px] uppercase tracking-wide text-gray-400">{field.type}</span>
+                  </div>
+                  {field.required && (
+                    <span className="text-[10px] font-medium text-red-400">Required</span>
+                  )}
+                </div>
+              </div>
+            ))}
+            <p className="text-xs text-gray-400">Your customers will fill out a step-by-step form.</p>
+          </div>
         </div>
       )}
     </div>

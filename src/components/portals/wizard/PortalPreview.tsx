@@ -23,7 +23,6 @@ import { CombinedOverviewSkeleton } from "@/components/portals/skeletons/Combine
 import { getSkeletonForPlatform } from "@/lib/portals/platformToSkeleton";
 import { transformDataForSkeleton, type SkeletonData, type PortalEvent } from "@/lib/portals/transformData";
 
-import { FormWizard } from "@/components/products/FormWizard";
 import type { InputField } from "@/lib/products/types";
 
 type DeviceMode = "desktop" | "tablet" | "mobile";
@@ -267,7 +266,7 @@ export default function PortalPreview({
             const w = DEVICES[device].width;
             const h = device === "mobile" ? 812 : device === "tablet" ? 1024 : 900;
             window.open(
-              `/control-panel/offerings/preview?source_id=${sourceId}&platform=${platformType}&surface=${surfaceType}`,
+              `/control-panel/offerings/preview?source_id=${sourceId}&platform=${platformType}&surface=${surfaceType}&entity_name=${encodeURIComponent(entityName)}`,
               "_blank",
               `width=${w},height=${h},menubar=no,toolbar=no,location=no,status=no`
             );
@@ -363,13 +362,11 @@ export default function PortalPreview({
             >
               {showAnalytics && activeTab === "portal" && (
                 <PortalShell
-                  branding={{
-                    logo_url: branding?.logo_url || null,
-                    primary_color: branding?.primary_color || "#3b82f6",
-                    secondary_color: branding?.secondary_color || "#1e40af",
-                    welcome_message: branding?.welcome_message || `Welcome to your ${entityName} dashboard`,
-                    brand_footer: branding?.brand_footer || branding?.tenant_name || "",
-                  }}
+                  portalName={entityName || "Your Portal"}
+                  tenantName={branding?.tenant_name || "Your Agency"}
+                  logoUrl={branding?.logo_url || null}
+                  primaryColor={branding?.primary_color || "#3b82f6"}
+                  secondaryColor={branding?.secondary_color || "#1e40af"}
                 >
                   {SkeletonComponent && transformedData ? (
                     <SkeletonComponent
@@ -411,13 +408,23 @@ export default function PortalPreview({
                     </div>
 
                     {inputSchema && inputSchema.length > 0 ? (
-                      <FormWizard
-                        fields={inputSchema}
-                        onSubmit={() => {
-                          return;
-                        }}
-                        isPreview={true}
-                      />
+                      <div className="space-y-3">
+                        {(inputSchema ?? []).map((field, i) => (
+                          <div key={field.name} className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-2.5">
+                            <span className="flex h-6 w-6 items-center justify-center rounded-md bg-gray-100 text-[10px] font-bold text-gray-500">
+                              {i + 1}
+                            </span>
+                            <div className="flex-1">
+                              <span className="text-sm font-medium text-gray-900">{field.label}</span>
+                              <span className="ml-2 text-[10px] uppercase tracking-wide text-gray-400">{field.type}</span>
+                            </div>
+                            {field.required && (
+                              <span className="text-[10px] font-medium text-red-400">Required</span>
+                            )}
+                          </div>
+                        ))}
+                        <p className="text-xs text-gray-400">Your customers will fill out a step-by-step form.</p>
+                      </div>
                     ) : (
                       <div className="rounded-xl border border-dashed border-gray-300 p-8 text-center">
                         <Info className="mx-auto h-8 w-8 text-gray-400" />
