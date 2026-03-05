@@ -225,22 +225,32 @@ export function transformVoiceData(events: PortalEvent[], platform: 'vapi' | 're
     .map(([date, b]) => ({ date, count: b.count, successCount: b.success, failCount: b.fail }))
     .sort((a, b) => a.date.localeCompare(b.date));
 
-  // ── Recent Calls Table ──
+  // ── Recent Calls Table — pass ALL state fields for enriched display ──
   const recentRows: TableRow[] = currentEvents
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
     .slice(0, 15)
-    .map(e => ({
-      id: String(getStateField(e, fields.callId) || e.id),
-      assistant: String(getStateField(e, fields.assistantName) || 'Unknown'),
-      status: String(getStateField(e, fields.status) || 'unknown'),
-      duration: formatDuration(toNumber(getStateField(e, fields.durationMs))),
-      cost: formatCost(toNumber(getStateField(e, fields.cost))),
-      endedReason: String(getStateField(e, fields.endedReason) || '—'),
-      sentiment: String(getStateField(e, fields.sentiment) || '—'),
-      time: new Date(e.timestamp).toLocaleString(),
-      transcript: String(getStateField(e, fields.transcript) || ''),
-      callSummary: String(getStateField(e, fields.callSummary) || ''),
-    }));
+    .map(e => {
+      const base: TableRow = {
+        id: String(getStateField(e, fields.callId) || e.id),
+        assistant: String(getStateField(e, fields.assistantName) || 'Unknown'),
+        status: String(getStateField(e, fields.status) || 'unknown'),
+        duration: formatDuration(toNumber(getStateField(e, fields.durationMs))),
+        cost: formatCost(toNumber(getStateField(e, fields.cost))),
+        endedReason: String(getStateField(e, fields.endedReason) || '—'),
+        sentiment: String(getStateField(e, fields.sentiment) || '—'),
+        time: new Date(e.timestamp).toLocaleString(),
+        transcript: String(getStateField(e, fields.transcript) || ''),
+        callSummary: String(getStateField(e, fields.callSummary) || ''),
+      };
+      if (e.state && typeof e.state === 'object') {
+        for (const [key, value] of Object.entries(e.state)) {
+          if (!(key in base) && value !== undefined && value !== null) {
+            base[key] = value;
+          }
+        }
+      }
+      return base;
+    });
 
   // ── Ended Reason Breakdown (Premium) ──
   const endedReasonMap = new Map<string, number>();
@@ -385,15 +395,25 @@ export function transformWorkflowData(events: PortalEvent[], platform: 'n8n' | '
     .map(([date, b]) => ({ date, count: b.count, successCount: b.success, failCount: b.fail }))
     .sort((a, b) => a.date.localeCompare(b.date));
 
-  // Recent table
-  const recentRows: TableRow[] = sortedByTime.slice(0, 15).map(e => ({
-    id: String(getStateField(e, fields.executionId) || e.id),
-    workflow: String(getStateField(e, fields.workflowName) || 'Unknown'),
-    status: String(getStateField(e, fields.status) || 'unknown'),
-    duration: formatDuration(toNumber(getStateField(e, fields.durationMs))),
-    error: String(getStateField(e, fields.errorMessage) || '—'),
-    time: new Date(e.timestamp).toLocaleString(),
-  }));
+  // Recent table — pass ALL state fields so skeleton can show enriched data
+  const recentRows: TableRow[] = sortedByTime.slice(0, 15).map(e => {
+    const base: TableRow = {
+      id: String(getStateField(e, fields.executionId) || e.id),
+      workflow: String(getStateField(e, fields.workflowName) || 'Unknown'),
+      status: String(getStateField(e, fields.status) || 'unknown'),
+      duration: formatDuration(toNumber(getStateField(e, fields.durationMs))),
+      error: String(getStateField(e, fields.errorMessage) || '—'),
+      time: new Date(e.timestamp).toLocaleString(),
+    };
+    if (e.state && typeof e.state === 'object') {
+      for (const [key, value] of Object.entries(e.state)) {
+        if (!(key in base) && value !== undefined && value !== null) {
+          base[key] = value;
+        }
+      }
+    }
+    return base;
+  });
 
   // Workflow breakdown
   const wfMap = new Map<string, { count: number; success: number; totalDuration: number }>();

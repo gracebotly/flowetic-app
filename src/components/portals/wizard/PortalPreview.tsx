@@ -71,32 +71,69 @@ const SKELETON_COMPONENTS: Record<string, ComponentType<SkeletonProps>> = {
 
 function generateSampleVoiceData(): PreviewEvent[] {
   const now = Date.now();
-  return Array.from({ length: 24 }, (_, i) => ({
-    id: `sample-${i}`,
-    type: "call.completed",
-    name: "call.completed",
-    value: Math.random() > 0.15 ? 1 : 0,
-    unit: "count",
-    text: `Sample call ${i + 1}`,
-    state: { status: Math.random() > 0.15 ? "completed" : "failed", duration_seconds: Math.floor(45 + Math.random() * 300) },
-    labels: { platform: "vapi" },
-    timestamp: new Date(now - i * 3600000).toISOString(),
-  }));
+  const assistants = ["Sales Assistant", "Support Agent", "Booking Bot"];
+  const endedReasons = ["customer-ended-call", "assistant-ended-call", "silence-timed-out"];
+  return Array.from({ length: 24 }, (_, i) => {
+    const isSuccess = Math.random() > 0.15;
+    const durationMs = Math.floor(45000 + Math.random() * 300000);
+    return {
+      id: `sample-${i}`,
+      type: "call.completed",
+      name: "call.completed",
+      value: isSuccess ? 1 : 0,
+      unit: "count",
+      text: `Sample call ${i + 1}`,
+      state: {
+        status: isSuccess ? "completed" : "failed",
+        duration_ms: durationMs,
+        workflow_name: assistants[i % assistants.length],
+        workflow_id: `asst-${(i % assistants.length) + 1}`,
+        execution_id: `call-sample-${i}`,
+        started_at: new Date(now - i * 3600000).toISOString(),
+        ended_at: new Date(now - i * 3600000 + durationMs).toISOString(),
+        ended_reason: endedReasons[i % endedReasons.length],
+        cost: Number((0.03 + Math.random() * 0.15).toFixed(4)),
+        platform: "vapi",
+      },
+      labels: { platform: "vapi" },
+      timestamp: new Date(now - i * 3600000).toISOString(),
+    };
+  });
 }
 
 function generateSampleWorkflowData(): PreviewEvent[] {
   const now = Date.now();
-  return Array.from({ length: 30 }, (_, i) => ({
-    id: `sample-${i}`,
-    type: "execution.completed",
-    name: "execution.completed",
-    value: Math.random() > 0.08 ? 1 : 0,
-    unit: "count",
-    text: `Execution ${i + 1}`,
-    state: { status: Math.random() > 0.08 ? "success" : "error", duration_ms: Math.floor(800 + Math.random() * 4000) },
-    labels: { platform: "make" },
-    timestamp: new Date(now - i * 1800000).toISOString(),
-  }));
+  const sampleNames = [
+    "Lead Enrichment Pipeline",
+    "Daily Report Generator",
+    "Slack Notification Flow",
+    "CRM Sync Workflow",
+    "Invoice Processor",
+  ];
+  return Array.from({ length: 30 }, (_, i) => {
+    const isSuccess = Math.random() > 0.08;
+    return {
+      id: `sample-${i}`,
+      type: "workflow_execution",
+      name: "workflow_execution",
+      value: isSuccess ? 1 : 0,
+      unit: "count",
+      text: `Execution ${i + 1}`,
+      state: {
+        status: isSuccess ? "success" : "error",
+        duration_ms: Math.floor(800 + Math.random() * 4000),
+        workflow_name: sampleNames[i % sampleNames.length],
+        workflow_id: `wf-${(i % sampleNames.length) + 1}`,
+        execution_id: `exec-sample-${i}`,
+        started_at: new Date(now - i * 1800000).toISOString(),
+        ended_at: new Date(now - i * 1800000 + 2000).toISOString(),
+        error_message: isSuccess ? undefined : "Sample: timeout after 30s",
+        platform: "make",
+      },
+      labels: { platform: "make", workflow_name: sampleNames[i % sampleNames.length] },
+      timestamp: new Date(now - i * 1800000).toISOString(),
+    };
+  });
 }
 
 function BrowserChrome({
@@ -228,7 +265,10 @@ export default function PortalPreview({
 
   const containerMaxWidth = device === "desktop" ? 1280 : device === "tablet" ? 900 : 900;
   const deviceWidth = DEVICES[device].width;
-  const scale = device === "mobile" ? Math.min(1, 900 / deviceWidth) : 1;
+  const WIZARD_USABLE_WIDTH = 700;
+  const scale = deviceWidth > WIZARD_USABLE_WIDTH
+    ? WIZARD_USABLE_WIDTH / deviceWidth
+    : 1;
   const scaledHeight = device === "mobile" ? 900 : device === "tablet" ? 1100 : 1000;
 
   const handleRefresh = useCallback(() => {
@@ -342,13 +382,13 @@ export default function PortalPreview({
         <motion.div
           layout
           transition={{ type: "spring", stiffness: 300, damping: 30 }}
-          style={{ width: Math.min(deviceWidth, containerMaxWidth) }}
+          style={{ width: Math.min(deviceWidth * scale, containerMaxWidth) }}
         >
           <BrowserChrome mode={device} entityName={entityName}>
             <div
               style={{
                 width: deviceWidth,
-                minHeight: scaledHeight,
+                height: scaledHeight,
                 maxHeight: 1200,
                 transform: `scale(${scale})`,
                 transformOrigin: "top left",
