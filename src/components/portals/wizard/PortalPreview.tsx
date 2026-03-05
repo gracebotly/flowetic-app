@@ -226,10 +226,10 @@ export default function PortalPreview({
     }
   }, [events, skeletonId, platformType]);
 
-  const containerMaxWidth = 900;
+  const containerMaxWidth = device === "desktop" ? 1280 : device === "tablet" ? 900 : 900;
   const deviceWidth = DEVICES[device].width;
-  const scale = Math.min(1, containerMaxWidth / deviceWidth);
-  const scaledHeight = device === "mobile" ? 900 : device === "tablet" ? 1000 : 850;
+  const scale = device === "mobile" ? Math.min(1, 900 / deviceWidth) : 1;
+  const scaledHeight = device === "mobile" ? 900 : device === "tablet" ? 1100 : 1000;
 
   const handleRefresh = useCallback(() => {
     setRefreshKey((k) => k + 1);
