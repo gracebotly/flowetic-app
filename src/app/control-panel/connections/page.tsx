@@ -16,6 +16,7 @@ import {
   X,
   Cpu,
   Copy,
+  RefreshCw,
 } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
@@ -315,6 +316,9 @@ export default function ConnectionsPage() {
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const [openCredentialMenuId, setOpenCredentialMenuId] = useState<string | null>(null);
   const [manageIndexedLoading, setManageIndexedLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncingSourceId, setSyncingSourceId] = useState<string | null>(null);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
   // Connect modal state
   const [connectOpen, setConnectOpen] = useState(false);
@@ -475,6 +479,74 @@ export default function ConnectionsPage() {
 
     setIndexedEntities((json.entities as IndexedEntityRow[]) ?? []);
     setIndexedLoading(false);
+  }
+
+  async function syncSingleSource(sourceId: string) {
+    setSyncingSourceId(sourceId);
+    setSyncMessage(null);
+    try {
+      const res = await fetch("/api/connections/refresh-events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceId }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json.ok) {
+        setSyncMessage(json.message || `Synced ${json.refreshed ?? 0} events.`);
+      } else {
+        setSyncMessage(json.message || "Sync failed.");
+      }
+    } catch (e: any) {
+      setSyncMessage(e?.message || "Sync failed.");
+    }
+    setSyncingSourceId(null);
+    // Refresh the entity list so last_seen_at updates are visible
+    await refreshIndexedEntities();
+  }
+
+  async function syncAllSources() {
+    setSyncing(true);
+    setSyncMessage(null);
+    let totalRefreshed = 0;
+    let totalSources = 0;
+    let lastError: string | null = null;
+
+    for (const cred of credentials) {
+      try {
+        const res = await fetch("/api/connections/refresh-events", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sourceId: cred.id }),
+        });
+        const json = await res.json().catch(() => ({}));
+        if (res.ok && json.ok) {
+          totalRefreshed += json.refreshed ?? 0;
+          totalSources++;
+        } else {
+          // Some platforms may not support refresh yet (only n8n currently)
+          // Don't treat as fatal — just skip
+          if (json.code !== "UNSUPPORTED_PLATFORM") {
+            lastError = json.message || "Sync failed for a connection.";
+          }
+        }
+      } catch (e: any) {
+        lastError = e?.message || "Sync failed.";
+      }
+    }
+
+    if (totalSources > 0) {
+      setSyncMessage(
+        `Synced ${totalRefreshed} events across ${totalSources} connection${totalSources === 1 ? "" : "s"}.`
+      );
+    } else if (lastError) {
+      setSyncMessage(lastError);
+    } else {
+      setSyncMessage("No connections support event sync yet.");
+    }
+
+    setSyncing(false);
+    // Refresh the entity list so last_seen_at updates are visible
+    await refreshIndexedEntities();
   }
 
   async function getIndexedExternalIdsForSource(sourceId: string) {
@@ -1273,14 +1345,39 @@ export default function ConnectionsPage() {
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={openConnect}
-          className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600"
-        >
-          Connect Platform
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={syncAllSources}
+            disabled={syncing || credentials.length === 0}
+            className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition-colors duration-150 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <RefreshCw className={`h-4 w-4 ${syncing ? "animate-spin" : ""}`} />
+            {syncing ? "Syncing…" : "Sync All"}
+          </button>
+          <button
+            type="button"
+            onClick={openConnect}
+            className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600"
+          >
+            Connect Platform
+          </button>
+        </div>
       </div>
+
+      {/* Sync status message */}
+      {syncMessage && (
+        <div className="mt-4 flex items-center justify-between rounded-lg border border-blue-100 bg-blue-50/60 px-4 py-2.5">
+          <span className="text-sm text-blue-800">{syncMessage}</span>
+          <button
+            onClick={() => setSyncMessage(null)}
+            className="ml-4 rounded p-0.5 text-blue-400 transition-colors duration-150 hover:text-blue-600 cursor-pointer"
+            aria-label="Dismiss"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="mb-6 border-b border-gray-200">
@@ -1632,6 +1729,20 @@ export default function ConnectionsPage() {
               >
                 <Edit className="h-4 w-4" />
                 Edit
+              </button>
+
+              <button
+                type="button"
+                disabled={syncingSourceId === openCred.id}
+                onClick={async () => {
+                  setOpenCredentialMenuId(null);
+                  setMenuPos(null);
+                  await syncSingleSource(openCred.id);
+                }}
+                className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <RefreshCw className={`h-4 w-4 ${syncingSourceId === openCred.id ? "animate-spin" : ""}`} />
+                {syncingSourceId === openCred.id ? "Syncing…" : "Sync Events"}
               </button>
 
               {/* Show for all platforms that support inventory management */}

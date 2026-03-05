@@ -1,20 +1,26 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import {
   Search,
   Check,
   Phone,
   GitBranch,
-  Bot,
   Loader2,
   ChevronRight,
+  Cpu,
+  Zap,
+  Workflow,
+  X,
 } from "lucide-react";
-import { Badge } from "@tremor/react";
 import { motion, AnimatePresence } from "framer-motion";
+import {
+  PlatformBadge,
+  getPlatformLabel,
+} from "@/components/shared/PlatformBadge";
 
 // ────────────────────────────────────────────
-// Types
+// Types (UNCHANGED — parent depends on these)
 // ────────────────────────────────────────────
 
 export interface EntityItem {
@@ -57,18 +63,13 @@ const PLATFORM_FILTERS = [
   { value: "make", label: "Make" },
 ] as const;
 
-const PLATFORM_COLORS: Record<string, string> = {
-  vapi: "blue",
-  retell: "red",
-  n8n: "orange",
-  make: "violet",
-};
-
 const KIND_ICONS: Record<string, typeof Phone> = {
   assistant: Phone,
   agent: Phone,
-  workflow: GitBranch,
-  scenario: Bot,
+  workflow: Workflow,
+  scenario: Zap,
+  flow: GitBranch,
+  squad: Cpu,
 };
 
 // ────────────────────────────────────────────
@@ -86,21 +87,15 @@ function formatLastSeen(dateStr: string | null): string {
   return `${Math.floor(days / 30)}mo ago`;
 }
 
-function shortId(externalId: string): string {
-  if (!externalId) return "";
-  return externalId.slice(-6);
-}
-
 function cleanDisplayName(name: string): string {
-  // Strip leading number prefixes like "1-", "23-", "100-"
   return name.replace(/^\d+-/, "").replace(/[_-]/g, " ").trim();
 }
 
 // ────────────────────────────────────────────
-// EntityCard
+// EntityRow — vertical list row (replaces EntityCard)
 // ────────────────────────────────────────────
 
-function EntityCard({
+function EntityRow({
   entity,
   isSelected,
   onToggle,
@@ -109,8 +104,7 @@ function EntityCard({
   isSelected: boolean;
   onToggle: () => void;
 }) {
-  const Icon = KIND_ICONS[entity.entity_kind] || GitBranch;
-  const platformColor = PLATFORM_COLORS[entity.platform_type] || "gray";
+  const KindIcon = KIND_ICONS[entity.entity_kind] ?? GitBranch;
 
   return (
     <div
@@ -125,52 +119,53 @@ function EntityCard({
         }
       }}
       className={`
-        group relative cursor-pointer rounded-xl border p-4
-        transition-all duration-200
+        group flex cursor-pointer items-center gap-3 px-4 py-3
+        transition-colors duration-150
         ${
           isSelected
-            ? "border-tremor-brand bg-tremor-brand/5 dark:border-dark-tremor-brand dark:bg-dark-tremor-brand/10 ring-1 ring-tremor-brand/20"
-            : "border-tremor-border dark:border-dark-tremor-border hover:border-tremor-brand/50 dark:hover:border-dark-tremor-brand/50 hover:shadow-sm"
+            ? "bg-blue-50/70 border-l-2 border-l-blue-500"
+            : "border-l-2 border-l-transparent hover:bg-gray-50"
         }
       `}
     >
-      {/* Checkbox indicator */}
+      {/* Checkbox */}
       <div
         className={`
-          absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded
-          transition-all duration-200
+          flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center rounded
+          transition-all duration-150
           ${
             isSelected
-              ? "bg-tremor-brand text-white"
-              : "border border-tremor-border dark:border-dark-tremor-border group-hover:border-tremor-brand/50"
+              ? "bg-blue-600 text-white"
+              : "border border-gray-300 bg-white group-hover:border-gray-400"
           }
         `}
       >
         {isSelected && <Check className="h-3 w-3" strokeWidth={3} />}
       </div>
 
-      {/* Platform badge + Kind */}
-      <div className="flex items-center gap-2 pr-6">
-        <Badge size="xs" color={platformColor}>
-          {entity.source_name}
-        </Badge>
-        <span className="text-[11px] font-medium uppercase tracking-wide text-tremor-content dark:text-dark-tremor-content">
-          {entity.entity_kind}
+      {/* Platform color badge */}
+      <PlatformBadge platform={entity.platform_type} size={32} />
+
+      {/* Name + meta */}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="truncate text-sm font-semibold text-gray-900">
+            {cleanDisplayName(entity.display_name)}
+          </span>
+        </div>
+        <div className="mt-0.5 flex items-center gap-2 text-xs text-gray-500">
+          <KindIcon className="h-3 w-3 flex-shrink-0" />
+          <span className="capitalize">{entity.entity_kind}</span>
+          <span className="text-gray-300">·</span>
+          <span>{getPlatformLabel(entity.platform_type)}</span>
+        </div>
+      </div>
+
+      {/* Last seen — hidden on small screens */}
+      <div className="hidden flex-shrink-0 text-right sm:block">
+        <span className="text-xs text-gray-400">
+          {formatLastSeen(entity.last_seen_at)}
         </span>
-      </div>
-
-      {/* Name */}
-      <div className="mt-2.5 flex items-start gap-2">
-        <Icon className="mt-0.5 h-4 w-4 flex-shrink-0 text-tremor-content dark:text-dark-tremor-content" />
-        <h3 className="text-sm font-semibold leading-tight text-tremor-content-strong dark:text-dark-tremor-content-strong line-clamp-2">
-          {cleanDisplayName(entity.display_name)}
-        </h3>
-      </div>
-
-      {/* Meta row */}
-      <div className="mt-3 flex items-center justify-between text-[11px] text-tremor-content dark:text-dark-tremor-content">
-        <span className="font-mono opacity-60">ID: {shortId(entity.external_id)}</span>
-        <span>{formatLastSeen(entity.last_seen_at)}</span>
       </div>
     </div>
   );
@@ -189,6 +184,14 @@ export default function AgentPicker({
 }: AgentPickerProps) {
   const [search, setSearch] = useState("");
   const [platformFilter, setPlatformFilter] = useState("all");
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  // Auto-focus search when data loads
+  useEffect(() => {
+    if (!loading && entities.length > 0) {
+      searchRef.current?.focus();
+    }
+  }, [loading, entities.length]);
 
   // ── Filter entities ──
   const filtered = useMemo(() => {
@@ -201,10 +204,7 @@ export default function AgentPicker({
     if (search.trim()) {
       const q = search.toLowerCase();
       result = result.filter(
-        (e) =>
-          e.display_name.toLowerCase().includes(q) ||
-          e.external_id.toLowerCase().includes(q) ||
-          e.entity_kind.toLowerCase().includes(q)
+        (e) => e.display_name.toLowerCase().includes(q)
       );
     }
 
@@ -220,7 +220,16 @@ export default function AgentPicker({
     return counts;
   }, [entities]);
 
-  // ── Selection toggle ──
+  // Only show platform filters that have entities
+  const visibleFilters = useMemo(
+    () =>
+      PLATFORM_FILTERS.filter(
+        (pf) => pf.value === "all" || (platformCounts[pf.value] ?? 0) > 0
+      ),
+    [platformCounts]
+  );
+
+  // ── Selection helpers ──
   const selectedIds = useMemo(() => new Set(selected.map((s) => s.id)), [selected]);
 
   const toggleEntity = useCallback(
@@ -244,7 +253,6 @@ export default function AgentPicker({
     [selected, selectedIds, onSelectionChange]
   );
 
-  // ── Select all visible ──
   const selectAllVisible = useCallback(() => {
     const newSelected = [...selected];
     for (const entity of filtered) {
@@ -266,11 +274,11 @@ export default function AgentPicker({
     onSelectionChange([]);
   }, [onSelectionChange]);
 
-  // ── Loading ──
+  // ── Loading state ──
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-tremor-content" />
+        <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
       </div>
     );
   }
@@ -278,67 +286,75 @@ export default function AgentPicker({
   return (
     <div className="flex flex-col">
       {/* Header */}
-      <div className="mb-5">
-        <h2 className="text-lg font-bold text-tremor-content-strong dark:text-dark-tremor-content-strong">
-          Select agents and workflows
-        </h2>
-        <p className="mt-1 text-sm text-tremor-content dark:text-dark-tremor-content">
+      <div className="mb-4">
+        <h2 className="text-lg font-bold text-gray-900">Select agents and workflows</h2>
+        <p className="mt-1 text-sm text-gray-500">
           Pick one or more to create portals for. Same configuration applies to all.
         </p>
       </div>
 
-      {/* Search */}
-      <div className="relative mb-4">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-tremor-content dark:text-dark-tremor-content" />
+      {/* Search bar — always visible for any catalog size */}
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
         <input
+          ref={searchRef}
           type="text"
-          placeholder="Search by name, ID, or type..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full rounded-tremor-default border border-tremor-border bg-tremor-background py-2.5 pl-10 pr-4 text-sm text-tremor-content-strong placeholder:text-tremor-content focus:border-tremor-brand focus:outline-none focus:ring-1 focus:ring-tremor-brand dark:border-dark-tremor-border dark:bg-dark-tremor-background dark:text-dark-tremor-content-strong dark:placeholder:text-dark-tremor-content dark:focus:border-dark-tremor-brand dark:focus:ring-dark-tremor-brand"
+          placeholder="Search by name…"
+          className="w-full rounded-lg border border-gray-200 bg-gray-50 py-2.5 pl-10 pr-10 text-sm text-gray-900 outline-none transition-colors duration-150 placeholder:text-gray-400 focus:border-blue-300 focus:bg-white focus:ring-2 focus:ring-blue-100"
         />
+        {search && (
+          <button
+            onClick={() => setSearch("")}
+            className="absolute right-3 top-1/2 -translate-y-1/2 rounded p-0.5 text-gray-400 transition-colors duration-150 hover:text-gray-600 cursor-pointer"
+            aria-label="Clear search"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
       </div>
 
-      {/* Platform filter chips */}
-      <div className="mb-4 flex flex-wrap gap-2">
-        {PLATFORM_FILTERS.map((pf) => {
-          const count = platformCounts[pf.value] || 0;
-          if (pf.value !== "all" && count === 0) return null;
+      {/* Platform filter pills + bulk actions */}
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        {visibleFilters.map((pf) => {
+          const count = platformCounts[pf.value] ?? 0;
           const isActive = platformFilter === pf.value;
+
           return (
             <button
               key={pf.value}
               onClick={() => setPlatformFilter(pf.value)}
               className={`
                 cursor-pointer rounded-full px-3 py-1.5 text-xs font-medium
-                transition-colors duration-200
+                transition-colors duration-150
                 ${
                   isActive
-                    ? "bg-tremor-brand text-white"
-                    : "bg-tremor-background-subtle text-tremor-content hover:bg-tremor-background-emphasis dark:bg-dark-tremor-background-subtle dark:text-dark-tremor-content dark:hover:bg-dark-tremor-background-emphasis"
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                 }
               `}
             >
               {pf.label}
-              <span className="ml-1.5 opacity-70">{count}</span>
+              <span className="ml-1 opacity-70">{count}</span>
             </button>
           );
         })}
 
-        {/* Select all / Clear */}
-        <div className="ml-auto flex items-center gap-2">
+        {/* Bulk actions pushed to the right */}
+        <div className="ml-auto flex items-center gap-3">
           {selected.length > 0 && (
             <button
               onClick={clearSelection}
-              className="cursor-pointer text-xs font-medium text-tremor-content hover:text-red-600 dark:text-dark-tremor-content dark:hover:text-red-400 transition-colors duration-200"
+              className="cursor-pointer text-xs font-medium text-gray-500 transition-colors duration-150 hover:text-red-600"
             >
               Clear ({selected.length})
             </button>
           )}
-          {filtered.length > 0 && filtered.length <= 20 && (
+          {filtered.length > 0 && filtered.length <= 50 && (
             <button
               onClick={selectAllVisible}
-              className="cursor-pointer text-xs font-medium text-tremor-brand hover:text-tremor-brand-emphasis dark:text-dark-tremor-brand dark:hover:text-dark-tremor-brand-emphasis transition-colors duration-200"
+              className="cursor-pointer text-xs font-medium text-blue-600 transition-colors duration-150 hover:text-blue-700"
             >
               Select all visible
             </button>
@@ -346,44 +362,61 @@ export default function AgentPicker({
         </div>
       </div>
 
-      {/* Card grid — scrollable */}
-      <div className="overflow-y-auto max-h-[55vh] pr-1 -mr-1">
-        {filtered.length === 0 ? (
-          <div className="flex h-40 flex-col items-center justify-center">
-            <Search className="h-8 w-8 text-tremor-content dark:text-dark-tremor-content opacity-40" />
-            <p className="mt-3 text-sm text-tremor-content dark:text-dark-tremor-content">
-              {search ? `No results for "${search}"` : "No entities found for this platform"}
-            </p>
-          </div>
-        ) : (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {filtered.map((entity) => (
-              <EntityCard
+      {/* Entity list — vertical rows in a scrollable bordered container */}
+      <div className="mt-3 overflow-hidden rounded-lg border border-gray-200 bg-white">
+        <div className="max-h-[55vh] overflow-y-auto divide-y divide-gray-100">
+          {filtered.length === 0 ? (
+            <div className="flex h-48 flex-col items-center justify-center px-4">
+              <Search className="h-8 w-8 text-gray-300" />
+              <p className="mt-3 text-sm font-medium text-gray-500">
+                {search ? `No results for "${search}"` : "No entities found for this platform"}
+              </p>
+              {search && (
+                <button
+                  onClick={() => {
+                    setSearch("");
+                    setPlatformFilter("all");
+                  }}
+                  className="mt-2 cursor-pointer text-xs font-medium text-blue-600 transition-colors duration-150 hover:text-blue-700"
+                >
+                  Clear filters
+                </button>
+              )}
+            </div>
+          ) : (
+            filtered.map((entity) => (
+              <EntityRow
                 key={entity.id}
                 entity={entity}
                 isSelected={selectedIds.has(entity.id)}
                 onToggle={() => toggleEntity(entity)}
               />
-            ))}
-          </div>
-        )}
+            ))
+          )}
+        </div>
       </div>
 
-      {/* Selection summary bar — sticky bottom */}
+      {/* Result count */}
+      {filtered.length > 0 && (
+        <div className="mt-2 text-xs text-gray-400">
+          {filtered.length} {filtered.length === 1 ? "result" : "results"}
+          {filtered.length !== entities.length && ` of ${entities.length} total`}
+        </div>
+      )}
+
+      {/* Selection summary bar — animated bottom bar */}
       <AnimatePresence>
         {selected.length > 0 && (
           <motion.div
-            initial={{ opacity: 0, y: 16 }}
+            initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 16 }}
-            transition={{ duration: 0.2 }}
-            className="mt-4 flex items-center justify-between rounded-xl border border-tremor-brand/20 bg-tremor-brand/5 dark:border-dark-tremor-brand/20 dark:bg-dark-tremor-brand/10 px-4 py-3"
+            exit={{ opacity: 0, y: 12 }}
+            transition={{ duration: 0.15 }}
+            className="mt-4 flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-3"
           >
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-tremor-content-strong dark:text-dark-tremor-content-strong">
-                {selected.length} selected
-              </p>
-              <p className="truncate text-xs text-tremor-content dark:text-dark-tremor-content">
+              <p className="text-sm font-semibold text-gray-900">{selected.length} selected</p>
+              <p className="truncate text-xs text-gray-500">
                 {selected
                   .slice(0, 3)
                   .map((s) => cleanDisplayName(s.displayName))
@@ -393,7 +426,7 @@ export default function AgentPicker({
             </div>
             <button
               onClick={onContinue}
-              className="cursor-pointer flex items-center gap-1.5 rounded-tremor-default bg-tremor-brand px-4 py-2 text-sm font-semibold text-white transition-colors duration-200 hover:bg-tremor-brand-emphasis"
+              className="cursor-pointer flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors duration-150 hover:bg-blue-700"
             >
               Continue
               <ChevronRight className="h-4 w-4" />

@@ -1,7 +1,21 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Search, Cpu, Bot, Workflow, Zap } from "lucide-react";
+import { useMemo, useState, useRef, useEffect } from "react";
+import {
+  Search,
+  Cpu,
+  Bot,
+  Workflow,
+  Zap,
+  GitBranch,
+  Phone,
+  X,
+} from "lucide-react";
+import { PlatformBadge, getPlatformLabel } from "@/components/shared/PlatformBadge";
+
+// ────────────────────────────────────────────
+// Types (UNCHANGED — preserve exact interface)
+// ────────────────────────────────────────────
 
 type SourceOption = {
   id: string;
@@ -26,21 +40,30 @@ type Props = {
   onSelect: (sourceId: string, entityUuid: string | null) => void;
 };
 
-const PLATFORM_COLORS: Record<string, string> = {
-  vapi: "bg-violet-100 text-violet-700 border-violet-200",
-  retell: "bg-rose-100 text-rose-700 border-rose-200",
-  n8n: "bg-orange-100 text-orange-700 border-orange-200",
-  make: "bg-purple-100 text-purple-700 border-purple-200",
-};
+// ────────────────────────────────────────────
+// Constants
+// ────────────────────────────────────────────
 
 const KIND_ICONS: Record<string, typeof Bot> = {
   agent: Bot,
-  assistant: Bot,
+  assistant: Phone,
   workflow: Workflow,
   scenario: Zap,
-  flow: Workflow,
+  flow: GitBranch,
   squad: Cpu,
 };
+
+// ────────────────────────────────────────────
+// Helpers
+// ────────────────────────────────────────────
+
+function cleanDisplayName(name: string): string {
+  return name.replace(/^\d+-/, "").replace(/[_-]/g, " ").trim();
+}
+
+// ────────────────────────────────────────────
+// Component
+// ────────────────────────────────────────────
 
 export function WizardStepWorkflow({
   sources,
@@ -50,57 +73,42 @@ export function WizardStepWorkflow({
   onSelect,
 }: Props) {
   const [search, setSearch] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
 
-  // Group entities by sourceId
-  const entitiesBySource = useMemo(() => {
-    const map = new Map<string, EntityOption[]>();
-    for (const e of entities) {
-      const arr = map.get(e.sourceId) ?? [];
-      arr.push(e);
-      map.set(e.sourceId, arr);
+  // Auto-focus search on mount
+  useEffect(() => {
+    if (entities.length > 0) {
+      searchRef.current?.focus();
     }
-    return map;
-  }, [entities]);
+  }, [entities.length]);
 
-  // Filter entities by search
-  const filteredEntities = useMemo(() => {
+  // Flat filtered list — no accordion grouping, just a clean vertical list
+  const filtered = useMemo(() => {
     if (!search.trim()) return entities;
     const q = search.toLowerCase();
     return entities.filter(
       (e) =>
         e.name.toLowerCase().includes(q) ||
         e.platform.toLowerCase().includes(q) ||
-        e.kind.toLowerCase().includes(q)
+        e.kind.toLowerCase().includes(q) ||
+        e.externalId.toLowerCase().includes(q)
     );
   }, [entities, search]);
 
-  // Group filtered by source
-  const filteredBySource = useMemo(() => {
-    const map = new Map<string, EntityOption[]>();
-    for (const e of filteredEntities) {
-      const arr = map.get(e.sourceId) ?? [];
-      arr.push(e);
-      map.set(e.sourceId, arr);
-    }
-    return map;
-  }, [filteredEntities]);
-
+  // ── Empty state ──
   if (sources.length === 0) {
     return (
       <div className="flex flex-col items-center py-12 text-center">
         <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gray-100">
           <Cpu className="h-7 w-7 text-gray-400" />
         </div>
-        <h3 className="mt-4 text-base font-semibold text-gray-900">
-          No connections yet
-        </h3>
+        <h3 className="mt-4 text-base font-semibold text-gray-900">No connections yet</h3>
         <p className="mt-2 max-w-xs text-sm text-gray-500">
-          Connect a platform first (Vapi, Retell, n8n, or Make) to get
-          started.
+          Connect a platform first (Vapi, Retell, n8n, or Make) to get started.
         </p>
         <a
           href="/control-panel/connections"
-          className="mt-4 text-sm font-medium text-blue-600 hover:text-blue-700"
+          className="mt-4 text-sm font-medium text-blue-600 transition-colors duration-150 hover:text-blue-700"
         >
           Go to Connections →
         </a>
@@ -110,96 +118,125 @@ export function WizardStepWorkflow({
 
   return (
     <div>
-      <h2 className="text-lg font-semibold text-gray-900">
-        Select an agent or workflow
-      </h2>
+      <h2 className="text-lg font-bold text-gray-900">Select an agent or workflow</h2>
       <p className="mt-1 text-sm text-gray-500">
         Pick the connection and agent that will power this portal.
       </p>
 
-      {/* Search */}
-      {entities.length > 5 && (
-        <div className="relative mt-5">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+      {/* Search bar — always visible for any catalog size */}
+      {entities.length > 0 && (
+        <div className="relative mt-4">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <input
+            ref={searchRef}
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search agents, workflows, scenarios…"
-            className="w-full rounded-lg border border-gray-200 bg-gray-50 py-2.5 pl-10 pr-4 text-sm outline-none transition focus:border-blue-300 focus:bg-white focus:ring-2 focus:ring-blue-100"
+            className="w-full rounded-lg border border-gray-200 bg-gray-50 py-2.5 pl-10 pr-10 text-sm text-gray-900 outline-none transition-colors duration-150 placeholder:text-gray-400 focus:border-blue-300 focus:bg-white focus:ring-2 focus:ring-blue-100"
           />
+          {search && (
+            <button
+              onClick={() => setSearch("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 rounded p-0.5 text-gray-400 transition-colors duration-150 hover:text-gray-600 cursor-pointer"
+              aria-label="Clear search"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
         </div>
       )}
 
-      {/* Sources + Entities */}
-      <div className="mt-5 space-y-4">
-        {sources.map((source) => {
-          const sourceEntities = filteredBySource.get(source.id) ?? [];
-          const isSourceSelected = selectedSourceId === source.id;
-          const colorClass =
-            PLATFORM_COLORS[source.type] ?? "bg-gray-100 text-gray-700 border-gray-200";
-
-          return (
-            <div key={source.id}>
-              {/* Source header — clicking selects entire source (no specific entity) */}
-              <button
-                type="button"
-                onClick={() => onSelect(source.id, null)}
-                className={`flex w-full items-center gap-3 rounded-xl border-2 px-4 py-3 text-left transition ${
-                  isSourceSelected && !selectedEntityUuid
-                    ? "border-blue-500 bg-blue-50 ring-2 ring-blue-100"
-                    : "border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50"
-                }`}
-              >
-                <span
-                  className={`inline-flex rounded-lg border px-2.5 py-1 text-xs font-bold uppercase tracking-wide ${colorClass}`}
+      {/* Entity list — vertical rows */}
+      <div className="mt-3 overflow-hidden rounded-lg border border-gray-200 bg-white">
+        <div className="max-h-[55vh] overflow-y-auto divide-y divide-gray-100">
+          {filtered.length === 0 ? (
+            <div className="flex h-48 flex-col items-center justify-center px-4">
+              <Search className="h-8 w-8 text-gray-300" />
+              <p className="mt-3 text-sm font-medium text-gray-500">
+                {search ? `No results for "${search}"` : "No entities available"}
+              </p>
+              {search && (
+                <button
+                  onClick={() => setSearch("")}
+                  className="mt-2 cursor-pointer text-xs font-medium text-blue-600 transition-colors duration-150 hover:text-blue-700"
                 >
-                  {source.type}
-                </span>
-                <span className="flex-1 text-sm font-medium text-gray-900">
-                  {source.name}
-                </span>
-                {sourceEntities.length > 0 && (
-                  <span className="text-xs text-gray-400">
-                    {sourceEntities.length} entit{sourceEntities.length === 1 ? "y" : "ies"}
-                  </span>
-                )}
-              </button>
-
-              {/* Entity sub-list (only show when this source is selected or has matching search) */}
-              {(isSourceSelected || search.trim()) && sourceEntities.length > 0 && (
-                <div className="ml-6 mt-2 space-y-1.5">
-                  {sourceEntities.map((entity) => {
-                    const isSelected = selectedEntityUuid === entity.entityUuid;
-                    const KindIcon = KIND_ICONS[entity.kind] ?? Workflow;
-
-                    return (
-                      <button
-                        key={entity.entityUuid}
-                        type="button"
-                        onClick={() => onSelect(source.id, entity.entityUuid)}
-                        className={`flex w-full items-center gap-3 rounded-lg border px-4 py-2.5 text-left transition ${
-                          isSelected
-                            ? "border-blue-500 bg-blue-50 ring-2 ring-blue-100"
-                            : "border-gray-100 bg-gray-50/50 hover:border-gray-200 hover:bg-white"
-                        }`}
-                      >
-                        <KindIcon className="h-4 w-4 flex-shrink-0 text-gray-400" />
-                        <span className="flex-1 truncate text-sm text-gray-700">
-                          {entity.name}
-                        </span>
-                        <span className="flex-shrink-0 text-[10px] uppercase tracking-wide text-gray-400">
-                          {entity.kind}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
+                  Clear search
+                </button>
               )}
             </div>
-          );
-        })}
+          ) : (
+            filtered.map((entity) => {
+              const isSelected =
+                selectedSourceId === entity.sourceId &&
+                selectedEntityUuid === entity.entityUuid;
+              const KindIcon = KIND_ICONS[entity.kind] ?? Workflow;
+
+              return (
+                <div
+                  key={entity.entityUuid}
+                  onClick={() => onSelect(entity.sourceId, entity.entityUuid)}
+                  role="radio"
+                  aria-checked={isSelected}
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === " " || e.key === "Enter") {
+                      e.preventDefault();
+                      onSelect(entity.sourceId, entity.entityUuid);
+                    }
+                  }}
+                  className={`
+                    group flex cursor-pointer items-center gap-3 px-4 py-3
+                    transition-colors duration-150
+                    ${
+                      isSelected
+                        ? "bg-blue-50/70 border-l-2 border-l-blue-500"
+                        : "border-l-2 border-l-transparent hover:bg-gray-50"
+                    }
+                  `}
+                >
+                  {/* Radio indicator */}
+                  <div
+                    className={`
+                      flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center rounded-full
+                      transition-all duration-150
+                      ${
+                        isSelected
+                          ? "border-[5px] border-blue-600 bg-white"
+                          : "border-2 border-gray-300 bg-white group-hover:border-gray-400"
+                      }
+                    `}
+                  />
+
+                  {/* Platform color badge */}
+                  <PlatformBadge platform={entity.platform} size={32} />
+
+                  {/* Name + meta */}
+                  <div className="min-w-0 flex-1">
+                    <span className="truncate text-sm font-semibold text-gray-900">
+                      {cleanDisplayName(entity.name)}
+                    </span>
+                    <div className="mt-0.5 flex items-center gap-2 text-xs text-gray-500">
+                      <KindIcon className="h-3 w-3 flex-shrink-0" />
+                      <span className="capitalize">{entity.kind}</span>
+                      <span className="text-gray-300">·</span>
+                      <span>{getPlatformLabel(entity.platform)}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
       </div>
+
+      {/* Result count */}
+      {filtered.length > 0 && (
+        <div className="mt-2 text-xs text-gray-400">
+          {filtered.length} {filtered.length === 1 ? "result" : "results"}
+          {filtered.length !== entities.length && ` of ${entities.length} total`}
+        </div>
+      )}
     </div>
   );
 }
