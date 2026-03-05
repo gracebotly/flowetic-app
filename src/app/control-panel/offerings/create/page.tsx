@@ -452,7 +452,6 @@ export default function CreateOfferingPage() {
                     selectedPlatform: selected.length > 0 ? selected[0].platform : null,
                   }));
                 }}
-                onContinue={() => setCurrentStep(2)}
               />
             )}
             {currentStep === 2 && (

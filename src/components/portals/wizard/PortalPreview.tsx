@@ -25,7 +25,7 @@ import { transformDataForSkeleton, type SkeletonData, type PortalEvent } from "@
 
 import type { InputField } from "@/lib/products/types";
 
-type DeviceMode = "desktop" | "tablet" | "mobile";
+type DeviceMode = "tablet" | "mobile";
 
 type PreviewEvent = PortalEvent;
 
@@ -57,7 +57,6 @@ interface Branding {
 }
 
 const DEVICES: Record<DeviceMode, { width: number; label: string; icon: typeof Monitor }> = {
-  desktop: { width: 1280, label: "Desktop", icon: Monitor },
   tablet: { width: 768, label: "Tablet", icon: Tablet },
   mobile: { width: 375, label: "Mobile", icon: Smartphone },
 };
@@ -138,33 +137,11 @@ function generateSampleWorkflowData(): PreviewEvent[] {
 
 function BrowserChrome({
   mode,
-  entityName,
   children,
 }: {
   mode: DeviceMode;
-  entityName: string;
   children: ReactNode;
 }) {
-  if (mode === "desktop") {
-    return (
-      <div className="overflow-hidden rounded-xl border border-tremor-border shadow-2xl dark:border-dark-tremor-border">
-        <div className="flex items-center gap-2 border-b border-tremor-border bg-tremor-background-subtle px-4 py-2.5 dark:border-dark-tremor-border dark:bg-dark-tremor-background-subtle">
-          <div className="flex gap-1.5">
-            <div className="h-3 w-3 rounded-full bg-red-400" />
-            <div className="h-3 w-3 rounded-full bg-yellow-400" />
-            <div className="h-3 w-3 rounded-full bg-green-400" />
-          </div>
-          <div className="ml-4 flex-1 rounded-md bg-tremor-background px-3 py-1 dark:bg-dark-tremor-background">
-            <span className="font-mono text-[11px] text-tremor-content dark:text-dark-tremor-content">
-              youragency.com/client/{entityName || "portal-preview"}
-            </span>
-          </div>
-        </div>
-        <div className="bg-white dark:bg-slate-950">{children}</div>
-      </div>
-    );
-  }
-
   if (mode === "tablet") {
     return (
       <div className="overflow-hidden rounded-2xl border-[3px] border-slate-700 shadow-2xl dark:border-slate-500">
@@ -199,7 +176,7 @@ export default function PortalPreview({
   surfaceType,
   inputSchema,
 }: PortalPreviewProps) {
-  const [device, setDevice] = useState<DeviceMode>("desktop");
+  const [device, setDevice] = useState<DeviceMode>("tablet");
   const [branding, setBranding] = useState<Branding | null>(null);
   const [events, setEvents] = useState<PreviewEvent[] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -263,13 +240,15 @@ export default function PortalPreview({
     }
   }, [events, skeletonId, platformType]);
 
-  const containerMaxWidth = device === "desktop" ? 1280 : device === "tablet" ? 900 : 900;
+  const containerMaxWidth = 900;
   const deviceWidth = DEVICES[device].width;
+  // Tablet (768px) needs slight scaling to fit wizard container (~700px usable)
+  // Mobile (375px) fits naturally
   const WIZARD_USABLE_WIDTH = 700;
   const scale = deviceWidth > WIZARD_USABLE_WIDTH
     ? WIZARD_USABLE_WIDTH / deviceWidth
     : 1;
-  const scaledHeight = device === "mobile" ? 900 : device === "tablet" ? 1100 : 1000;
+  const scaledHeight = device === "mobile" ? 900 : 1100;
 
   const handleRefresh = useCallback(() => {
     setRefreshKey((k) => k + 1);
@@ -384,7 +363,7 @@ export default function PortalPreview({
           transition={{ type: "spring", stiffness: 300, damping: 30 }}
           style={{ width: Math.min(deviceWidth * scale, containerMaxWidth) }}
         >
-          <BrowserChrome mode={device} entityName={entityName}>
+          <BrowserChrome mode={device}>
             <div
               style={{
                 width: deviceWidth,
