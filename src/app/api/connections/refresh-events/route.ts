@@ -49,11 +49,108 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, code: "SOURCE_NOT_FOUND" }, { status: 404 });
   }
 
+  // ── For non-n8n platforms, delegate to their existing import routes ──
+  // The import routes already do: fetch from API → upsert entities → insert events → update last_seen_at
   if (source.type !== "n8n") {
-    return NextResponse.json(
-      { ok: false, code: "UNSUPPORTED_PLATFORM", message: "Only n8n is supported for refresh currently." },
-      { status: 400 },
-    );
+    const platformType = source.type as string;
+    const supportedPlatforms = ["vapi", "retell", "make"];
+
+    if (!supportedPlatforms.includes(platformType)) {
+      return NextResponse.json(
+        { ok: false, code: "UNSUPPORTED_PLATFORM", message: `Platform "${platformType}" is not supported for refresh.` },
+        { status: 400 },
+      );
+    }
+
+    try {
+      // Build internal request to the platform's import route
+      const importUrl = new URL(
+        `/api/connections/inventory/${platformType}/import`,
+        req.nextUrl.origin,
+      );
+
+      // Forward auth by cloning cookies from the incoming request
+      const importRes = await fetch(importUrl.toString(), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: req.headers.get("cookie") || "",
+        },
+        body: JSON.stringify({ sourceId }),
+      });
+
+      const importJson = await importRes.json().catch(() => ({}));
+
+      if (!importRes.ok || !importJson?.ok) {
+        return NextResponse.json(
+          {
+            ok: false,
+            code: importJson?.code || "REFRESH_FAILED",
+            message: importJson?.message || `Failed to refresh ${platformType} data.`,
+          },
+          { status: importRes.status || 500 },
+        );
+      }
+
+      // Update last_seen_at on source_entities from the latest events
+      const now = new Date().toISOString();
+      try {
+        const { data: latestEvents } = await supabase
+          .from("events")
+          .select("labels, timestamp")
+          .eq("tenant_id", tenantId)
+          .eq("source_id", sourceId)
+          .order("timestamp", { ascending: false })
+          .limit(200);
+
+        if (latestEvents && latestEvents.length > 0) {
+          // Build map of entity external_id → latest timestamp
+          // Different platforms use different label keys for the entity ID
+          const entityIdKeys = platformType === "vapi" ? ["assistant_id"]
+            : platformType === "retell" ? ["agent_id"]
+            : platformType === "make" ? ["scenario_id", "workflow_id"]
+            : ["workflow_id"];
+
+          const latestByEntity = new Map<string, string>();
+          for (const ev of latestEvents) {
+            const labels = ev.labels as Record<string, string> | null;
+            if (!labels) continue;
+
+            for (const key of entityIdKeys) {
+              const entityId = labels[key];
+              if (entityId && !latestByEntity.has(String(entityId))) {
+                latestByEntity.set(String(entityId), String(ev.timestamp));
+              }
+            }
+          }
+
+          for (const [externalId, latestTs] of latestByEntity) {
+            await supabase
+              .from("source_entities")
+              .update({ last_seen_at: latestTs, updated_at: now })
+              .eq("source_id", sourceId)
+              .eq("external_id", externalId)
+              .eq("tenant_id", tenantId);
+          }
+        }
+      } catch (e) {
+        console.warn(`[refresh-events][${platformType}] Failed to update last_seen_at:`, e);
+      }
+
+      return NextResponse.json({
+        ok: true,
+        refreshed: importJson.eventsStored ?? importJson.importedCount ?? 0,
+        enriched: 0,
+        workflowCount: importJson.importedCount ?? 0,
+        message: `Synced ${importJson.importedCount ?? 0} ${platformType} entities with ${importJson.eventsStored ?? 0} events.`,
+      });
+    } catch (e: any) {
+      console.error(`[refresh-events][${platformType}] Unexpected error:`, e);
+      return NextResponse.json(
+        { ok: false, code: "REFRESH_FAILED", message: e?.message || "Unknown error" },
+        { status: 500 },
+      );
+    }
   }
 
   let secret: { apiKey?: string; instanceUrl?: string; authMode?: string; method?: string };
