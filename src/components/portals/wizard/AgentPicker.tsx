@@ -204,12 +204,7 @@ export default function AgentPicker({
     if (search.trim()) {
       const q = search.toLowerCase();
       result = result.filter(
-        (e) =>
-          e.display_name.toLowerCase().includes(q) ||
-          e.external_id.toLowerCase().includes(q) ||
-          e.entity_kind.toLowerCase().includes(q) ||
-          e.platform_type.toLowerCase().includes(q) ||
-          e.source_name.toLowerCase().includes(q)
+        (e) => e.display_name.toLowerCase().includes(q)
       );
     }
 
@@ -306,7 +301,7 @@ export default function AgentPicker({
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by name, platform, or type…"
+          placeholder="Search by name…"
           className="w-full rounded-lg border border-gray-200 bg-gray-50 py-2.5 pl-10 pr-10 text-sm text-gray-900 outline-none transition-colors duration-150 placeholder:text-gray-400 focus:border-blue-300 focus:bg-white focus:ring-2 focus:ring-blue-100"
         />
         {search && (
