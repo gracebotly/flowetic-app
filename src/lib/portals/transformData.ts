@@ -238,6 +238,8 @@ export function transformVoiceData(events: PortalEvent[], platform: 'vapi' | 're
       endedReason: String(getStateField(e, fields.endedReason) || '—'),
       sentiment: String(getStateField(e, fields.sentiment) || '—'),
       time: new Date(e.timestamp).toLocaleString(),
+      transcript: String(getStateField(e, fields.transcript) || ''),
+      callSummary: String(getStateField(e, fields.callSummary) || ''),
     }));
 
   // ── Ended Reason Breakdown (Premium) ──
