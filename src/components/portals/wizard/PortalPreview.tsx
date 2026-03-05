@@ -261,21 +261,15 @@ export default function PortalPreview({
           </p>
         </div>
 
-        <button
-          onClick={() => {
-            const w = DEVICES[device].width;
-            const h = device === "mobile" ? 812 : device === "tablet" ? 1024 : 900;
-            window.open(
-              `/portal-preview?source_id=${sourceId}&platform=${platformType}&surface=${surfaceType}&entity_name=${encodeURIComponent(entityName)}`,
-              "_blank",
-              `width=${w},height=${h},menubar=no,toolbar=no,location=no,status=no`
-            );
-          }}
+        <a
+          href={`/portal-preview?source_id=${sourceId}&platform=${platformType}&surface=${surfaceType}&entity_name=${encodeURIComponent(entityName)}`}
+          target="_blank"
+          rel="noopener noreferrer"
           className="cursor-pointer flex items-center gap-1.5 rounded-tremor-default border border-tremor-border px-3 py-1.5 text-xs font-medium text-tremor-content-strong transition-colors duration-200 hover:bg-tremor-background-subtle dark:border-dark-tremor-border dark:text-dark-tremor-content-strong dark:hover:bg-dark-tremor-background-subtle"
         >
           <ExternalLink className="h-3.5 w-3.5" />
           Open full preview
-        </button>
+        </a>
       </div>
 
       {surfaceType === "both" && (
