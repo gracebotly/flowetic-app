@@ -1,16 +1,16 @@
 'use client';
 
-import React from "react";
-import { motion } from 'framer-motion';
+import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   AreaChart,
   BarChart,
+  DonutChart,
   Card,
   Metric,
   Text,
   Flex,
   Badge,
-  BadgeDelta,
   Title,
   Table,
   TableHead,
@@ -20,7 +20,22 @@ import {
   TableCell,
   Grid,
 } from '@tremor/react';
-import { ChevronDown, ChevronRight, Download } from 'lucide-react';
+import {
+  Activity,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  Zap,
+  TrendingUp,
+  TrendingDown,
+  AlertTriangle,
+  Lightbulb,
+  ChevronDown,
+  ChevronRight,
+  Download,
+  BarChart3,
+} from 'lucide-react';
+import { usePortalTheme } from '@/components/portals/PortalShell';
 import type { SkeletonData } from '@/lib/portals/transformData';
 
 interface WorkflowOperationsProps {
@@ -33,54 +48,100 @@ interface WorkflowOperationsProps {
   };
 }
 
+// ── Animation ─────────────────────────────────────────────────
 const fadeUp = {
   hidden: { opacity: 0, y: 20 },
   visible: (i: number) => ({
-    opacity: 1,
-    y: 0,
+    opacity: 1, y: 0,
     transition: { delay: i * 0.08, duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] },
   }),
 };
 
-function StatusBadge({ status }: { status: string }) {
-  const config: Record<string, { bg: string; text: string; dot: string; label: string }> = {
-    success: {
-      bg: 'bg-emerald-50 dark:bg-emerald-950/40',
-      text: 'text-emerald-700 dark:text-emerald-300',
-      dot: 'bg-emerald-500',
-      label: 'Success',
-    },
-    error: {
-      bg: 'bg-red-50 dark:bg-red-950/40',
-      text: 'text-red-700 dark:text-red-300',
-      dot: 'bg-red-500',
-      label: 'Failed',
-    },
-    waiting: {
-      bg: 'bg-amber-50 dark:bg-amber-950/40',
-      text: 'text-amber-700 dark:text-amber-300',
-      dot: 'bg-amber-500',
-      label: 'Waiting',
-    },
-  };
-
-  const c = config[status] ?? {
-    bg: 'bg-gray-100 dark:bg-gray-800',
-    text: 'text-gray-600 dark:text-gray-400',
-    dot: 'bg-gray-400',
-    label: status,
-  };
-
+// ── Theme-aware card wrapper ──────────────────────────────────
+function ThemedCard({ children, className = '', glow = false, accentColor }: {
+  children: React.ReactNode;
+  className?: string;
+  glow?: boolean;
+  accentColor?: string;
+}) {
+  const { theme } = usePortalTheme();
+  const isDark = theme === 'dark';
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${c.bg} ${c.text}`}>
-      <span className={`h-1.5 w-1.5 rounded-full ${c.dot}`} />
-      {c.label}
+    <div
+      className={`relative overflow-hidden rounded-xl border p-5 transition-all duration-300 ${className}`}
+      style={{
+        backgroundColor: isDark ? '#12121c' : '#ffffff',
+        borderColor: isDark ? '#1e1e30' : '#e5e7eb',
+        boxShadow: glow && accentColor
+          ? `0 0 40px ${accentColor}15, 0 1px 3px rgba(0,0,0,${isDark ? '0.3' : '0.08'})`
+          : `0 1px 3px rgba(0,0,0,${isDark ? '0.3' : '0.08'})`,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+// ── KPI Card with icon ────────────────────────────────────────
+function KPICard({ label, value, icon: Icon, color, trend, trendValue, index }: {
+  label: string;
+  value: string | number;
+  icon: React.ElementType;
+  color: string;
+  trend?: 'up' | 'down' | 'flat';
+  trendValue?: string;
+  index: number;
+}) {
+  const { theme } = usePortalTheme();
+  const isDark = theme === 'dark';
+  return (
+    <motion.div variants={fadeUp} initial="hidden" animate="visible" custom={index}>
+      <ThemedCard>
+        <Flex justifyContent="between" alignItems="start">
+          <div className="flex-1">
+            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: isDark ? '#8b8ba0' : '#6b7280' }}>
+              {label}
+            </p>
+            <p className="mt-2 text-2xl font-bold tracking-tight" style={{ color: isDark ? '#f0f0f5' : '#111827' }}>
+              {value}
+            </p>
+            {trendValue && (
+              <p className={`mt-1 text-xs font-medium ${trend === 'up' ? 'text-emerald-500' : trend === 'down' ? 'text-red-400' : 'text-slate-400'}`}>
+                {trend === 'up' ? '↑' : trend === 'down' ? '↓' : '→'} {trendValue}
+              </p>
+            )}
+          </div>
+          <div
+            className="flex h-10 w-10 items-center justify-center rounded-xl"
+            style={{
+              backgroundColor: `${color}${isDark ? '20' : '15'}`,
+            }}
+          >
+            <Icon className="h-5 w-5" style={{ color }} />
+          </div>
+        </Flex>
+      </ThemedCard>
+    </motion.div>
+  );
+}
+
+// ── Status Badge ──────────────────────────────────────────────
+function StatusBadge({ status }: { status: string }) {
+  const isSuccess = status === 'success' || status === 'completed';
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
+      isSuccess
+        ? 'bg-emerald-500/10 text-emerald-500'
+        : 'bg-red-500/10 text-red-400'
+    }`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${isSuccess ? 'bg-emerald-500' : 'bg-red-400'}`} />
+      {isSuccess ? 'Success' : 'Failed'}
     </span>
   );
 }
 
-
-const BASE_EXECUTION_FIELDS = new Set([
+// ── Enriched field helpers ────────────────────────────────────
+const BASE_FIELDS = new Set([
   'workflow_id', 'workflow_name', 'execution_id', 'status',
   'started_at', 'ended_at', 'duration_ms', 'error_message',
   'platform', 'platformType', 'platform_type',
@@ -90,23 +151,72 @@ const BASE_EXECUTION_FIELDS = new Set([
 function getEnrichedFields(row: Record<string, unknown>): Record<string, unknown> {
   const enriched: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(row)) {
-    if (BASE_EXECUTION_FIELDS.has(key)) continue;
+    if (BASE_FIELDS.has(key)) continue;
     if (value === undefined || value === null || value === '' || value === '—') continue;
     enriched[key] = value;
   }
   return enriched;
 }
 
-function generateMarkdownReport(
-  data: {
-    headline: { total: number; totalLabel: string; periodLabel: string };
-    kpis: Array<{ label: string; value: string | number }>;
-    recentRows: Array<Record<string, unknown>>;
-    workflowBreakdown?: Array<{ name: string; count: number; successRate: number }>;
-    errorBreakdown?: Array<{ message: string; count: number }>;
-  },
-  portalName: string
-): string {
+// ── Key Insights generator ────────────────────────────────────
+function generateInsights(data: SkeletonData): Array<{ type: 'success' | 'warning' | 'info'; title: string; description: string; recommendation: string }> {
+  const insights: Array<{ type: 'success' | 'warning' | 'info'; title: string; description: string; recommendation: string }> = [];
+  const { headline, kpis, workflowBreakdown, errorBreakdown } = data;
+
+  const failedKpi = kpis.find(k => k.label === 'Failed');
+  const failedCount = typeof failedKpi?.value === 'number' ? failedKpi.value : 0;
+  const successRate = headline.total > 0 ? Math.round(((headline.total - failedCount) / headline.total) * 100) : 0;
+
+  if (successRate >= 95) {
+    insights.push({
+      type: 'success',
+      title: 'Excellent reliability',
+      description: `${successRate}% success rate across ${headline.total} executions`,
+      recommendation: 'Performance is strong — consider scaling volume',
+    });
+  } else if (successRate < 80) {
+    insights.push({
+      type: 'warning',
+      title: 'High failure rate detected',
+      description: `${failedCount} failures out of ${headline.total} executions (${100 - successRate}% failure rate)`,
+      recommendation: 'Review error logs and check workflow configurations',
+    });
+  }
+
+  if (errorBreakdown && errorBreakdown.length > 0) {
+    const topError = errorBreakdown[0];
+    insights.push({
+      type: 'warning',
+      title: 'Recurring error pattern',
+      description: `"${topError.message}" occurred ${topError.count} times`,
+      recommendation: 'Investigate this specific failure to reduce error volume',
+    });
+  }
+
+  if (workflowBreakdown && workflowBreakdown.length > 1) {
+    const topWf = workflowBreakdown[0];
+    insights.push({
+      type: 'info',
+      title: 'Most active workflow',
+      description: `"${topWf.name}" accounts for ${topWf.count} executions (${Math.round((topWf.count / headline.total) * 100)}% of total)`,
+      recommendation: topWf.successRate < 90 ? 'This workflow needs attention — success rate below 90%' : 'Running smoothly',
+    });
+  }
+
+  if (headline.percentChange !== null && headline.percentChange > 20) {
+    insights.push({
+      type: 'info',
+      title: 'Volume is growing',
+      description: `${headline.percentChange}% more executions vs previous period`,
+      recommendation: 'Monitor capacity and consider scaling infrastructure',
+    });
+  }
+
+  return insights.slice(0, 3);
+}
+
+// ── MD Report generator ───────────────────────────────────────
+function generateMarkdownReport(data: SkeletonData, portalName: string): string {
   const lines: string[] = [];
   lines.push(`# ${portalName} — Workflow Operations Report`);
   lines.push(`> Generated ${new Date().toLocaleString()}`);
@@ -131,7 +241,7 @@ function generateMarkdownReport(
     lines.push('');
   }
   if (data.recentRows.length > 0) {
-    lines.push('## Recent Executions (Full Detail)');
+    lines.push('## Recent Executions');
     lines.push('');
     for (const row of data.recentRows) {
       lines.push(`### Execution ${String(row.id || 'N/A')}`);
@@ -142,10 +252,9 @@ function generateMarkdownReport(
       if (row.error && row.error !== '—') lines.push(`- **Error:** ${String(row.error)}`);
       const enriched = getEnrichedFields(row);
       if (Object.keys(enriched).length > 0) {
-        lines.push('- **Enriched Data:**');
+        lines.push('- **Data:**');
         for (const [key, value] of Object.entries(enriched)) {
-          const display = typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value);
-          lines.push(`  - **${key}:** ${display}`);
+          lines.push(`  - ${key}: ${typeof value === 'object' ? JSON.stringify(value) : String(value)}`);
         }
       }
       lines.push('');
@@ -154,21 +263,27 @@ function generateMarkdownReport(
   return lines.join('\n');
 }
 
+// ── Expandable Row ────────────────────────────────────────────
 function ExpandableRow({ row }: { row: Record<string, unknown> }) {
-  const [expanded, setExpanded] = React.useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const { theme } = usePortalTheme();
+  const isDark = theme === 'dark';
   const enriched = getEnrichedFields(row);
   const hasEnriched = Object.keys(enriched).length > 0;
+
   return (
     <>
       <TableRow
-        className={hasEnriched ? 'cursor-pointer hover:bg-gray-50' : ''}
+        className={hasEnriched ? 'cursor-pointer' : ''}
         onClick={() => hasEnriched && setExpanded(!expanded)}
+        style={{ backgroundColor: expanded ? (isDark ? '#16162a' : '#f8fafc') : 'transparent' }}
       >
         <TableCell>
-          <Flex justifyContent="start" className="gap-1">
-            {hasEnriched && (expanded
-              ? <ChevronDown className="h-3 w-3 text-gray-400 flex-shrink-0" />
-              : <ChevronRight className="h-3 w-3 text-gray-400 flex-shrink-0" />
+          <Flex justifyContent="start" className="gap-1.5">
+            {hasEnriched && (
+              expanded
+                ? <ChevronDown className="h-3 w-3 flex-shrink-0" style={{ color: isDark ? '#8b8ba0' : '#9ca3af' }} />
+                : <ChevronRight className="h-3 w-3 flex-shrink-0" style={{ color: isDark ? '#8b8ba0' : '#9ca3af' }} />
             )}
             <Text className="font-medium">{String(row.workflow)}</Text>
           </Flex>
@@ -178,147 +293,289 @@ function ExpandableRow({ row }: { row: Record<string, unknown> }) {
         <TableCell><Text className="text-xs truncate max-w-[200px]">{String(row.error)}</Text></TableCell>
         <TableCell><Text className="text-xs">{String(row.time)}</Text></TableCell>
       </TableRow>
-      {expanded && hasEnriched && (
-        <TableRow>
-          <TableCell colSpan={5}>
-            <div className="bg-slate-50 rounded-lg p-3 ml-4 text-xs space-y-1">
-              <Text className="font-semibold text-gray-700 mb-2">Enriched Data</Text>
-              {Object.entries(enriched).map(([key, value]) => (
-                <div key={key} className="flex gap-2">
-                  <span className="font-medium text-gray-600 min-w-[120px]">{key}:</span>
-                  <span className="text-gray-800 break-all">
-                    {typeof value === 'object' ? JSON.stringify(value) : String(value)}
-                  </span>
+      <AnimatePresence>
+        {expanded && hasEnriched && (
+          <TableRow>
+            <TableCell colSpan={5}>
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.2 }}
+              >
+                <div
+                  className="rounded-lg p-3 ml-5 text-xs space-y-1.5"
+                  style={{
+                    backgroundColor: isDark ? '#0c0c14' : '#f1f5f9',
+                    border: `1px solid ${isDark ? '#1e1e30' : '#e2e8f0'}`,
+                  }}
+                >
+                  <p className="font-semibold mb-2" style={{ color: isDark ? '#c0c0d0' : '#374151' }}>
+                    Enriched Data
+                  </p>
+                  {Object.entries(enriched).map(([key, value]) => (
+                    <div key={key} className="flex gap-2">
+                      <span className="font-medium min-w-[120px]" style={{ color: isDark ? '#8b8ba0' : '#6b7280' }}>
+                        {key}:
+                      </span>
+                      <span className="break-all" style={{ color: isDark ? '#d0d0e0' : '#111827' }}>
+                        {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                      </span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </TableCell>
-        </TableRow>
-      )}
+              </motion.div>
+            </TableCell>
+          </TableRow>
+        )}
+      </AnimatePresence>
     </>
   );
 }
 
+// ══════════════════════════════════════════════════════════════
+// MAIN COMPONENT
+// ══════════════════════════════════════════════════════════════
 export function WorkflowOperationsSkeleton({ data, branding }: WorkflowOperationsProps) {
   const { headline, kpis, trend, recentRows, workflowBreakdown, errorBreakdown } = data;
+  const { theme } = usePortalTheme();
+  const isDark = theme === 'dark';
 
+  const failedKpi = kpis.find(k => k.label === 'Failed');
+  const failedCount = typeof failedKpi?.value === 'number' ? failedKpi.value : 0;
   const successRate = headline.total > 0
-    ? Math.round(((headline.total - (kpis.find(k => k.label === 'Failed')?.value as number || 0)) / headline.total) * 100)
+    ? Math.round(((headline.total - failedCount) / headline.total) * 100)
     : 0;
+
+  const insights = generateInsights(data);
+
+  // KPI icon mapping
+  const kpiIcons: Record<string, { icon: React.ElementType; color: string }> = {
+    'Failed': { icon: XCircle, color: '#ef4444' },
+    'Success Rate': { icon: CheckCircle2, color: '#10b981' },
+    'Avg Runtime': { icon: Clock, color: '#3b82f6' },
+    'Last Run': { icon: Zap, color: '#8b5cf6' },
+  };
 
   return (
     <div className="space-y-6">
-      {/* ─── Headline ─── */}
+      {/* ─── Hero Headline ─── */}
       <motion.div variants={fadeUp} initial="hidden" animate="visible" custom={0}>
-        <Card decoration="top" decorationColor="blue">
-          <Flex justifyContent="between" alignItems="center">
-            <div>
-              <Text>Operations Summary</Text>
-              <Metric className="mt-1">
-                {headline.total.toLocaleString()} {headline.totalLabel}
-              </Metric>
-              <Text className="mt-1">
-                {successRate}% success rate · {headline.periodLabel}
-              </Text>
-            </div>
-            {headline.percentChange !== null && (
-              <BadgeDelta
-                deltaType={headline.percentChange >= 0 ? 'increase' : 'decrease'}
-                size="lg"
-              >
-                {headline.percentChange >= 0 ? '+' : ''}{headline.percentChange}%
-              </BadgeDelta>
-            )}
-          </Flex>
-        </Card>
+        <ThemedCard glow accentColor={branding.primary_color}>
+          <div
+            className="absolute inset-x-0 top-0 h-1"
+            style={{ background: `linear-gradient(90deg, ${branding.primary_color}, ${branding.secondary_color})` }}
+          />
+          <div className="pt-2">
+            <Flex justifyContent="between" alignItems="center">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: isDark ? '#8b8ba0' : '#6b7280' }}>
+                  Operations Summary
+                </p>
+                <p className="mt-1 text-3xl font-bold tracking-tight" style={{ color: isDark ? '#f0f0f5' : '#111827' }}>
+                  {headline.total.toLocaleString()} {headline.totalLabel}
+                </p>
+                <p className="mt-1 text-sm" style={{ color: isDark ? '#8b8ba0' : '#6b7280' }}>
+                  {successRate}% success rate · {headline.periodLabel}
+                </p>
+              </div>
+              {headline.percentChange !== null && (
+                <div className={`flex items-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-bold ${
+                  headline.percentChange >= 0
+                    ? 'bg-emerald-500/10 text-emerald-500'
+                    : 'bg-red-500/10 text-red-400'
+                }`}>
+                  {headline.percentChange >= 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
+                  {headline.percentChange >= 0 ? '+' : ''}{headline.percentChange}%
+                </div>
+              )}
+            </Flex>
+          </div>
+        </ThemedCard>
       </motion.div>
 
-      {/* ─── KPIs ─── */}
-      <Grid numItemsMd={3} className="gap-4">
-        {kpis.map((kpi, i) => (
-          <motion.div key={kpi.label} variants={fadeUp} initial="hidden" animate="visible" custom={i + 1}>
-            <Card>
-              <Text>{kpi.label}</Text>
-              <Metric className="mt-2">{kpi.value}</Metric>
-            </Card>
-          </motion.div>
-        ))}
-      </Grid>
+      {/* ─── KPI Cards ─── */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {kpis.map((kpi, i) => {
+          const iconConfig = kpiIcons[kpi.label] || { icon: Activity, color: branding.primary_color };
+          return (
+            <KPICard
+              key={kpi.label}
+              label={kpi.label}
+              value={kpi.value}
+              icon={iconConfig.icon}
+              color={iconConfig.color}
+              trend={kpi.trend}
+              trendValue={kpi.trendValue}
+              index={i + 1}
+            />
+          );
+        })}
+      </div>
 
       {/* ─── Execution Trend ─── */}
       {trend.length > 1 && (
         <motion.div variants={fadeUp} initial="hidden" animate="visible" custom={4}>
-          <Card>
-            <Title>Execution Volume</Title>
-            <Text>Daily executions — success vs failed</Text>
+          <ThemedCard>
+            <Flex justifyContent="between" alignItems="center" className="mb-4">
+              <div>
+                <p className="text-base font-semibold" style={{ color: isDark ? '#f0f0f5' : '#111827' }}>
+                  Execution Volume
+                </p>
+                <p className="text-xs mt-0.5" style={{ color: isDark ? '#8b8ba0' : '#6b7280' }}>
+                  Daily executions — success vs failed
+                </p>
+              </div>
+            </Flex>
             <AreaChart
-              className="mt-4 h-72"
+              className="h-72"
               data={trend}
               index="date"
               categories={['successCount', 'failCount']}
-              colors={['emerald', 'red']}
+              colors={['emerald', 'rose']}
               valueFormatter={(v: number) => v.toLocaleString()}
               showLegend
               showAnimation
               curveType="monotone"
-              stack
+              showGridLines={false}
             />
-          </Card>
+          </ThemedCard>
         </motion.div>
       )}
 
-      {/* ─── Workflow Breakdown + Error Breakdown (side by side) ─── */}
-      <Grid numItemsMd={2} className="gap-4">
+      {/* ─── Workflow Breakdown + Key Insights (side by side) ─── */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {workflowBreakdown && workflowBreakdown.length > 0 && (
           <motion.div variants={fadeUp} initial="hidden" animate="visible" custom={5}>
-            <Card>
-              <Title>Workflow Performance</Title>
-              <Text>Executions per workflow</Text>
-              <BarChart
-                className="mt-4 h-72"
-                data={workflowBreakdown.slice(0, 6)}
-                index="name"
-                categories={['count']}
-                colors={['blue']}
-                valueFormatter={(v: number) => v.toLocaleString()}
-                showAnimation
-                layout="vertical"
-                showGridLines={false}
-              />
-            </Card>
+            <ThemedCard>
+              <Flex justifyContent="start" className="gap-2 mb-4">
+                <BarChart3 className="h-4 w-4" style={{ color: branding.primary_color }} />
+                <p className="text-base font-semibold" style={{ color: isDark ? '#f0f0f5' : '#111827' }}>
+                  Workflow Performance
+                </p>
+              </Flex>
+              <div className="space-y-3">
+                {workflowBreakdown.slice(0, 5).map((wf) => (
+                  <div key={wf.name} className="space-y-1.5">
+                    <Flex justifyContent="between">
+                      <p className="text-sm truncate max-w-[200px]" style={{ color: isDark ? '#d0d0e0' : '#374151' }}>
+                        {wf.name}
+                      </p>
+                      <Flex justifyContent="end" className="gap-2">
+                        <span className="text-xs font-medium" style={{ color: isDark ? '#8b8ba0' : '#6b7280' }}>
+                          {wf.count} runs
+                        </span>
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${
+                          wf.successRate >= 90 ? 'bg-emerald-500/10 text-emerald-500'
+                            : wf.successRate >= 70 ? 'bg-amber-500/10 text-amber-500'
+                            : 'bg-red-500/10 text-red-400'
+                        }`}>
+                          {wf.successRate}%
+                        </span>
+                      </Flex>
+                    </Flex>
+                    <div className="h-1.5 w-full rounded-full" style={{ backgroundColor: isDark ? '#1e1e30' : '#e5e7eb' }}>
+                      <div
+                        className="h-1.5 rounded-full transition-all duration-700"
+                        style={{
+                          width: `${wf.successRate}%`,
+                          backgroundColor: wf.successRate >= 90 ? '#10b981' : wf.successRate >= 70 ? '#f59e0b' : '#ef4444',
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </ThemedCard>
           </motion.div>
         )}
 
-        {errorBreakdown && errorBreakdown.length > 0 && (
+        {/* Key Insights */}
+        {insights.length > 0 && (
           <motion.div variants={fadeUp} initial="hidden" animate="visible" custom={6}>
-            <Card>
-              <Title>Top Errors</Title>
-              <Text>Most frequent failure reasons</Text>
-              <div className="mt-4 space-y-3">
-                {errorBreakdown.slice(0, 5).map((err, i) => (
-                  <Flex key={i} justifyContent="between" alignItems="center">
-                    <Text className="truncate text-xs max-w-[280px]">{err.message}</Text>
-                    <Badge color="red" size="xs">{err.count}×</Badge>
-                  </Flex>
-                ))}
+            <ThemedCard>
+              <Flex justifyContent="start" className="gap-2 mb-4">
+                <Lightbulb className="h-4 w-4" style={{ color: '#f59e0b' }} />
+                <p className="text-base font-semibold" style={{ color: isDark ? '#f0f0f5' : '#111827' }}>
+                  Key Insights
+                </p>
+              </Flex>
+              <div className="space-y-3">
+                {insights.map((insight, i) => {
+                  const insightIcon = insight.type === 'success' ? CheckCircle2
+                    : insight.type === 'warning' ? AlertTriangle
+                    : Lightbulb;
+                  const insightColor = insight.type === 'success' ? '#10b981'
+                    : insight.type === 'warning' ? '#f59e0b'
+                    : '#3b82f6';
+                  const InsightIcon = insightIcon;
+                  return (
+                    <div
+                      key={i}
+                      className="rounded-lg p-3 transition-colors"
+                      style={{
+                        backgroundColor: isDark ? '#16162a' : '#f8fafc',
+                        border: `1px solid ${isDark ? '#1e1e30' : '#e5e7eb'}`,
+                      }}
+                    >
+                      <Flex justifyContent="start" className="gap-2 mb-1">
+                        <InsightIcon className="h-4 w-4 flex-shrink-0" style={{ color: insightColor }} />
+                        <p className="text-sm font-semibold" style={{ color: isDark ? '#f0f0f5' : '#111827' }}>
+                          {insight.title}
+                        </p>
+                      </Flex>
+                      <p className="text-xs ml-6" style={{ color: isDark ? '#8b8ba0' : '#6b7280' }}>
+                        {insight.description}
+                      </p>
+                      <p className="text-xs ml-6 mt-1 font-medium" style={{ color: insightColor }}>
+                        {insight.recommendation}
+                      </p>
+                    </div>
+                  );
+                })}
               </div>
-            </Card>
+            </ThemedCard>
           </motion.div>
         )}
-      </Grid>
+      </div>
+
+      {/* ─── Error Breakdown ─── */}
+      {errorBreakdown && errorBreakdown.length > 0 && (
+        <motion.div variants={fadeUp} initial="hidden" animate="visible" custom={7}>
+          <ThemedCard>
+            <Flex justifyContent="start" className="gap-2 mb-4">
+              <AlertTriangle className="h-4 w-4 text-red-400" />
+              <p className="text-base font-semibold" style={{ color: isDark ? '#f0f0f5' : '#111827' }}>
+                Top Errors
+              </p>
+            </Flex>
+            <div className="space-y-2.5">
+              {errorBreakdown.slice(0, 5).map((err, i) => (
+                <Flex key={i} justifyContent="between" alignItems="center">
+                  <p className="truncate text-xs max-w-[320px]" style={{ color: isDark ? '#d0d0e0' : '#374151' }}>
+                    {err.message}
+                  </p>
+                  <span className="rounded-full bg-red-500/10 px-2 py-0.5 text-xs font-bold text-red-400">
+                    {err.count}×
+                  </span>
+                </Flex>
+              ))}
+            </div>
+          </ThemedCard>
+        </motion.div>
+      )}
 
       {/* ─── Recent Executions Table ─── */}
       {recentRows.length > 0 && (
-        <motion.div variants={fadeUp} initial="hidden" animate="visible" custom={7}>
-          <Card>
-            <Flex justifyContent="between" alignItems="center">
-              <Title>Recent Executions</Title>
+        <motion.div variants={fadeUp} initial="hidden" animate="visible" custom={8}>
+          <ThemedCard>
+            <Flex justifyContent="between" alignItems="center" className="mb-4">
+              <p className="text-base font-semibold" style={{ color: isDark ? '#f0f0f5' : '#111827' }}>
+                Recent Executions
+              </p>
               <button
                 onClick={() => {
-                  const md = generateMarkdownReport(
-                    { headline, kpis, recentRows, workflowBreakdown, errorBreakdown },
-                    branding.portalName
-                  );
+                  const md = generateMarkdownReport(data, branding.portalName);
                   const blob = new Blob([md], { type: 'text/markdown' });
                   const url = URL.createObjectURL(blob);
                   const a = document.createElement('a');
@@ -327,13 +584,17 @@ export function WorkflowOperationsSkeleton({ data, branding }: WorkflowOperation
                   a.click();
                   URL.revokeObjectURL(url);
                 }}
-                className="flex items-center gap-1.5 rounded-md bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100 transition-colors"
+                className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors"
+                style={{
+                  backgroundColor: `${branding.primary_color}15`,
+                  color: branding.primary_color,
+                }}
               >
                 <Download className="h-3.5 w-3.5" />
-                Export MD
+                Export
               </button>
             </Flex>
-            <Table className="mt-4">
+            <Table>
               <TableHead>
                 <TableRow>
                   <TableHeaderCell>Workflow</TableHeaderCell>
@@ -349,7 +610,7 @@ export function WorkflowOperationsSkeleton({ data, branding }: WorkflowOperation
                 ))}
               </TableBody>
             </Table>
-          </Card>
+          </ThemedCard>
         </motion.div>
       )}
     </div>

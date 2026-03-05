@@ -5,17 +5,9 @@ export const runtime = "nodejs";
 
 /**
  * GET /api/events
- *
  * Authenticated endpoint for fetching normalized events.
- * Used by PortalPreview in the wizard and other admin views.
- *
- * Query params:
- *   source_id (required) — the source to fetch events for
- *   limit (optional, default 50, max 500)
- *   type (optional) — filter by event type
- *   workflow_name (optional) — filter by state->>'workflow_name'
- *
- * Referenced in: GETFLOWETIC_CONTROL_PANEL_V4.md line 774
+ * Used by PortalPreview in wizard and admin views.
+ * Documented in GETFLOWETIC_CONTROL_PANEL_V4.md line 774.
  */
 export async function GET(req: Request) {
   const supabase = await createClient();
@@ -43,16 +35,10 @@ export async function GET(req: Request) {
   const sourceId = searchParams.get("source_id");
   const type = searchParams.get("type");
   const workflowName = searchParams.get("workflow_name");
-  const limit = Math.min(
-    Math.max(Number(searchParams.get("limit") ?? "50"), 1),
-    500
-  );
+  const limit = Math.min(Math.max(Number(searchParams.get("limit") ?? "50"), 1), 500);
 
   if (!sourceId) {
-    return NextResponse.json(
-      { error: "source_id is required" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "source_id is required" }, { status: 400 });
   }
 
   const { data: source } = await supabase
@@ -63,27 +49,19 @@ export async function GET(req: Request) {
     .maybeSingle();
 
   if (!source) {
-    return NextResponse.json(
-      { error: "Source not found or not owned by tenant" },
-      { status: 404 }
-    );
+    return NextResponse.json({ error: "Source not found" }, { status: 404 });
   }
 
   let query = supabase
     .from("events")
-    .select(
-      "id, type, name, value, unit, text, state, labels, timestamp, platform_event_id, source_id"
-    )
+    .select("id, type, name, value, unit, text, state, labels, timestamp, platform_event_id, source_id")
     .eq("tenant_id", tenantId)
     .eq("source_id", sourceId)
     .not("type", "in", '("state","tool_event")')
     .order("timestamp", { ascending: false })
     .limit(limit);
 
-  if (type) {
-    query = query.eq("type", type);
-  }
-
+  if (type) query = query.eq("type", type);
   if (workflowName) {
     query = query.or(
       `state->>workflow_name.eq.${workflowName},state->>workflow_id.eq.${workflowName}`
@@ -94,14 +72,8 @@ export async function GET(req: Request) {
 
   if (error) {
     console.error("[GET /api/events] Query failed:", error.message);
-    return NextResponse.json(
-      { error: "QUERY_FAILED", message: error.message },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "QUERY_FAILED", message: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({
-    events: events ?? [],
-    count: events?.length ?? 0,
-  });
+  return NextResponse.json({ events: events ?? [], count: events?.length ?? 0 });
 }
