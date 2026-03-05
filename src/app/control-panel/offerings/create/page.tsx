@@ -158,7 +158,6 @@ export default function CreateOfferingPage() {
                 source_name?: string;
                 sourceName?: string;
                 last_seen_at?: string | null;
-                lastSeenAt?: string | null;
               }) => ({
                 id: e.id ?? e.entityUuid ?? "",
                 source_id: e.source_id ?? e.sourceId ?? "",
