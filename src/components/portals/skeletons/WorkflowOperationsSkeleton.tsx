@@ -1,5 +1,6 @@
 'use client';
 
+import React from "react";
 import { motion } from 'framer-motion';
 import {
   AreaChart,
@@ -19,6 +20,7 @@ import {
   TableCell,
   Grid,
 } from '@tremor/react';
+import { ChevronDown, ChevronRight, Download } from 'lucide-react';
 import type { SkeletonData } from '@/lib/portals/transformData';
 
 interface WorkflowOperationsProps {
@@ -77,7 +79,127 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-export function WorkflowOperationsSkeleton({ data }: WorkflowOperationsProps) {
+
+const BASE_EXECUTION_FIELDS = new Set([
+  'workflow_id', 'workflow_name', 'execution_id', 'status',
+  'started_at', 'ended_at', 'duration_ms', 'error_message',
+  'platform', 'platformType', 'platform_type',
+  'id', 'workflow', 'duration', 'error', 'time',
+]);
+
+function getEnrichedFields(row: Record<string, unknown>): Record<string, unknown> {
+  const enriched: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(row)) {
+    if (BASE_EXECUTION_FIELDS.has(key)) continue;
+    if (value === undefined || value === null || value === '' || value === '—') continue;
+    enriched[key] = value;
+  }
+  return enriched;
+}
+
+function generateMarkdownReport(
+  data: {
+    headline: { total: number; totalLabel: string; periodLabel: string };
+    kpis: Array<{ label: string; value: string | number }>;
+    recentRows: Array<Record<string, unknown>>;
+    workflowBreakdown?: Array<{ name: string; count: number; successRate: number }>;
+    errorBreakdown?: Array<{ message: string; count: number }>;
+  },
+  portalName: string
+): string {
+  const lines: string[] = [];
+  lines.push(`# ${portalName} — Workflow Operations Report`);
+  lines.push(`> Generated ${new Date().toLocaleString()}`);
+  lines.push('');
+  lines.push(`## Summary: ${data.headline.total} ${data.headline.totalLabel} (${data.headline.periodLabel})`);
+  lines.push('');
+  lines.push('## KPIs');
+  for (const kpi of data.kpis) lines.push(`- **${kpi.label}:** ${kpi.value}`);
+  lines.push('');
+  if (data.workflowBreakdown?.length) {
+    lines.push('## Workflow Breakdown');
+    lines.push('| Workflow | Executions | Success Rate |');
+    lines.push('|----------|-----------|-------------|');
+    for (const wf of data.workflowBreakdown) lines.push(`| ${wf.name} | ${wf.count} | ${wf.successRate}% |`);
+    lines.push('');
+  }
+  if (data.errorBreakdown?.length) {
+    lines.push('## Top Errors');
+    lines.push('| Error | Count |');
+    lines.push('|-------|-------|');
+    for (const err of data.errorBreakdown) lines.push(`| ${err.message} | ${err.count} |`);
+    lines.push('');
+  }
+  if (data.recentRows.length > 0) {
+    lines.push('## Recent Executions (Full Detail)');
+    lines.push('');
+    for (const row of data.recentRows) {
+      lines.push(`### Execution ${String(row.id || 'N/A')}`);
+      lines.push(`- **Workflow:** ${String(row.workflow || 'Unknown')}`);
+      lines.push(`- **Status:** ${String(row.status || 'unknown')}`);
+      lines.push(`- **Duration:** ${String(row.duration || '—')}`);
+      lines.push(`- **Time:** ${String(row.time || '—')}`);
+      if (row.error && row.error !== '—') lines.push(`- **Error:** ${String(row.error)}`);
+      const enriched = getEnrichedFields(row);
+      if (Object.keys(enriched).length > 0) {
+        lines.push('- **Enriched Data:**');
+        for (const [key, value] of Object.entries(enriched)) {
+          const display = typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value);
+          lines.push(`  - **${key}:** ${display}`);
+        }
+      }
+      lines.push('');
+    }
+  }
+  return lines.join('\n');
+}
+
+function ExpandableRow({ row }: { row: Record<string, unknown> }) {
+  const [expanded, setExpanded] = React.useState(false);
+  const enriched = getEnrichedFields(row);
+  const hasEnriched = Object.keys(enriched).length > 0;
+  return (
+    <>
+      <TableRow
+        className={hasEnriched ? 'cursor-pointer hover:bg-gray-50' : ''}
+        onClick={() => hasEnriched && setExpanded(!expanded)}
+      >
+        <TableCell>
+          <Flex justifyContent="start" className="gap-1">
+            {hasEnriched && (expanded
+              ? <ChevronDown className="h-3 w-3 text-gray-400 flex-shrink-0" />
+              : <ChevronRight className="h-3 w-3 text-gray-400 flex-shrink-0" />
+            )}
+            <Text className="font-medium">{String(row.workflow)}</Text>
+          </Flex>
+        </TableCell>
+        <TableCell><StatusBadge status={String(row.status)} /></TableCell>
+        <TableCell><Text>{String(row.duration)}</Text></TableCell>
+        <TableCell><Text className="text-xs truncate max-w-[200px]">{String(row.error)}</Text></TableCell>
+        <TableCell><Text className="text-xs">{String(row.time)}</Text></TableCell>
+      </TableRow>
+      {expanded && hasEnriched && (
+        <TableRow>
+          <TableCell colSpan={5}>
+            <div className="bg-slate-50 rounded-lg p-3 ml-4 text-xs space-y-1">
+              <Text className="font-semibold text-gray-700 mb-2">Enriched Data</Text>
+              {Object.entries(enriched).map(([key, value]) => (
+                <div key={key} className="flex gap-2">
+                  <span className="font-medium text-gray-600 min-w-[120px]">{key}:</span>
+                  <span className="text-gray-800 break-all">
+                    {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </TableCell>
+        </TableRow>
+      )}
+    </>
+  );
+}
+
+export function WorkflowOperationsSkeleton({ data, branding }: WorkflowOperationsProps) {
   const { headline, kpis, trend, recentRows, workflowBreakdown, errorBreakdown } = data;
 
   const successRate = headline.total > 0
@@ -189,7 +311,28 @@ export function WorkflowOperationsSkeleton({ data }: WorkflowOperationsProps) {
       {recentRows.length > 0 && (
         <motion.div variants={fadeUp} initial="hidden" animate="visible" custom={7}>
           <Card>
-            <Title>Recent Executions</Title>
+            <Flex justifyContent="between" alignItems="center">
+              <Title>Recent Executions</Title>
+              <button
+                onClick={() => {
+                  const md = generateMarkdownReport(
+                    { headline, kpis, recentRows, workflowBreakdown, errorBreakdown },
+                    branding.portalName
+                  );
+                  const blob = new Blob([md], { type: 'text/markdown' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `${branding.portalName.replace(/\s+/g, '-').toLowerCase()}-report.md`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}
+                className="flex items-center gap-1.5 rounded-md bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100 transition-colors"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Export MD
+              </button>
+            </Flex>
             <Table className="mt-4">
               <TableHead>
                 <TableRow>
@@ -202,19 +345,7 @@ export function WorkflowOperationsSkeleton({ data }: WorkflowOperationsProps) {
               </TableHead>
               <TableBody>
                 {recentRows.map((row) => (
-                  <TableRow key={row.id}>
-                    <TableCell>
-                      <Text className="font-medium">{String(row.workflow)}</Text>
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge status={String(row.status)} />
-                    </TableCell>
-                    <TableCell><Text>{String(row.duration)}</Text></TableCell>
-                    <TableCell>
-                      <Text className="text-xs truncate max-w-[200px]">{String(row.error)}</Text>
-                    </TableCell>
-                    <TableCell><Text className="text-xs">{String(row.time)}</Text></TableCell>
-                  </TableRow>
+                  <ExpandableRow key={row.id} row={row} />
                 ))}
               </TableBody>
             </Table>
