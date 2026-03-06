@@ -48,7 +48,7 @@ interface AgentPickerProps {
   loading: boolean;
   selected: SelectedEntity[];
   onSelectionChange: (selected: SelectedEntity[]) => void;
-  onContinue: () => void;
+  onContinue?: () => void;
 }
 
 // ────────────────────────────────────────────
@@ -424,13 +424,15 @@ export default function AgentPicker({
                 {selected.length > 3 && ` +${selected.length - 3} more`}
               </p>
             </div>
-            <button
-              onClick={onContinue}
-              className="cursor-pointer flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors duration-150 hover:bg-blue-700"
-            >
-              Continue
-              <ChevronRight className="h-4 w-4" />
-            </button>
+            {onContinue && (
+              <button
+                onClick={onContinue}
+                className="cursor-pointer flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors duration-150 hover:bg-blue-700"
+              >
+                Continue
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
