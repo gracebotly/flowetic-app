@@ -124,7 +124,7 @@ export async function POST(req: Request) {
     let recentCalls: Array<{ id: string; status: string; startedAt: string; duration?: number; error?: string }> = [];
 
     try {
-      const callsRes = await fetch(`https://api.retellai.com/list-calls?agent_id=${agentId}&limit=20`, {
+      const callsRes = await fetch(`https://api.retellai.com/list-calls?agent_id=${agentId}&limit=1000`, {
         method: "GET",
         headers: retellHeaders,
       });
@@ -137,19 +137,26 @@ export async function POST(req: Request) {
         callStats.failed = calls.filter((c: any) => c.call_status === 'error' || c.call_status === 'failed').length;
 
         if (calls.length > 0 && calls[0].start_timestamp) {
-          callStats.lastCall = new Date(calls[0].start_timestamp * 1000).toISOString();
+          callStats.lastCall = new Date(calls[0].start_timestamp).toISOString();
         }
 
         recentCalls = calls.slice(0, 5).map((c: any) => ({
           id: String(c.call_id),
           status: c.call_status === 'ended' || c.call_status === 'completed' ? 'success' : 'error',
-          startedAt: c.start_timestamp ? new Date(c.start_timestamp * 1000).toISOString() : now,
-          duration: c.end_timestamp && c.start_timestamp ? (c.end_timestamp - c.start_timestamp) * 1000 : undefined,
+          startedAt: c.start_timestamp ? new Date(c.start_timestamp).toISOString() : now,
+          duration: c.end_timestamp && c.start_timestamp ? (c.end_timestamp - c.start_timestamp) : undefined,
           error: c.disconnection_reason,
         }));
 
         // Store sample events
-        for (const call of calls.slice(0, 10)) {
+        for (const call of calls) {
+          const durationMs = (call.end_timestamp && call.start_timestamp)
+            ? call.end_timestamp - call.start_timestamp
+            : undefined;
+          const costDollars = typeof call.call_cost?.combined_cost === 'number'
+            ? call.call_cost.combined_cost / 100
+            : undefined;
+
           eventRows.push({
             tenant_id: membership.tenant_id,
             source_id: sourceId,
@@ -158,14 +165,32 @@ export async function POST(req: Request) {
             name: `retell:${agent.agent_name || agentId}:call`,
             value: call.call_status === 'ended' || call.call_status === 'completed' ? 1 : 0,
             state: {
+              // Identifiers
               workflow_id: String(call.agent_id || ''),
-              workflow_name: call.agent_name || '',
+              workflow_name: agent.agent_name || '',
               execution_id: String(call.call_id),
+
+              // Status & timing
               status: call.call_status === 'ended' ? 'success' : call.call_status || 'unknown',
-              started_at: call.start_timestamp || '',
-              ended_at: call.end_timestamp || '',
-              duration_ms: call.duration_ms || undefined,
+              started_at: call.start_timestamp ? new Date(call.start_timestamp).toISOString() : '',
+              ended_at: call.end_timestamp ? new Date(call.end_timestamp).toISOString() : '',
+              duration_ms: durationMs,
               disconnection_reason: call.disconnection_reason || undefined,
+
+              // Rich voice fields
+              call_type: call.call_type || undefined,
+              transcript: call.transcript || undefined,
+              recording_url: call.recording_url || undefined,
+              call_summary: call.call_analysis?.call_summary || undefined,
+              user_sentiment: call.call_analysis?.user_sentiment || undefined,
+              call_successful: call.call_analysis?.call_successful ?? undefined,
+              in_voicemail: call.call_analysis?.in_voicemail ?? undefined,
+
+              // Cost fields
+              cost: costDollars,
+              cost_breakdown: call.call_cost?.product_costs || undefined,
+              total_duration_seconds: call.call_cost?.total_duration_seconds || undefined,
+
               platform: 'retell',
             },
             labels: {
@@ -174,7 +199,7 @@ export async function POST(req: Request) {
               call_id: call.call_id,
               status: call.call_status,
             },
-            timestamp: call.start_timestamp ? new Date(call.start_timestamp * 1000).toISOString() : now,
+            timestamp: call.start_timestamp ? new Date(call.start_timestamp).toISOString() : now,
             created_at: now,
           });
         }
@@ -248,7 +273,9 @@ export async function POST(req: Request) {
 
   // Insert sample events
   if (eventRows.length > 0) {
-    const { error: evErr } = await supabase.from("events").insert(eventRows);
+    const { error: evErr } = await supabase
+      .from("events")
+      .upsert(eventRows, { onConflict: "tenant_id,source_id,platform_event_id", ignoreDuplicates: false });
     if (evErr) {
       console.error('[retell import] Failed to insert events:', evErr);
     }

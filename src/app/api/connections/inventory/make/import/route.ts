@@ -149,11 +149,16 @@ export async function POST(req: Request) {
       const execRes = await fetch(`https://${region}.make.com/api/v2/scenarios/${scenarioId}/executions?limit=20`, { method: "GET", headers: makeHeaders });
       if (execRes.ok) {
         const execData = await execRes.json();
-        const executions = Array.isArray(execData?.executions) ? execData.executions : [];
+        const rawExecutions = Array.isArray(execData?.executions) ? execData.executions : [];
+
+        // Filter to only real executions — the API returns start/stop/modify events too
+        const executions = rawExecutions.filter(
+          (e: any) => e.type === 'auto' && e.eventType === 'EXECUTION_END'
+        );
 
         executionStats.total = executions.length;
-        executionStats.success = executions.filter((e: any) => e.status === 'success' || e.status === 1).length;
-        executionStats.failed = executions.filter((e: any) => e.status === 'error' || e.status === 'failed' || e.status === 0).length;
+        executionStats.success = executions.filter((e: any) => e.status === 1).length;
+        executionStats.failed = executions.filter((e: any) => e.status === 3).length;
 
         if (executions.length > 0 && executions[0].createdAt) {
           executionStats.lastRun = executions[0].createdAt;
@@ -161,16 +166,16 @@ export async function POST(req: Request) {
 
         recentExecutions = executions.slice(0, 5).map((e: any) => ({
           id: String(e.id || e.executionId),
-          status: e.status === 'success' || e.status === 1 ? 'success' : 'error',
-          startedAt: e.createdAt || e.startedAt,
+          status: e.status === 1 ? 'success' : 'error',
+          startedAt: e.timestamp || e.createdAt || e.startedAt,
           duration: e.duration,
           error: e.error?.message,
         }));
 
         // Store sample events — MUST include `state` JSONB for events_flat view
-        for (const exec of executions.slice(0, 10)) {
-          const isSuccess = exec.status === 'success' || exec.status === 1;
-          const startedAt = exec.createdAt || exec.startedAt || now;
+        for (const exec of executions) {
+          const isSuccess = exec.status === 1;
+          const startedAt = exec.timestamp || now;
 
           eventRows.push({
             tenant_id: membership.tenant_id,
@@ -180,15 +185,30 @@ export async function POST(req: Request) {
             name: `make:${scenario.name || scenarioId}:execution`,
             value: isSuccess ? 1 : 0,
             state: {
+              // Identifiers
               workflow_id: scenarioId,
               workflow_name: scenario.name || scenarioId,
               execution_id: String(exec.id || exec.executionId),
+
+              // Status & timing
               status: isSuccess ? 'success' : 'error',
               started_at: startedAt,
               ended_at: '',
-              duration_ms: exec.duration || undefined,
-              operations: typeof exec.operations === 'number' ? exec.operations : undefined,
-              data_transfer: typeof exec.transfer === 'number' ? exec.transfer : (typeof exec.dataTransfer === 'number' ? exec.dataTransfer : undefined),
+              duration_ms: typeof exec.duration === 'number' ? exec.duration : undefined,
+
+              // Workflow metrics
+              operations_used: typeof exec.operations === 'number' ? exec.operations : undefined,
+              data_transfer_bytes: typeof exec.transfer === 'number' ? exec.transfer : undefined,
+              centicredits: typeof exec.centicredits === 'number' ? exec.centicredits : undefined,
+
+              // Error fields
+              error_message: exec.error?.message || undefined,
+              error_name: exec.error?.name || undefined,
+
+              // Metadata
+              is_instant: exec.instant ?? undefined,
+              is_replayable: exec.isReplayable ?? undefined,
+
               platform: 'make',
             },
             labels: {
@@ -262,7 +282,9 @@ export async function POST(req: Request) {
 
   // Insert sample events
   if (eventRows.length > 0) {
-    const { error: evErr } = await supabase.from("events").insert(eventRows);
+    const { error: evErr } = await supabase
+      .from("events")
+      .upsert(eventRows, { onConflict: "tenant_id,source_id,platform_event_id", ignoreDuplicates: false });
     if (evErr) {
       console.error('[make import] Failed to insert events:', evErr);
     }
