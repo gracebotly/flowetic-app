@@ -149,54 +149,78 @@ export async function POST(req: Request) {
       const execRes = await fetch(`https://${region}.make.com/api/v2/scenarios/${scenarioId}/executions?limit=20`, { method: "GET", headers: makeHeaders });
       if (execRes.ok) {
         const execData = await execRes.json();
-        const executions = Array.isArray(execData?.executions) ? execData.executions : [];
+        const allEntries = Array.isArray(execData?.executions) ? execData.executions : [];
+        // Filter: only real executions, not audit events (start/stop/modify)
+        const executions = allEntries.filter((e: any) =>
+          e.type === 'auto' && e.eventType === 'EXECUTION_END'
+        );
 
         executionStats.total = executions.length;
-        executionStats.success = executions.filter((e: any) => e.status === 'success' || e.status === 1).length;
-        executionStats.failed = executions.filter((e: any) => e.status === 'error' || e.status === 'failed' || e.status === 0).length;
+        // Make status is numeric: 1=success, 2=warning, 3=error
+        executionStats.success = executions.filter((e: any) => e.status === 1).length;
+        executionStats.failed = executions.filter((e: any) => e.status === 3).length;
 
-        if (executions.length > 0 && executions[0].createdAt) {
-          executionStats.lastRun = executions[0].createdAt;
+        if (executions.length > 0 && executions[0].timestamp) {
+          executionStats.lastRun = executions[0].timestamp;
         }
 
         recentExecutions = executions.slice(0, 5).map((e: any) => ({
-          id: String(e.id || e.executionId),
-          status: e.status === 'success' || e.status === 1 ? 'success' : 'error',
-          startedAt: e.createdAt || e.startedAt,
+          id: String(e.id),
+          status: e.status === 1 ? 'success' : (e.status === 2 ? 'warning' : 'error'),
+          startedAt: e.timestamp,
           duration: e.duration,
           error: e.error?.message,
         }));
 
-        // Store sample events — MUST include `state` JSONB for events_flat view
-        for (const exec of executions.slice(0, 10)) {
-          const isSuccess = exec.status === 'success' || exec.status === 1;
-          const startedAt = exec.createdAt || exec.startedAt || now;
+        // Store ALL filtered executions for complete analytics
+        for (const exec of executions) {
+          // Make status: 1=success, 2=warning, 3=error
+          const normalizedStatus = exec.status === 1 ? 'success' : (exec.status === 2 ? 'warning' : 'error');
+          const isSuccess = exec.status === 1;
+          const startedAt = exec.timestamp || now;
 
           eventRows.push({
             tenant_id: membership.tenant_id,
             source_id: sourceId,
-            platform_event_id: String(exec.id || exec.executionId),
+            platform_event_id: String(exec.id),
             type: 'scenario_execution',
             name: `make:${scenario.name || scenarioId}:execution`,
             value: isSuccess ? 1 : 0,
             state: {
+              // Identifiers
               workflow_id: scenarioId,
               workflow_name: scenario.name || scenarioId,
-              execution_id: String(exec.id || exec.executionId),
-              status: isSuccess ? 'success' : 'error',
+              execution_id: String(exec.id),
+              platform: 'make',
+
+              // Status
+              status: normalizedStatus,
+
+              // Time
               started_at: startedAt,
               ended_at: '',
-              duration_ms: exec.duration || undefined,
-              operations: typeof exec.operations === 'number' ? exec.operations : undefined,
-              data_transfer: typeof exec.transfer === 'number' ? exec.transfer : (typeof exec.dataTransfer === 'number' ? exec.dataTransfer : undefined),
-              platform: 'make',
+              duration_ms: typeof exec.duration === 'number' ? exec.duration : undefined,
+
+              // Make-specific metrics (matched to fieldMappings keys)
+              operations_used: typeof exec.operations === 'number' ? exec.operations : undefined,
+              data_transfer_bytes: typeof exec.transfer === 'number' ? exec.transfer : undefined,
+              centicredits: typeof exec.centicredits === 'number' ? exec.centicredits : undefined,
+
+              // Execution metadata
+              is_instant: typeof exec.instant === 'boolean' ? exec.instant : undefined,
+              is_replayable: typeof exec.isReplayable === 'boolean' ? exec.isReplayable : undefined,
+              scenario_name: exec.scenarioName || undefined,
+
+              // Error info
+              error_message: exec.error?.message || undefined,
+              error_name: exec.error?.name || undefined,
             },
             labels: {
               scenario_id: scenarioId,
               scenario_name: scenario.name,
-              execution_id: String(exec.id || exec.executionId),
-              status: isSuccess ? 'success' : 'error',
-              platformType: 'make',
+              execution_id: String(exec.id),
+              status: normalizedStatus,
+              platform: 'make',
             },
             timestamp: startedAt,
             created_at: now,
@@ -260,11 +284,13 @@ export async function POST(req: Request) {
   const { error: upErr } = await supabase.from("source_entities").upsert(rows, { onConflict: "source_id,external_id" });
   if (upErr) return NextResponse.json({ ok: false, code: "PERSISTENCE_FAILED", message: upErr.message }, { status: 400 });
 
-  // Insert sample events
+  // Upsert events
   if (eventRows.length > 0) {
-    const { error: evErr } = await supabase.from("events").insert(eventRows);
+    const { error: evErr } = await supabase
+      .from("events")
+      .upsert(eventRows, { onConflict: "source_id,platform_event_id", ignoreDuplicates: false });
     if (evErr) {
-      console.error('[make import] Failed to insert events:', evErr);
+      console.error('[make import] Failed to upsert events:', evErr);
     }
   }
 

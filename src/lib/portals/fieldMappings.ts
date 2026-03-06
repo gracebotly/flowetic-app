@@ -56,9 +56,12 @@ export interface WorkflowFieldMapping {
   
   // Rich fields
   errorMessage: string;
-  nodeCount: string;        // n8n: number of nodes executed
-  operationsUsed: string;   // Make: operations consumed
-  triggerType: string;       // webhook/schedule/manual
+  errorName: string;         // Make: error type name (BundleValidationError, etc.)
+  nodeCount: string;         // n8n: number of nodes executed
+  operationsUsed: string;    // Make: operations consumed
+  dataTransferBytes: string; // Make: bytes transferred
+  centicredits: string;      // Make: centicredits consumed (÷100 = credits)
+  triggerType: string;       // n8n: webhook/schedule/manual; Make: is_instant
 }
 
 // ─── Vapi Field Mapping ──────────────────────────────────────
@@ -129,8 +132,11 @@ export const N8N_FIELDS: WorkflowFieldMapping = {
   startedAt:          'started_at',
   endedAt:            'ended_at',
   errorMessage:       'error_message',    // data.resultData.error.message
+  errorName:          'error_name',
   nodeCount:          'node_count',       // count of executed nodes
   operationsUsed:     'operations_used',  // not applicable for n8n
+  dataTransferBytes:  'data_transfer_bytes',
+  centicredits:       'centicredits',
   triggerType:        'trigger_type',     // webhook/schedule/manual
 };
 
@@ -148,9 +154,12 @@ export const MAKE_FIELDS: WorkflowFieldMapping = {
   startedAt:          'started_at',
   endedAt:            'ended_at',
   errorMessage:       'error_message',
-  nodeCount:          'node_count',       // modules count
-  operationsUsed:     'operations_used',  // Make operations consumed
-  triggerType:        'trigger_type',
+  errorName:          'error_name',           // BundleValidationError, AccountValidationError, etc.
+  nodeCount:          'node_count',           // not applicable for Make
+  operationsUsed:     'operations_used',      // Make operations consumed per execution
+  dataTransferBytes:  'data_transfer_bytes',  // bytes transferred per execution
+  centicredits:       'centicredits',         // centicredits consumed (÷100 = credits)
+  triggerType:        'is_instant',           // boolean: true = webhook trigger, false = scheduled
 };
 
 // ─── Lookup ──────────────────────────────────────────────────

@@ -124,57 +124,97 @@ export async function POST(req: Request) {
     let recentCalls: Array<{ id: string; status: string; startedAt: string; duration?: number; error?: string }> = [];
 
     try {
-      const callsRes = await fetch(`https://api.retellai.com/list-calls?agent_id=${agentId}&limit=20`, {
-        method: "GET",
+      const callsRes = await fetch("https://api.retellai.com/v2/list-calls", {
+        method: "POST",
         headers: retellHeaders,
+        body: JSON.stringify({
+          filter_criteria: { agent_id: [agentId] },
+          limit: 1000,
+          sort_order: "descending",
+        }),
       });
       if (callsRes.ok) {
         const callsData = await callsRes.json();
         const calls = Array.isArray(callsData) ? callsData : Array.isArray(callsData?.calls) ? callsData.calls : [];
 
         callStats.total = calls.length;
-        callStats.success = calls.filter((c: any) => c.call_status === 'ended' || c.call_status === 'completed').length;
-        callStats.failed = calls.filter((c: any) => c.call_status === 'error' || c.call_status === 'failed').length;
+        callStats.success = calls.filter((c: any) => c.call_status === 'ended').length;
+        callStats.failed = calls.filter((c: any) => c.call_status === 'error').length;
 
         if (calls.length > 0 && calls[0].start_timestamp) {
-          callStats.lastCall = new Date(calls[0].start_timestamp * 1000).toISOString();
+          callStats.lastCall = new Date(calls[0].start_timestamp).toISOString();
         }
 
         recentCalls = calls.slice(0, 5).map((c: any) => ({
           id: String(c.call_id),
-          status: c.call_status === 'ended' || c.call_status === 'completed' ? 'success' : 'error',
-          startedAt: c.start_timestamp ? new Date(c.start_timestamp * 1000).toISOString() : now,
-          duration: c.end_timestamp && c.start_timestamp ? (c.end_timestamp - c.start_timestamp) * 1000 : undefined,
+          status: c.call_status === 'ended' ? 'success' : 'error',
+          startedAt: c.start_timestamp ? new Date(c.start_timestamp).toISOString() : now,
+          duration: c.end_timestamp && c.start_timestamp ? (c.end_timestamp - c.start_timestamp) : undefined,
           error: c.disconnection_reason,
         }));
 
-        // Store sample events
-        for (const call of calls.slice(0, 10)) {
+        // Store ALL calls (not just 10) for complete analytics
+        for (const call of calls) {
+          const isSuccess = call.call_status === 'ended';
+          const normalizedStatus = isSuccess ? 'success' : (call.call_status === 'error' ? 'error' : call.call_status || 'unknown');
+
+          const analysis = call.call_analysis || {};
+          const costData = call.call_cost || {};
+
+          const durationMs = (call.end_timestamp && call.start_timestamp && call.end_timestamp > call.start_timestamp)
+            ? call.end_timestamp - call.start_timestamp
+            : undefined;
+
           eventRows.push({
             tenant_id: membership.tenant_id,
             source_id: sourceId,
             platform_event_id: String(call.call_id),
             type: 'agent_call',
             name: `retell:${agent.agent_name || agentId}:call`,
-            value: call.call_status === 'ended' || call.call_status === 'completed' ? 1 : 0,
+            value: isSuccess ? 1 : 0,
             state: {
               workflow_id: String(call.agent_id || ''),
-              workflow_name: call.agent_name || '',
+              workflow_name: String(agent.agent_name || `Agent ${agentId}`),
               execution_id: String(call.call_id),
-              status: call.call_status === 'ended' ? 'success' : call.call_status || 'unknown',
-              started_at: call.start_timestamp || '',
-              ended_at: call.end_timestamp || '',
-              duration_ms: call.duration_ms || undefined,
-              disconnection_reason: call.disconnection_reason || undefined,
               platform: 'retell',
+
+              status: normalizedStatus,
+
+              started_at: call.start_timestamp ? new Date(call.start_timestamp).toISOString() : '',
+              ended_at: call.end_timestamp ? new Date(call.end_timestamp).toISOString() : '',
+              duration_ms: durationMs,
+
+              call_type: call.call_type || undefined,
+              ended_reason: call.disconnection_reason || undefined,
+
+              call_summary: analysis.call_summary || undefined,
+              user_sentiment: analysis.user_sentiment || undefined,
+              call_successful: typeof analysis.call_successful === 'boolean' ? analysis.call_successful : undefined,
+              in_voicemail: typeof analysis.in_voicemail === 'boolean' ? analysis.in_voicemail : undefined,
+              custom_analysis_data: (analysis.custom_analysis_data && Object.keys(analysis.custom_analysis_data).length > 0)
+                ? analysis.custom_analysis_data : undefined,
+
+              transcript: call.transcript || undefined,
+              recording_url: call.recording_url || undefined,
+
+              cost: typeof costData.combined_cost === 'number' ? costData.combined_cost / 100 : undefined,
+              cost_breakdown: (costData.product_costs && costData.product_costs.length > 0)
+                ? costData.product_costs.map((p: any) => ({
+                    product: p.product,
+                    cost: typeof p.cost === 'number' ? p.cost / 100 : 0,
+                    unit_price: p.unit_price,
+                  }))
+                : undefined,
+              total_duration_seconds: typeof costData.total_duration_seconds === 'number' ? costData.total_duration_seconds : undefined,
             },
             labels: {
               agent_id: agentId,
               agent_name: agent.agent_name,
               call_id: call.call_id,
-              status: call.call_status,
+              status: normalizedStatus,
+              platform: 'retell',
             },
-            timestamp: call.start_timestamp ? new Date(call.start_timestamp * 1000).toISOString() : now,
+            timestamp: call.start_timestamp ? new Date(call.start_timestamp).toISOString() : now,
             created_at: now,
           });
         }
@@ -246,11 +286,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, code: "PERSISTENCE_FAILED", message: upErr.message }, { status: 400 });
   }
 
-  // Insert sample events
+  // Upsert events
   if (eventRows.length > 0) {
-    const { error: evErr } = await supabase.from("events").insert(eventRows);
+    const { error: evErr } = await supabase
+      .from("events")
+      .upsert(eventRows, { onConflict: "source_id,platform_event_id", ignoreDuplicates: false });
     if (evErr) {
-      console.error('[retell import] Failed to insert events:', evErr);
+      console.error('[retell import] Failed to upsert events:', evErr);
     }
   }
 
