@@ -11,46 +11,59 @@ type Props = {
   onSelect: (surfaceType: SurfaceType) => void;
 };
 
-const SURFACE_OPTIONS: Array<{
+type SurfaceOption = {
   value: SurfaceType;
   title: string;
   description: string;
   icon: typeof BarChart3;
   color: string;
-}> = [
+};
+
+const VOICE_OPTIONS: SurfaceOption[] = [
   {
     value: "analytics",
-    title: "Analytics Dashboard",
+    title: "Client Reporting Portal",
     description:
-      "Your client gets a branded dashboard with real-time KPIs, charts, and activity tables. Perfect for proving ROI and keeping clients.",
+      "Your client gets a branded dashboard showing call volume, success rates, sentiment, and trends. Share via magic link — they see your brand, not Vapi or Retell.",
+    icon: BarChart3,
+    color: "blue",
+  },
+];
+
+const WORKFLOW_OPTIONS: SurfaceOption[] = [
+  {
+    value: "analytics",
+    title: "Client Reporting Portal",
+    description:
+      "Your client gets a branded dashboard showing execution counts, success rates, error alerts, and performance trends. Share via magic link.",
     icon: BarChart3,
     color: "blue",
   },
   {
     value: "runner",
-    title: "SaaS Product",
+    title: "Workflow Service",
     description:
-      "Wrap your workflow into a sellable product. Your client fills out a form, triggers the workflow, and sees results instantly.",
+      "Wrap this automation into a branded product page. Your client's customers fill out a form, the workflow runs, and results display — all under your brand.",
     icon: Play,
     color: "emerald",
   },
   {
     value: "both",
-    title: "Dashboard + Product",
+    title: "Portal + Service",
     description:
-      "The full package — your client can view live analytics AND run workflows on demand. The premium tier.",
+      "The full package — your client sees the reporting dashboard AND their customers can trigger the workflow through a branded form page.",
     icon: Layers,
     color: "violet",
   },
 ];
 
 export function WizardStepSurface({ surfaceType, platform, onSelect }: Props) {
-  const platformHint =
-    platform === "vapi" || platform === "retell"
-      ? "Voice agents → show call volume, success rates, and costs. Products → trigger outbound calls via form."
-      : platform === "n8n" || platform === "make"
-        ? "Workflows → show execution counts, success rates, and trends. Products → trigger executions via form."
-        : null;
+  const isVoice = platform === "vapi" || platform === "retell";
+  const options = isVoice ? VOICE_OPTIONS : WORKFLOW_OPTIONS;
+
+  const platformHint = isVoice
+    ? "Voice agents → your client sees call analytics, sentiment, and transcripts in a branded dashboard."
+    : "Workflows → your client sees execution analytics. Service wraps the workflow into a sellable product with a form.";
 
   return (
     <div>
@@ -62,12 +75,12 @@ export function WizardStepSurface({ surfaceType, platform, onSelect }: Props) {
       </p>
       {platformHint && (
         <p className="mt-2 rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-700">
-          💡 {platformHint}
+          {platformHint}
         </p>
       )}
 
       <div className="mt-6 grid gap-4">
-        {SURFACE_OPTIONS.map((option) => (
+        {options.map((option) => (
           <OfferingCard
             key={option.value}
             title={option.title}
