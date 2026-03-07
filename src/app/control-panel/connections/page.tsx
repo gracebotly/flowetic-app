@@ -20,6 +20,7 @@ import {
   Loader2,
   CheckCircle2,
   XCircle,
+  Activity,
 } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
@@ -397,6 +398,7 @@ export default function ConnectionsPage() {
     state: Record<string, unknown> | null;
   }>>([]);
   const [drawerEventsLoading, setDrawerEventsLoading] = useState(false);
+  const [drawerSyncing, setDrawerSyncing] = useState(false);
 
   // Inventory state for n8n workflows
   const [inventoryLoading, setInventoryLoading] = useState(false);
@@ -807,6 +809,46 @@ export default function ConnectionsPage() {
       return () => window.removeEventListener("keydown", onKeyDown);
     }
   }, [detailsOpen]);
+
+  // Sync events from n8n for the current entity, then reload
+  async function syncAndReloadDrawerEvents() {
+    if (!selectedEntity || drawerSyncing) return;
+    setDrawerSyncing(true);
+    try {
+      const res = await fetch("/api/connections/refresh-events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sourceId: selectedEntity.sourceId,
+          workflowExternalId: selectedEntity.externalId,
+        }),
+      });
+      const json = await res.json();
+      if (json.ok) {
+        // Reload events
+        const evRes = await fetch(
+          `/api/events?source_id=${selectedEntity.sourceId}&limit=50`
+        );
+        const evJson = await evRes.json();
+        const allEvents = evJson.events ?? [];
+        const filtered = allEvents.filter((ev: any) => {
+          const s = ev.state as Record<string, unknown> | null;
+          if (!s) return false;
+          return (
+            String(s.workflow_id ?? "") === selectedEntity.externalId ||
+            String(s.assistant_id ?? "") === selectedEntity.externalId ||
+            String(s.agent_id ?? "") === selectedEntity.externalId ||
+            String(s.scenario_id ?? "") === selectedEntity.externalId
+          );
+        });
+        setDrawerEvents(filtered);
+      }
+    } catch {
+      // silent
+    } finally {
+      setDrawerSyncing(false);
+    }
+  }
 
   // Fetch events when activity tab is selected
   useEffect(() => {
@@ -2636,6 +2678,22 @@ export default function ConnectionsPage() {
               {/* Activity tab — real event feed */}
               {drawerTab === "activity" ? (
                 <div>
+                  {/* Sync button at top */}
+                  <div className="mb-4 flex items-center justify-between">
+                    <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Execution History
+                    </span>
+                    <button
+                      type="button"
+                      onClick={syncAndReloadDrawerEvents}
+                      disabled={drawerSyncing}
+                      className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-600 shadow-sm transition hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      <RefreshCw className={`h-3 w-3 ${drawerSyncing ? "animate-spin" : ""}`} />
+                      {drawerSyncing ? "Syncing..." : "Sync"}
+                    </button>
+                  </div>
+
                   {drawerEventsLoading ? (
                     <div className="flex items-center justify-center py-12">
                       <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
@@ -2643,9 +2701,12 @@ export default function ConnectionsPage() {
                     </div>
                   ) : drawerEvents.length === 0 ? (
                     <div className="py-8 text-center">
-                      <div className="text-sm text-gray-400">No recent activity for this {selectedEntity.kind}.</div>
-                      <div className="mt-1 text-xs text-gray-300">
-                        Activity will appear here once events are recorded. Try syncing your connection first.
+                      <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-gray-100">
+                        <Activity className="h-5 w-5 text-gray-400" />
+                      </div>
+                      <div className="text-sm font-medium text-gray-600">No events synced yet</div>
+                      <div className="mt-1 text-xs text-gray-400">
+                        Click &ldquo;Sync&rdquo; above to pull the latest executions from n8n.
                       </div>
                     </div>
                   ) : (
@@ -2665,37 +2726,70 @@ export default function ConnectionsPage() {
                           month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
                         });
 
+                        // Enriched fields from extractPayloadFields
+                        const topic = s?.topic ? String(s.topic) : null;
+                        const customerId = s?.customer_id ? String(s.customer_id) : null;
+                        const depth = s?.depth ? String(s.depth) : null;
+                        const executionId = s?.execution_id ? String(s.execution_id) : null;
+
                         return (
                           <div
                             key={ev.id}
-                            className={`flex items-center gap-3 rounded-lg border px-4 py-3 ${
+                            className={`rounded-lg border px-4 py-3 ${
                               isError
-                                ? "border-red-100 bg-red-50/50"
+                                ? "border-red-100 bg-red-50/30"
                                 : "border-gray-100 bg-white"
                             }`}
                           >
-                            <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${
-                              isError ? "bg-red-100" : "bg-emerald-100"
-                            }`}>
-                              {isError ? (
-                                <XCircle className="h-3.5 w-3.5 text-red-600" />
-                              ) : (
-                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                              )}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2">
-                                <span className="text-sm font-medium text-gray-900 capitalize">{status}</span>
-                                {durationLabel ? (
-                                  <span className="text-xs text-gray-400">{durationLabel}</span>
+                            <div className="flex items-start gap-3">
+                              <div className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${
+                                isError ? "bg-red-100" : "bg-emerald-100"
+                              }`}>
+                                {isError ? (
+                                  <XCircle className="h-3.5 w-3.5 text-red-600" />
+                                ) : (
+                                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                                )}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2">
+                                  <span className={`text-sm font-semibold capitalize ${isError ? "text-red-700" : "text-gray-900"}`}>
+                                    {status}
+                                  </span>
+                                  {durationLabel ? (
+                                    <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-500">{durationLabel}</span>
+                                  ) : null}
+                                  {depth ? (
+                                    <span className="rounded bg-blue-50 px-1.5 py-0.5 text-xs font-medium text-blue-600 capitalize">{depth}</span>
+                                  ) : null}
+                                </div>
+
+                                {topic ? (
+                                  <div className="mt-1 text-sm text-gray-700 line-clamp-2">{topic}</div>
+                                ) : null}
+
+                                <div className="mt-1.5 flex items-center gap-3 text-xs text-gray-400">
+                                  <span>{timeLabel}</span>
+                                  {customerId && customerId !== "anonymous" ? (
+                                    <>
+                                      <span>·</span>
+                                      <span>{customerId}</span>
+                                    </>
+                                  ) : null}
+                                  {executionId ? (
+                                    <>
+                                      <span>·</span>
+                                      <span className="font-mono">{executionId.length > 20 ? executionId.slice(0, 20) + "…" : executionId}</span>
+                                    </>
+                                  ) : null}
+                                </div>
+
+                                {isError && s?.error_message ? (
+                                  <div className="mt-1.5 rounded bg-red-50 px-2 py-1 text-xs text-red-600">
+                                    {String(s.error_message).slice(0, 150)}
+                                  </div>
                                 ) : null}
                               </div>
-                              <div className="text-xs text-gray-400">{timeLabel}</div>
-                              {isError && s?.error_message ? (
-                                <div className="mt-1 truncate text-xs text-red-600">
-                                  {String(s.error_message).slice(0, 120)}
-                                </div>
-                              ) : null}
                             </div>
                           </div>
                         );
