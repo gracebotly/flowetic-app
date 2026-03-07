@@ -107,7 +107,6 @@ export function MetricsBar({ kpis }: MetricsBarProps) {
                   colors={[chartColor as 'slate']}
                   className="h-8 w-20"
                   curveType="monotone"
-                  showGradient={false}
                 />
               ) : null}
             </div>
