@@ -80,7 +80,7 @@ export async function GET(req: Request) {
   const costs = entityEvents.map((e: any) => Number((e.state as any)?.cost ?? 0)).filter((c: number) => c > 0);
   const totalCost = costs.reduce((a: number, b: number) => a + b, 0);
 
-  const stats = { totalEvents, successEvents, successRate, avgDuration, totalCost };
+  const stats: Stats = { totalEvents, successEvents, successRate, avgDuration, totalCost };
 
   try {
     if (platform === "retell") {
@@ -105,6 +105,7 @@ type Stats = {
   successRate: number;
   avgDuration: number;
   totalCost: number;
+  latestError?: string;
 };
 
 async function fetchRetellDetails(secret: Record<string, unknown>, agentId: string, stats: Stats) {
@@ -230,15 +231,6 @@ async function fetchMakeDetails(secret: Record<string, unknown>, scenarioId: str
     // non-fatal — fall back to Supabase stats
   }
 
-  // Use Make's aggregate stats when Supabase has nothing
-  const enrichedStats: Stats = stats.totalEvents > 0 ? stats : {
-    totalEvents: makeExecs,
-    successEvents: Math.max(0, makeExecs - makeErrors),
-    successRate: makeExecs > 0 ? Math.round(((makeExecs - makeErrors) / makeExecs) * 100) : 0,
-    avgDuration: stats.avgDuration,
-    totalCost: 0,
-  };
-
   // ── Check for recent execution errors ──
   let latestError: string | undefined;
   try {
@@ -259,6 +251,16 @@ async function fetchMakeDetails(secret: Record<string, unknown>, scenarioId: str
   } catch {
     // non-fatal
   }
+
+  // Use Make's aggregate stats when Supabase has nothing
+  const enrichedStats: Stats = stats.totalEvents > 0 ? stats : {
+    totalEvents: makeExecs,
+    successEvents: Math.max(0, makeExecs - makeErrors),
+    successRate: makeExecs > 0 ? Math.round(((makeExecs - makeErrors) / makeExecs) * 100) : 0,
+    avgDuration: stats.avgDuration,
+    totalCost: 0,
+    latestError: latestError ?? undefined,
+  };
 
   return NextResponse.json({
     ok: true,
@@ -360,6 +362,11 @@ async function fetchN8nDetails(secret: Record<string, unknown>, workflowId: stri
       // non-fatal
     }
   }
+
+  enrichedStats = {
+    ...enrichedStats,
+    latestError: latestError ?? undefined,
+  };
 
   return NextResponse.json({
     ok: true,

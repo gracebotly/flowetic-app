@@ -30,6 +30,8 @@ import {
   CredentialSavingOverlay,
 } from "@/components/connections/ConnectionSkeletons";
 import { EntityDetailsPanel } from "@/components/connections/EntityDetailsPanel";
+import { PortalReadyBadge } from "@/components/connections/panels/shared/PortalReadyBadge";
+import type { EntityHealth } from "@/components/connections/panels/shared/HealthBanner";
 
 type EntityType = "workflow" | "agent" | "voice_agent" | "automation";
 
@@ -380,6 +382,7 @@ export default function ConnectionsPage() {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [selectedEntity, setSelectedEntity] = useState<IndexedEntityRow | null>(null);
   const [drawerTab, setDrawerTab] = useState<"overview" | "activity" | "portals">("overview");
+  const [drawerHealth, setDrawerHealth] = useState<EntityHealth | null>(null);
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [drawerEvents, setDrawerEvents] = useState<Array<{
     id: string;
@@ -785,6 +788,7 @@ export default function ConnectionsPage() {
     setTimeout(() => {
       setDetailsOpen(false);
       setSelectedEntity(null);
+      setDrawerHealth(null);
     }, 300);
   }
 
@@ -2524,7 +2528,6 @@ export default function ConnectionsPage() {
                 <div>
                   <div className="flex items-center gap-2">
                     <h2 className="text-lg font-semibold text-gray-900">{selectedEntity.name}</h2>
-                    <span className="inline-block h-2 w-2 rounded-full bg-emerald-400" title="Healthy" />
                   </div>
                   <div className="mt-0.5 flex items-center gap-2">
                     <span className="inline-flex items-center rounded-md bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 capitalize">
@@ -2541,6 +2544,7 @@ export default function ConnectionsPage() {
                     </span>
                     <span className="text-xs text-gray-400">·</span>
                     <span className="text-xs text-gray-400">Last seen {formatRelativeFromTs(selectedEntity.lastUpdatedTs)}</span>
+                    {drawerHealth ? <PortalReadyBadge health={drawerHealth} /> : null}
                   </div>
                 </div>
               </div>
@@ -2552,22 +2556,6 @@ export default function ConnectionsPage() {
               >
                 <X className="h-5 w-5" />
               </button>
-            </div>
-
-            {/* Stats bar */}
-            <div className="grid grid-cols-3 divide-x divide-gray-100 border-b border-gray-100 bg-gray-50/50">
-              <div className="px-6 py-3">
-                <div className="text-xs text-gray-400">Connection</div>
-                <div className="text-sm font-semibold text-emerald-600">Healthy</div>
-              </div>
-              <div className="px-6 py-3">
-                <div className="text-xs text-gray-400">Indexed</div>
-                <div className="text-sm font-semibold text-blue-600">Active</div>
-              </div>
-              <div className="px-6 py-3">
-                <div className="text-xs text-gray-400">Portals</div>
-                <div className="text-sm font-semibold text-gray-900">0</div>
-              </div>
             </div>
 
             {/* Tabs */}
@@ -2606,6 +2594,7 @@ export default function ConnectionsPage() {
                   platform={selectedEntity.platform}
                   sourceId={selectedEntity.sourceId}
                   externalId={selectedEntity.externalId}
+                  onHealthChange={setDrawerHealth}
                 />
               ) : null}
 

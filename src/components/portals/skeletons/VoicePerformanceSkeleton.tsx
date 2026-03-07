@@ -24,6 +24,7 @@ import { usePortalTheme } from '@/components/portals/PortalShell';
 import { ThemedCard, KPICard, StatusBadge, fadeUp, hexToRgba } from '@/components/portals/shared/portalPrimitives';
 import type { SkeletonData } from '@/lib/portals/transformData';
 import { getThemeTokens, STATUS, DEFAULT_ACCENT, type ThemeTokens } from '@/lib/portals/themeTokens';
+import { parseTranscript } from '@/lib/portals/parseTranscript';
 
 interface VoicePerformanceProps {
   data: SkeletonData;
@@ -60,39 +61,6 @@ function formatProductName(product: string): string {
     .join(' ');
 }
 
-function parseTranscript(raw: string): Array<{ role: 'agent' | 'user'; text: string }> {
-  if (!raw) return [];
-  const messages: Array<{ role: 'agent' | 'user'; text: string }> = [];
-  const lines = raw.split('\n');
-  let currentRole: 'agent' | 'user' | null = null;
-  let currentText = '';
-
-  for (const line of lines) {
-    const agentMatch = line.match(/^Agent:\s*(.*)/i);
-    const userMatch = line.match(/^User:\s*(.*)/i);
-
-    if (agentMatch) {
-      if (currentRole && currentText.trim()) {
-        messages.push({ role: currentRole, text: currentText.trim() });
-      }
-      currentRole = 'agent';
-      currentText = agentMatch[1];
-    } else if (userMatch) {
-      if (currentRole && currentText.trim()) {
-        messages.push({ role: currentRole, text: currentText.trim() });
-      }
-      currentRole = 'user';
-      currentText = userMatch[1];
-    } else if (currentRole) {
-      currentText += ` ${line.trim()}`;
-    }
-  }
-
-  if (currentRole && currentText.trim()) {
-    messages.push({ role: currentRole, text: currentText.trim() });
-  }
-  return messages;
-}
 
 function generateVoiceInsights(data: SkeletonData): Array<{ type: 'success' | 'warning' | 'info'; title: string; description: string; recommendation: string }> {
   const insights: Array<{ type: 'success' | 'warning' | 'info'; title: string; description: string; recommendation: string }> = [];
