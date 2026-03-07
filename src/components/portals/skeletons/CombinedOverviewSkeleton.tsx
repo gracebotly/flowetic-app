@@ -17,6 +17,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { usePortalTheme } from '@/components/portals/PortalShell';
+import { ThemedCard, KPICard, StatusBadge, fadeUp } from '@/components/portals/shared/portalPrimitives';
 import { getThemeTokens, STATUS, DEFAULT_ACCENT, type ThemeTokens } from '@/lib/portals/themeTokens';
 import type { SkeletonData } from '@/lib/portals/transformData';
 
@@ -28,88 +29,6 @@ interface CombinedOverviewProps {
     logo_url?: string | null;
     portalName: string;
   };
-}
-
-const fadeUp = {
-  hidden: { opacity: 0, y: 20 },
-  visible: (i: number) => ({
-    opacity: 1,
-    y: 0,
-    transition: { delay: i * 0.08, duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] },
-  }),
-};
-
-function ThemedCard({ children, className = '', glow = false, accentColor }: {
-  children: React.ReactNode;
-  className?: string;
-  glow?: boolean;
-  accentColor?: string;
-}) {
-  const { theme } = usePortalTheme();
-  const isDark = theme === 'dark';
-  const tokens = getThemeTokens(theme);
-
-  return (
-    <div
-      className={`relative overflow-hidden rounded-xl border p-5 transition-all duration-300 ${className}`}
-      style={{
-        backgroundColor: tokens.bgCard,
-        borderColor: tokens.border,
-        boxShadow: glow && accentColor
-          ? `0 0 40px ${accentColor}15, 0 1px 3px rgba(0,0,0,${isDark ? '0.3' : '0.08'})`
-          : `0 1px 3px rgba(0,0,0,${isDark ? '0.3' : '0.08'})`,
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
-function KPICard({ label, value, icon: Icon, color, index }: {
-  label: string;
-  value: string | number;
-  icon: React.ElementType;
-  color: string;
-  index: number;
-}) {
-  const { theme } = usePortalTheme();
-  const tokens = getThemeTokens(theme);
-
-  return (
-    <motion.div variants={fadeUp} initial="hidden" animate="visible" custom={index}>
-      <ThemedCard>
-        <Flex justifyContent="between" alignItems="start">
-          <div className="flex-1">
-            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: tokens.textSecondary }}>
-              {label}
-            </p>
-            <p className="mt-2 text-2xl font-bold tracking-tight" style={{ color: tokens.textPrimary }}>
-              {value}
-            </p>
-          </div>
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ backgroundColor: `${color}15` }}>
-            <Icon className="h-5 w-5" style={{ color }} />
-          </div>
-        </Flex>
-      </ThemedCard>
-    </motion.div>
-  );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const isSuccess = status === 'success' || status === 'completed';
-  return (
-    <span
-      className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold"
-      style={{
-        backgroundColor: isSuccess ? `${STATUS.success}10` : `${STATUS.error}10`,
-        color: isSuccess ? STATUS.success : STATUS.error,
-      }}
-    >
-      <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: isSuccess ? STATUS.success : STATUS.error }} />
-      {isSuccess ? 'Success' : 'Failed'}
-    </span>
-  );
 }
 
 function PlatformCard({ label, icon: Icon, data, accent, tokens }: {
