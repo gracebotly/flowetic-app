@@ -389,7 +389,6 @@ export default function ConnectionsPage() {
     state: Record<string, unknown> | null;
   }>>([]);
   const [drawerEventsLoading, setDrawerEventsLoading] = useState(false);
-  const [drawerSyncing, setDrawerSyncing] = useState(false);
 
   // Inventory state for n8n workflows
   const [inventoryLoading, setInventoryLoading] = useState(false);
@@ -800,46 +799,6 @@ export default function ConnectionsPage() {
       return () => window.removeEventListener("keydown", onKeyDown);
     }
   }, [detailsOpen]);
-
-  // Sync events from n8n for the current entity, then reload
-  async function syncAndReloadDrawerEvents() {
-    if (!selectedEntity || drawerSyncing) return;
-    setDrawerSyncing(true);
-    try {
-      const res = await fetch("/api/connections/refresh-events", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sourceId: selectedEntity.sourceId,
-          workflowExternalId: selectedEntity.externalId,
-        }),
-      });
-      const json = await res.json();
-      if (json.ok) {
-        // Reload events
-        const evRes = await fetch(
-          `/api/events?source_id=${selectedEntity.sourceId}&limit=50`
-        );
-        const evJson = await evRes.json();
-        const allEvents = evJson.events ?? [];
-        const filtered = allEvents.filter((ev: any) => {
-          const s = ev.state as Record<string, unknown> | null;
-          if (!s) return false;
-          return (
-            String(s.workflow_id ?? "") === selectedEntity.externalId ||
-            String(s.assistant_id ?? "") === selectedEntity.externalId ||
-            String(s.agent_id ?? "") === selectedEntity.externalId ||
-            String(s.scenario_id ?? "") === selectedEntity.externalId
-          );
-        });
-        setDrawerEvents(filtered);
-      }
-    } catch {
-      // silent
-    } finally {
-      setDrawerSyncing(false);
-    }
-  }
 
   // Fetch events when activity tab is selected
   useEffect(() => {
@@ -2653,20 +2612,67 @@ export default function ConnectionsPage() {
               {/* Activity tab — real event feed */}
               {drawerTab === "activity" ? (
                 <div>
-                  {/* Sync button at top */}
+                  {/* Header with download */}
                   <div className="mb-4 flex items-center justify-between">
                     <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Execution History
                     </span>
-                    <button
-                      type="button"
-                      onClick={syncAndReloadDrawerEvents}
-                      disabled={drawerSyncing}
-                      className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-600 shadow-sm transition hover:bg-gray-50 disabled:opacity-50"
-                    >
-                      <RefreshCw className={`h-3 w-3 ${drawerSyncing ? "animate-spin" : ""}`} />
-                      {drawerSyncing ? "Syncing..." : "Sync"}
-                    </button>
+                    {drawerEvents.length > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          // Generate markdown report from events
+                          const entity = selectedEntity;
+                          if (!entity) return;
+                          let md = `# Execution Report: ${entity.name}
+
+`;
+                          md += `**Platform:** ${entity.platform} · **Type:** ${entity.kind}
+`;
+                          md += `**Generated:** ${new Date().toLocaleString()}
+
+`;
+                          md += `---
+
+`;
+                          md += `| # | Status | Duration | Date | Details |
+`;
+                          md += `|---|--------|----------|------|----------|
+`;
+                          drawerEvents.forEach((ev, i) => {
+                            const st = ev.state as Record<string, unknown> | null;
+                            const status = String(st?.status ?? "unknown");
+                            const dur = Number(st?.duration_ms ?? 0);
+                            const durStr = dur > 0 ? (dur < 1000 ? `${dur}ms` : dur < 60000 ? `${Math.round(dur / 1000)}s` : `${Math.round(dur / 60000)}m`) : "—";
+                            const ts = new Date(ev.timestamp).toLocaleString();
+                            const details: string[] = [];
+                            if (st?.topic) details.push(`Topic: ${String(st.topic)}`);
+                            if (st?.customer_id && st.customer_id !== "anonymous") details.push(`Customer: ${String(st.customer_id)}`);
+                            if (typeof st?.operations_used === "number") details.push(`${st.operations_used} ops`);
+                            if (st?.error_message) details.push(`Error: ${String(st.error_message).slice(0, 80)}`);
+                            if (st?.depth) details.push(`Depth: ${String(st.depth)}`);
+                            md += `| ${i + 1} | ${status} | ${durStr} | ${ts} | ${details.join(", ") || "—"} |
+`;
+                          });
+                          md += `
+---
+
+*${drawerEvents.length} execution(s) total*
+`;
+                          const blob = new Blob([md], { type: "text/markdown" });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement("a");
+                          a.href = url;
+                          a.download = `${entity.name.replace(/[^a-zA-Z0-9]/g, "_")}_report.md`;
+                          a.click();
+                          URL.revokeObjectURL(url);
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-600 shadow-sm transition hover:bg-gray-50"
+                      >
+                        <Copy className="h-3 w-3" />
+                        Download Report
+                      </button>
+                    ) : null}
                   </div>
 
                   {drawerEventsLoading ? (
@@ -2679,9 +2685,9 @@ export default function ConnectionsPage() {
                       <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-gray-100">
                         <Activity className="h-5 w-5 text-gray-400" />
                       </div>
-                      <div className="text-sm font-medium text-gray-600">No events synced yet</div>
+                      <div className="text-sm font-medium text-gray-600">No executions recorded</div>
                       <div className="mt-1 text-xs text-gray-400">
-                        Click &ldquo;Sync&rdquo; above to pull the latest executions from n8n.
+                        Use Sync All or Sync Events from the Credentials tab to pull execution data.
                       </div>
                     </div>
                   ) : (

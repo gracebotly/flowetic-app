@@ -190,13 +190,38 @@ async function fetchMakeDetails(secret: Record<string, unknown>, scenarioId: str
   const scenario = data.scenario ?? data;
   const modules = scenario.blueprint?.flow ?? [];
 
-  // ── Pull aggregate stats from Make's scenario object ──
-  // Make tracks these regardless of our sync state
-  const makeExecs = typeof scenario.executions === "number" ? scenario.executions : 0;
-  const makeErrors = typeof scenario.errors === "number" ? scenario.errors : 0;
-  const makeOps = typeof scenario.operations === "number" ? scenario.operations : 0;
-  const makeCenticredits = typeof scenario.centicredits === "number" ? scenario.centicredits : 0;
-  const makeTransfer = typeof scenario.transfer === "number" ? scenario.transfer : 0;
+  // ── Pull aggregate stats ──
+  // The single-scenario GET endpoint does NOT return execution stats.
+  // We must call the list endpoint to get executions/errors/operations/centicredits.
+  let makeExecs = 0;
+  let makeErrors = 0;
+  let makeOps = 0;
+  let makeCenticredits = 0;
+  let makeTransfer = 0;
+
+  try {
+    const teamId = scenario.teamId;
+    if (teamId) {
+      const listRes = await fetch(
+        `${baseUrl}/api/v2/scenarios?teamId=${teamId}`,
+        { headers: makeHeaders },
+      );
+      if (listRes.ok) {
+        const listData = await listRes.json();
+        const allScenarios = Array.isArray(listData?.scenarios) ? listData.scenarios : [];
+        const match = allScenarios.find((s: any) => String(s.id) === scenarioId);
+        if (match) {
+          makeExecs = typeof match.executions === "number" ? match.executions : 0;
+          makeErrors = typeof match.errors === "number" ? match.errors : 0;
+          makeOps = typeof match.operations === "number" ? match.operations : 0;
+          makeCenticredits = typeof match.centicredits === "number" ? match.centicredits : 0;
+          makeTransfer = typeof match.transfer === "number" ? match.transfer : 0;
+        }
+      }
+    }
+  } catch {
+    // non-fatal — fall back to Supabase stats
+  }
 
   // Use Make's aggregate stats when Supabase has nothing
   const enrichedStats: Stats = stats.totalEvents > 0 ? stats : {
