@@ -17,14 +17,13 @@ import {
   Cpu,
   Copy,
   RefreshCw,
+  Loader2,
+  CheckCircle2,
+  XCircle,
+  Activity,
 } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import {
-  N8nLogo,
-  MakeLogo,
-  VapiLogo,
-  RetellLogo,
-} from "@/components/connections/platform-icons";
+import { PlatformBadge } from "@/components/shared/PlatformBadge";
 import {
   CredentialsLoadingSkeleton,
   EntitiesLoadingSkeleton,
@@ -98,22 +97,18 @@ const entityTypeLabel: Record<EntityType, string> = {
 const PLATFORM_META = {
   n8n: { 
     label: "n8n", 
-    Icon: N8nLogo,
     description: "Workflow automation platform"
   },
   make: { 
     label: "Make", 
-    Icon: MakeLogo,
     description: "Visual automation builder"
   },
   vapi: { 
     label: "Vapi", 
-    Icon: VapiLogo,
     description: "Voice AI platform"
   },
   retell: { 
     label: "Retell", 
-    Icon: RetellLogo,
     description: "Voice agent platform"
   },
 };
@@ -384,8 +379,16 @@ export default function ConnectionsPage() {
 
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [selectedEntity, setSelectedEntity] = useState<IndexedEntityRow | null>(null);
-  const [drawerTab, setDrawerTab] = useState<"activity" | "portals" | "offerings" | "details">("activity");
+  const [drawerTab, setDrawerTab] = useState<"overview" | "activity" | "portals">("overview");
   const [drawerVisible, setDrawerVisible] = useState(false);
+  const [drawerEvents, setDrawerEvents] = useState<Array<{
+    id: string;
+    type: string;
+    name: string;
+    timestamp: string;
+    state: Record<string, unknown> | null;
+  }>>([]);
+  const [drawerEventsLoading, setDrawerEventsLoading] = useState(false);
 
   // Inventory state for n8n workflows
   const [inventoryLoading, setInventoryLoading] = useState(false);
@@ -796,6 +799,42 @@ export default function ConnectionsPage() {
       return () => window.removeEventListener("keydown", onKeyDown);
     }
   }, [detailsOpen]);
+
+  // Fetch events when activity tab is selected
+  useEffect(() => {
+    if (drawerTab !== "activity" || !selectedEntity) {
+      return;
+    }
+    let mounted = true;
+    setDrawerEventsLoading(true);
+    fetch(`/api/events?source_id=${selectedEntity.sourceId}&limit=50`)
+      .then((res) => res.json())
+      .then((json) => {
+        if (!mounted) return;
+        const allEvents = json.events ?? [];
+        // Filter to events matching this entity's externalId
+        const filtered = allEvents.filter((ev: any) => {
+          const s = ev.state as Record<string, unknown> | null;
+          if (!s) return false;
+          return (
+            String(s.workflow_id ?? "") === selectedEntity.externalId ||
+            String(s.assistant_id ?? "") === selectedEntity.externalId ||
+            String(s.agent_id ?? "") === selectedEntity.externalId ||
+            String(s.scenario_id ?? "") === selectedEntity.externalId
+          );
+        });
+        setDrawerEvents(filtered);
+      })
+      .catch(() => {
+        if (mounted) setDrawerEvents([]);
+      })
+      .finally(() => {
+        if (mounted) setDrawerEventsLoading(false);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [drawerTab, selectedEntity]);
 
   useEffect(() => {
     if (connectOpen && step === "entities" && selectedPlatform === "n8n" && createdSourceId) {
@@ -1470,15 +1509,12 @@ export default function ConnectionsPage() {
             <div className="mt-6 max-h-[calc(100vh-320px)] overflow-auto space-y-3 pb-6">
               {displayedIndexedEntities.map((entity) => {
                 const meta = getPlatformMeta(entity.platform);
-                const Icon = meta?.Icon;
 
                 return (
                   <div key={entity.id} className="rounded-xl border border-gray-200 bg-white px-5 py-4">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-800">
-                          {Icon ? <Icon className="h-5 w-5" /> : null}
-                        </div>
+                        <PlatformBadge platform={entity.platform} size={40} />
                         <div>
                           <div className="text-base font-semibold text-gray-900">{entity.name}</div>
                           <div className="text-sm text-gray-600">
@@ -1545,7 +1581,7 @@ export default function ConnectionsPage() {
                 type="button"
                 onClick={() => {
                   setSelectedEntity(openEntity);
-                  setDrawerTab("activity");
+                  setDrawerTab("overview");
                   setDetailsOpen(true);
                   setOpenEntityMenuId(null);
                   setDeleteConfirmId(null);
@@ -1653,7 +1689,6 @@ export default function ConnectionsPage() {
             <div className="mt-6 max-h-[calc(100vh-320px)] overflow-auto space-y-3 pb-6">
               {displayedCredentials.map((cred) => {
                 const meta = getPlatformMeta(String(cred.platformType));
-                const Icon = meta?.Icon;
 
                 const methodLabel = cred.method === "api" ? "API" : "Webhook";
                 const methodIcon =
@@ -1669,9 +1704,7 @@ export default function ConnectionsPage() {
                   <div key={cred.id} className="rounded-lg border border-gray-200 bg-white p-4 hover:shadow-sm transition-shadow">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-800">
-                          {Icon ? <Icon className="h-5 w-5" /> : null}
-                        </div>
+                        <PlatformBadge platform={String(cred.platformType)} size={40} />
 
                         <div>
                           <div className="font-semibold text-gray-900">{meta?.label ?? cred.name}</div>
@@ -1897,7 +1930,6 @@ export default function ConnectionsPage() {
                   <div className="grid grid-cols-1 gap-3">
                     {(Object.keys(PLATFORM_META) as Array<keyof typeof PLATFORM_META>).map((k) => {
                       const meta = PLATFORM_META[k];
-                      const Icon = meta.Icon;
 
                       return (
                         <button
@@ -1934,9 +1966,7 @@ export default function ConnectionsPage() {
                           className="w-full rounded-xl border-2 border-gray-200 p-4 text-left hover:border-blue-500 hover:bg-slate-50"
                         >
                           <div className="flex items-center gap-3">
-                            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-800">
-                              <Icon className="h-5 w-5" />
-                            </div>
+                            <PlatformBadge platform={k} size={40} />
                             <div>
                               <div className="text-base font-semibold text-gray-900">{meta.label}</div>
                               <div className="text-sm text-gray-600">{meta.description}</div>
@@ -2490,14 +2520,7 @@ export default function ConnectionsPage() {
             {/* Header */}
             <div className="flex items-start justify-between border-b border-gray-100 px-6 pb-4 pt-5">
               <div className="flex items-center gap-4">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-800">
-                  {getPlatformMeta(selectedEntity.platform)?.Icon ? (
-                    (() => {
-                      const Icon = getPlatformMeta(selectedEntity.platform)!.Icon!;
-                      return <Icon className="h-5 w-5" />;
-                    })()
-                  ) : null}
-                </div>
+                <PlatformBadge platform={selectedEntity.platform} size={40} className="rounded-xl" />
                 <div>
                   <div className="flex items-center gap-2">
                     <h2 className="text-lg font-semibold text-gray-900">{selectedEntity.name}</h2>
@@ -2532,7 +2555,7 @@ export default function ConnectionsPage() {
             </div>
 
             {/* Stats bar */}
-            <div className="grid grid-cols-4 divide-x divide-gray-100 border-b border-gray-100 bg-gray-50/50">
+            <div className="grid grid-cols-3 divide-x divide-gray-100 border-b border-gray-100 bg-gray-50/50">
               <div className="px-6 py-3">
                 <div className="text-xs text-gray-400">Connection</div>
                 <div className="text-sm font-semibold text-emerald-600">Healthy</div>
@@ -2545,19 +2568,15 @@ export default function ConnectionsPage() {
                 <div className="text-xs text-gray-400">Portals</div>
                 <div className="text-sm font-semibold text-gray-900">0</div>
               </div>
-              <div className="px-6 py-3">
-                <div className="text-xs text-gray-400">Products</div>
-                <div className="text-sm font-semibold text-gray-900">0</div>
-              </div>
             </div>
 
             {/* Tabs */}
             <div className="border-b border-gray-100 px-6">
               <nav className="flex gap-6">
                 {([
+                  { id: "overview" as const, label: "Overview" },
                   { id: "activity" as const, label: "Activity" },
                   { id: "portals" as const, label: "Portals" },
-                  { id: "offerings" as const, label: "Products" },
                 ] as const).map((tab) => (
                   <button
                     key={tab.id}
@@ -2574,30 +2593,204 @@ export default function ConnectionsPage() {
                     )}
                   </button>
                 ))}
-                <button
-                  onClick={() => setDrawerTab("details")}
-                  className={`relative ml-auto py-3 text-sm font-medium transition ${
-                    drawerTab === "details"
-                      ? "text-gray-900"
-                      : "text-gray-400 hover:text-gray-600"
-                  }`}
-                >
-                  Details
-                  {drawerTab === "details" && (
-                    <span className="absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-gray-900" />
-                  )}
-                </button>
               </nav>
             </div>
 
             {/* Tab content — scrollable */}
             <div className="flex-1 overflow-y-auto px-6 py-4">
 
-              {/* Activity tab */}
+              {/* Overview tab (was "Details" — now the default) */}
+              {drawerTab === "overview" ? (
+                <EntityDetailsPanel
+                  key={`${selectedEntity.platform}:${selectedEntity.sourceId}:${selectedEntity.externalId}`}
+                  platform={selectedEntity.platform}
+                  sourceId={selectedEntity.sourceId}
+                  externalId={selectedEntity.externalId}
+                />
+              ) : null}
+
+              {/* Activity tab — real event feed */}
               {drawerTab === "activity" ? (
-                <div className="py-8 text-center">
-                  <div className="text-sm text-gray-400">No recent activity for this {selectedEntity.kind}.</div>
-                  <div className="mt-1 text-xs text-gray-300">Activity will appear here once events are recorded.</div>
+                <div>
+                  {/* Header with download */}
+                  <div className="mb-4 flex items-center justify-between">
+                    <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Execution History
+                    </span>
+                    {drawerEvents.length > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          // Generate markdown report from events
+                          const entity = selectedEntity;
+                          if (!entity) return;
+                          let md = `# Execution Report: ${entity.name}
+
+`;
+                          md += `**Platform:** ${entity.platform} · **Type:** ${entity.kind}
+`;
+                          md += `**Generated:** ${new Date().toLocaleString()}
+
+`;
+                          md += `---
+
+`;
+                          md += `| # | Status | Duration | Date | Details |
+`;
+                          md += `|---|--------|----------|------|----------|
+`;
+                          drawerEvents.forEach((ev, i) => {
+                            const st = ev.state as Record<string, unknown> | null;
+                            const status = String(st?.status ?? "unknown");
+                            const dur = Number(st?.duration_ms ?? 0);
+                            const durStr = dur > 0 ? (dur < 1000 ? `${dur}ms` : dur < 60000 ? `${Math.round(dur / 1000)}s` : `${Math.round(dur / 60000)}m`) : "—";
+                            const ts = new Date(ev.timestamp).toLocaleString();
+                            const details: string[] = [];
+                            if (st?.topic) details.push(`Topic: ${String(st.topic)}`);
+                            if (st?.customer_id && st.customer_id !== "anonymous") details.push(`Customer: ${String(st.customer_id)}`);
+                            if (typeof st?.operations_used === "number") details.push(`${st.operations_used} ops`);
+                            if (st?.error_message) details.push(`Error: ${String(st.error_message).slice(0, 80)}`);
+                            if (st?.depth) details.push(`Depth: ${String(st.depth)}`);
+                            md += `| ${i + 1} | ${status} | ${durStr} | ${ts} | ${details.join(", ") || "—"} |
+`;
+                          });
+                          md += `
+---
+
+*${drawerEvents.length} execution(s) total*
+`;
+                          const blob = new Blob([md], { type: "text/markdown" });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement("a");
+                          a.href = url;
+                          a.download = `${entity.name.replace(/[^a-zA-Z0-9]/g, "_")}_report.md`;
+                          a.click();
+                          URL.revokeObjectURL(url);
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-600 shadow-sm transition hover:bg-gray-50"
+                      >
+                        <Copy className="h-3 w-3" />
+                        Download Report
+                      </button>
+                    ) : null}
+                  </div>
+
+                  {drawerEventsLoading ? (
+                    <div className="flex items-center justify-center py-12">
+                      <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+                      <span className="ml-2 text-sm text-gray-400">Loading activity...</span>
+                    </div>
+                  ) : drawerEvents.length === 0 ? (
+                    <div className="py-8 text-center">
+                      <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-gray-100">
+                        <Activity className="h-5 w-5 text-gray-400" />
+                      </div>
+                      <div className="text-sm font-medium text-gray-600">No executions recorded</div>
+                      <div className="mt-1 text-xs text-gray-400">
+                        Use Sync All or Sync Events from the Credentials tab to pull execution data.
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {drawerEvents.map((ev) => {
+                        const s = ev.state as Record<string, unknown> | null;
+                        const status = String(s?.status ?? "unknown");
+                        const isError = status === "error" || status === "crashed" || status === "failed";
+                        const durationMs = Number(s?.duration_ms ?? 0);
+                        const durationLabel = durationMs > 0
+                          ? durationMs < 1000 ? `${durationMs}ms`
+                          : durationMs < 60000 ? `${Math.round(durationMs / 1000)}s`
+                          : `${Math.round(durationMs / 60000)}m`
+                          : null;
+                        const ts = new Date(ev.timestamp);
+                        const timeLabel = ts.toLocaleDateString("en-US", {
+                          month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+                        });
+
+                        // Enriched fields from extractPayloadFields
+                        const topic = s?.topic ? String(s.topic) : null;
+                        const customerId = s?.customer_id ? String(s.customer_id) : null;
+                        const depth = s?.depth ? String(s.depth) : null;
+                        const executionId = s?.execution_id ? String(s.execution_id) : null;
+
+                        // Make-specific fields
+                        const operationsUsed = typeof s?.operations_used === "number" ? s.operations_used : null;
+                        const centicredits = typeof s?.centicredits === "number" ? s.centicredits : null;
+                        const platform = s?.platform ? String(s.platform) : null;
+
+                        return (
+                          <div
+                            key={ev.id}
+                            className={`rounded-lg border px-4 py-3 ${
+                              isError
+                                ? "border-red-100 bg-red-50/30"
+                                : "border-gray-100 bg-white"
+                            }`}
+                          >
+                            <div className="flex items-start gap-3">
+                              <div className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${
+                                isError ? "bg-red-100" : "bg-emerald-100"
+                              }`}>
+                                {isError ? (
+                                  <XCircle className="h-3.5 w-3.5 text-red-600" />
+                                ) : (
+                                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                                )}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2">
+                                  <span className={`text-sm font-semibold capitalize ${isError ? "text-red-700" : "text-gray-900"}`}>
+                                    {status}
+                                  </span>
+                                  {durationLabel ? (
+                                    <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-500">{durationLabel}</span>
+                                  ) : null}
+                                  {depth ? (
+                                    <span className="rounded bg-blue-50 px-1.5 py-0.5 text-xs font-medium text-blue-600 capitalize">{depth}</span>
+                                  ) : null}
+                                  {operationsUsed !== null ? (
+                                    <span className="rounded bg-purple-50 px-1.5 py-0.5 text-xs font-medium text-purple-600">{operationsUsed} ops</span>
+                                  ) : null}
+                                </div>
+
+                                {topic ? (
+                                  <div className="mt-1 text-sm text-gray-700 line-clamp-2">{topic}</div>
+                                ) : null}
+
+                                <div className="mt-1.5 flex items-center gap-3 text-xs text-gray-400">
+                                  <span>{timeLabel}</span>
+                                  {platform === "make" && centicredits !== null ? (
+                                    <>
+                                      <span>·</span>
+                                      <span>{centicredits} cc</span>
+                                    </>
+                                  ) : null}
+                                  {customerId && customerId !== "anonymous" ? (
+                                    <>
+                                      <span>·</span>
+                                      <span>{customerId}</span>
+                                    </>
+                                  ) : null}
+                                  {executionId ? (
+                                    <>
+                                      <span>·</span>
+                                      <span className="font-mono">{executionId.length > 20 ? executionId.slice(0, 20) + "…" : executionId}</span>
+                                    </>
+                                  ) : null}
+                                </div>
+
+                                {isError && s?.error_message ? (
+                                  <div className="mt-1.5 rounded bg-red-50 px-2 py-1 text-xs text-red-600">
+                                    {String(s.error_message).slice(0, 150)}
+                                  </div>
+                                ) : null}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               ) : null}
 
@@ -2607,24 +2800,6 @@ export default function ConnectionsPage() {
                   <div className="text-sm text-gray-400">No portals linked to this {selectedEntity.kind}.</div>
                   <div className="mt-1 text-xs text-gray-300">Create a portal from the Portals tab to see it here.</div>
                 </div>
-              ) : null}
-
-              {/* Offerings tab */}
-              {drawerTab === "offerings" ? (
-                <div className="py-8 text-center">
-                  <div className="text-sm text-gray-400">No products linked to this {selectedEntity.kind}.</div>
-                  <div className="mt-1 text-xs text-gray-300">Create a product from the Products tab to see it here.</div>
-                </div>
-              ) : null}
-
-              {/* Details tab */}
-              {drawerTab === "details" ? (
-                <EntityDetailsPanel
-                  key={`${selectedEntity.platform}:${selectedEntity.sourceId}:${selectedEntity.externalId}`}
-                  platform={selectedEntity.platform}
-                  sourceId={selectedEntity.sourceId}
-                  externalId={selectedEntity.externalId}
-                />
               ) : null}
 
             </div>

@@ -15,10 +15,11 @@ import {
   Cpu,
   Tag,
   Calendar,
-  Activity,
   Settings,
   User,
   Layers,
+  AlertTriangle,
+  BarChart3,
 } from 'lucide-react';
 
 interface EntityDetailsPanelProps {
@@ -106,26 +107,59 @@ function DetailRow({
 }
 
 function StatsBar({ stats }: { stats: DetailData['stats'] }) {
+  const failedCount = stats.totalEvents - stats.successEvents;
+  const hasErrors = stats.totalEvents > 0 && failedCount > 0;
+
+  const kpis = [
+    {
+      label: 'Executions',
+      value: stats.totalEvents.toLocaleString(),
+      icon: BarChart3,
+      accent: '',
+    },
+    {
+      label: 'Success Rate',
+      value: `${stats.successRate}%`,
+      icon: stats.successRate === 0 && stats.totalEvents > 0 ? XCircle
+        : stats.successRate < 80 ? AlertTriangle
+        : CheckCircle2,
+      accent: stats.totalEvents === 0 ? ''
+        : stats.successRate === 0 ? 'red'
+        : stats.successRate < 80 ? 'amber'
+        : 'green',
+    },
+    {
+      label: hasErrors ? 'Failures' : 'Avg Duration',
+      value: hasErrors ? failedCount.toLocaleString() : formatDuration(stats.avgDuration),
+      icon: hasErrors ? AlertTriangle : Clock,
+      accent: hasErrors ? 'red' : '',
+    },
+    {
+      label: 'Total Cost',
+      value: formatCost(stats.totalCost),
+      icon: DollarSign,
+      accent: '',
+    },
+  ];
+
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-      {[
-        { label: 'Total Events', value: stats.totalEvents.toLocaleString(), icon: Activity },
-        {
-          label: 'Success Rate',
-          value: `${stats.successRate}%`,
-          icon: stats.successRate >= 80 ? CheckCircle2 : XCircle,
-        },
-        { label: 'Avg Duration', value: formatDuration(stats.avgDuration), icon: Clock },
-        { label: 'Total Cost', value: formatCost(stats.totalCost), icon: DollarSign },
-      ].map((kpi) => (
-        <div key={kpi.label} className="rounded-lg border border-gray-100 bg-gray-50/50 p-3">
-          <div className="flex items-center gap-1.5 text-xs text-gray-400">
-            <kpi.icon className="h-3 w-3" />
-            {kpi.label}
+      {kpis.map((kpi) => {
+        const border = kpi.accent === 'red' ? 'border-red-200' : kpi.accent === 'amber' ? 'border-amber-200' : 'border-gray-100';
+        const bg = kpi.accent === 'red' ? 'bg-red-50/60' : kpi.accent === 'amber' ? 'bg-amber-50/60' : 'bg-gray-50/50';
+        const iconColor = kpi.accent === 'red' ? 'text-red-500' : kpi.accent === 'amber' ? 'text-amber-500' : kpi.accent === 'green' ? 'text-emerald-500' : 'text-gray-400';
+        const valueColor = kpi.accent === 'red' ? 'text-red-700' : kpi.accent === 'amber' ? 'text-amber-700' : 'text-gray-900';
+
+        return (
+          <div key={kpi.label} className={`rounded-lg border ${border} ${bg} p-3`}>
+            <div className="flex items-center gap-1.5 text-xs text-gray-400">
+              <kpi.icon className={`h-3 w-3 ${iconColor}`} />
+              {kpi.label}
+            </div>
+            <div className={`mt-1 text-lg font-semibold ${valueColor}`}>{kpi.value}</div>
           </div>
-          <div className="mt-1 text-lg font-semibold text-gray-900">{kpi.value}</div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -181,8 +215,23 @@ function VapiDetails({ details }: { details: Record<string, unknown> }) {
 function MakeDetails({ details }: { details: Record<string, unknown> }) {
   const modules = Array.isArray(details.modules_used) ? details.modules_used : [];
   const packages = Array.isArray(details.used_packages) ? details.used_packages : [];
+  const latestError = details.latest_error ? String(details.latest_error) : null;
+  const makeErrors = typeof details.make_total_errors === 'number' ? details.make_total_errors : 0;
+  const makeOps = typeof details.make_total_operations === 'number' ? details.make_total_operations : 0;
+
   return (
     <div className="space-y-1 divide-y divide-gray-50">
+      {latestError ? (
+        <div className="!border-b-0 mb-2 rounded-lg border border-red-200 bg-red-50 p-3">
+          <div className="flex gap-2.5">
+            <AlertTriangle className="h-4 w-4 shrink-0 text-red-500 mt-0.5" />
+            <div className="min-w-0">
+              <div className="text-sm font-medium text-red-800">Recent execution failure</div>
+              <div className="mt-0.5 text-xs text-red-700 break-words">{latestError.length > 200 ? latestError.slice(0, 200) + '…' : latestError}</div>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {details.description ? <DetailRow icon={Tag} label="Description" value={String(details.description)} /> : null}
       <DetailRow icon={Zap} label="Status" value={details.is_active ? 'Active' : details.is_paused ? 'Paused' : 'Inactive'} />
       <DetailRow
@@ -222,6 +271,8 @@ function MakeDetails({ details }: { details: Record<string, unknown> }) {
           </div>
         </div>
       ) : null}
+      {makeOps > 0 ? <DetailRow icon={BarChart3} label="Total Operations" value={makeOps.toLocaleString()} /> : null}
+      {makeErrors > 0 ? <DetailRow icon={AlertTriangle} label="Total Errors" value={String(makeErrors)} /> : null}
       <DetailRow icon={User} label="Created By" value={String(details.created_by ?? '—')} />
       <DetailRow icon={Calendar} label="Created" value={formatTimestamp(details.created)} />
       <DetailRow icon={Calendar} label="Last Edit" value={formatTimestamp(details.last_edit)} />
@@ -232,8 +283,21 @@ function MakeDetails({ details }: { details: Record<string, unknown> }) {
 function N8nDetails({ details }: { details: Record<string, unknown> }) {
   const nodeTypes = Array.isArray(details.node_types) ? details.node_types : [];
   const tags = Array.isArray(details.tags) ? details.tags : [];
+  const latestError = details.latest_error ? String(details.latest_error) : null;
+
   return (
     <div className="space-y-1 divide-y divide-gray-50">
+      {latestError ? (
+        <div className="!border-b-0 mb-2 rounded-lg border border-red-200 bg-red-50 p-3">
+          <div className="flex gap-2.5">
+            <AlertTriangle className="h-4 w-4 shrink-0 text-red-500 mt-0.5" />
+            <div className="min-w-0">
+              <div className="text-sm font-medium text-red-800">Recent execution failure</div>
+              <div className="mt-0.5 text-xs text-red-700 break-words">{latestError.length > 200 ? latestError.slice(0, 200) + '…' : latestError}</div>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <DetailRow icon={Zap} label="Status" value={details.active ? 'Active' : 'Inactive'} />
       <DetailRow icon={Layers} label="Nodes" value={`${details.node_count ?? 0} nodes`} />
       {tags.length > 0 ? (

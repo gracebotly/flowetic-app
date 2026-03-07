@@ -178,17 +178,80 @@ async function fetchMakeDetails(secret: Record<string, unknown>, scenarioId: str
   if (!apiKey) return NextResponse.json({ ok: true, platform: "make", details: null, stats });
 
   const baseUrl = zone.includes(".") ? `https://${zone}` : `https://${zone}.make.com`;
+  const makeHeaders = { Authorization: `Token ${apiKey}` };
 
   const res = await fetch(`${baseUrl}/api/v2/scenarios/${scenarioId}`, {
-    headers: { Authorization: `Token ${apiKey}` },
+    headers: makeHeaders,
   });
 
   if (!res.ok) return NextResponse.json({ ok: true, platform: "make", details: null, stats });
 
   const data = await res.json();
   const scenario = data.scenario ?? data;
-
   const modules = scenario.blueprint?.flow ?? [];
+
+  // ── Pull aggregate stats ──
+  // The single-scenario GET endpoint does NOT return execution stats.
+  // We must call the list endpoint to get executions/errors/operations/centicredits.
+  let makeExecs = 0;
+  let makeErrors = 0;
+  let makeOps = 0;
+  let makeCenticredits = 0;
+  let makeTransfer = 0;
+
+  try {
+    const teamId = scenario.teamId;
+    if (teamId) {
+      const listRes = await fetch(
+        `${baseUrl}/api/v2/scenarios?teamId=${teamId}`,
+        { headers: makeHeaders },
+      );
+      if (listRes.ok) {
+        const listData = await listRes.json();
+        const allScenarios = Array.isArray(listData?.scenarios) ? listData.scenarios : [];
+        const match = allScenarios.find((s: any) => String(s.id) === scenarioId);
+        if (match) {
+          makeExecs = typeof match.executions === "number" ? match.executions : 0;
+          makeErrors = typeof match.errors === "number" ? match.errors : 0;
+          makeOps = typeof match.operations === "number" ? match.operations : 0;
+          makeCenticredits = typeof match.centicredits === "number" ? match.centicredits : 0;
+          makeTransfer = typeof match.transfer === "number" ? match.transfer : 0;
+        }
+      }
+    }
+  } catch {
+    // non-fatal — fall back to Supabase stats
+  }
+
+  // Use Make's aggregate stats when Supabase has nothing
+  const enrichedStats: Stats = stats.totalEvents > 0 ? stats : {
+    totalEvents: makeExecs,
+    successEvents: Math.max(0, makeExecs - makeErrors),
+    successRate: makeExecs > 0 ? Math.round(((makeExecs - makeErrors) / makeExecs) * 100) : 0,
+    avgDuration: stats.avgDuration,
+    totalCost: makeCenticredits > 0 ? makeCenticredits / 100 : 0,
+  };
+
+  // ── Check for recent execution errors ──
+  let latestError: string | undefined;
+  try {
+    const execRes = await fetch(
+      `${baseUrl}/api/v2/scenarios/${scenarioId}/executions?limit=10`,
+      { headers: makeHeaders },
+    );
+    if (execRes.ok) {
+      const execData = await execRes.json();
+      const rawExecs = Array.isArray(execData?.executions) ? execData.executions : [];
+      const errorExecs = rawExecs.filter(
+        (e: any) => e.type === "auto" && e.eventType === "EXECUTION_END" && e.status === 3,
+      );
+      if (errorExecs.length > 0) {
+        latestError = errorExecs[0]?.error?.message;
+      }
+    }
+  } catch {
+    // non-fatal
+  }
 
   return NextResponse.json({
     ok: true,
@@ -208,8 +271,16 @@ async function fetchMakeDetails(secret: Record<string, unknown>, scenarioId: str
       created: scenario.created,
       last_edit: scenario.lastEdit,
       created_by: scenario.createdByUser?.name,
+      // Aggregate stats from Make API
+      make_total_executions: makeExecs,
+      make_total_operations: makeOps,
+      make_total_errors: makeErrors,
+      make_centicredits: makeCenticredits,
+      make_data_transfer_bytes: makeTransfer,
+      // Connection health
+      latest_error: latestError,
     },
-    stats,
+    stats: enrichedStats,
   });
 }
 
@@ -220,8 +291,10 @@ async function fetchN8nDetails(secret: Record<string, unknown>, workflowId: stri
   const apiKey = String(secret?.apiKey ?? "").trim();
   if (!baseUrl || !apiKey) return NextResponse.json({ ok: true, platform: "n8n", details: null, stats });
 
+  const n8nHeaders: Record<string, string> = { "X-N8N-API-KEY": apiKey };
+
   const res = await fetch(`${baseUrl}/api/v1/workflows/${workflowId}`, {
-    headers: { "X-N8N-API-KEY": apiKey },
+    headers: n8nHeaders,
   });
 
   if (!res.ok) return NextResponse.json({ ok: true, platform: "n8n", details: null, stats });
@@ -229,6 +302,57 @@ async function fetchN8nDetails(secret: Record<string, unknown>, workflowId: stri
   const workflow = await res.json();
   const nodes = workflow.nodes ?? [];
   const nodeTypes = [...new Set(nodes.map((n: any) => String(n.type ?? "").replace("n8n-nodes-base.", "")))];
+
+  // ── Pull execution stats from n8n when Supabase has nothing ──
+  let enrichedStats = stats;
+  let latestError: string | undefined;
+
+  if (stats.totalEvents === 0) {
+    try {
+      const execRes = await fetch(
+        `${baseUrl}/api/v1/executions?workflowId=${workflowId}&limit=20`,
+        { headers: n8nHeaders },
+      );
+      if (execRes.ok) {
+        const execData = await execRes.json();
+        const executions = execData.data || execData || [];
+        if (Array.isArray(executions) && executions.length > 0) {
+          const total = executions.length;
+          const errors = executions.filter(
+            (e: any) => e.status === "error" || e.status === "crashed",
+          ).length;
+          const durations = executions
+            .map((e: any) => {
+              if (!e.startedAt || !e.stoppedAt) return 0;
+              return Math.max(0, new Date(e.stoppedAt).getTime() - new Date(e.startedAt).getTime());
+            })
+            .filter((d: number) => d > 0);
+          const avgDur = durations.length > 0
+            ? Math.round(durations.reduce((a: number, b: number) => a + b, 0) / durations.length)
+            : 0;
+
+          enrichedStats = {
+            totalEvents: total,
+            successEvents: total - errors,
+            successRate: Math.round(((total - errors) / total) * 100),
+            avgDuration: avgDur,
+            totalCost: 0,
+          };
+
+          // Get latest error
+          const firstError = executions.find(
+            (e: any) => e.status === "error" || e.status === "crashed",
+          );
+          if (firstError) {
+            const errData = firstError.data?.resultData?.error;
+            latestError = errData?.message || `Execution ${firstError.id} failed`;
+          }
+        }
+      }
+    } catch {
+      // non-fatal
+    }
+  }
 
   return NextResponse.json({
     ok: true,
@@ -241,7 +365,8 @@ async function fetchN8nDetails(secret: Record<string, unknown>, workflowId: stri
       tags: (workflow.tags ?? []).map((t: any) => t.name ?? t),
       created_at: workflow.createdAt,
       updated_at: workflow.updatedAt,
+      latest_error: latestError,
     },
-    stats,
+    stats: enrichedStats,
   });
 }
