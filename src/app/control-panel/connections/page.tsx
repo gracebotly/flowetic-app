@@ -23,12 +23,7 @@ import {
   Activity,
 } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import {
-  N8nLogo,
-  MakeLogo,
-  VapiLogo,
-  RetellLogo,
-} from "@/components/connections/platform-icons";
+import { PlatformBadge } from "@/components/shared/PlatformBadge";
 import {
   CredentialsLoadingSkeleton,
   EntitiesLoadingSkeleton,
@@ -102,22 +97,18 @@ const entityTypeLabel: Record<EntityType, string> = {
 const PLATFORM_META = {
   n8n: { 
     label: "n8n", 
-    Icon: N8nLogo,
     description: "Workflow automation platform"
   },
   make: { 
     label: "Make", 
-    Icon: MakeLogo,
     description: "Visual automation builder"
   },
   vapi: { 
     label: "Vapi", 
-    Icon: VapiLogo,
     description: "Voice AI platform"
   },
   retell: { 
     label: "Retell", 
-    Icon: RetellLogo,
     description: "Voice agent platform"
   },
 };
@@ -1559,15 +1550,12 @@ export default function ConnectionsPage() {
             <div className="mt-6 max-h-[calc(100vh-320px)] overflow-auto space-y-3 pb-6">
               {displayedIndexedEntities.map((entity) => {
                 const meta = getPlatformMeta(entity.platform);
-                const Icon = meta?.Icon;
 
                 return (
                   <div key={entity.id} className="rounded-xl border border-gray-200 bg-white px-5 py-4">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-800">
-                          {Icon ? <Icon className="h-5 w-5" /> : null}
-                        </div>
+                        <PlatformBadge platform={entity.platform} size={40} />
                         <div>
                           <div className="text-base font-semibold text-gray-900">{entity.name}</div>
                           <div className="text-sm text-gray-600">
@@ -1742,7 +1730,6 @@ export default function ConnectionsPage() {
             <div className="mt-6 max-h-[calc(100vh-320px)] overflow-auto space-y-3 pb-6">
               {displayedCredentials.map((cred) => {
                 const meta = getPlatformMeta(String(cred.platformType));
-                const Icon = meta?.Icon;
 
                 const methodLabel = cred.method === "api" ? "API" : "Webhook";
                 const methodIcon =
@@ -1758,9 +1745,7 @@ export default function ConnectionsPage() {
                   <div key={cred.id} className="rounded-lg border border-gray-200 bg-white p-4 hover:shadow-sm transition-shadow">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-800">
-                          {Icon ? <Icon className="h-5 w-5" /> : null}
-                        </div>
+                        <PlatformBadge platform={String(cred.platformType)} size={40} />
 
                         <div>
                           <div className="font-semibold text-gray-900">{meta?.label ?? cred.name}</div>
@@ -1986,7 +1971,6 @@ export default function ConnectionsPage() {
                   <div className="grid grid-cols-1 gap-3">
                     {(Object.keys(PLATFORM_META) as Array<keyof typeof PLATFORM_META>).map((k) => {
                       const meta = PLATFORM_META[k];
-                      const Icon = meta.Icon;
 
                       return (
                         <button
@@ -2023,9 +2007,7 @@ export default function ConnectionsPage() {
                           className="w-full rounded-xl border-2 border-gray-200 p-4 text-left hover:border-blue-500 hover:bg-slate-50"
                         >
                           <div className="flex items-center gap-3">
-                            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-800">
-                              <Icon className="h-5 w-5" />
-                            </div>
+                            <PlatformBadge platform={k} size={40} />
                             <div>
                               <div className="text-base font-semibold text-gray-900">{meta.label}</div>
                               <div className="text-sm text-gray-600">{meta.description}</div>
@@ -2579,14 +2561,7 @@ export default function ConnectionsPage() {
             {/* Header */}
             <div className="flex items-start justify-between border-b border-gray-100 px-6 pb-4 pt-5">
               <div className="flex items-center gap-4">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-800">
-                  {getPlatformMeta(selectedEntity.platform)?.Icon ? (
-                    (() => {
-                      const Icon = getPlatformMeta(selectedEntity.platform)!.Icon!;
-                      return <Icon className="h-5 w-5" />;
-                    })()
-                  ) : null}
-                </div>
+                <PlatformBadge platform={selectedEntity.platform} size={40} className="rounded-xl" />
                 <div>
                   <div className="flex items-center gap-2">
                     <h2 className="text-lg font-semibold text-gray-900">{selectedEntity.name}</h2>
