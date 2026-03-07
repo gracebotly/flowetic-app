@@ -2617,13 +2617,51 @@ export default function ConnectionsPage() {
                     <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Execution History
                     </span>
-                    {drawerEvents.length > 0 ? (
+                    {selectedEntity ? (
                       <button
                         type="button"
-                        onClick={() => {
-                          // Generate markdown report from events
+                        onClick={async () => {
+                          // Generate markdown report — use Supabase events if available, otherwise fetch from platform
                           const entity = selectedEntity;
                           if (!entity) return;
+
+                          let eventsForReport = drawerEvents;
+
+                          // If no events in Supabase, try fetching fresh from the platform
+                          if (eventsForReport.length === 0) {
+                            try {
+                              const refreshRes = await fetch("/api/connections/refresh-events", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ sourceId: entity.sourceId }),
+                              });
+                              if (refreshRes.ok) {
+                                const evRes = await fetch(`/api/events?source_id=${entity.sourceId}&limit=100`);
+                                const evJson = await evRes.json();
+                                const allEvs = evJson.events ?? [];
+                                eventsForReport = allEvs.filter((ev: any) => {
+                                  const s = ev.state as Record<string, unknown> | null;
+                                  if (!s) return false;
+                                  return (
+                                    String(s.workflow_id ?? "") === entity.externalId ||
+                                    String(s.assistant_id ?? "") === entity.externalId ||
+                                    String(s.agent_id ?? "") === entity.externalId ||
+                                    String(s.scenario_id ?? "") === entity.externalId
+                                  );
+                                });
+                                // Also update drawer events state so Activity tab shows them
+                                setDrawerEvents(eventsForReport);
+                              }
+                            } catch {
+                              // fall through — will generate empty report
+                            }
+                          }
+
+                          if (eventsForReport.length === 0) {
+                            alert("No execution data available. Use Sync All from the main page first.");
+                            return;
+                          }
+
                           let md = `# Execution Report: ${entity.name}
 
 `;
@@ -2639,7 +2677,7 @@ export default function ConnectionsPage() {
 `;
                           md += `|---|--------|----------|------|----------|
 `;
-                          drawerEvents.forEach((ev, i) => {
+                          eventsForReport.forEach((ev, i) => {
                             const st = ev.state as Record<string, unknown> | null;
                             const status = String(st?.status ?? "unknown");
                             const dur = Number(st?.duration_ms ?? 0);
@@ -2657,7 +2695,7 @@ export default function ConnectionsPage() {
                           md += `
 ---
 
-*${drawerEvents.length} execution(s) total*
+*${eventsForReport.length} execution(s) total*
 `;
                           const blob = new Blob([md], { type: "text/markdown" });
                           const url = URL.createObjectURL(blob);
