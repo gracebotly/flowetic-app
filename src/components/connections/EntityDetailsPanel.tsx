@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Loader2,
   Mic,
@@ -21,11 +21,15 @@ import {
   AlertTriangle,
   BarChart3,
 } from 'lucide-react';
+import { MetricsBar, type MetricKPI } from './panels/shared/MetricsBar';
+import { HealthBanner, type EntityHealth } from './panels/shared/HealthBanner';
+import { deriveEntityHealth } from './panels/shared/deriveEntityHealth';
 
 interface EntityDetailsPanelProps {
   platform: string;
   sourceId: string;
   externalId: string;
+  onHealthChange?: (health: EntityHealth) => void;
 }
 
 interface DetailData {
@@ -38,9 +42,19 @@ interface DetailData {
     successRate: number;
     avgDuration: number;
     totalCost: number;
+    latestError?: string | null;
   };
   error?: string;
 }
+
+const FALLBACK_STATS: DetailData['stats'] = {
+  totalEvents: 0,
+  successEvents: 0,
+  successRate: 0,
+  avgDuration: 0,
+  totalCost: 0,
+  latestError: null,
+};
 
 function formatDuration(ms: number): string {
   if (ms === 0) return '—';
@@ -106,11 +120,17 @@ function DetailRow({
   );
 }
 
+function toEntityKind(platform: string) {
+  if (platform === 'retell' || platform === 'vapi') return 'agent';
+  if (platform === 'make') return 'scenario';
+  return 'workflow';
+}
+
 function StatsBar({ stats }: { stats: DetailData['stats'] }) {
   const failedCount = stats.totalEvents - stats.successEvents;
   const hasErrors = stats.totalEvents > 0 && failedCount > 0;
 
-  const kpis = [
+  const kpis: MetricKPI[] = [
     {
       label: 'Executions',
       value: stats.totalEvents.toLocaleString(),
@@ -142,26 +162,7 @@ function StatsBar({ stats }: { stats: DetailData['stats'] }) {
     },
   ];
 
-  return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-      {kpis.map((kpi) => {
-        const border = kpi.accent === 'red' ? 'border-red-200' : kpi.accent === 'amber' ? 'border-amber-200' : 'border-gray-100';
-        const bg = kpi.accent === 'red' ? 'bg-red-50/60' : kpi.accent === 'amber' ? 'bg-amber-50/60' : 'bg-gray-50/50';
-        const iconColor = kpi.accent === 'red' ? 'text-red-500' : kpi.accent === 'amber' ? 'text-amber-500' : kpi.accent === 'green' ? 'text-emerald-500' : 'text-gray-400';
-        const valueColor = kpi.accent === 'red' ? 'text-red-700' : kpi.accent === 'amber' ? 'text-amber-700' : 'text-gray-900';
-
-        return (
-          <div key={kpi.label} className={`rounded-lg border ${border} ${bg} p-3`}>
-            <div className="flex items-center gap-1.5 text-xs text-gray-400">
-              <kpi.icon className={`h-3 w-3 ${iconColor}`} />
-              {kpi.label}
-            </div>
-            <div className={`mt-1 text-lg font-semibold ${valueColor}`}>{kpi.value}</div>
-          </div>
-        );
-      })}
-    </div>
-  );
+  return <MetricsBar kpis={kpis} />;
 }
 
 function RetellDetails({ details }: { details: Record<string, unknown> }) {
@@ -330,8 +331,9 @@ function N8nDetails({ details }: { details: Record<string, unknown> }) {
   );
 }
 
-export function EntityDetailsPanel({ platform, sourceId, externalId }: EntityDetailsPanelProps) {
+export function EntityDetailsPanel({ platform, sourceId, externalId, onHealthChange }: EntityDetailsPanelProps) {
   const [data, setData] = useState<DetailData | null>(null);
+
 
   useEffect(() => {
     let mounted = true;
@@ -342,13 +344,25 @@ export function EntityDetailsPanel({ platform, sourceId, externalId }: EntityDet
         if (mounted) setData(json);
       })
       .catch(() => {
-        if (mounted) setData({ ok: false, platform, details: null, stats: { totalEvents: 0, successEvents: 0, successRate: 0, avgDuration: 0, totalCost: 0 }, error: 'Unknown error' });
+        if (mounted) setData({ ok: false, platform, details: null, stats: FALLBACK_STATS, error: 'Unknown error' });
       });
 
     return () => {
       mounted = false;
     };
   }, [platform, sourceId, externalId]);
+
+  const computedHealth = useMemo(() => {
+    const entityKind = toEntityKind(platform);
+    const health = deriveEntityHealth(data?.stats ?? FALLBACK_STATS, data?.error ?? null);
+    return health.status === 'no-data' ? { ...health, entityKind } : health;
+  }, [data?.error, data?.stats, platform]);
+
+  useEffect(() => {
+    if (data) {
+      onHealthChange?.(computedHealth);
+    }
+  }, [computedHealth, data, onHealthChange]);
 
   if (!data) {
     return (
@@ -361,15 +375,19 @@ export function EntityDetailsPanel({ platform, sourceId, externalId }: EntityDet
 
   if (!data || !data.ok) {
     return (
-      <div className="py-8 text-center">
-        <div className="text-sm text-gray-400">Failed to load details.</div>
-        <div className="mt-1 text-xs text-gray-300">{data?.error || 'Unknown error'}</div>
+      <div className="space-y-5">
+        <HealthBanner
+          health={computedHealth}
+          platformLabel={platform}
+        />
+        <StatsBar stats={data?.stats ?? FALLBACK_STATS} />
       </div>
     );
   }
 
   return (
     <div className="space-y-5">
+      <HealthBanner health={computedHealth} platformLabel={platform} />
       <StatsBar stats={data.stats} />
 
       {data.details ? (
