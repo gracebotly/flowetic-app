@@ -190,6 +190,27 @@ async function fetchMakeDetails(secret: Record<string, unknown>, scenarioId: str
 
   const modules = scenario.blueprint?.flow ?? [];
 
+  // Use Make's aggregate stats if Supabase has none
+  const makeStats = {
+    totalExecutions: typeof scenario.executions === "number" ? scenario.executions : 0,
+    totalOperations: typeof scenario.operations === "number" ? scenario.operations : 0,
+    totalErrors: typeof scenario.errors === "number" ? scenario.errors : 0,
+    centicredits: typeof scenario.centicredits === "number" ? scenario.centicredits : 0,
+    dataTransferBytes: typeof scenario.transfer === "number" ? scenario.transfer : 0,
+  };
+
+  // If Supabase has no events, use Make's aggregate stats instead
+  const enrichedStats = stats.totalEvents > 0
+    ? stats
+    : {
+        ...stats,
+        totalEvents: makeStats.totalExecutions,
+        successEvents: makeStats.totalExecutions - makeStats.totalErrors,
+        successRate: makeStats.totalExecutions > 0
+          ? Math.round(((makeStats.totalExecutions - makeStats.totalErrors) / makeStats.totalExecutions) * 100)
+          : 0,
+      };
+
   return NextResponse.json({
     ok: true,
     platform: "make",
@@ -208,8 +229,14 @@ async function fetchMakeDetails(secret: Record<string, unknown>, scenarioId: str
       created: scenario.created,
       last_edit: scenario.lastEdit,
       created_by: scenario.createdByUser?.name,
+      // Make-specific aggregate stats
+      make_total_executions: makeStats.totalExecutions,
+      make_total_operations: makeStats.totalOperations,
+      make_total_errors: makeStats.totalErrors,
+      make_centicredits: makeStats.centicredits,
+      make_data_transfer_bytes: makeStats.dataTransferBytes,
     },
-    stats,
+    stats: enrichedStats,
   });
 }
 

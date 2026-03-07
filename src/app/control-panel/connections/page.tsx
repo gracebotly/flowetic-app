@@ -2732,6 +2732,11 @@ export default function ConnectionsPage() {
                         const depth = s?.depth ? String(s.depth) : null;
                         const executionId = s?.execution_id ? String(s.execution_id) : null;
 
+                        // Make-specific fields
+                        const operationsUsed = typeof s?.operations_used === "number" ? s.operations_used : null;
+                        const centicredits = typeof s?.centicredits === "number" ? s.centicredits : null;
+                        const platform = s?.platform ? String(s.platform) : null;
+
                         return (
                           <div
                             key={ev.id}
@@ -2762,6 +2767,9 @@ export default function ConnectionsPage() {
                                   {depth ? (
                                     <span className="rounded bg-blue-50 px-1.5 py-0.5 text-xs font-medium text-blue-600 capitalize">{depth}</span>
                                   ) : null}
+                                  {operationsUsed !== null ? (
+                                    <span className="rounded bg-purple-50 px-1.5 py-0.5 text-xs font-medium text-purple-600">{operationsUsed} ops</span>
+                                  ) : null}
                                 </div>
 
                                 {topic ? (
@@ -2770,6 +2778,12 @@ export default function ConnectionsPage() {
 
                                 <div className="mt-1.5 flex items-center gap-3 text-xs text-gray-400">
                                   <span>{timeLabel}</span>
+                                  {platform === "make" && centicredits !== null ? (
+                                    <>
+                                      <span>·</span>
+                                      <span>{centicredits} cc</span>
+                                    </>
+                                  ) : null}
                                   {customerId && customerId !== "anonymous" ? (
                                     <>
                                       <span>·</span>
