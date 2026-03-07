@@ -64,9 +64,23 @@ export function MakeDetailPanel({ sourceId, externalId, onHealthChange }: MakeDe
   }, [sourceId, externalId, limit]);
 
   const health = useMemo(() => {
-    const h = deriveEntityHealth(data?.stats ?? null, data?.error ?? null);
+    const stats = data?.stats ?? null;
+    if (stats && stats.totalEvents === 0 && executions.length > 0) {
+      const successExecs = executions.filter((e) => e.status === 'success').length;
+      const total = executions.length;
+      const enrichedStats = {
+        totalEvents: total,
+        successEvents: successExecs,
+        successRate: total > 0 ? Math.round((successExecs / total) * 100) : 0,
+        avgDuration: 0,
+        totalCost: 0,
+        latestError: executions.find((e) => e.status === 'error')?.errorMessage ?? null,
+      };
+      return deriveEntityHealth(enrichedStats, data?.error ?? null);
+    }
+    const h = deriveEntityHealth(stats, data?.error ?? null);
     return h.status === 'no-data' ? { ...h, entityKind: 'scenario' } : h;
-  }, [data?.stats, data?.error]);
+  }, [data?.stats, data?.error, executions]);
 
   useEffect(() => { if (data) onHealthChange?.(health); }, [data, health, onHealthChange]);
 

@@ -129,9 +129,24 @@ export function RetellDetailPanel({ sourceId, externalId, onHealthChange }: Voic
   }, [callsLimit, externalId, sourceId]);
 
   const health = useMemo(() => {
-    const h = deriveEntityHealth(data?.stats ?? null, data?.error ?? null);
+    // If Supabase stats are empty but we have calls from the platform API, use call data for health
+    const stats = data?.stats ?? null;
+    if (stats && stats.totalEvents === 0 && calls.length > 0) {
+      const successCalls = calls.filter((c) => c.status === 'success' || c.status === 'ended').length;
+      const total = calls.length;
+      const enrichedStats = {
+        totalEvents: total,
+        successEvents: successCalls,
+        successRate: total > 0 ? Math.round((successCalls / total) * 100) : 0,
+        avgDuration: 0,
+        totalCost: 0,
+        latestError: stats.latestError,
+      };
+      return deriveEntityHealth(enrichedStats, data?.error ?? null);
+    }
+    const h = deriveEntityHealth(stats, data?.error ?? null);
     return h.status === 'no-data' ? { ...h, entityKind: 'agent' } : h;
-  }, [data?.error, data?.stats]);
+  }, [data?.error, data?.stats, calls]);
 
   useEffect(() => {
     if (data) onHealthChange?.(health);

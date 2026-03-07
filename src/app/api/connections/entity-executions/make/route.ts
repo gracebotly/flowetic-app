@@ -41,13 +41,24 @@ export async function GET(req: Request) {
   const baseUrl = zone.includes('.') ? `https://${zone}` : `https://${zone}.make.com`;
   if (!apiKey) return NextResponse.json({ ok: false, code: 'MISSING_API_KEY' }, { status: 400 });
 
-  const res = await fetch(`${baseUrl}/api/v2/scenarios/${scenarioId}/executions?limit=${limit}`, { headers: { Authorization: `Token ${apiKey}` } });
-  if (!res.ok) return NextResponse.json({ ok: false, code: 'MAKE_FETCH_FAILED' }, { status: 502 });
+  let raw: MakeExecution[] = [];
+  try {
+    const res = await fetch(`${baseUrl}/api/v2/scenarios/${scenarioId}/executions?limit=${limit}`, { headers: { Authorization: `Token ${apiKey}` } });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      console.error(`[entity-executions/make] Make API returned ${res.status}: ${text.slice(0, 200)}`);
+      return NextResponse.json({ ok: false, code: 'MAKE_FETCH_FAILED', error: `Make API returned ${res.status}` }, { status: 502 });
+    }
+    const json = await res.json();
+    raw = Array.isArray(json?.executions) ? json.executions : [];
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    console.error('[entity-executions/make] Fetch failed:', message);
+    return NextResponse.json({ ok: false, code: 'MAKE_FETCH_ERROR', error: message }, { status: 502 });
+  }
 
-  const json = await res.json();
-  const raw = Array.isArray(json?.executions) ? json.executions : [];
   const executions = (raw as MakeExecution[])
-    .filter((e) => e.type === 'auto' && e.eventType === 'EXECUTION_END')
+    .filter((e) => (e.type === 'auto' || e.type === 'manual') && e.eventType === 'EXECUTION_END')
     .map((e) => ({
       id: String(e.id ?? ''),
       status: e.status === 3 ? 'error' : 'success',

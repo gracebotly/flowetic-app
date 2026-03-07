@@ -37,11 +37,25 @@ export async function GET(req: Request) {
   const instanceUrl = String(secret.instanceUrl ?? '').trim().replace(/\/$/, '');
   if (!apiKey || !instanceUrl) return NextResponse.json({ ok: false, code: 'MISSING_API_KEY' }, { status: 400 });
 
-  const res = await fetch(`${instanceUrl}/api/v1/executions?workflowId=${workflowId}&limit=${limit}`, { headers: { 'X-N8N-API-KEY': apiKey } });
-  if (!res.ok) return NextResponse.json({ ok: false, code: 'N8N_FETCH_FAILED' }, { status: 502 });
-
-  const raw = await res.json();
-  const executionsRaw = Array.isArray(raw?.data) ? raw.data : Array.isArray(raw) ? raw : [];
+  let raw: unknown = {};
+  try {
+    const res = await fetch(`${instanceUrl}/api/v1/executions?workflowId=${workflowId}&limit=${limit}`, { headers: { 'X-N8N-API-KEY': apiKey } });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      console.error(`[entity-executions/n8n] n8n API returned ${res.status}: ${text.slice(0, 200)}`);
+      return NextResponse.json({ ok: false, code: 'N8N_FETCH_FAILED', error: `n8n API returned ${res.status}` }, { status: 502 });
+    }
+    raw = await res.json();
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    console.error('[entity-executions/n8n] Fetch failed:', message);
+    return NextResponse.json({ ok: false, code: 'N8N_FETCH_ERROR', error: message }, { status: 502 });
+  }
+  const executionsRaw = Array.isArray((raw as { data?: unknown })?.data)
+    ? (raw as { data: unknown[] }).data
+    : Array.isArray(raw)
+      ? raw
+      : [];
   const executions = (executionsRaw as N8nExecution[]).map((e) => {
     const started = e.startedAt ? new Date(e.startedAt).getTime() : NaN;
     const stopped = e.stoppedAt ? new Date(e.stoppedAt).getTime() : NaN;
