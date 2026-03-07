@@ -20,6 +20,14 @@ async function fetchInternal(req: Request, path: string) {
 }
 
 export async function GET(req: Request) {
+  const { createClient } = await import('@/lib/supabase/server');
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ ok: false, code: 'AUTH_REQUIRED' }, { status: 401 });
+
+  const { data: membership } = await supabase.from('memberships').select('tenant_id').eq('user_id', user.id).limit(1).maybeSingle();
+  if (!membership?.tenant_id) return NextResponse.json({ ok: false, code: 'NO_TENANT' }, { status: 403 });
+
   const { searchParams } = new URL(req.url);
   const sourceId = searchParams.get('source_id');
   const externalId = searchParams.get('external_id');
@@ -38,23 +46,31 @@ export async function GET(req: Request) {
       ? `/api/connections/entity-calls/retell?source_id=${sourceId}&agent_id=${externalId}&limit=50`
       : `/api/connections/entity-calls/vapi?source_id=${sourceId}&assistant_id=${externalId}&limit=50`;
 
-    const res = await fetchInternal(req, qs);
-    const json = await res.json();
+    let json: Record<string, unknown> = {};
+    try {
+      const res = await fetchInternal(req, qs);
+      if (!res.ok) return NextResponse.json({ ok: false, code: 'INTERNAL_FETCH_FAILED' }, { status: 502 });
+      json = await res.json();
+    } catch {
+      return NextResponse.json({ ok: false, code: 'INTERNAL_FETCH_FAILED', error: 'Could not fetch data for export. Try again.' }, { status: 502 });
+    }
+
     const calls = Array.isArray(json?.calls) ? json.calls : [];
 
     rows.push(['Date', 'Time', 'Duration', 'Status', 'Sentiment', 'Summary', 'Cost', 'Disconnection Reason'].map(csvEscape).join(','));
     for (const c of calls) {
-      const d = new Date(c.timestamp ?? Date.now());
-      const summary = redact ? redactPII(String(c.summary ?? '')) : String(c.summary ?? '');
-      const reason = redact ? redactPII(String(c.disconnectionReason ?? '')) : String(c.disconnectionReason ?? '');
+      const call = c as Record<string, unknown>;
+      const d = new Date(Number(call.timestamp ?? Date.now()));
+      const summary = redact ? redactPII(String(call.summary ?? '')) : String(call.summary ?? '');
+      const reason = redact ? redactPII(String(call.disconnectionReason ?? '')) : String(call.disconnectionReason ?? '');
       rows.push([
         d.toLocaleDateString('en-US'),
         d.toLocaleTimeString('en-US'),
-        String(c.duration ?? 0),
-        String(c.status ?? ''),
-        String(c.sentiment ?? ''),
+        String(call.duration ?? 0),
+        String(call.status ?? ''),
+        String(call.sentiment ?? ''),
         summary,
-        String(c.costTotal ?? 0),
+        String(call.costTotal ?? 0),
         reason,
       ].map(csvEscape).join(','));
     }
@@ -62,21 +78,30 @@ export async function GET(req: Request) {
     const qs = platform === 'make'
       ? `/api/connections/entity-executions/make?source_id=${sourceId}&scenario_id=${externalId}&limit=50`
       : `/api/connections/entity-executions/n8n?source_id=${sourceId}&workflow_id=${externalId}&limit=50`;
-    const res = await fetchInternal(req, qs);
-    const json = await res.json();
+
+    let json: Record<string, unknown> = {};
+    try {
+      const res = await fetchInternal(req, qs);
+      if (!res.ok) return NextResponse.json({ ok: false, code: 'INTERNAL_FETCH_FAILED' }, { status: 502 });
+      json = await res.json();
+    } catch {
+      return NextResponse.json({ ok: false, code: 'INTERNAL_FETCH_FAILED', error: 'Could not fetch data for export. Try again.' }, { status: 502 });
+    }
+
     const executions = Array.isArray(json?.executions) ? json.executions : [];
 
     rows.push(['Execution ID', 'Timestamp', 'Status', 'Duration (ms)', 'Operations', 'Credits', 'Error Name', 'Error Message'].map(csvEscape).join(','));
     for (const e of executions) {
+      const execution = e as Record<string, unknown>;
       rows.push([
-        String(e.id ?? ''),
-        String(e.timestamp ?? ''),
-        String(e.status ?? ''),
-        String(e.duration ?? ''),
-        String(e.operations ?? ''),
-        String(e.centicredits ?? ''),
-        String(e.errorName ?? ''),
-        String(e.errorMessage ?? ''),
+        String(execution.id ?? ''),
+        String(execution.timestamp ?? ''),
+        String(execution.status ?? ''),
+        String(execution.duration ?? ''),
+        String(execution.operations ?? ''),
+        String(execution.centicredits ?? ''),
+        String(execution.errorName ?? ''),
+        String(execution.errorMessage ?? ''),
       ].map(csvEscape).join(','));
     }
   } else {

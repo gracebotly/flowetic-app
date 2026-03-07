@@ -57,13 +57,13 @@ export function ExportButton({ sourceId, externalId, platform, type }: ExportBut
       <DropdownMenu.Portal>
         <DropdownMenu.Content className="rounded-lg border border-gray-200 bg-white p-1 shadow-lg" sideOffset={6}>
           <DropdownMenu.Item
-            onClick={() => download(false)}
+            onSelect={() => download(false)}
             className="cursor-pointer rounded-md px-3 py-2 text-xs text-gray-700 transition-colors duration-200 hover:bg-gray-50"
           >
             Export CSV
           </DropdownMenu.Item>
           <DropdownMenu.Item
-            onClick={() => download(true)}
+            onSelect={() => download(true)}
             className="cursor-pointer rounded-md px-3 py-2 text-xs text-gray-700 transition-colors duration-200 hover:bg-gray-50"
           >
             Export CSV (PII Redacted)
