@@ -17,6 +17,9 @@ import {
   Cpu,
   Copy,
   RefreshCw,
+  Loader2,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
@@ -384,8 +387,16 @@ export default function ConnectionsPage() {
 
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [selectedEntity, setSelectedEntity] = useState<IndexedEntityRow | null>(null);
-  const [drawerTab, setDrawerTab] = useState<"activity" | "portals" | "offerings" | "details">("activity");
+  const [drawerTab, setDrawerTab] = useState<"overview" | "activity" | "portals">("overview");
   const [drawerVisible, setDrawerVisible] = useState(false);
+  const [drawerEvents, setDrawerEvents] = useState<Array<{
+    id: string;
+    type: string;
+    name: string;
+    timestamp: string;
+    state: Record<string, unknown> | null;
+  }>>([]);
+  const [drawerEventsLoading, setDrawerEventsLoading] = useState(false);
 
   // Inventory state for n8n workflows
   const [inventoryLoading, setInventoryLoading] = useState(false);
@@ -796,6 +807,42 @@ export default function ConnectionsPage() {
       return () => window.removeEventListener("keydown", onKeyDown);
     }
   }, [detailsOpen]);
+
+  // Fetch events when activity tab is selected
+  useEffect(() => {
+    if (drawerTab !== "activity" || !selectedEntity) {
+      return;
+    }
+    let mounted = true;
+    setDrawerEventsLoading(true);
+    fetch(`/api/events?source_id=${selectedEntity.sourceId}&limit=50`)
+      .then((res) => res.json())
+      .then((json) => {
+        if (!mounted) return;
+        const allEvents = json.events ?? [];
+        // Filter to events matching this entity's externalId
+        const filtered = allEvents.filter((ev: any) => {
+          const s = ev.state as Record<string, unknown> | null;
+          if (!s) return false;
+          return (
+            String(s.workflow_id ?? "") === selectedEntity.externalId ||
+            String(s.assistant_id ?? "") === selectedEntity.externalId ||
+            String(s.agent_id ?? "") === selectedEntity.externalId ||
+            String(s.scenario_id ?? "") === selectedEntity.externalId
+          );
+        });
+        setDrawerEvents(filtered);
+      })
+      .catch(() => {
+        if (mounted) setDrawerEvents([]);
+      })
+      .finally(() => {
+        if (mounted) setDrawerEventsLoading(false);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [drawerTab, selectedEntity]);
 
   useEffect(() => {
     if (connectOpen && step === "entities" && selectedPlatform === "n8n" && createdSourceId) {
@@ -1545,7 +1592,7 @@ export default function ConnectionsPage() {
                 type="button"
                 onClick={() => {
                   setSelectedEntity(openEntity);
-                  setDrawerTab("activity");
+                  setDrawerTab("overview");
                   setDetailsOpen(true);
                   setOpenEntityMenuId(null);
                   setDeleteConfirmId(null);
@@ -2532,7 +2579,7 @@ export default function ConnectionsPage() {
             </div>
 
             {/* Stats bar */}
-            <div className="grid grid-cols-4 divide-x divide-gray-100 border-b border-gray-100 bg-gray-50/50">
+            <div className="grid grid-cols-3 divide-x divide-gray-100 border-b border-gray-100 bg-gray-50/50">
               <div className="px-6 py-3">
                 <div className="text-xs text-gray-400">Connection</div>
                 <div className="text-sm font-semibold text-emerald-600">Healthy</div>
@@ -2545,19 +2592,15 @@ export default function ConnectionsPage() {
                 <div className="text-xs text-gray-400">Portals</div>
                 <div className="text-sm font-semibold text-gray-900">0</div>
               </div>
-              <div className="px-6 py-3">
-                <div className="text-xs text-gray-400">Products</div>
-                <div className="text-sm font-semibold text-gray-900">0</div>
-              </div>
             </div>
 
             {/* Tabs */}
             <div className="border-b border-gray-100 px-6">
               <nav className="flex gap-6">
                 {([
+                  { id: "overview" as const, label: "Overview" },
                   { id: "activity" as const, label: "Activity" },
                   { id: "portals" as const, label: "Portals" },
-                  { id: "offerings" as const, label: "Products" },
                 ] as const).map((tab) => (
                   <button
                     key={tab.id}
@@ -2574,30 +2617,91 @@ export default function ConnectionsPage() {
                     )}
                   </button>
                 ))}
-                <button
-                  onClick={() => setDrawerTab("details")}
-                  className={`relative ml-auto py-3 text-sm font-medium transition ${
-                    drawerTab === "details"
-                      ? "text-gray-900"
-                      : "text-gray-400 hover:text-gray-600"
-                  }`}
-                >
-                  Details
-                  {drawerTab === "details" && (
-                    <span className="absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-gray-900" />
-                  )}
-                </button>
               </nav>
             </div>
 
             {/* Tab content — scrollable */}
             <div className="flex-1 overflow-y-auto px-6 py-4">
 
-              {/* Activity tab */}
+              {/* Overview tab (was "Details" — now the default) */}
+              {drawerTab === "overview" ? (
+                <EntityDetailsPanel
+                  key={`${selectedEntity.platform}:${selectedEntity.sourceId}:${selectedEntity.externalId}`}
+                  platform={selectedEntity.platform}
+                  sourceId={selectedEntity.sourceId}
+                  externalId={selectedEntity.externalId}
+                />
+              ) : null}
+
+              {/* Activity tab — real event feed */}
               {drawerTab === "activity" ? (
-                <div className="py-8 text-center">
-                  <div className="text-sm text-gray-400">No recent activity for this {selectedEntity.kind}.</div>
-                  <div className="mt-1 text-xs text-gray-300">Activity will appear here once events are recorded.</div>
+                <div>
+                  {drawerEventsLoading ? (
+                    <div className="flex items-center justify-center py-12">
+                      <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+                      <span className="ml-2 text-sm text-gray-400">Loading activity...</span>
+                    </div>
+                  ) : drawerEvents.length === 0 ? (
+                    <div className="py-8 text-center">
+                      <div className="text-sm text-gray-400">No recent activity for this {selectedEntity.kind}.</div>
+                      <div className="mt-1 text-xs text-gray-300">
+                        Activity will appear here once events are recorded. Try syncing your connection first.
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {drawerEvents.map((ev) => {
+                        const s = ev.state as Record<string, unknown> | null;
+                        const status = String(s?.status ?? "unknown");
+                        const isError = status === "error" || status === "crashed" || status === "failed";
+                        const durationMs = Number(s?.duration_ms ?? 0);
+                        const durationLabel = durationMs > 0
+                          ? durationMs < 1000 ? `${durationMs}ms`
+                          : durationMs < 60000 ? `${Math.round(durationMs / 1000)}s`
+                          : `${Math.round(durationMs / 60000)}m`
+                          : null;
+                        const ts = new Date(ev.timestamp);
+                        const timeLabel = ts.toLocaleDateString("en-US", {
+                          month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+                        });
+
+                        return (
+                          <div
+                            key={ev.id}
+                            className={`flex items-center gap-3 rounded-lg border px-4 py-3 ${
+                              isError
+                                ? "border-red-100 bg-red-50/50"
+                                : "border-gray-100 bg-white"
+                            }`}
+                          >
+                            <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${
+                              isError ? "bg-red-100" : "bg-emerald-100"
+                            }`}>
+                              {isError ? (
+                                <XCircle className="h-3.5 w-3.5 text-red-600" />
+                              ) : (
+                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium text-gray-900 capitalize">{status}</span>
+                                {durationLabel ? (
+                                  <span className="text-xs text-gray-400">{durationLabel}</span>
+                                ) : null}
+                              </div>
+                              <div className="text-xs text-gray-400">{timeLabel}</div>
+                              {isError && s?.error_message ? (
+                                <div className="mt-1 truncate text-xs text-red-600">
+                                  {String(s.error_message).slice(0, 120)}
+                                </div>
+                              ) : null}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               ) : null}
 
@@ -2607,24 +2711,6 @@ export default function ConnectionsPage() {
                   <div className="text-sm text-gray-400">No portals linked to this {selectedEntity.kind}.</div>
                   <div className="mt-1 text-xs text-gray-300">Create a portal from the Portals tab to see it here.</div>
                 </div>
-              ) : null}
-
-              {/* Offerings tab */}
-              {drawerTab === "offerings" ? (
-                <div className="py-8 text-center">
-                  <div className="text-sm text-gray-400">No products linked to this {selectedEntity.kind}.</div>
-                  <div className="mt-1 text-xs text-gray-300">Create a product from the Products tab to see it here.</div>
-                </div>
-              ) : null}
-
-              {/* Details tab */}
-              {drawerTab === "details" ? (
-                <EntityDetailsPanel
-                  key={`${selectedEntity.platform}:${selectedEntity.sourceId}:${selectedEntity.externalId}`}
-                  platform={selectedEntity.platform}
-                  sourceId={selectedEntity.sourceId}
-                  externalId={selectedEntity.externalId}
-                />
               ) : null}
 
             </div>
