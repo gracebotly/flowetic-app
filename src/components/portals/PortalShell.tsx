@@ -93,6 +93,8 @@ interface PortalShellProps {
   secondaryColor: string;
   children: ReactNode;
   defaultTheme?: PortalTheme;
+  footerText?: string;
+  faviconUrl?: string | null;
   tabs?: PortalTab[];
   activeTab?: string;
   onTabChange?: (tabId: string) => void;
@@ -106,6 +108,8 @@ export function PortalShell({
   secondaryColor,
   children,
   defaultTheme = 'dark',
+  footerText,
+  faviconUrl,
   tabs,
   activeTab,
   onTabChange,
@@ -118,6 +122,11 @@ export function PortalShell({
 
   return (
     <PortalThemeContext.Provider value={{ theme, toggle }}>
+      {faviconUrl && (
+        <head>
+          <link rel="icon" href={faviconUrl} />
+        </head>
+      )}
       <div
         className={`min-h-screen transition-colors duration-300 ${isDark ? 'dark' : ''}`}
         style={{
@@ -239,7 +248,7 @@ export function PortalShell({
           }}
         >
           <p className="text-xs" style={{ color: tokens.textMuted }}>
-            © {new Date().getFullYear()} {tenantName}. All rights reserved.
+            {footerText || `© ${new Date().getFullYear()} ${tenantName}. All rights reserved.`}
           </p>
         </footer>
       </div>

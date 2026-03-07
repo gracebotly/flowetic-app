@@ -31,6 +31,10 @@ export interface ResolvedPortal {
     primary_color: string;
     secondary_color: string;
     custom_domain: string | null;
+    brand_footer: string | null;
+    favicon_url: string | null;
+    default_theme: string | null;
+    welcome_message: string | null;
   };
   events: Array<{
     id: string;
@@ -76,7 +80,7 @@ export async function resolvePortal(
   // 3. Fetch tenant with branding columns
   const { data: tenant, error: tenantError } = await supabaseAdmin
     .from('tenants')
-    .select('id, name, logo_url, primary_color, secondary_color, custom_domain')
+    .select('id, name, logo_url, primary_color, secondary_color, custom_domain, brand_footer, favicon_url, default_theme, welcome_message')
     .eq('id', portal.tenant_id)
     .single();
 

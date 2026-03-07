@@ -23,6 +23,11 @@ interface PortalClientProps {
     primary_color: string;
     secondary_color: string;
   };
+  brand: {
+    footerText: string;
+    faviconUrl: string | null;
+    defaultTheme: 'light' | 'dark';
+  };
   data: SkeletonData;
   events: PortalEvent[];
 }
@@ -41,7 +46,7 @@ function getTabs(surfaceType: string): PortalTab[] {
   }
 }
 
-export function PortalClient({ portal, tenant, data, events }: PortalClientProps) {
+export function PortalClient({ portal, tenant, brand, data, events }: PortalClientProps) {
   const tabs = getTabs(portal.surface_type);
   const [activeTab, setActiveTab] = useState(tabs[0]?.id ?? 'dashboard');
 
@@ -59,6 +64,9 @@ export function PortalClient({ portal, tenant, data, events }: PortalClientProps
       logoUrl={tenant.logo_url}
       primaryColor={tenant.primary_color}
       secondaryColor={tenant.secondary_color}
+      defaultTheme={brand.defaultTheme}
+      footerText={brand.footerText}
+      faviconUrl={brand.faviconUrl}
       tabs={tabs}
       activeTab={activeTab}
       onTabChange={setActiveTab}
