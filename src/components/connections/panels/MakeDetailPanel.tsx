@@ -87,7 +87,19 @@ export function MakeDetailPanel({ sourceId, externalId, onHealthChange }: MakeDe
   const sparkData = useMemo(() => computeSparkData(executions), [executions]);
 
   const kpis: MetricKPI[] = useMemo(() => {
-    const stats = data?.stats ?? { totalEvents: 0, successEvents: 0, successRate: 0, avgDuration: 0, totalCost: 0 };
+    let stats = data?.stats ?? { totalEvents: 0, successEvents: 0, successRate: 0, avgDuration: 0, totalCost: 0 };
+    // Enrich from platform API data when Supabase is empty
+    if (stats.totalEvents === 0 && executions.length > 0) {
+      const successCount = executions.filter((e) => e.status === 'success').length;
+      const total = executions.length;
+      stats = {
+        totalEvents: total,
+        successEvents: successCount,
+        successRate: total > 0 ? Math.round((successCount / total) * 100) : 0,
+        avgDuration: 0,
+        totalCost: 0,
+      };
+    }
     return [
       { label: 'Executions', value: String(stats.totalEvents), icon: BarChart3, accent: '', sparkData, sparkColor: 'blue' },
       {
@@ -109,7 +121,7 @@ export function MakeDetailPanel({ sourceId, externalId, onHealthChange }: MakeDe
         accent: '',
       },
     ];
-  }, [data?.stats, data?.details, sparkData]);
+  }, [data?.stats, data?.details, sparkData, executions]);
 
   const integrations = Array.isArray(data?.details?.used_packages) ? data?.details?.used_packages as string[] : [];
   const hasMore = limit < 20 && executions.length >= limit;

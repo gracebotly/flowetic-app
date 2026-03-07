@@ -94,7 +94,18 @@ export function N8nDetailPanel({ sourceId, externalId, onHealthChange }: N8nDeta
   const sparkData = useMemo(() => computeSparkData(executions), [executions]);
 
   const kpis: MetricKPI[] = useMemo(() => {
-    const stats = data?.stats ?? { totalEvents: 0, successEvents: 0, successRate: 0, avgDuration: 0, totalCost: 0 };
+    let stats = data?.stats ?? { totalEvents: 0, successEvents: 0, successRate: 0, avgDuration: 0, totalCost: 0 };
+    if (stats.totalEvents === 0 && executions.length > 0) {
+      const successCount = executions.filter((e) => e.status === 'success').length;
+      const total = executions.length;
+      stats = {
+        totalEvents: total,
+        successEvents: successCount,
+        successRate: total > 0 ? Math.round((successCount / total) * 100) : 0,
+        avgDuration: 0,
+        totalCost: 0,
+      };
+    }
     return [
       { label: 'Executions', value: String(stats.totalEvents), icon: BarChart3, accent: '', sparkData, sparkColor: 'blue' },
       {
@@ -111,7 +122,7 @@ export function N8nDetailPanel({ sourceId, externalId, onHealthChange }: N8nDeta
         accent: data?.details?.active ? 'green' : 'amber',
       },
     ];
-  }, [data?.stats, data?.details, sparkData]);
+  }, [data?.stats, data?.details, sparkData, executions]);
 
   const tags = Array.isArray(data?.details?.tags) ? data?.details?.tags as string[] : [];
   const nodeTypes = Array.isArray(data?.details?.node_types) ? data?.details?.node_types as string[] : [];

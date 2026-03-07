@@ -155,7 +155,16 @@ export function RetellDetailPanel({ sourceId, externalId, onHealthChange }: Voic
   const sparkData = useMemo(() => computeSparkData(calls), [calls]);
 
   const kpis: MetricKPI[] = useMemo(() => {
-    const stats = data?.stats ?? { totalEvents: 0, successRate: 0, avgDuration: 0, totalCost: 0 };
+    let stats = data?.stats ?? { totalEvents: 0, successRate: 0, avgDuration: 0, totalCost: 0 };
+    if (stats.totalEvents === 0 && calls.length > 0) {
+      const successCount = calls.filter((c) => c.status === 'success' || c.status === 'ended').length;
+      const total = calls.length;
+      stats = {
+        ...stats,
+        totalEvents: total,
+        successRate: total > 0 ? Math.round((successCount / total) * 100) : 0,
+      };
+    }
     return [
       {
         label: 'Calls',
@@ -185,7 +194,7 @@ export function RetellDetailPanel({ sourceId, externalId, onHealthChange }: Voic
         tooltip: 'Agency platform cost — not visible to clients',
       },
     ];
-  }, [data?.stats, sparkData]);
+  }, [data?.stats, sparkData, calls]);
 
   const hasMore = callsLimit < 10 && calls.length >= callsLimit;
 
