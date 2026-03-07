@@ -1,9 +1,16 @@
 'use client';
 
-import { ReactNode, createContext, useContext, useState, useCallback } from 'react';
+import { type CSSProperties, type ElementType, type ReactNode, createContext, useContext, useState, useCallback } from 'react';
+import { getThemeTokens } from '@/lib/portals/themeTokens';
 
 // ── Theme Context ─────────────────────────────────────────────
 type PortalTheme = 'light' | 'dark';
+
+export interface PortalTab {
+  id: string;
+  label: string;
+  icon: ElementType;
+}
 
 interface PortalThemeContextValue {
   theme: PortalTheme;
@@ -22,14 +29,15 @@ export function usePortalTheme() {
 // ── Theme Toggle Button ───────────────────────────────────────
 function ThemeToggle() {
   const { theme, toggle } = usePortalTheme();
+  const tokens = getThemeTokens(theme);
   return (
     <button
       onClick={toggle}
       aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
       className="relative flex h-8 w-8 items-center justify-center rounded-full transition-all duration-300 hover:scale-110"
       style={{
-        backgroundColor: theme === 'light' ? '#f1f5f9' : '#1e293b',
-        border: `1px solid ${theme === 'light' ? '#e2e8f0' : '#334155'}`,
+        backgroundColor: tokens.bgCode,
+        border: `1px solid ${tokens.borderCode}`,
       }}
     >
       {/* Sun */}
@@ -85,6 +93,9 @@ interface PortalShellProps {
   secondaryColor: string;
   children: ReactNode;
   defaultTheme?: PortalTheme;
+  tabs?: PortalTab[];
+  activeTab?: string;
+  onTabChange?: (tabId: string) => void;
 }
 
 export function PortalShell({
@@ -95,11 +106,15 @@ export function PortalShell({
   secondaryColor,
   children,
   defaultTheme = 'dark',
+  tabs,
+  activeTab,
+  onTabChange,
 }: PortalShellProps) {
   const [theme, setTheme] = useState<PortalTheme>(defaultTheme);
   const toggle = useCallback(() => setTheme((t) => (t === 'light' ? 'dark' : 'light')), []);
 
   const isDark = theme === 'dark';
+  const tokens = getThemeTokens(theme);
 
   return (
     <PortalThemeContext.Provider value={{ theme, toggle }}>
@@ -108,16 +123,16 @@ export function PortalShell({
         style={{
           '--portal-primary': primaryColor,
           '--portal-secondary': secondaryColor,
-          backgroundColor: isDark ? '#0c0c14' : '#f8fafc',
-          color: isDark ? '#f0f0f5' : '#111827',
-        } as React.CSSProperties}
+          backgroundColor: tokens.bgPage,
+          color: tokens.textPrimary,
+        } as CSSProperties}
       >
         {/* Header */}
         <header
           className="sticky top-0 z-10 border-b backdrop-blur-md transition-colors duration-300"
           style={{
-            backgroundColor: isDark ? 'rgba(12, 12, 20, 0.85)' : 'rgba(255, 255, 255, 0.85)',
-            borderColor: isDark ? '#1e1e2e' : '#e5e7eb',
+            backgroundColor: tokens.headerBg,
+            borderColor: tokens.headerBorder,
           }}
         >
           <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-3">
@@ -135,13 +150,13 @@ export function PortalShell({
               <div>
                 <h1
                   className="text-sm font-semibold"
-                  style={{ color: isDark ? '#f0f0f5' : '#111827' }}
+                  style={{ color: tokens.textPrimary }}
                 >
                   {portalName}
                 </h1>
                 <p
                   className="text-xs"
-                  style={{ color: isDark ? '#8b8ba0' : '#6b7280' }}
+                  style={{ color: tokens.textSecondary }}
                 >
                   Powered by {tenantName}
                 </p>
@@ -158,7 +173,7 @@ export function PortalShell({
                 </span>
                 <span
                   className="text-xs"
-                  style={{ color: isDark ? '#8b8ba0' : '#6b7280' }}
+                  style={{ color: tokens.textSecondary }}
                 >
                   Live
                 </span>
@@ -166,6 +181,49 @@ export function PortalShell({
             </div>
           </div>
         </header>
+
+        {/* Tab Navigation */}
+        {tabs && tabs.length > 1 && (
+          <nav
+            className="sticky top-[57px] z-[9] border-b backdrop-blur-md"
+            style={{
+              backgroundColor: tokens.headerBg,
+              borderColor: tokens.border,
+            }}
+          >
+            <div className="mx-auto flex max-w-7xl items-center gap-1 px-6">
+              {tabs.map((tab) => {
+                const isActive = tab.id === activeTab;
+                const TabIcon = tab.icon;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => onTabChange?.(tab.id)}
+                    className="group relative flex cursor-pointer items-center gap-2 rounded-t-md px-4 py-3 text-sm font-medium transition-colors duration-200"
+                    style={{
+                      color: isActive ? tokens.textPrimary : tokens.textSecondary,
+                    }}
+                  >
+                    <TabIcon className="h-4 w-4" />
+                    {tab.label}
+                    {!isActive && (
+                      <span
+                        className="absolute inset-0 -z-10 rounded-md opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+                        style={{ backgroundColor: tokens.bgExpanded }}
+                      />
+                    )}
+                    {isActive && (
+                      <span
+                        className="absolute inset-x-0 bottom-0 h-0.5"
+                        style={{ backgroundColor: primaryColor }}
+                      />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </nav>
+        )}
 
         {/* Content */}
         <main className="mx-auto max-w-7xl px-6 py-6">
@@ -176,11 +234,11 @@ export function PortalShell({
         <footer
           className="border-t py-4 text-center transition-colors duration-300"
           style={{
-            backgroundColor: isDark ? 'rgba(12, 12, 20, 0.5)' : 'rgba(255, 255, 255, 0.5)',
-            borderColor: isDark ? '#1e1e2e' : '#e5e7eb',
+            backgroundColor: tokens.footerBg,
+            borderColor: tokens.headerBorder,
           }}
         >
-          <p className="text-xs" style={{ color: isDark ? '#4a4a5e' : '#9ca3af' }}>
+          <p className="text-xs" style={{ color: tokens.textMuted }}>
             © {new Date().getFullYear()} {tenantName}. All rights reserved.
           </p>
         </footer>

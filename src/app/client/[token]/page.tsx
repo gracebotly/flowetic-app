@@ -1,12 +1,8 @@
 import { notFound } from 'next/navigation';
 import { resolvePortal } from '@/lib/portals/resolvePortal';
 import { transformDataForSkeleton } from '@/lib/portals/transformData';
-import { PortalShell } from '@/components/portals/PortalShell';
-import { VoicePerformanceSkeleton } from '@/components/portals/skeletons/VoicePerformanceSkeleton';
-import { WorkflowOperationsSkeleton } from '@/components/portals/skeletons/WorkflowOperationsSkeleton';
-import { ROISummarySkeleton } from '@/components/portals/skeletons/ROISummarySkeleton';
-import { CombinedOverviewSkeleton } from '@/components/portals/skeletons/CombinedOverviewSkeleton';
 import { createClient } from '@/lib/supabase/server';
+import { PortalClient } from './PortalClient';
 
 interface PageProps {
   params: Promise<{ token: string }>;
@@ -25,43 +21,30 @@ export default async function ClientPortalPage({ params }: PageProps) {
 
   const data = transformDataForSkeleton(events, portal.skeleton_id, portal.platform_type);
 
-  const branding = {
-    primary_color: tenant.primary_color,
-    secondary_color: tenant.secondary_color,
-    logo_url: tenant.logo_url,
-    portalName: portal.name,
-  };
-
   return (
-    <PortalShell
-      portalName={portal.name}
-      tenantName={tenant.name}
-      logoUrl={tenant.logo_url}
-      primaryColor={tenant.primary_color}
-      secondaryColor={tenant.secondary_color}
-    >
-      {(portal.skeleton_id === 'voice-performance') && (
-        <VoicePerformanceSkeleton data={data} branding={branding} />
-      )}
-      {(portal.skeleton_id === 'workflow-operations') && (
-        <WorkflowOperationsSkeleton data={data} branding={branding} />
-      )}
-      {(portal.skeleton_id === 'roi-summary') && (
-        <ROISummarySkeleton data={data} branding={branding} />
-      )}
-      {(portal.skeleton_id === 'combined-overview') && (
-        <CombinedOverviewSkeleton data={data} branding={branding} />
-      )}
-    </PortalShell>
+    <PortalClient
+      portal={{
+        name: portal.name,
+        skeleton_id: portal.skeleton_id,
+        surface_type: portal.surface_type,
+        platform_type: portal.platform_type,
+      }}
+      tenant={{
+        name: tenant.name,
+        logo_url: tenant.logo_url,
+        primary_color: tenant.primary_color,
+        secondary_color: tenant.secondary_color,
+      }}
+      data={data}
+      events={events}
+    />
   );
 }
-
-// ── Metadata ─────────────────────────────────────────────────
 
 export async function generateMetadata({ params }: PageProps) {
   const { token } = await params;
   const resolved = await resolvePortal(token);
-  
+
   if (!resolved) {
     return { title: 'Portal Not Found' };
   }
@@ -69,6 +52,6 @@ export async function generateMetadata({ params }: PageProps) {
   return {
     title: `${resolved.portal.name} — ${resolved.tenant.name}`,
     description: `Real-time analytics portal powered by ${resolved.tenant.name}`,
-    robots: 'noindex, nofollow', // Client portals should not be indexed
+    robots: 'noindex, nofollow',
   };
 }
