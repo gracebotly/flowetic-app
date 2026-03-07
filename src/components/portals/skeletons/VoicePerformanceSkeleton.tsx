@@ -21,6 +21,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { usePortalTheme } from '@/components/portals/PortalShell';
+import { ThemedCard, KPICard, StatusBadge, fadeUp, hexToRgba } from '@/components/portals/shared/portalPrimitives';
 import type { SkeletonData } from '@/lib/portals/transformData';
 import { getThemeTokens, STATUS, DEFAULT_ACCENT, type ThemeTokens } from '@/lib/portals/themeTokens';
 
@@ -34,28 +35,11 @@ interface VoicePerformanceProps {
   };
 }
 
-const fadeUp = {
-  hidden: { opacity: 0, y: 20 },
-  visible: (i: number) => ({
-    opacity: 1,
-    y: 0,
-    transition: { delay: i * 0.08, duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] },
-  }),
-};
-
 const expandVariant = {
   hidden: { height: 0, opacity: 0 },
   visible: { height: 'auto', opacity: 1, transition: { duration: 0.3, ease: 'easeOut' } },
   exit: { height: 0, opacity: 0, transition: { duration: 0.2, ease: 'easeIn' } },
 };
-
-function hexToRgba(hex: string, alpha: number): string {
-  const clean = hex.replace('#', '');
-  if (!/^[0-9a-fA-F]{3,8}$/.test(clean)) return `rgba(59,130,246,${alpha})`;
-  const full = clean.length === 3 ? clean.split('').map((c) => c + c).join('') : clean.slice(0, 6);
-  const num = parseInt(full, 16);
-  return `rgba(${(num >> 16) & 255}, ${(num >> 8) & 255}, ${num & 255}, ${alpha})`;
-}
 
 function formatCallType(raw: string): string {
   if (!raw) return '';
@@ -190,73 +174,6 @@ function getKPIIcon(label: string): { icon: React.ElementType; color: string } {
   if (label === 'Success Rate') return { icon: CheckCircle2, color: STATUS.success };
   if (label === 'Failed') return { icon: XCircle, color: STATUS.error };
   return { icon: Activity, color: 'accent' };
-}
-
-function ThemedCard({ children, className = '', glow = false, accentColor }: { children: React.ReactNode; className?: string; glow?: boolean; accentColor?: string }) {
-  const { theme } = usePortalTheme();
-  const tokens = getThemeTokens(theme);
-
-  return (
-    <div
-      className={`relative overflow-hidden rounded-xl border p-5 transition-all duration-300 ${className}`}
-      style={{
-        backgroundColor: tokens.bgCard,
-        borderColor: tokens.border,
-        boxShadow: glow && accentColor
-          ? `0 0 40px ${hexToRgba(accentColor, 0.08)}, 0 1px 3px rgba(0,0,0,${theme === 'dark' ? '0.3' : '0.08'})`
-          : `0 1px 3px rgba(0,0,0,${theme === 'dark' ? '0.3' : '0.08'})`,
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
-function KPICard({ label, value, trend, trendValue, index, accentColor }: { label: string; value: string | number; trend?: 'up' | 'down' | 'flat'; trendValue?: string; index: number; accentColor: string }) {
-  const { theme } = usePortalTheme();
-  const tokens = getThemeTokens(theme);
-  const { icon: Icon, color } = getKPIIcon(label);
-  const iconColor = color === 'accent' ? accentColor : color;
-
-  return (
-    <motion.div variants={fadeUp} initial="hidden" animate="visible" custom={index}>
-      <ThemedCard>
-        <Flex justifyContent="between" alignItems="start">
-          <div className="flex-1">
-            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: tokens.textSecondary }}>{label}</p>
-            <p className="mt-2 text-2xl font-bold tracking-tight" style={{ color: tokens.textPrimary }}>{value}</p>
-            {trendValue && (
-              <p
-                className="mt-1 text-xs font-medium"
-                style={{ color: trend === 'up' ? STATUS.success : trend === 'down' ? STATUS.error : tokens.textMuted }}
-              >
-                {trend === 'up' ? '↑' : trend === 'down' ? '↓' : '→'} {trendValue}
-              </p>
-            )}
-          </div>
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ backgroundColor: hexToRgba(iconColor, 0.15) }}>
-            <Icon className="h-5 w-5" style={{ color: iconColor }} />
-          </div>
-        </Flex>
-      </ThemedCard>
-    </motion.div>
-  );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const isSuccess = status === 'success' || status === 'completed';
-  return (
-    <span
-      className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold"
-      style={{
-        backgroundColor: isSuccess ? `${STATUS.success}1A` : `${STATUS.error}1A`,
-        color: isSuccess ? STATUS.success : STATUS.error,
-      }}
-    >
-      <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: isSuccess ? STATUS.success : STATUS.error }} />
-      {isSuccess ? 'Success' : 'Failed'}
-    </span>
-  );
 }
 
 function SentimentBadge({ sentiment }: { sentiment: string }) {
@@ -498,17 +415,22 @@ export function VoicePerformanceSkeleton({ data, branding }: VoicePerformancePro
       </motion.div>
 
       <Grid numItemsMd={4} className="gap-4">
-        {kpis.slice(0, 4).map((kpi, i) => (
-          <KPICard
-            key={kpi.label}
-            label={kpi.label}
-            value={kpi.value}
-            trend={kpi.trend}
-            trendValue={kpi.trendValue}
-            index={i + 1}
-            accentColor={accentColor}
-          />
-        ))}
+        {kpis.slice(0, 4).map((kpi, i) => {
+          const { icon, color } = getKPIIcon(kpi.label);
+          const iconColor = color === 'accent' ? accentColor : color;
+          return (
+            <KPICard
+              key={kpi.label}
+              label={kpi.label}
+              value={kpi.value}
+              icon={icon}
+              color={iconColor}
+              trend={kpi.trend}
+              trendValue={kpi.trendValue}
+              index={i + 1}
+            />
+          );
+        })}
       </Grid>
 
       {trend.length > 1 && (

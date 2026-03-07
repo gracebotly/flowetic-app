@@ -15,7 +15,7 @@ export async function GET() {
 
   const { data: tenant, error } = await auth.supabase
     .from("tenants")
-    .select("logo_url, primary_color, secondary_color, welcome_message, brand_footer")
+    .select("logo_url, primary_color, secondary_color, welcome_message, brand_footer, favicon_url, default_theme")
     .eq("id", auth.tenantId)
     .maybeSingle();
 
@@ -39,7 +39,7 @@ export async function PATCH(req: Request) {
     return json(400, { ok: false, code: "INVALID_JSON" });
   }
 
-  const allowedFields = ["primary_color", "secondary_color", "welcome_message", "brand_footer"];
+  const allowedFields = ["primary_color", "secondary_color", "welcome_message", "brand_footer", "favicon_url", "default_theme"];
   const updates: Record<string, unknown> = {};
 
   for (const key of allowedFields) {
@@ -64,13 +64,17 @@ export async function PATCH(req: Request) {
     return json(400, { ok: false, code: "INVALID_COLOR", field: "secondary_color" });
   }
 
+  if (updates.default_theme && !['light', 'dark'].includes(updates.default_theme as string)) {
+    return json(400, { ok: false, code: "INVALID_THEME", field: "default_theme" });
+  }
+
   updates.updated_at = new Date().toISOString();
 
   const { data: tenant, error } = await auth.supabase
     .from("tenants")
     .update(updates)
     .eq("id", auth.tenantId)
-    .select("logo_url, primary_color, secondary_color, welcome_message, brand_footer")
+    .select("logo_url, primary_color, secondary_color, welcome_message, brand_footer, favicon_url, default_theme")
     .maybeSingle();
 
   if (error || !tenant) {

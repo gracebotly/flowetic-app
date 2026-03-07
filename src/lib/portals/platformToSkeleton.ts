@@ -49,3 +49,26 @@ export function getSkeletonDescription(skeletonId: SkeletonId): string {
   };
   return descriptions[skeletonId] ?? '';
 }
+
+
+/**
+ * Detect the correct skeleton from a list of platform types.
+ * Used when an offering has entities from multiple sources.
+ *
+ * Rules:
+ * - All voice (vapi/retell) → voice-performance
+ * - All workflow (make/n8n) → workflow-operations
+ * - Mix of voice + workflow → combined-overview
+ * - Empty → workflow-operations (default)
+ */
+export function getSkeletonForPlatformMix(platformTypes: string[]): SkeletonId {
+  if (platformTypes.length === 0) return 'workflow-operations';
+
+  const unique = [...new Set(platformTypes)];
+  const hasVoice = unique.some((p) => p === 'vapi' || p === 'retell');
+  const hasWorkflow = unique.some((p) => p === 'make' || p === 'n8n');
+
+  if (hasVoice && hasWorkflow) return 'combined-overview';
+  if (hasVoice) return 'voice-performance';
+  return 'workflow-operations';
+}

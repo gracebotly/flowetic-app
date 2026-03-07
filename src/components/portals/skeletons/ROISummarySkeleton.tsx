@@ -11,7 +11,8 @@ import {
   TrendingDown,
 } from 'lucide-react';
 import { usePortalTheme } from '@/components/portals/PortalShell';
-import { getThemeTokens, STATUS, type ThemeTokens } from '@/lib/portals/themeTokens';
+import { ThemedCard, KPICard, fadeUp } from '@/components/portals/shared/portalPrimitives';
+import { getThemeTokens, STATUS } from '@/lib/portals/themeTokens';
 import type { SkeletonData } from '@/lib/portals/transformData';
 
 interface ROISummaryProps {
@@ -24,15 +25,6 @@ interface ROISummaryProps {
   };
 }
 
-const fadeUp = {
-  hidden: { opacity: 0, y: 20 },
-  visible: (i: number) => ({
-    opacity: 1,
-    y: 0,
-    transition: { delay: i * 0.08, duration: 0.45 },
-  }),
-};
-
 function alpha(hex: string, opacity: number): string {
   const clean = hex.replace('#', '');
   const base = clean.length === 3 ? clean.split('').map((c) => c + c).join('') : clean;
@@ -41,57 +33,6 @@ function alpha(hex: string, opacity: number): string {
   const g = (num >> 8) & 255;
   const b = num & 255;
   return `rgba(${r}, ${g}, ${b}, ${opacity})`;
-}
-
-function ThemedCard({ children, className = '', glow = false, accentColor }: {
-  children: React.ReactNode;
-  className?: string;
-  glow?: boolean;
-  accentColor?: string;
-}) {
-  const { theme } = usePortalTheme();
-  const isDark = theme === 'dark';
-  const tokens = getThemeTokens(theme);
-
-  return (
-    <div
-      className={`relative overflow-hidden rounded-xl border p-5 transition-all duration-300 ${className}`}
-      style={{
-        backgroundColor: tokens.bgCard,
-        borderColor: tokens.border,
-        boxShadow: glow && accentColor
-          ? `0 0 40px ${accentColor}15, 0 1px 3px rgba(0,0,0,${isDark ? '0.3' : '0.08'})`
-          : `0 1px 3px rgba(0,0,0,${isDark ? '0.3' : '0.08'})`,
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
-function KPICard({ label, value, icon: Icon, color, index, tokens }: {
-  label: string;
-  value: string | number;
-  icon: React.ElementType;
-  color: string;
-  index: number;
-  tokens: ThemeTokens;
-}) {
-  return (
-    <motion.div variants={fadeUp} initial="hidden" animate="visible" custom={index}>
-      <ThemedCard>
-        <Flex justifyContent="between" alignItems="start">
-          <div className="flex-1">
-            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: tokens.textSecondary }}>{label}</p>
-            <p className="mt-2 text-2xl font-bold tracking-tight" style={{ color: tokens.textPrimary }}>{value}</p>
-          </div>
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ backgroundColor: `${color}15` }}>
-            <Icon className="h-5 w-5" style={{ color }} />
-          </div>
-        </Flex>
-      </ThemedCard>
-    </motion.div>
-  );
 }
 
 export function ROISummarySkeleton({ data }: ROISummaryProps) {
