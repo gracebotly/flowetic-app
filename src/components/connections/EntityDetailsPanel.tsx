@@ -26,6 +26,8 @@ import { HealthBanner, type EntityHealth } from './panels/shared/HealthBanner';
 import { deriveEntityHealth } from './panels/shared/deriveEntityHealth';
 import { RetellDetailPanel } from './panels/RetellDetailPanel';
 import { VapiDetailPanel } from './panels/VapiDetailPanel';
+import { MakeDetailPanel } from './panels/MakeDetailPanel';
+import { N8nDetailPanel } from './panels/N8nDetailPanel';
 
 interface EntityDetailsPanelProps {
   platform: string;
@@ -428,6 +430,12 @@ export function EntityDetailsPanel({ platform, sourceId, externalId, onHealthCha
 
   if (platform === 'vapi') {
     return <VapiDetailPanel platform="vapi" sourceId={sourceId} externalId={externalId} onHealthChange={onHealthChange} />;
+  }
+  if (platform === 'make') {
+    return <MakeDetailPanel sourceId={sourceId} externalId={externalId} onHealthChange={onHealthChange} />;
+  }
+  if (platform === 'n8n') {
+    return <N8nDetailPanel sourceId={sourceId} externalId={externalId} onHealthChange={onHealthChange} />;
   }
 
   return <GenericEntityDetailsPanel platform={platform} sourceId={sourceId} externalId={externalId} onHealthChange={onHealthChange} />;

@@ -19,6 +19,7 @@ import { HealthBanner, type EntityHealth } from './shared/HealthBanner';
 import { MetricsBar, type MetricKPI } from './shared/MetricsBar';
 import { deriveEntityHealth } from './shared/deriveEntityHealth';
 import { CallRow, type CallData } from './shared/CallRow';
+import { ExportButton } from './shared/ExportButton';
 
 interface VoiceDetailPanelProps {
   platform: 'retell' | 'vapi';
@@ -47,6 +48,23 @@ function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
   return `${m}m ${s}s`;
+}
+
+
+function computeSparkData(items: Array<{ timestamp: number | string }>, days = 7): { idx: string; value: number }[] {
+  const now = new Date();
+  const buckets = Array.from({ length: days }, (_, i) => {
+    const d = new Date(now);
+    d.setDate(d.getDate() - (days - 1 - i));
+    return d.toISOString().slice(0, 10);
+  });
+  const counts = new Map<string, number>();
+  buckets.forEach((b) => counts.set(b, 0));
+  items.forEach((item) => {
+    const day = new Date(item.timestamp).toISOString().slice(0, 10);
+    if (counts.has(day)) counts.set(day, (counts.get(day) ?? 0) + 1);
+  });
+  return buckets.map((b, i) => ({ idx: String(i), value: counts.get(b) ?? 0 }));
 }
 
 function DetailRow({
@@ -119,6 +137,8 @@ export function RetellDetailPanel({ sourceId, externalId, onHealthChange }: Voic
     if (data) onHealthChange?.(health);
   }, [data, health, onHealthChange]);
 
+  const sparkData = useMemo(() => computeSparkData(calls), [calls]);
+
   const kpis: MetricKPI[] = useMemo(() => {
     const stats = data?.stats ?? { totalEvents: 0, successRate: 0, avgDuration: 0, totalCost: 0 };
     return [
@@ -127,6 +147,8 @@ export function RetellDetailPanel({ sourceId, externalId, onHealthChange }: Voic
         value: `${stats.totalEvents}`,
         icon: Phone,
         accent: '',
+        sparkData,
+        sparkColor: 'blue',
       },
       {
         label: 'Success Rate',
@@ -148,7 +170,7 @@ export function RetellDetailPanel({ sourceId, externalId, onHealthChange }: Voic
         tooltip: 'Agency platform cost — not visible to clients',
       },
     ];
-  }, [data?.stats]);
+  }, [data?.stats, sparkData]);
 
   const hasMore = callsLimit < 10 && calls.length >= callsLimit;
 
@@ -160,7 +182,10 @@ export function RetellDetailPanel({ sourceId, externalId, onHealthChange }: Voic
       <div className="rounded-xl border border-gray-100 bg-white p-4">
         <div className="mb-3 flex items-center justify-between">
           <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400">Recent Calls</h3>
-          <span className="text-xs text-gray-400">{calls.length} calls</span>
+          <div className="flex items-center gap-2">
+            <ExportButton sourceId={sourceId} externalId={externalId} platform="retell" type="calls" />
+            <span className="text-xs text-gray-400">{calls.length} calls</span>
+          </div>
         </div>
         {callsLoading ? (
           <div className="flex items-center gap-2 py-3 text-sm text-gray-400">
