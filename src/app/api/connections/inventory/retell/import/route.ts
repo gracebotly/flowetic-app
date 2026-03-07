@@ -124,14 +124,9 @@ export async function POST(req: Request) {
     let recentCalls: Array<{ id: string; status: string; startedAt: string; duration?: number; error?: string }> = [];
 
     try {
-      const callsRes = await fetch("https://api.retellai.com/v2/list-calls", {
-        method: "POST",
+      const callsRes = await fetch(`https://api.retellai.com/list-calls?agent_id=${agentId}&limit=1000`, {
+        method: "GET",
         headers: retellHeaders,
-        body: JSON.stringify({
-          agent_id: agentId,
-          limit: 1000,
-          sort_order: "descending",
-        }),
       });
       if (callsRes.ok) {
         const callsData = await callsRes.json();
