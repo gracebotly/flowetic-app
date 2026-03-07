@@ -24,6 +24,8 @@ import {
 import { MetricsBar, type MetricKPI } from './panels/shared/MetricsBar';
 import { HealthBanner, type EntityHealth } from './panels/shared/HealthBanner';
 import { deriveEntityHealth } from './panels/shared/deriveEntityHealth';
+import { RetellDetailPanel } from './panels/RetellDetailPanel';
+import { VapiDetailPanel } from './panels/VapiDetailPanel';
 
 interface EntityDetailsPanelProps {
   platform: string;
@@ -331,7 +333,7 @@ function N8nDetails({ details }: { details: Record<string, unknown> }) {
   );
 }
 
-export function EntityDetailsPanel({ platform, sourceId, externalId, onHealthChange }: EntityDetailsPanelProps) {
+function GenericEntityDetailsPanel({ platform, sourceId, externalId, onHealthChange }: EntityDetailsPanelProps) {
   const [data, setData] = useState<DetailData | null>(null);
 
 
@@ -416,4 +418,17 @@ export function EntityDetailsPanel({ platform, sourceId, externalId, onHealthCha
       )}
     </div>
   );
+}
+
+
+export function EntityDetailsPanel({ platform, sourceId, externalId, onHealthChange }: EntityDetailsPanelProps) {
+  if (platform === 'retell') {
+    return <RetellDetailPanel platform="retell" sourceId={sourceId} externalId={externalId} onHealthChange={onHealthChange} />;
+  }
+
+  if (platform === 'vapi') {
+    return <VapiDetailPanel platform="vapi" sourceId={sourceId} externalId={externalId} onHealthChange={onHealthChange} />;
+  }
+
+  return <GenericEntityDetailsPanel platform={platform} sourceId={sourceId} externalId={externalId} onHealthChange={onHealthChange} />;
 }

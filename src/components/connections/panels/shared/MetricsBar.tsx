@@ -2,6 +2,8 @@
 
 import { type LucideIcon } from 'lucide-react';
 import { SparkAreaChart } from '@tremor/react';
+import * as Tooltip from '@radix-ui/react-tooltip';
+import { Info } from 'lucide-react';
 
 export interface MetricKPI {
   label: string;
@@ -80,6 +82,22 @@ export function MetricsBar({ kpis }: MetricsBarProps) {
               <div className="flex min-w-0 items-center gap-1.5 text-xs text-gray-400">
                 <kpi.icon className={`h-3 w-3 shrink-0 ${styles.icon}`} />
                 <span className="truncate">{kpi.label}</span>
+                {kpi.tooltip ? (
+                  <Tooltip.Provider delayDuration={120}>
+                    <Tooltip.Root>
+                      <Tooltip.Trigger asChild>
+                        <button type="button" className="cursor-pointer text-gray-400 transition-colors duration-200 hover:text-gray-600">
+                          <Info className="h-3 w-3" />
+                        </button>
+                      </Tooltip.Trigger>
+                      <Tooltip.Portal>
+                        <Tooltip.Content className="rounded-lg bg-gray-900 px-3 py-2 text-xs text-white shadow-lg" sideOffset={5}>
+                          {kpi.tooltip}
+                        </Tooltip.Content>
+                      </Tooltip.Portal>
+                    </Tooltip.Root>
+                  </Tooltip.Provider>
+                ) : null}
               </div>
               {kpi.sparkData && kpi.sparkData.length > 1 ? (
                 <SparkAreaChart
@@ -90,9 +108,6 @@ export function MetricsBar({ kpis }: MetricsBarProps) {
                   className="h-8 w-20"
                   curveType="monotone"
                   showGradient={false}
-                  showXAxis={false}
-                  showYAxis={false}
-                  showLegend={false}
                 />
               ) : null}
             </div>
