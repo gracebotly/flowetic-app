@@ -55,6 +55,11 @@ export interface SkeletonData {
   // Workflow-specific extras
   workflowBreakdown?: { name: string; count: number; successRate: number; avgDuration: number }[];
   errorBreakdown?: { message: string; count: number }[];
+  // Workflow resource metrics (Phase 0 enrichment)
+  operationsConsumed?: number;
+  dataTransferTotal?: number;       // bytes
+  estimatedCost?: number;           // dollars (centicredits / 100)
+  errorNameBreakdown?: { name: string; count: number }[];
 }
 
 // ─── Helpers ─────────────────────────────────────────────────
@@ -446,6 +451,31 @@ export function transformWorkflowData(events: PortalEvent[], platform: 'n8n' | '
     ? Array.from(errorMap.entries()).map(([message, count]) => ({ message, count })).sort((a, b) => b.count - a.count).slice(0, 10)
     : undefined;
 
+  // Resource metrics aggregation (from Phase 0 enriched state fields)
+  let operationsConsumed = 0;
+  let dataTransferTotal = 0;
+  let totalCenticredits = 0;
+
+  for (const e of currentEvents) {
+    operationsConsumed += toNumber(getStateField(e, fields.operationsUsed));
+    dataTransferTotal += toNumber(getStateField(e, 'data_transfer_bytes'));
+    totalCenticredits += toNumber(getStateField(e, 'centicredits'));
+  }
+
+  const estimatedCost = totalCenticredits > 0 ? totalCenticredits / 100 : undefined;
+
+  // Error name breakdown (distinct from error message breakdown)
+  const errorNameMap = new Map<string, number>();
+  for (const e of currentEvents) {
+    const errName = String(getStateField(e, 'error_name') || '').trim();
+    if (errName && errName !== 'undefined') {
+      errorNameMap.set(errName, (errorNameMap.get(errName) ?? 0) + 1);
+    }
+  }
+  const errorNameBreakdown = errorNameMap.size > 0
+    ? Array.from(errorNameMap.entries()).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count)
+    : undefined;
+
   return {
     headline: { total: totalCurrent, totalLabel: 'executions', percentChange, periodLabel: 'last 30 days' },
     kpis: [
@@ -469,6 +499,11 @@ export function transformWorkflowData(events: PortalEvent[], platform: 'n8n' | '
     recentRows,
     workflowBreakdown,
     errorBreakdown,
+    // Phase 2 additions
+    operationsConsumed: operationsConsumed > 0 ? operationsConsumed : undefined,
+    dataTransferTotal: dataTransferTotal > 0 ? dataTransferTotal : undefined,
+    estimatedCost,
+    errorNameBreakdown,
   };
 }
 
