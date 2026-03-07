@@ -122,11 +122,6 @@ export function PortalShell({
 
   return (
     <PortalThemeContext.Provider value={{ theme, toggle }}>
-      {faviconUrl && (
-        <head>
-          <link rel="icon" href={faviconUrl} />
-        </head>
-      )}
       <div
         className={`min-h-screen transition-colors duration-300 ${isDark ? 'dark' : ''}`}
         style={{

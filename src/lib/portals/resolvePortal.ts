@@ -93,6 +93,7 @@ export async function resolvePortal(
   const { data: events, error: eventsError } = await supabaseAdmin
     .from('events')
     .select('id, type, name, value, state, labels, timestamp, platform_event_id')
+    .eq('tenant_id', portal.tenant_id)
     .eq('source_id', portal.source_id)
     .order('timestamp', { ascending: false })
     .limit(500);
