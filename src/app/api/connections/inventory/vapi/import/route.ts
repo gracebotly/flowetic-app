@@ -156,16 +156,31 @@ export async function POST(req: Request) {
             name: `vapi:${assistant.name || assistantId}:call`,
             value: call.status === 'completed' || call.status === 'ended' ? 1 : 0,
             state: {
-              workflow_id: String(call.assistant_id || ''),
-              workflow_name: call.assistant?.name || '',
+              // Identifiers
+              workflow_id: String(call.assistantId || call.assistant_id || ''),
+              workflow_name: call.assistant?.name || assistant.name || '',
               execution_id: String(call.id),
+              platform: 'vapi',
+
+              // Status & timing
               status: call.status === 'ended' ? 'success' : call.status || 'unknown',
               started_at: call.startedAt || call.createdAt || '',
               ended_at: call.endedAt || '',
-              duration_ms: call.duration || undefined,
+              duration_ms: (call.endedAt && call.startedAt)
+                ? new Date(call.endedAt).getTime() - new Date(call.startedAt).getTime()
+                : undefined,
               ended_reason: call.endedReason || undefined,
+
+              // Cost
               cost: typeof call.cost === 'number' ? call.cost : undefined,
-              platform: 'vapi',
+              cost_breakdown: call.costBreakdown || undefined,
+
+              // Rich voice fields
+              call_type: call.type || undefined,
+              call_summary: call.analysis?.summary || undefined,
+              call_successful: call.analysis?.successEvaluation || undefined,
+              transcript: call.artifact?.transcript || undefined,
+              sentiment: call.analysis?.structuredData?.sentiment || undefined,
             },
             labels: {
               assistant_id: assistantId,
@@ -247,7 +262,9 @@ export async function POST(req: Request) {
 
   // Insert sample events
   if (eventRows.length > 0) {
-    const { error: evErr } = await supabase.from("events").insert(eventRows);
+    const { error: evErr } = await supabase
+      .from("events")
+      .upsert(eventRows, { onConflict: "tenant_id,source_id,platform_event_id", ignoreDuplicates: false });
     if (evErr) {
       console.error('[vapi import] Failed to insert events:', evErr);
     }

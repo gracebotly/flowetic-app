@@ -55,6 +55,16 @@ export interface SkeletonData {
   // Workflow-specific extras
   workflowBreakdown?: { name: string; count: number; successRate: number; avgDuration: number }[];
   errorBreakdown?: { message: string; count: number }[];
+  // Workflow resource metrics (Phase 2)
+  operationsConsumed?: number;
+  dataTransferTotal?: number;
+  estimatedCost?: number;
+  errorNameBreakdown?: { name: string; count: number }[];
+  // Combined-specific extras (Phase 3)
+  platformComparison?: {
+    voice: { count: number; successRate: number; platforms: string[] };
+    workflow: { count: number; successRate: number; platforms: string[] };
+  };
 }
 
 // ─── Helpers ─────────────────────────────────────────────────
@@ -100,9 +110,14 @@ export function getStateField(
  * The platform is stored in event.labels.platform
  */
 export function getEventPlatform(
-  event: { labels?: Record<string, unknown> | null }
+  event: { state?: Record<string, unknown> | null; labels?: Record<string, unknown> | null }
 ): string | undefined {
-  return event.labels?.platform as string | undefined;
+  // state.platform is set by ALL import routes (retell, vapi, make, n8n)
+  // labels.platformType is set by make/n8n imports
+  return (event.state?.platform as string)
+    || (event.labels?.platformType as string)
+    || (event.labels?.platform as string)
+    || undefined;
 }
 
 /**
@@ -446,6 +461,31 @@ export function transformWorkflowData(events: PortalEvent[], platform: 'n8n' | '
     ? Array.from(errorMap.entries()).map(([message, count]) => ({ message, count })).sort((a, b) => b.count - a.count).slice(0, 10)
     : undefined;
 
+  // Resource metrics aggregation (from Phase 0 enriched state fields)
+  let operationsConsumed = 0;
+  let dataTransferTotal = 0;
+  let totalCenticredits = 0;
+
+  for (const e of currentEvents) {
+    operationsConsumed += toNumber(getStateField(e, fields.operationsUsed));
+    dataTransferTotal += toNumber(getStateField(e, 'data_transfer_bytes'));
+    totalCenticredits += toNumber(getStateField(e, 'centicredits'));
+  }
+
+  const estimatedCost = totalCenticredits > 0 ? totalCenticredits / 100 : undefined;
+
+  // Error name breakdown (distinct from error message breakdown)
+  const errorNameMap = new Map<string, number>();
+  for (const e of currentEvents) {
+    const errName = String(getStateField(e, 'error_name') || '').trim();
+    if (errName && errName !== 'undefined') {
+      errorNameMap.set(errName, (errorNameMap.get(errName) ?? 0) + 1);
+    }
+  }
+  const errorNameBreakdown = errorNameMap.size > 0
+    ? Array.from(errorNameMap.entries()).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count)
+    : undefined;
+
   return {
     headline: { total: totalCurrent, totalLabel: 'executions', percentChange, periodLabel: 'last 30 days' },
     kpis: [
@@ -469,6 +509,11 @@ export function transformWorkflowData(events: PortalEvent[], platform: 'n8n' | '
     recentRows,
     workflowBreakdown,
     errorBreakdown,
+    // Phase 2 additions
+    operationsConsumed: operationsConsumed > 0 ? operationsConsumed : undefined,
+    dataTransferTotal: dataTransferTotal > 0 ? dataTransferTotal : undefined,
+    estimatedCost,
+    errorNameBreakdown,
   };
 }
 
@@ -549,6 +594,7 @@ export function transformROIData(events: PortalEvent[], platformType: string): S
 }
 
 export function transformCombinedData(events: PortalEvent[], platformType: string): SkeletonData {
+  void platformType;
   const now = new Date();
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
   const sixtyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
@@ -559,51 +605,95 @@ export function transformCombinedData(events: PortalEvent[], platformType: strin
     return d >= sixtyDaysAgo && d < thirtyDaysAgo;
   });
 
-  const success = currentEvents.filter((e) => getEventStatus(e) === 'success').length;
-  const successRate = currentEvents.length > 0 ? Math.round((success / currentEvents.length) * 100) : 0;
+  // Split by platform category
+  const voiceEvents = currentEvents.filter((e) => {
+    const p = getEventPlatform(e);
+    return p === 'vapi' || p === 'retell';
+  });
+  const workflowEvents = currentEvents.filter((e) => {
+    const p = getEventPlatform(e);
+    return p === 'make' || p === 'n8n';
+  });
+
+  // Overall metrics
+  const totalOps = currentEvents.length;
+  const successCount = currentEvents.filter((e) => getEventStatus(e) === 'success').length;
+  const successRate = totalOps > 0 ? Math.round((successCount / totalOps) * 100) : 0;
+  const failedCount = totalOps - successCount;
 
   const durations = currentEvents.map((e) => toNumber(getStateField(e, 'duration_ms'))).filter((d) => d > 0);
   const avgDuration = durations.length > 0 ? durations.reduce((a, b) => a + b, 0) / durations.length : 0;
   const totalCost = currentEvents.reduce((acc, e) => acc + toNumber(getStateField(e, 'cost') || e.value), 0);
 
-  const dayBuckets = new Map<string, number>();
+  // Per-platform success rates
+  const voiceSuccess = voiceEvents.length > 0
+    ? Math.round((voiceEvents.filter((e) => getEventStatus(e) === 'success').length / voiceEvents.length) * 100)
+    : 0;
+  const workflowSuccess = workflowEvents.length > 0
+    ? Math.round((workflowEvents.filter((e) => getEventStatus(e) === 'success').length / workflowEvents.length) * 100)
+    : 0;
+
+  // Trend (daily buckets with success/fail)
+  const dayBuckets = new Map<string, { count: number; success: number; fail: number }>();
   for (const event of currentEvents) {
     const day = toDateString(event.timestamp);
     if (!day) continue;
-    dayBuckets.set(day, (dayBuckets.get(day) ?? 0) + 1);
+    const bucket = dayBuckets.get(day) ?? { count: 0, success: 0, fail: 0 };
+    bucket.count++;
+    if (getEventStatus(event) === 'success') bucket.success++;
+    else bucket.fail++;
+    dayBuckets.set(day, bucket);
   }
-
   const trend = Array.from(dayBuckets.entries())
-    .map(([date, count]) => ({ date, count }))
+    .map(([date, b]) => ({ date, count: b.count, successCount: b.success, failCount: b.fail }))
     .sort((a, b) => a.date.localeCompare(b.date));
 
+  // Recent rows with platform badge
   const recentRows = [...currentEvents]
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
     .slice(0, 20)
-    .map((event) => ({
-      id: event.id,
-      name: event.name || getEventWorkflowName(event),
-      status: getEventStatus(event),
-      type: event.type,
-      time: new Date(event.timestamp).toLocaleString(),
-    }));
+    .map((event) => {
+      const platform = getEventPlatform(event) || 'unknown';
+      const base: TableRow = {
+        id: event.id,
+        name: getEventWorkflowName(event),
+        status: getEventStatus(event),
+        platform,
+        platformCategory: (platform === 'vapi' || platform === 'retell') ? 'voice' : 'workflow',
+        type: event.type,
+        duration: formatDuration(toNumber(getStateField(event, 'duration_ms'))),
+        cost: formatCost(toNumber(getStateField(event, 'cost'))),
+        time: new Date(event.timestamp).toLocaleString(),
+      };
+      if (event.state && typeof event.state === 'object') {
+        for (const [key, value] of Object.entries(event.state)) {
+          if (!(key in base) && value !== undefined && value !== null) {
+            base[key] = value;
+          }
+        }
+      }
+      return base;
+    });
 
   return {
     headline: {
-      total: currentEvents.length,
-      totalLabel: 'total ops',
-      percentChange: calculatePercentChange(currentEvents.length, previousEvents.length),
+      total: totalOps,
+      totalLabel: 'total operations',
+      percentChange: calculatePercentChange(totalOps, previousEvents.length),
       periodLabel: 'last 30 days',
     },
     kpis: [
-      { label: 'Total Operations', value: currentEvents.length.toLocaleString(), color: 'blue' },
-      { label: 'Avg Duration', value: avgDuration > 0 ? formatDuration(avgDuration) : '—', color: 'neutral' },
-      { label: 'Success Rate', value: `${successRate}%`, color: successRate > 90 ? 'green' : 'amber' },
+      { label: 'Success Rate', value: `${successRate}%`, color: successRate >= 90 ? 'green' : successRate >= 70 ? 'amber' : 'red' },
+      { label: 'Avg Duration', value: avgDuration > 0 ? formatDuration(avgDuration) : '—', color: 'blue' },
+      { label: 'Failed', value: failedCount, color: failedCount === 0 ? 'green' : 'red' },
       { label: 'Total Cost', value: formatCost(totalCost), color: 'neutral' },
-      { label: 'Platform', value: platformType.toUpperCase(), color: 'neutral' },
     ],
     trend,
     recentRows,
+    platformComparison: {
+      voice: { count: voiceEvents.length, successRate: voiceSuccess, platforms: [...new Set(voiceEvents.map((e) => getEventPlatform(e) || 'unknown'))] },
+      workflow: { count: workflowEvents.length, successRate: workflowSuccess, platforms: [...new Set(workflowEvents.map((e) => getEventPlatform(e) || 'unknown'))] },
+    },
   };
 }
 
