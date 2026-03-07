@@ -769,7 +769,9 @@ export default function ConnectionsPage() {
 
   useEffect(() => {
     if (detailsOpen) {
-      requestAnimationFrame(() => setDrawerVisible(true));
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => setDrawerVisible(true));
+      });
     } else {
       setDrawerVisible(false);
     }
@@ -2465,28 +2467,28 @@ export default function ConnectionsPage() {
           {/* Backdrop */}
           <div
             onClick={closeDrawer}
-            className="fixed inset-0 z-50 transition-opacity duration-300"
+            className="fixed inset-0 z-50 transition-opacity duration-200"
             style={{
-              backgroundColor: drawerVisible ? "rgba(0,0,0,0.25)" : "rgba(0,0,0,0)",
+              backgroundColor: drawerVisible ? "rgba(0,0,0,0.4)" : "rgba(0,0,0,0)",
             }}
           />
 
-          {/* Bottom Drawer */}
+          {/* Centered Modal */}
           <div
-            className="fixed inset-x-0 bottom-0 z-50 flex flex-col rounded-t-2xl bg-white shadow-2xl transition-transform duration-300 ease-out"
-            style={{
-              maxHeight: "70vh",
-              transform: drawerVisible ? "translateY(0)" : "translateY(100%)",
-            }}
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none"
           >
-            {/* Drag handle */}
-            <div className="flex justify-center pt-3 pb-1">
-              <div className="h-1 w-10 rounded-full bg-gray-300" />
-            </div>
+            <div
+              className="pointer-events-auto flex w-full max-w-2xl flex-col rounded-2xl bg-white shadow-2xl transition-all duration-200 ease-out"
+              style={{
+                maxHeight: "80vh",
+                opacity: drawerVisible ? 1 : 0,
+                transform: drawerVisible ? "scale(1)" : "scale(0.95)",
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
 
             {/* Header */}
-            <div className="flex items-start justify-between border-b border-gray-100 px-6 pb-4 pt-2">
+            <div className="flex items-start justify-between border-b border-gray-100 px-6 pb-4 pt-5">
               <div className="flex items-center gap-4">
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-800">
                   {getPlatformMeta(selectedEntity.platform)?.Icon ? (
@@ -2626,6 +2628,7 @@ export default function ConnectionsPage() {
               ) : null}
 
             </div>
+          </div>
           </div>
         </>
       ) : null}
