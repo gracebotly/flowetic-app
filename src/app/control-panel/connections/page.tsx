@@ -30,6 +30,7 @@ import {
   EntitiesLoadingSkeleton,
   CredentialSavingOverlay,
 } from "@/components/connections/ConnectionSkeletons";
+import { EntityDetailsPanel } from "@/components/connections/EntityDetailsPanel";
 
 type EntityType = "workflow" | "agent" | "voice_agent" | "automation";
 
@@ -2616,36 +2617,12 @@ export default function ConnectionsPage() {
 
               {/* Details tab */}
               {drawerTab === "details" ? (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-x-8 gap-y-3 rounded-xl border border-gray-100 bg-gray-50/50 p-4">
-                    <div>
-                      <div className="text-xs text-gray-400">Platform</div>
-                      <div className="mt-0.5 text-sm font-medium text-gray-900 capitalize">
-                        {getPlatformMeta(selectedEntity.platform)?.label ?? selectedEntity.platform}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-gray-400">Type</div>
-                      <div className="mt-0.5 text-sm font-medium text-gray-900 capitalize">{selectedEntity.kind}</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-gray-400">External ID</div>
-                      <div className="mt-0.5 font-mono text-xs text-gray-600 break-all">{selectedEntity.externalId}</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-gray-400">Source ID</div>
-                      <div className="mt-0.5 font-mono text-xs text-gray-600 break-all">{selectedEntity.sourceId}</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-gray-400">Last seen</div>
-                      <div className="mt-0.5 text-sm font-medium text-gray-900">{formatRelativeFromTs(selectedEntity.lastUpdatedTs)}</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-gray-400">Created</div>
-                      <div className="mt-0.5 text-sm font-medium text-gray-900">{formatDateFromTs(selectedEntity.createdAtTs)}</div>
-                    </div>
-                  </div>
-                </div>
+                <EntityDetailsPanel
+                  key={`${selectedEntity.platform}:${selectedEntity.sourceId}:${selectedEntity.externalId}`}
+                  platform={selectedEntity.platform}
+                  sourceId={selectedEntity.sourceId}
+                  externalId={selectedEntity.externalId}
+                />
               ) : null}
 
             </div>
