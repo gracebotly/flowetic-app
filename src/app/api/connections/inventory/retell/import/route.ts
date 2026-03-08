@@ -276,11 +276,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, code: "PERSISTENCE_FAILED", message: upErr.message }, { status: 400 });
   }
 
-  // Insert sample events
+  // Insert sample events — deduplicate by platform_event_id before upsert
   if (eventRows.length > 0) {
+    const dedupedEvents = Array.from(
+      new Map(eventRows.map((r) => [r.platform_event_id, r])).values()
+    );
     const { error: evErr } = await supabase
       .from("events")
-      .upsert(eventRows, { onConflict: "tenant_id,source_id,platform_event_id", ignoreDuplicates: false });
+      .upsert(dedupedEvents, { onConflict: "tenant_id,source_id,platform_event_id", ignoreDuplicates: true });
     if (evErr) {
       console.error('[retell import] Failed to insert events:', evErr);
     }
