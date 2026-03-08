@@ -13,6 +13,8 @@ import {
 import { usePortalTheme } from '@/components/portals/PortalShell';
 import { ThemedCard, KPICard, fadeUp } from '@/components/portals/shared/portalPrimitives';
 import { getThemeTokens, STATUS } from '@/lib/portals/themeTokens';
+import { SkeletonHealthBanner } from '@/components/portals/shared/SkeletonEmptyState';
+import { DataFreshnessBar } from '@/components/portals/shared/DataFreshnessBar';
 import type { SkeletonData } from '@/lib/portals/transformData';
 
 interface ROISummaryProps {
@@ -38,6 +40,15 @@ function alpha(hex: string, opacity: number): string {
 export function ROISummarySkeleton({ data }: ROISummaryProps) {
   const { headline, kpis, trend, recentRows } = data;
   const { theme } = usePortalTheme();
+
+  if (data.health.status === 'no-data') {
+    return (
+      <div className="space-y-6">
+        <SkeletonHealthBanner health={data.health} entityType="workflow" />
+      </div>
+    );
+  }
+
   const tokens = getThemeTokens(theme);
 
   const kpiIcons: Record<string, { icon: React.ElementType; color: string }> = {
@@ -48,6 +59,10 @@ export function ROISummarySkeleton({ data }: ROISummaryProps) {
 
   return (
     <div className="space-y-6">
+      {(data.health.status === 'critical' || data.health.status === 'degraded' || data.health.status === 'sparse') && (
+        <SkeletonHealthBanner health={data.health} entityType="workflow" />
+      )}
+
       <motion.div variants={fadeUp} initial="hidden" animate="visible" custom={0}>
         <ThemedCard glow accentColor={STATUS.success}>
           <div
@@ -140,6 +155,8 @@ export function ROISummarySkeleton({ data }: ROISummaryProps) {
           </ThemedCard>
         </motion.div>
       )}
+
+      <DataFreshnessBar latestEventTimestamp={recentRows[0]?.time as string} />
     </div>
   );
 }

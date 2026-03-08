@@ -65,6 +65,13 @@ export interface SkeletonData {
     voice: { count: number; successRate: number; platforms: string[] };
     workflow: { count: number; successRate: number; platforms: string[] };
   };
+  // Health status for skeleton empty/error/sparse state rendering
+  health: {
+    status: 'healthy' | 'degraded' | 'critical' | 'no-data' | 'sparse';
+    errorRate: number;
+    eventCount: number;
+    latestError?: string;
+  };
 }
 
 // ─── Helpers ─────────────────────────────────────────────────
@@ -168,6 +175,27 @@ function formatCost(cost: number): string {
   return `$${cost.toFixed(2)}`;
 }
 
+function computeHealth(
+  totalEvents: number,
+  successEvents: number,
+  latestError?: string,
+): SkeletonData['health'] {
+  if (totalEvents === 0) {
+    return { status: 'no-data', errorRate: 0, eventCount: 0 };
+  }
+  const errorRate = Math.round((1 - successEvents / totalEvents) * 100);
+  if (totalEvents < 5) {
+    return { status: 'sparse', errorRate, eventCount: totalEvents };
+  }
+  if (successEvents === 0) {
+    return { status: 'critical', errorRate: 100, eventCount: totalEvents, latestError };
+  }
+  if (errorRate >= 30) {
+    return { status: 'degraded', errorRate, eventCount: totalEvents, latestError };
+  }
+  return { status: 'healthy', errorRate, eventCount: totalEvents };
+}
+
 function calculatePercentChange(current: number, previous: number): number | null {
   if (previous === 0) return current > 0 ? 100 : null;
   return Math.round(((current - previous) / previous) * 100);
@@ -188,6 +216,7 @@ export function transformVoiceData(events: PortalEvent[], platform: 'vapi' | 're
       ],
       trend: [],
       recentRows: [],
+      health: { status: 'no-data', errorRate: 0, eventCount: 0 },
     };
   }
 
@@ -317,6 +346,14 @@ export function transformVoiceData(events: PortalEvent[], platform: 'vapi' | 're
     .map(([date, b]) => ({ date, totalCost: Number(b.total.toFixed(2)), avgCost: Number((b.total / b.count).toFixed(2)) }))
     .sort((a, b) => a.date.localeCompare(b.date));
 
+  // Compute health
+  const latestErrorRow = recentRows.find((r) => String(r.status) !== 'success');
+  const health = computeHealth(
+    totalCurrent,
+    successCurrent,
+    latestErrorRow ? String(latestErrorRow.endedReason || '') : undefined,
+  );
+
   return {
     headline: {
       total: totalCurrent,
@@ -350,6 +387,7 @@ export function transformVoiceData(events: PortalEvent[], platform: 'vapi' | 're
     assistantBreakdown,
     sentimentBreakdown: sentimentBreakdown?.length ? sentimentBreakdown : undefined,
     costTrend: costTrend.length > 1 ? costTrend : undefined,
+    health,
   };
 }
 
@@ -368,6 +406,7 @@ export function transformWorkflowData(events: PortalEvent[], platform: 'n8n' | '
       ],
       trend: [],
       recentRows: [],
+      health: { status: 'no-data', errorRate: 0, eventCount: 0 },
     };
   }
 
@@ -486,6 +525,9 @@ export function transformWorkflowData(events: PortalEvent[], platform: 'n8n' | '
     ? Array.from(errorNameMap.entries()).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count)
     : undefined;
 
+  const latestErrorMsg = errorBreakdown?.[0]?.message;
+  const health = computeHealth(totalCurrent, successCurrent, latestErrorMsg);
+
   return {
     headline: { total: totalCurrent, totalLabel: 'executions', percentChange, periodLabel: 'last 30 days' },
     kpis: [
@@ -514,6 +556,7 @@ export function transformWorkflowData(events: PortalEvent[], platform: 'n8n' | '
     dataTransferTotal: dataTransferTotal > 0 ? dataTransferTotal : undefined,
     estimatedCost,
     errorNameBreakdown,
+    health,
   };
 }
 
@@ -590,6 +633,7 @@ export function transformROIData(events: PortalEvent[], platformType: string): S
     ],
     trend,
     recentRows,
+    health: computeHealth(currentEvents.length, currentEvents.length, undefined),
   };
 }
 
@@ -694,6 +738,7 @@ export function transformCombinedData(events: PortalEvent[], platformType: strin
       voice: { count: voiceEvents.length, successRate: voiceSuccess, platforms: [...new Set(voiceEvents.map((e) => getEventPlatform(e) || 'unknown'))] },
       workflow: { count: workflowEvents.length, successRate: workflowSuccess, platforms: [...new Set(workflowEvents.map((e) => getEventPlatform(e) || 'unknown'))] },
     },
+    health: computeHealth(totalOps, successCount, undefined),
   };
 }
 
