@@ -199,6 +199,7 @@ function generateMarkdownReport(data: SkeletonData, portalName: string): string 
 // ── Expandable Row ────────────────────────────────────────────
 function ExpandableRow({ row }: { row: Record<string, unknown> }) {
   const [expanded, setExpanded] = useState(false);
+  const { theme } = usePortalTheme();
   const tokens = getThemeTokens(theme);
   const enriched = getEnrichedFields(row);
   const hasEnriched = Object.keys(enriched).length > 0;
