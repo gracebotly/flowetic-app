@@ -248,7 +248,6 @@ export default function PortalPreview({
   const scale = deviceWidth > WIZARD_USABLE_WIDTH
     ? WIZARD_USABLE_WIDTH / deviceWidth
     : 1;
-  const scaledHeight = device === "mobile" ? 900 : 1100;
 
   const handleRefresh = useCallback(() => {
     setRefreshKey((k) => k + 1);
@@ -361,19 +360,16 @@ export default function PortalPreview({
         <motion.div
           layout
           transition={{ type: "spring", stiffness: 300, damping: 30 }}
-          style={{ width: Math.min(deviceWidth * scale, containerMaxWidth) }}
+          style={{ width: Math.min(deviceWidth * scale, containerMaxWidth), overflow: "hidden" }}
         >
           <BrowserChrome mode={device}>
             <div
               style={{
                 width: deviceWidth,
-                height: scaledHeight,
-                maxHeight: 1200,
-                transform: `scale(${scale})`,
-                transformOrigin: "top left",
-                overflowY: "auto",
+                zoom: scale,
                 overflowX: "hidden",
-                pointerEvents: "none",
+                maxHeight: 900,
+                overflowY: "auto",
               }}
             >
               {showAnalytics && activeTab === "portal" && (
