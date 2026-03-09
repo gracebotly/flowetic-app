@@ -57,7 +57,7 @@ export async function GET(req: Request) {
     .select("id, type, name, value, unit, text, state, labels, timestamp, platform_event_id, source_id")
     .eq("tenant_id", tenantId)
     .eq("source_id", sourceId)
-    .not("type", "in", '("state","tool_event")')
+    .not("type", "eq", "tool_event")
     .order("timestamp", { ascending: false })
     .limit(limit);
 

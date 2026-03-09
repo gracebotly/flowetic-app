@@ -19,6 +19,24 @@ async function getDecryptedSecret(source: { secret_hash: string }): Promise<Reco
   return JSON.parse(decryptSecret(String(source.secret_hash)));
 }
 
+// ─── Transcript formatter ─────────────────────────────────────────────────────
+// Converts raw transcript lines into scannable [AI] / [YOU] labeled turns
+function formatTranscript(raw: string): string {
+  if (!raw) return '';
+  return raw
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean)
+    .map(line => {
+      if (line.startsWith('AI:')) return `[AI]  ${line.slice(3).trim()}`;
+      if (line.startsWith('User:')) return `[YOU] ${line.slice(5).trim()}`;
+      if (line.startsWith('Agent:')) return `[AI]  ${line.slice(6).trim()}`;
+      if (line.startsWith('Human:')) return `[YOU] ${line.slice(6).trim()}`;
+      return `      ${line}`;
+    })
+    .join(' | ');
+}
+
 // ─── Retell ───────────────────────────────────────────────────────────────────
 
 async function fetchRetellCalls(apiKey: string, agentId: string, limit: number) {
@@ -121,14 +139,13 @@ async function fetchMakeExecutions(apiKey: string, zone: string, scenarioId: str
   return (raw as Record<string, unknown>[])
     .filter((e) => (e.type === 'auto' || e.type === 'manual') && e.eventType === 'EXECUTION_END')
     .map((e) => ({
-      id: String(e.id ?? ''),
-      status: e.status === 3 ? 'error' : 'success',
-      duration: Number(e.duration ?? 0),
-      operations: Number(e.operations ?? 0),
-      centicredits: Number(e.centicredits ?? 0),
-      timestamp: String(e.timestamp ?? new Date().toISOString()),
-      errorName: e.status === 3 ? String((e.error as Record<string, unknown>)?.name ?? '') : '',
-      errorMessage: e.status === 3 ? String((e.error as Record<string, unknown>)?.message ?? '') : '',
+      Timestamp: String(e.timestamp ?? ''),
+      Status: e.status === 3 ? 'Error' : 'Success',
+      'Duration (ms)': Number(e.duration ?? 0),
+      Operations: Number(e.operations ?? 0),
+      Credits: Number(e.centicredits ?? 0),
+      'Error Name': e.status === 3 ? String((e.error as Record<string, unknown>)?.name ?? '') : '',
+      'Error Message': e.status === 3 ? String((e.error as Record<string, unknown>)?.message ?? '') : '',
     }));
 }
 
@@ -136,7 +153,7 @@ async function fetchMakeExecutions(apiKey: string, zone: string, scenarioId: str
 
 async function fetchN8nExecutions(apiKey: string, instanceUrl: string, workflowId: string, limit: number) {
   const res = await fetch(
-    `${instanceUrl}/api/v1/executions?workflowId=${workflowId}&limit=${limit}`,
+    `${instanceUrl}/api/v1/executions?workflowId=${workflowId}&limit=${limit}&includeData=true`,
     { headers: { 'X-N8N-API-KEY': apiKey } },
   );
   if (!res.ok) throw new Error(`n8n API returned ${res.status}`);
@@ -146,27 +163,97 @@ async function fetchN8nExecutions(apiKey: string, instanceUrl: string, workflowI
     : Array.isArray(raw)
       ? raw
       : [];
+
   return (executionsRaw as Record<string, unknown>[]).map((e) => {
     const startedAt = String(e.startedAt ?? '');
     const stoppedAt = String(e.stoppedAt ?? '');
     const started = startedAt ? new Date(startedAt).getTime() : NaN;
     const stopped = stoppedAt ? new Date(stoppedAt).getTime() : NaN;
-    const duration = Number.isFinite(started) && Number.isFinite(stopped) ? Math.max(0, stopped - started) : 0;
-    const status =
-      e.status === 'error' || e.status === 'crashed' ? 'error' : stoppedAt ? 'success' : 'waiting';
+    const durationMs = Number.isFinite(started) && Number.isFinite(stopped) ? Math.max(0, stopped - started) : 0;
+    const execStatus = e.status === 'error' || e.status === 'crashed' ? 'Error' : stoppedAt ? 'Success' : 'Waiting';
+
     const resultData = ((e.data as Record<string, unknown>)?.resultData ?? {}) as Record<string, unknown>;
-    const errorMsg = (resultData.error as Record<string, unknown>)?.message ?? '';
+    const runData = (resultData.runData ?? {}) as Record<string, unknown[]>;
+
+    // Extract trigger node payload (first node = trigger)
+    const triggerNodeKey = Object.keys(runData)[0];
+    const triggerRuns = triggerNodeKey ? (runData[triggerNodeKey] as Record<string, unknown>[]) : [];
+    const triggerOutput = triggerRuns?.[0];
+    const items = ((triggerOutput?.data as Record<string, unknown>)?.main as unknown[][])?.[0] ?? [];
+    const firstItem = (items[0] as Record<string, unknown>)?.json as Record<string, unknown> ?? {};
+
+    // Webhook payloads nest data inside .body; fall back to the json directly
+    const payload: Record<string, unknown> = (firstItem.body as Record<string, unknown>) ?? firstItem;
+
+    // Strip internal webhook metadata (headers, params, query, webhookUrl, executionMode)
+    const skipKeys = new Set(['headers', 'params', 'query', 'webhookUrl', 'executionMode']);
+    const cleanPayload: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(payload)) {
+      if (!skipKeys.has(k)) {
+        // Flatten arrays to pipe-separated strings for CSV readability
+        cleanPayload[k] = Array.isArray(v) ? (v as unknown[]).join(' | ') : v;
+      }
+    }
+
     return {
-      id: String(e.id ?? ''),
-      status,
-      duration,
-      operations: '',
-      centicredits: '',
-      timestamp: startedAt || new Date().toISOString(),
-      errorName: status === 'error' ? 'Error' : '',
-      errorMessage: String(errorMsg),
+      Timestamp: startedAt,
+      Status: execStatus,
+      'Duration (ms)': durationMs,
+      ...cleanPayload,
     };
   });
+}
+
+// ─── n8n node summary ─────────────────────────────────────────────────────────
+
+async function fetchN8nNodeSummary(apiKey: string, instanceUrl: string, workflowId: string) {
+  const res = await fetch(
+    `${instanceUrl}/api/v1/workflows/${workflowId}`,
+    { headers: { 'X-N8N-API-KEY': apiKey } },
+  );
+  if (!res.ok) throw new Error(`n8n workflow API returned ${res.status}`);
+  const wf = await res.json() as Record<string, unknown>;
+  const nodes = Array.isArray(wf.nodes) ? wf.nodes as Record<string, unknown>[] : [];
+  const connections = (wf.connections ?? {}) as Record<string, { main?: { node: string }[][] }>;
+
+  return nodes
+    .filter((n) => n.type !== 'n8n-nodes-base.stickyNote')
+    .map((n) => {
+      const outgoing = connections[String(n.name)]?.main?.flat() ?? [];
+      const connectsTo = outgoing.map((c) => c.node).join(' → ');
+      return {
+        'Node Name': String(n.name ?? ''),
+        Type: String(n.type ?? '').replace('n8n-nodes-base.', '').replace('n8n-nodes-', ''),
+        'Position X': String((n.position as number[])?.[0] ?? ''),
+        'Position Y': String((n.position as number[])?.[1] ?? ''),
+        'Connects To': connectsTo,
+        'On Error': String(n.onError ?? 'stopWorkflow'),
+      };
+    });
+}
+
+// ─── Make node summary ────────────────────────────────────────────────────────
+
+async function fetchMakeNodeSummary(apiKey: string, zone: string, scenarioId: string) {
+  const baseUrl = zone.includes('.') ? `https://${zone}` : `https://${zone}.make.com`;
+  const res = await fetch(
+    `${baseUrl}/api/v2/scenarios/${scenarioId}`,
+    { headers: { Authorization: `Token ${apiKey}` } },
+  );
+  if (!res.ok) throw new Error(`Make scenario API returned ${res.status}`);
+  const json = await res.json() as Record<string, unknown>;
+  const scenario = (json.scenario ?? json) as Record<string, unknown>;
+  const blueprint = (scenario.blueprint ?? {}) as Record<string, unknown>;
+  const modules = Array.isArray(blueprint.modules) ? blueprint.modules as Record<string, unknown>[] : [];
+
+  return modules.map((m) => ({
+    'Module Name': String(m.label ?? m.name ?? ''),
+    Type: String(m.module ?? m.type ?? ''),
+    ID: String(m.id ?? ''),
+    'Connected To': Array.isArray(m.routes)
+      ? (m.routes as Record<string, unknown>[]).map(r => String(r.label ?? '')).join(' | ')
+      : '',
+  }));
 }
 
 // ─── Handler ──────────────────────────────────────────────────────────────────
@@ -190,12 +277,12 @@ export async function GET(req: Request) {
   const platform = searchParams.get('platform');
   const type = searchParams.get('type');
   const redact = searchParams.get('redact_pii') === 'true';
+  const exportMode = searchParams.get('export_mode') ?? 'full'; // 'full' | 'redacted' | 'nodes'
 
   if (!sourceId || !externalId || !platform || !type) {
     return NextResponse.json({ ok: false, code: 'MISSING_PARAMS' }, { status: 400 });
   }
 
-  // Load source credentials (tenant-scoped)
   const { data: source } = await supabase
     .from('sources')
     .select('secret_hash')
@@ -212,75 +299,145 @@ export async function GET(req: Request) {
   }
 
   const rows: string[] = ['# AGENCY INTERNAL — NOT FOR CLIENT DISTRIBUTION'];
+  let filename = `${platform}_${externalId}_export.csv`;
 
   try {
+    // ── Voice: Retell ──────────────────────────────────────────────────────────
     if (type === 'calls' && platform === 'retell') {
       const apiKey = String(secret.apiKey ?? '').trim();
       if (!apiKey) return NextResponse.json({ ok: false, code: 'MISSING_API_KEY' }, { status: 400 });
 
       const calls = await fetchRetellCalls(apiKey, externalId, 100);
-      rows.push(['Date', 'Time', 'Duration (s)', 'Status', 'Sentiment', 'Summary', 'Transcript', 'Cost ($)', 'Disconnection Reason'].map(csvEscape).join(','));
+      rows.push(['Date', 'Time', 'Duration (s)', 'Status', 'Sentiment', 'Cost ($)', 'Disconnection', 'Summary', 'Conversation'].map(csvEscape).join(','));
       for (const call of calls) {
         const d = new Date(Number(call.timestamp));
-        const summary = redact ? redactPII(String(call.summary)) : String(call.summary);
-        const transcript = redact ? redactPII(String(call.transcript)) : String(call.transcript);
-        const reason = redact ? redactPII(String(call.disconnectionReason)) : String(call.disconnectionReason);
+        let summary = String(call.summary);
+        let transcript = formatTranscript(String(call.transcript));
+        let disconnection = String(call.disconnectionReason);
+        if (redact) {
+          summary = redactPII(summary);
+          transcript = redactPII(transcript);
+          disconnection = redactPII(disconnection);
+        }
         rows.push([
           d.toLocaleDateString('en-US'),
           d.toLocaleTimeString('en-US'),
           String(call.duration),
           String(call.status),
           String(call.sentiment),
+          String(call.costTotal),
+          disconnection,
           summary,
           transcript,
-          String(call.costTotal),
-          reason,
         ].map(csvEscape).join(','));
       }
+      filename = `retell_calls_${new Date().toISOString().slice(0, 10)}.csv`;
 
+    // ── Voice: Vapi ────────────────────────────────────────────────────────────
     } else if (type === 'calls' && platform === 'vapi') {
       const apiKey = String(secret.apiKey ?? '').trim();
       if (!apiKey) return NextResponse.json({ ok: false, code: 'MISSING_API_KEY' }, { status: 400 });
 
       const calls = await fetchVapiCalls(apiKey, externalId, 100);
-      rows.push(['Date', 'Time', 'Duration (s)', 'Status', 'Summary', 'Transcript', 'Cost ($)', 'Disconnection Reason'].map(csvEscape).join(','));
+      rows.push(['Date', 'Time', 'Duration (s)', 'Status', 'Cost ($)', 'Disconnection', 'Summary', 'Conversation'].map(csvEscape).join(','));
       for (const call of calls) {
         const d = new Date(Number(call.timestamp));
-        const summary = redact ? redactPII(String(call.summary)) : String(call.summary);
-        const transcript = redact ? redactPII(String(call.transcript)) : String(call.transcript);
-        const reason = redact ? redactPII(String(call.disconnectionReason)) : String(call.disconnectionReason);
+        let summary = String(call.summary);
+        let transcript = formatTranscript(String(call.transcript));
+        let disconnection = String(call.disconnectionReason);
+        if (redact) {
+          summary = redactPII(summary);
+          transcript = redactPII(transcript);
+          disconnection = redactPII(disconnection);
+        }
         rows.push([
           d.toLocaleDateString('en-US'),
           d.toLocaleTimeString('en-US'),
           String(call.duration),
           String(call.status),
+          String(call.costTotal),
+          disconnection,
           summary,
           transcript,
-          String(call.costTotal),
-          reason,
         ].map(csvEscape).join(','));
       }
+      filename = `vapi_calls_${new Date().toISOString().slice(0, 10)}.csv`;
 
+    // ── Workflow: Make ─────────────────────────────────────────────────────────
     } else if (type === 'executions' && platform === 'make') {
       const apiKey = String(secret.apiKey ?? '').trim();
       const zone = String(secret.zone ?? secret.region ?? 'us1').trim();
       if (!apiKey) return NextResponse.json({ ok: false, code: 'MISSING_API_KEY' }, { status: 400 });
 
-      const executions = await fetchMakeExecutions(apiKey, zone, externalId, 100);
-      rows.push(['Execution ID', 'Timestamp', 'Status', 'Duration (ms)', 'Operations', 'Credits', 'Error Name', 'Error Message'].map(csvEscape).join(','));
-      for (const e of executions) {
-        rows.push([e.id, e.timestamp, e.status, String(e.duration), String(e.operations), String(e.centicredits), e.errorName, e.errorMessage].map(csvEscape).join(','));
+      if (exportMode === 'nodes') {
+        const nodes = await fetchMakeNodeSummary(apiKey, zone, externalId);
+        if (nodes.length === 0) {
+          rows.push(['Module Name', 'Type', 'ID', 'Connected To'].map(csvEscape).join(','));
+        } else {
+          const headers = Object.keys(nodes[0]);
+          rows.push(headers.map(csvEscape).join(','));
+          for (const n of nodes) {
+            rows.push(headers.map(h => csvEscape((n as Record<string, unknown>)[h] ?? '')).join(','));
+          }
+        }
+        filename = `make_node_summary_${new Date().toISOString().slice(0, 10)}.csv`;
+      } else {
+        const executions = await fetchMakeExecutions(apiKey, zone, externalId, 100);
+        if (executions.length === 0) {
+          rows.push(['Timestamp', 'Status', 'Duration (ms)', 'Operations', 'Credits', 'Error Name', 'Error Message'].map(csvEscape).join(','));
+        } else {
+          const headers = Object.keys(executions[0]);
+          rows.push(headers.map(csvEscape).join(','));
+          for (const e of executions) {
+            const row = headers.map(h => {
+              const v = String((e as Record<string, unknown>)[h] ?? '');
+              return csvEscape(redact ? redactPII(v) : v);
+            });
+            rows.push(row.join(','));
+          }
+        }
+        filename = `make_executions_${new Date().toISOString().slice(0, 10)}.csv`;
       }
 
+    // ── Workflow: n8n ──────────────────────────────────────────────────────────
     } else if (type === 'executions' && platform === 'n8n') {
       const apiKey = String(secret.apiKey ?? '').trim();
       const instanceUrl = String(secret.instanceUrl ?? '').trim().replace(/\/$/, '');
       if (!apiKey || !instanceUrl) return NextResponse.json({ ok: false, code: 'MISSING_API_KEY' }, { status: 400 });
 
-      const executions = await fetchN8nExecutions(apiKey, instanceUrl, externalId, 100);
-      rows.push(['Execution ID', 'Timestamp', 'Status', 'Duration (ms)', 'Error Message'].map(csvEscape).join(','));
-      for (const e of executions) {
-        rows.push([e.id, e.timestamp, e.status, String(e.duration), e.errorMessage].map(csvEscape).join(','));
+      if (exportMode === 'nodes') {
+        const nodes = await fetchN8nNodeSummary(apiKey, instanceUrl, externalId);
+        if (nodes.length === 0) {
+          rows.push(['Node Name', 'Type', 'Position X', 'Position Y', 'Connects To', 'On Error'].map(csvEscape).join(','));
+        } else {
+          const headers = Object.keys(nodes[0]);
+          rows.push(headers.map(csvEscape).join(','));
+          for (const n of nodes) {
+            rows.push(headers.map(h => csvEscape((n as Record<string, unknown>)[h] ?? '')).join(','));
+          }
+        }
+        filename = `n8n_node_summary_${new Date().toISOString().slice(0, 10)}.csv`;
+      } else {
+        const executions = await fetchN8nExecutions(apiKey, instanceUrl, externalId, 100);
+
+        if (executions.length === 0) {
+          rows.push(['Timestamp', 'Status', 'Duration (ms)'].map(csvEscape).join(','));
+        } else {
+          // Dynamic columns: meta first, then all business payload fields
+          const metaCols = ['Timestamp', 'Status', 'Duration (ms)'];
+          const allKeys = Array.from(new Set(executions.flatMap(e => Object.keys(e))));
+          const businessCols = allKeys.filter(k => !metaCols.includes(k));
+          const headers = [...metaCols, ...businessCols];
+
+          rows.push(headers.map(csvEscape).join(','));
+          for (const e of executions) {
+            rows.push(headers.map(h => {
+              const v = String((e as Record<string, unknown>)[h] ?? '');
+              return csvEscape(redact ? redactPII(v) : v);
+            }).join(','));
+          }
+        }
+        filename = `n8n_data_${new Date().toISOString().slice(0, 10)}.csv`;
       }
 
     } else {
@@ -293,7 +450,6 @@ export async function GET(req: Request) {
   }
 
   const csv = rows.join('\n');
-  const filename = `${platform}_${type}_export.csv`;
   return new NextResponse(csv, {
     headers: {
       'Content-Type': 'text/csv',
