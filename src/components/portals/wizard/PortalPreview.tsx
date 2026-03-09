@@ -148,7 +148,7 @@ function BrowserChrome({
         <div className="flex justify-center bg-slate-700 py-1.5 dark:bg-slate-500">
           <div className="h-1.5 w-1.5 rounded-full bg-slate-500 dark:bg-slate-400" />
         </div>
-        <div className="bg-white dark:bg-slate-950">{children}</div>
+        <div className="overflow-hidden">{children}</div>
         <div className="flex justify-center bg-slate-700 py-2 dark:bg-slate-500">
           <div className="h-1 w-8 rounded-full bg-slate-500 dark:bg-slate-400" />
         </div>
@@ -373,6 +373,7 @@ export default function PortalPreview({
                 transformOrigin: "top left",
                 overflowY: "auto",
                 overflowX: "hidden",
+                pointerEvents: "none",
               }}
             >
               {showAnalytics && activeTab === "portal" && (
