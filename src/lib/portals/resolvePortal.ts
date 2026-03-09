@@ -92,7 +92,7 @@ export async function resolvePortal(
   // 4. Fetch events for this offering's source
   const { data: events, error: eventsError } = await supabaseAdmin
     .from('events')
-    .select('id, type, name, value, state, labels, timestamp, platform_event_id')
+    .select('id, type, name, value, state, labels, timestamp, platform_event_id, source_id')
     .eq('tenant_id', portal.tenant_id)
     .eq('source_id', portal.source_id)
     .order('timestamp', { ascending: false })
@@ -137,7 +137,7 @@ export async function resolvePortal(
     for (const sid of extraSourceIds) {
       const { data: srcEvents } = await supabaseAdmin
         .from('events')
-        .select('id, type, name, value, state, labels, timestamp, platform_event_id')
+        .select('id, type, name, value, state, labels, timestamp, platform_event_id, source_id')
         .eq('tenant_id', portal.tenant_id)
         .eq('source_id', sid)
         .order('timestamp', { ascending: false })
@@ -146,19 +146,45 @@ export async function resolvePortal(
     }
 
     if (extraEvents.length > 0) {
-      // Resolve external IDs for all linked entities
       const entityIds = offeringEntities.map((oe) => String(oe.entity_id));
       const { data: entityRecords } = await supabaseAdmin
         .from('source_entities')
-        .select('id, external_id')
+        .select('id, external_id, source_id')
         .in('id', entityIds);
 
+      const sourceIds = [...new Set((entityRecords ?? []).map((er) => er.source_id))];
+      const { data: sourceRecords } = await supabaseAdmin
+        .from('sources')
+        .select('id, type')
+        .in('id', sourceIds);
+
+      const sourceTypeMap = new Map(
+        (sourceRecords ?? []).map((s) => [s.id as string, s.type as string])
+      );
+
       if (entityRecords) {
-        const externalIds = new Set(entityRecords.map((entityRecord) => entityRecord.external_id));
+        const allowedExternalIds = new Set(
+          entityRecords.map((er) => er.external_id as string)
+        );
+
         const combined = [...filteredEvents, ...extraEvents];
         filteredEvents = combined.filter((e) => {
-          const wfId = String((e.state as Record<string, unknown>)?.workflow_id ?? '');
-          return externalIds.has(wfId);
+          const state = (e.state as Record<string, unknown>) ?? {};
+          const platform = String(state.platform ?? '');
+
+          if (platform === 'vapi' || platform === 'retell') {
+            const voiceId = String(state.assistant_id ?? state.agent_id ?? '');
+            return allowedExternalIds.has(voiceId);
+          }
+
+          const sourceType = sourceTypeMap.get(String((e as { source_id?: string }).source_id ?? ''));
+          if (sourceType === 'vapi' || sourceType === 'retell') {
+            const voiceId = String(state.assistant_id ?? state.agent_id ?? '');
+            return allowedExternalIds.has(voiceId);
+          }
+
+          const wfId = String(state.workflow_id ?? '');
+          return allowedExternalIds.has(wfId);
         });
       }
     }

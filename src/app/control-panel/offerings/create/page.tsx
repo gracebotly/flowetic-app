@@ -20,9 +20,6 @@ export type AccessType = "magic_link" | "stripe_gate";
 export type PricingType = "free" | "per_run" | "monthly" | "usage_based";
 
 export type SourceOption = { id: string; type: string; name: string };
-function cleanDisplayName(name: string): string {
-  return name.replace(/^\d+-/, "").replace(/[_-]/g, " ").trim();
-}
 
 type CreatedOffering = { id?: string; name?: string; token?: string | null };
 
@@ -231,71 +228,56 @@ export default function CreateOfferingPage() {
     setSubmitError(null);
 
     try {
-      const results: CreatedOffering[] = [];
-      const errors: { entity: string; error: string }[] = [];
+      const entities = wizard.selectedEntities;
+      if (entities.length === 0) return;
 
-      for (const entity of wizard.selectedEntities) {
-        const portalName =
-          wizard.selectedEntities.length === 1
-            ? wizard.name.trim()
-            : `${wizard.name.trim()} — ${cleanDisplayName(entity.displayName)}`;
+      const primaryEntity = entities[0];
 
-        const body: Record<string, unknown> = {
-          name: portalName,
-          sourceId: entity.sourceId,
-          entityId: entity.id,
-          surfaceType: wizard.surfaceType,
-          accessType: stripeConnected ? wizard.accessType : "magic_link",
-          pricingType:
-            stripeConnected && wizard.accessType === "stripe_gate"
-              ? wizard.pricingType
-              : "free",
-          priceCents:
-            stripeConnected && wizard.accessType === "stripe_gate"
-              ? wizard.priceCents
-              : 0,
-          clientId: wizard.clientId.trim() || undefined,
-          description: wizard.description.trim() || undefined,
-        };
+      const body: Record<string, unknown> = {
+        name: wizard.name.trim(),
+        sourceId: primaryEntity.sourceId,
+        entityId: primaryEntity.id,
+        entityIds: entities.map((e) => ({ id: e.id, sourceId: e.sourceId })),
+        surfaceType: wizard.surfaceType,
+        accessType: stripeConnected ? wizard.accessType : "magic_link",
+        pricingType:
+          stripeConnected && wizard.accessType === "stripe_gate"
+            ? wizard.pricingType
+            : "free",
+        priceCents:
+          stripeConnected && wizard.accessType === "stripe_gate"
+            ? wizard.priceCents
+            : 0,
+        clientId: wizard.clientId.trim() || undefined,
+        description: wizard.description.trim() || undefined,
+      };
 
-        if (wizard.accessType === "stripe_gate" && wizard.slug) {
-          body.slug = wizard.slug;
-        }
-
-        try {
-          const res = await fetch("/api/offerings/create", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
-          });
-          const json = await res.json();
-
-          if (!res.ok || !json.ok) {
-            errors.push({
-              entity: entity.displayName,
-              error: json.error || "Failed to create portal",
-            });
-          } else {
-            results.push({
-              ...(json.offering || {}),
-              token: json.magicLink ? String(json.magicLink).split("/client/").pop() : null,
-            });
-          }
-        } catch {
-          errors.push({ entity: entity.displayName, error: "Network error" });
-        }
+      if (wizard.accessType === "stripe_gate" && wizard.slug) {
+        body.slug = wizard.slug;
       }
 
-      if (results.length === 0) {
-        setSubmitError(errors[0]?.error || "Failed to create portal");
+      const res = await fetch("/api/offerings/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const json = await res.json();
+
+      if (!res.ok || !json.ok) {
+        setSubmitError(json.error || "Failed to create portal");
         return;
       }
 
+      const created = json.offering;
+      const token = json.magicLink
+        ? String(json.magicLink).split("/client/").pop()
+        : null;
+
       update({
-        createdOffering: results[0] || null,
-        createdOfferings: results,
-        creationErrors: errors,
-        magicLink: results.length === 1 && results[0]?.token ? `${window.location.origin}/client/${results[0].token}` : null,
+        createdOffering: created || null,
+        createdOfferings: [created],
+        creationErrors: [],
+        magicLink: token ? `${window.location.origin}/client/${token}` : null,
         productUrl: null,
       });
       setCurrentStep(4);
@@ -461,7 +443,7 @@ export default function CreateOfferingPage() {
                 />
                 {wizard.selectedEntities.length > 1 && (
                   <p className="mt-1 text-xs text-tremor-content dark:text-dark-tremor-content">
-                    Each portal will be named: &quot;{wizard.name} — [Agent Name]&quot;
+                    Multiple selections will be combined into one unified portal.
                   </p>
                 )}
               </>
@@ -521,6 +503,7 @@ export default function CreateOfferingPage() {
                     productUrl={wizard.productUrl}
                     accessType={wizard.accessType}
                     surfaceType={wizard.surfaceType}
+                    clientId={wizard.clientId || undefined}
                     onCreateAnother={handleCreateAnother}
                   />
                 )}
