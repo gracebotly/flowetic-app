@@ -101,7 +101,7 @@ export function MakeDetailPanel({ sourceId, externalId, onHealthChange }: MakeDe
       };
     }
     return [
-      { label: 'Executions', value: String(stats.totalEvents), icon: BarChart3, accent: '', sparkData, sparkColor: 'blue' },
+      { label: 'Executions', value: String(stats.totalEvents), sublabel: 'All time', icon: BarChart3, accent: '', sparkData, sparkColor: 'blue' },
       {
         label: 'Success Rate',
         value: `${stats.successRate}%`,
@@ -134,10 +134,10 @@ export function MakeDetailPanel({ sourceId, externalId, onHealthChange }: MakeDe
 
       <div className="rounded-xl border border-gray-100 bg-white p-4">
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400">Recent Executions</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400">Execution History (Last 30 Days)</h3>
           <div className="flex items-center gap-2">
             <ExportButton sourceId={sourceId} externalId={externalId} platform="make" type="executions" />
-            <span className="text-xs text-gray-400">{executions.length} runs</span>
+            <span className="text-xs text-gray-400">{executions.length} in window</span>
           </div>
         </div>
         {loading ? <div className="flex items-center gap-2 py-3 text-sm text-gray-400"><Loader2 className="h-4 w-4 animate-spin" />Loading executions...</div> : null}
