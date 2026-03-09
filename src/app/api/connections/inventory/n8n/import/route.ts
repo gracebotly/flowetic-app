@@ -332,9 +332,12 @@ export async function POST(req: Request) {
 
   // Insert sample events
   if (eventRows.length > 0) {
+    const dedupedEvents = Array.from(
+      new Map(eventRows.map((r) => [r.platform_event_id, r])).values()
+    );
     const { error: evErr } = await supabase
       .from("events")
-      .upsert(eventRows, { onConflict: "source_id,platform_event_id", ignoreDuplicates: true });
+      .upsert(dedupedEvents, { onConflict: "tenant_id,source_id,platform_event_id", ignoreDuplicates: true });
     if (evErr) {
       console.error('[n8n import] Failed to insert events:', evErr);
     }

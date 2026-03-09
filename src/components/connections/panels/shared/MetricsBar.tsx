@@ -8,6 +8,7 @@ import { Info } from 'lucide-react';
 export interface MetricKPI {
   label: string;
   value: string;
+  sublabel?: string;
   icon: LucideIcon;
   accent: '' | 'green' | 'amber' | 'red' | 'blue';
   sparkData?: { idx: string; value: number }[];
@@ -111,6 +112,7 @@ export function MetricsBar({ kpis }: MetricsBarProps) {
               ) : null}
             </div>
             <div className={`mt-1 text-lg font-semibold ${styles.value}`}>{kpi.value}</div>
+            {kpi.sublabel ? <div className="mt-0.5 text-[10px] leading-none text-gray-400">{kpi.sublabel}</div> : null}
           </div>
         );
       })}

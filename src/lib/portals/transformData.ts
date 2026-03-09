@@ -208,7 +208,7 @@ export function transformVoiceData(events: PortalEvent[], platform: 'vapi' | 're
   
   if (events.length === 0) {
     return {
-      headline: { total: 0, totalLabel: 'calls handled', percentChange: null, periodLabel: 'this month' },
+      headline: { total: 0, totalLabel: 'calls handled', percentChange: null, periodLabel: 'recent activity' },
       kpis: [
         { label: 'Success Rate', value: '—', color: 'neutral' },
         { label: 'Avg Duration', value: '—', color: 'neutral' },
@@ -398,7 +398,7 @@ export function transformWorkflowData(events: PortalEvent[], platform: 'n8n' | '
 
   if (events.length === 0) {
     return {
-      headline: { total: 0, totalLabel: 'executions', percentChange: null, periodLabel: 'this month' },
+      headline: { total: 0, totalLabel: 'executions', percentChange: null, periodLabel: 'recent activity' },
       kpis: [
         { label: 'Success Rate', value: '—', color: 'neutral' },
         { label: 'Avg Runtime', value: '—', color: 'neutral' },
