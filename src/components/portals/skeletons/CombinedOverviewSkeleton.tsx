@@ -18,6 +18,8 @@ import {
 } from 'lucide-react';
 import { usePortalTheme } from '@/components/portals/PortalShell';
 import { ThemedCard, KPICard, StatusBadge, fadeUp } from '@/components/portals/shared/portalPrimitives';
+import { SkeletonHealthBanner } from '@/components/portals/shared/SkeletonEmptyState';
+import { DataFreshnessBar } from '@/components/portals/shared/DataFreshnessBar';
 import { getThemeTokens, STATUS, DEFAULT_ACCENT, type ThemeTokens } from '@/lib/portals/themeTokens';
 import type { SkeletonData } from '@/lib/portals/transformData';
 
@@ -154,6 +156,15 @@ function ActivityRow({ row, tokens }: { row: Record<string, unknown>; tokens: Th
 export function CombinedOverviewSkeleton({ data, branding }: CombinedOverviewProps) {
   const { headline, kpis, trend, recentRows, platformComparison } = data;
   const { theme } = usePortalTheme();
+
+  if (data.health.status === 'no-data') {
+    return (
+      <div className="space-y-6">
+        <SkeletonHealthBanner health={data.health} entityType="combined" />
+      </div>
+    );
+  }
+
   const tokens = getThemeTokens(theme);
   const accent = branding.primary_color || DEFAULT_ACCENT;
 
@@ -166,6 +177,10 @@ export function CombinedOverviewSkeleton({ data, branding }: CombinedOverviewPro
 
   return (
     <div className="space-y-6">
+      {(data.health.status === 'critical' || data.health.status === 'degraded' || data.health.status === 'sparse') && (
+        <SkeletonHealthBanner health={data.health} entityType="combined" />
+      )}
+
       <motion.div variants={fadeUp} initial="hidden" animate="visible" custom={0}>
         <ThemedCard glow accentColor={accent}>
           <div className="absolute inset-x-0 top-0 h-1" style={{ background: `linear-gradient(90deg, ${accent}, ${branding.secondary_color || accent})` }} />
@@ -256,6 +271,8 @@ export function CombinedOverviewSkeleton({ data, branding }: CombinedOverviewPro
           </ThemedCard>
         </motion.div>
       )}
+
+      <DataFreshnessBar latestEventTimestamp={data.recentRows[0]?.time as string} />
     </div>
   );
 }

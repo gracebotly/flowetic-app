@@ -260,11 +260,12 @@ export async function POST(req: Request) {
               ...payloadFields,
             },
             labels: {
+              platform: 'n8n',
+              platformType: 'n8n',
               workflow_id: wfId,
               workflow_name: wf.name,
               execution_id: String(exec.id),
               status: isError ? 'error' : 'success',
-              platformType: 'n8n',
             },
             timestamp: startedAt,
             created_at: now,

@@ -102,6 +102,68 @@ export async function resolvePortal(
     console.error('[resolvePortal] Events fetch error:', eventsError.message);
   }
 
+  // ── 4b. Filter events to this entity ────────────────────────
+  let filteredEvents = events ?? [];
+
+  if (portal.entity_id) {
+    const { data: entity } = await supabaseAdmin
+      .from('source_entities')
+      .select('external_id')
+      .eq('id', portal.entity_id)
+      .single();
+
+    if (entity?.external_id) {
+      filteredEvents = filteredEvents.filter((e) => {
+        const wfId = String((e.state as Record<string, unknown>)?.workflow_id ?? '');
+        return wfId === entity.external_id;
+      });
+    }
+  }
+
+  // ── 4c. Multi-entity portals (offering_entities) ───────────
+  const { data: offeringEntities } = await supabaseAdmin
+    .from('offering_entities')
+    .select('source_id, entity_id')
+    .eq('offering_id', portal.id);
+
+  if (offeringEntities && offeringEntities.length > 0) {
+    const extraEvents: typeof filteredEvents = [];
+    const extraSourceIds = [...new Set(
+      offeringEntities
+        .map((oe) => oe.source_id)
+        .filter((sid): sid is string => typeof sid === 'string' && sid !== portal.source_id)
+    )];
+
+    for (const sid of extraSourceIds) {
+      const { data: srcEvents } = await supabaseAdmin
+        .from('events')
+        .select('id, type, name, value, state, labels, timestamp, platform_event_id')
+        .eq('tenant_id', portal.tenant_id)
+        .eq('source_id', sid)
+        .order('timestamp', { ascending: false })
+        .limit(200);
+      extraEvents.push(...(srcEvents ?? []));
+    }
+
+    if (extraEvents.length > 0) {
+      // Resolve external IDs for all linked entities
+      const entityIds = offeringEntities.map((oe) => String(oe.entity_id));
+      const { data: entityRecords } = await supabaseAdmin
+        .from('source_entities')
+        .select('id, external_id')
+        .in('id', entityIds);
+
+      if (entityRecords) {
+        const externalIds = new Set(entityRecords.map((entityRecord) => entityRecord.external_id));
+        const combined = [...filteredEvents, ...extraEvents];
+        filteredEvents = combined.filter((e) => {
+          const wfId = String((e.state as Record<string, unknown>)?.workflow_id ?? '');
+          return externalIds.has(wfId);
+        });
+      }
+    }
+  }
+
   // 5. Update last_viewed_at (fire-and-forget)
   supabaseAdmin
     .from('offerings')
@@ -114,6 +176,6 @@ export async function resolvePortal(
   return {
     portal,
     tenant,
-    events: events ?? [],
+    events: filteredEvents,
   };
 }

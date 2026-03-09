@@ -25,6 +25,8 @@ import { ThemedCard, KPICard, StatusBadge, fadeUp, hexToRgba } from '@/component
 import type { SkeletonData } from '@/lib/portals/transformData';
 import { getThemeTokens, STATUS, DEFAULT_ACCENT, type ThemeTokens } from '@/lib/portals/themeTokens';
 import { parseTranscript } from '@/lib/portals/parseTranscript';
+import { SkeletonHealthBanner } from '@/components/portals/shared/SkeletonEmptyState';
+import { DataFreshnessBar } from '@/components/portals/shared/DataFreshnessBar';
 
 interface VoicePerformanceProps {
   data: SkeletonData;
@@ -362,8 +364,21 @@ export function VoicePerformanceSkeleton({ data, branding }: VoicePerformancePro
   const hasTranscripts = recentRows.some((r) => String(r.transcript || '').length > 0 || String(r.callSummary || '').length > 0);
   const insights = generateVoiceInsights(data);
 
+  // Early return for no-data state
+  if (data.health.status === 'no-data') {
+    return (
+      <div className="space-y-6">
+        <SkeletonHealthBanner health={data.health} entityType="voice" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
+      {/* Health banners — show degraded/critical/sparse states */}
+      {(data.health.status === 'critical' || data.health.status === 'degraded' || data.health.status === 'sparse') && (
+        <SkeletonHealthBanner health={data.health} entityType="voice" />
+      )}
       <motion.div variants={fadeUp} initial="hidden" animate="visible" custom={0}>
         <ThemedCard glow accentColor={accentColor}>
           <div className="absolute inset-x-0 top-0 h-1" style={{ background: `linear-gradient(90deg, ${accentColor}, ${branding.secondary_color || accentColor})` }} />
@@ -501,6 +516,9 @@ export function VoicePerformanceSkeleton({ data, branding }: VoicePerformancePro
           </ThemedCard>
         </motion.div>
       )}
+
+      {/* Data freshness */}
+      <DataFreshnessBar latestEventTimestamp={recentRows[0]?.time as string} />
     </div>
   );
 }

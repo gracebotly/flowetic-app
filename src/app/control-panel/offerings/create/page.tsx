@@ -339,10 +339,28 @@ export default function CreateOfferingPage() {
   }, [wizard, submitting, stripeConnected, update]);
 
   // ── Navigation ────────────────────────────────────────────
-  const goBack = () => setCurrentStep((s) => Math.max(1, s - 1));
+  const goBack = () => {
+    if (currentStep === 3) {
+      // If voice agent, skip back to Step 1 (not Step 2)
+      const isVoice = wizard.selectedPlatform === 'vapi' || wizard.selectedPlatform === 'retell';
+      setCurrentStep(isVoice ? 1 : 2);
+    } else {
+      setCurrentStep((s) => Math.max(1, s - 1));
+    }
+  };
+
   const goNext = () => {
     if (currentStep === 4) {
       handleSubmit();
+    } else if (currentStep === 1) {
+      // Voice agents only have one option (analytics) — auto-select and skip Step 2
+      const isVoice = wizard.selectedPlatform === 'vapi' || wizard.selectedPlatform === 'retell';
+      if (isVoice) {
+        setWizard((prev) => ({ ...prev, surfaceType: 'analytics' }));
+        setCurrentStep(3); // Skip to Preview
+      } else {
+        setCurrentStep(2);
+      }
     } else {
       setCurrentStep((s) => Math.min(5, s + 1));
     }

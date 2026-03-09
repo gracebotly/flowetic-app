@@ -43,14 +43,14 @@ export async function GET(req: Request) {
 
   let raw: MakeExecution[] = [];
   try {
-    const res = await fetch(`${baseUrl}/api/v2/scenarios/${scenarioId}/executions?limit=${limit}`, { headers: { Authorization: `Token ${apiKey}` } });
+    const res = await fetch(`${baseUrl}/api/v2/scenarios/${scenarioId}/logs?pg[limit]=${limit}&pg[sortDir]=desc`, { headers: { Authorization: `Token ${apiKey}` } });
     if (!res.ok) {
       const text = await res.text().catch(() => '');
       console.error(`[entity-executions/make] Make API returned ${res.status}: ${text.slice(0, 200)}`);
       return NextResponse.json({ ok: false, code: 'MAKE_FETCH_FAILED', error: `Make API returned ${res.status}` }, { status: 502 });
     }
     const json = await res.json();
-    raw = Array.isArray(json?.executions) ? json.executions : [];
+    raw = Array.isArray(json) ? json : Array.isArray(json?.scenarioLogs) ? json.scenarioLogs : [];
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     console.error('[entity-executions/make] Fetch failed:', message);

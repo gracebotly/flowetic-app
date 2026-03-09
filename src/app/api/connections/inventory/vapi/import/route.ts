@@ -146,49 +146,74 @@ export async function POST(req: Request) {
           error: c.error?.message,
         }));
 
-        // Store sample events
-        for (const call of calls.slice(0, 10)) {
+        // Store enriched events — fetch full detail per call for rich data
+        for (const call of calls.slice(0, 20)) {
+          let enrichedCall = call;
+          try {
+            const detailRes = await fetch(`https://api.vapi.ai/call/${call.id}`, {
+              headers: { Authorization: `Bearer ${apiKey}` },
+            });
+            if (detailRes.ok) {
+              enrichedCall = await detailRes.json();
+            }
+          } catch {
+            // Fall back to list data if detail fetch fails
+          }
+
+          const startedAt = enrichedCall.startedAt || enrichedCall.createdAt;
+          const endedAt = enrichedCall.endedAt;
+          const durationMs = (endedAt && startedAt)
+            ? new Date(endedAt).getTime() - new Date(startedAt).getTime()
+            : undefined;
+
           eventRows.push({
             tenant_id: membership.tenant_id,
             source_id: sourceId,
-            platform_event_id: String(call.id),
+            platform_event_id: String(enrichedCall.id),
             type: 'assistant_call',
             name: `vapi:${assistant.name || assistantId}:call`,
-            value: call.status === 'completed' || call.status === 'ended' ? 1 : 0,
+            value: enrichedCall.status === 'completed' || enrichedCall.status === 'ended' ? 1 : 0,
             state: {
               // Identifiers
-              workflow_id: String(call.assistantId || call.assistant_id || ''),
-              workflow_name: call.assistant?.name || assistant.name || '',
-              execution_id: String(call.id),
+              workflow_id: String(enrichedCall.assistantId || enrichedCall.assistant_id || ''),
+              workflow_name: enrichedCall.assistant?.name || assistant.name || '',
+              execution_id: String(enrichedCall.id),
               platform: 'vapi',
 
               // Status & timing
-              status: call.status === 'ended' ? 'success' : call.status || 'unknown',
-              started_at: call.startedAt || call.createdAt || '',
-              ended_at: call.endedAt || '',
-              duration_ms: (call.endedAt && call.startedAt)
-                ? new Date(call.endedAt).getTime() - new Date(call.startedAt).getTime()
-                : undefined,
-              ended_reason: call.endedReason || undefined,
+              status: enrichedCall.status === 'ended' ? 'success' : enrichedCall.status || 'unknown',
+              started_at: startedAt || '',
+              ended_at: endedAt || '',
+              duration_ms: durationMs,
+              ended_reason: enrichedCall.endedReason || undefined,
 
-              // Cost
-              cost: typeof call.cost === 'number' ? call.cost : undefined,
-              cost_breakdown: call.costBreakdown || undefined,
+              // Cost (Vapi returns dollars, no conversion needed)
+              cost: typeof enrichedCall.cost === 'number' ? enrichedCall.cost : undefined,
+              cost_breakdown: enrichedCall.costBreakdown || undefined,
 
-              // Rich voice fields
-              call_type: call.type || undefined,
-              call_summary: call.analysis?.summary || undefined,
-              call_successful: call.analysis?.successEvaluation || undefined,
-              transcript: call.artifact?.transcript || undefined,
-              sentiment: call.analysis?.structuredData?.sentiment || undefined,
+              // Rich voice fields from full call detail
+              call_type: enrichedCall.type || undefined,
+              call_summary: enrichedCall.analysis?.summary || undefined,
+              call_successful: enrichedCall.analysis?.successEvaluation || undefined,
+              transcript: enrichedCall.artifact?.transcript || undefined,
+              recording_url: enrichedCall.artifact?.recordingUrl
+                || enrichedCall.artifact?.recording?.stereoUrl
+                || enrichedCall.artifact?.recording?.mono?.combinedUrl
+                || undefined,
+              sentiment: enrichedCall.analysis?.structuredData?.sentiment || undefined,
+              user_sentiment: enrichedCall.analysis?.structuredData?.sentiment || undefined,
+
+              // Vapi-specific extras
+              structured_data: enrichedCall.analysis?.structuredData || undefined,
+              success_evaluation: enrichedCall.analysis?.successEvaluation || undefined,
             },
             labels: {
               assistant_id: assistantId,
               assistant_name: assistant.name,
-              call_id: call.id,
-              status: call.status,
+              call_id: enrichedCall.id,
+              status: enrichedCall.status,
             },
-            timestamp: call.createdAt || now,
+            timestamp: enrichedCall.createdAt || now,
             created_at: now,
           });
         }

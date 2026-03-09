@@ -146,10 +146,10 @@ export async function POST(req: Request) {
     let recentExecutions: Array<{ id: string; status: string; startedAt: string; duration?: number; error?: string }> = [];
 
     try {
-      const execRes = await fetch(`https://${region}.make.com/api/v2/scenarios/${scenarioId}/executions?limit=20`, { method: "GET", headers: makeHeaders });
+      const execRes = await fetch(`https://${region}.make.com/api/v2/scenarios/${scenarioId}/logs?pg[limit]=20&pg[sortDir]=desc`, { method: "GET", headers: makeHeaders });
       if (execRes.ok) {
         const execData = await execRes.json();
-        const rawExecutions = Array.isArray(execData?.executions) ? execData.executions : [];
+        const rawExecutions = Array.isArray(execData) ? execData : Array.isArray(execData?.scenarioLogs) ? execData.scenarioLogs : [];
 
         // Filter to only real executions — the API returns start/stop/modify events too
         const executions = rawExecutions.filter(

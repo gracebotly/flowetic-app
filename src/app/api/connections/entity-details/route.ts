@@ -235,12 +235,12 @@ async function fetchMakeDetails(secret: Record<string, unknown>, scenarioId: str
   let latestError: string | undefined;
   try {
     const execRes = await fetch(
-      `${baseUrl}/api/v2/scenarios/${scenarioId}/executions?limit=10`,
+      `${baseUrl}/api/v2/scenarios/${scenarioId}/logs?pg[limit]=10&pg[sortDir]=desc`,
       { headers: makeHeaders },
     );
     if (execRes.ok) {
       const execData = await execRes.json();
-      const rawExecs = Array.isArray(execData?.executions) ? execData.executions : [];
+      const rawExecs = Array.isArray(execData) ? execData : Array.isArray(execData?.scenarioLogs) ? execData.scenarioLogs : [];
       const errorExecs = rawExecs.filter(
         (e: any) => e.type === "auto" && e.eventType === "EXECUTION_END" && e.status === 3,
       );

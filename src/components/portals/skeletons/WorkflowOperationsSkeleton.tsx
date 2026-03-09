@@ -32,6 +32,8 @@ import {
 import { usePortalTheme } from '@/components/portals/PortalShell';
 import { ThemedCard, KPICard, StatusBadge, fadeUp, hexToRgba } from '@/components/portals/shared/portalPrimitives';
 import type { SkeletonData } from '@/lib/portals/transformData';
+import { SkeletonHealthBanner } from '@/components/portals/shared/SkeletonEmptyState';
+import { DataFreshnessBar } from '@/components/portals/shared/DataFreshnessBar';
 import { getThemeTokens, STATUS } from '@/lib/portals/themeTokens';
 
 interface WorkflowOperationsProps {
@@ -270,6 +272,16 @@ function ExpandableRow({ row }: { row: Record<string, unknown> }) {
 export function WorkflowOperationsSkeleton({ data, branding }: WorkflowOperationsProps) {
   const { headline, kpis, trend, recentRows, workflowBreakdown, errorBreakdown } = data;
   const { theme } = usePortalTheme();
+
+  // Early return for no-data state
+  if (data.health.status === 'no-data') {
+    return (
+      <div className="space-y-6">
+        <SkeletonHealthBanner health={data.health} entityType="workflow" />
+      </div>
+    );
+  }
+
   const tokens = getThemeTokens(theme);
 
   const failedKpi = kpis.find(k => k.label === 'Failed');
@@ -290,6 +302,10 @@ export function WorkflowOperationsSkeleton({ data, branding }: WorkflowOperation
 
   return (
     <div className="space-y-6">
+      {(data.health.status === 'critical' || data.health.status === 'degraded' || data.health.status === 'sparse') && (
+        <SkeletonHealthBanner health={data.health} entityType="workflow" />
+      )}
+
       {/* ─── Hero Headline ─── */}
       <motion.div variants={fadeUp} initial="hidden" animate="visible" custom={0}>
         <ThemedCard glow accentColor={branding.primary_color}>
@@ -632,6 +648,8 @@ export function WorkflowOperationsSkeleton({ data, branding }: WorkflowOperation
           </ThemedCard>
         </motion.div>
       )}
+
+      <DataFreshnessBar latestEventTimestamp={recentRows[0]?.time as string} />
     </div>
   );
 }

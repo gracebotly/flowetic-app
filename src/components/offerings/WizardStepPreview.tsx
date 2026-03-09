@@ -43,8 +43,10 @@ export function WizardStepPreview({
       </h2>
       <p className="mt-1 text-sm text-gray-500">
         {isProduct
-          ? "Review the auto-detected form fields your client will fill out."
-          : "Here's what your client will see."}
+          ? "Review the auto-detected form fields your client's customers will fill out."
+          : (platform === "vapi" || platform === "retell")
+            ? "Your client will see a branded voice analytics dashboard with call metrics, sentiment, and trends."
+            : "Your client will see a branded workflow dashboard with execution metrics and performance trends."}
       </p>
 
       {/* Analytics preview section */}
@@ -57,13 +59,18 @@ export function WizardStepPreview({
             <div>
               <h3 className="text-sm font-semibold text-gray-900">Analytics Dashboard</h3>
               <p className="text-xs text-gray-500">
-                Real-time KPIs, charts, and activity table for{" "}
-                <span className="font-medium text-gray-700">{entityName || "your agent"}</span>
+                {(platform === "vapi" || platform === "retell")
+                  ? "Call volume, success rates, sentiment analysis, and duration trends for "
+                  : "Execution counts, success rates, error alerts, and runtime trends for "}
+                <span className="font-medium text-gray-700">{entityName || "your entity"}</span>
               </p>
             </div>
           </div>
           <div className="mt-4 grid grid-cols-3 gap-3">
-            {["Total Events", "Success Rate", "Avg Duration"].map((label) => (
+            {((platform === "vapi" || platform === "retell")
+              ? ["Total Calls", "Success Rate", "Avg Duration"]
+              : ["Executions", "Success Rate", "Avg Runtime"]
+            ).map((label) => (
               <div
                 key={label}
                 className="rounded-lg border border-gray-100 bg-white p-3 text-center"
