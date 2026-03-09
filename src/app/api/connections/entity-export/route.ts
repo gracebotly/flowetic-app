@@ -20,8 +20,7 @@ async function getDecryptedSecret(source: { secret_hash: string }): Promise<Reco
 }
 
 // ─── Transcript formatter ─────────────────────────────────────────────────────
-// Converts "AI: Hello
-User: Hi" into a clean scannable format
+// Converts raw transcript lines into scannable [AI] / [YOU] labeled turns
 function formatTranscript(raw: string): string {
   if (!raw) return '';
   return raw
