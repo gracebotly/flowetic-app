@@ -2,14 +2,11 @@
 
 import { useState, useEffect, useMemo, useCallback, type ComponentType, type ReactNode } from "react";
 import {
-  Monitor,
   Tablet,
   Smartphone,
   ExternalLink,
   Loader2,
-  Eye,
   RotateCcw,
-  Maximize2,
   Info,
 } from "lucide-react";
 import { Badge } from "@tremor/react";
@@ -23,7 +20,6 @@ import { CombinedOverviewSkeleton } from "@/components/portals/skeletons/Combine
 import { getSkeletonForPlatform } from "@/lib/portals/platformToSkeleton";
 import { transformDataForSkeleton, type SkeletonData, type PortalEvent } from "@/lib/portals/transformData";
 
-import type { InputField } from "@/lib/products/types";
 
 type DeviceMode = "tablet" | "mobile";
 
@@ -44,7 +40,6 @@ interface PortalPreviewProps {
   sourceId: string;
   entityName: string;
   surfaceType: string;
-  inputSchema?: InputField[];
 }
 
 interface Branding {
@@ -56,7 +51,7 @@ interface Branding {
   tenant_name: string | null;
 }
 
-const DEVICES: Record<DeviceMode, { width: number; label: string; icon: typeof Monitor }> = {
+const DEVICES: Record<DeviceMode, { width: number; label: string; icon: typeof Tablet }> = {
   tablet: { width: 768, label: "Tablet", icon: Tablet },
   mobile: { width: 375, label: "Mobile", icon: Smartphone },
 };
@@ -174,16 +169,12 @@ export default function PortalPreview({
   sourceId,
   entityName,
   surfaceType,
-  inputSchema,
 }: PortalPreviewProps) {
   const [device, setDevice] = useState<DeviceMode>("tablet");
   const [branding, setBranding] = useState<Branding | null>(null);
   const [events, setEvents] = useState<PreviewEvent[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [usingSampleData, setUsingSampleData] = useState(false);
-  const [activeTab, setActiveTab] = useState<"portal" | "product">(
-    surfaceType === "runner" ? "product" : "portal"
-  );
   const [refreshKey, setRefreshKey] = useState(0);
 
   const skeletonId = useMemo(() => getSkeletonForPlatform(platformType), [platformType]);
@@ -264,9 +255,6 @@ export default function PortalPreview({
     );
   }
 
-  const showAnalytics = surfaceType === "analytics" || surfaceType === "both";
-  const showProduct = surfaceType === "runner" || surfaceType === "both";
-
   return (
     <div className="flex flex-col gap-5">
       <div className="flex items-start justify-between">
@@ -289,33 +277,6 @@ export default function PortalPreview({
           Open full preview
         </a>
       </div>
-
-      {surfaceType === "both" && (
-        <div className="flex gap-1 rounded-lg bg-tremor-background-subtle p-1 dark:bg-dark-tremor-background-subtle">
-          <button
-            onClick={() => setActiveTab("portal")}
-            className={`cursor-pointer flex-1 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors duration-200 ${
-              activeTab === "portal"
-                ? "bg-white text-tremor-content-strong shadow-sm dark:bg-dark-tremor-background dark:text-dark-tremor-content-strong"
-                : "text-tremor-content hover:text-tremor-content-strong dark:text-dark-tremor-content dark:hover:text-dark-tremor-content-strong"
-            }`}
-          >
-            <Eye className="mr-1.5 inline-block h-3.5 w-3.5" />
-            Analytics Dashboard
-          </button>
-          <button
-            onClick={() => setActiveTab("product")}
-            className={`cursor-pointer flex-1 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors duration-200 ${
-              activeTab === "product"
-                ? "bg-white text-tremor-content-strong shadow-sm dark:bg-dark-tremor-background dark:text-dark-tremor-content-strong"
-                : "text-tremor-content hover:text-tremor-content-strong dark:text-dark-tremor-content dark:hover:text-dark-tremor-content-strong"
-            }`}
-          >
-            <Maximize2 className="mr-1.5 inline-block h-3.5 w-3.5" />
-            Product Page
-          </button>
-        </div>
-      )}
 
       <div className="flex items-center justify-between">
         <div className="flex gap-1 rounded-lg bg-tremor-background-subtle p-1 dark:bg-dark-tremor-background-subtle">
@@ -372,8 +333,7 @@ export default function PortalPreview({
                 overflowY: "auto",
               }}
             >
-              {showAnalytics && activeTab === "portal" && (
-                <PortalShell
+              <PortalShell
                   portalName={entityName || "Your Portal"}
                   tenantName={branding?.tenant_name || "Your Agency"}
                   logoUrl={branding?.logo_url || null}
@@ -396,58 +356,6 @@ export default function PortalPreview({
                     </div>
                   )}
                 </PortalShell>
-              )}
-
-              {showProduct && activeTab === "product" && (
-                <div className="p-6">
-                  <div className="mx-auto max-w-2xl">
-                    <div className="mb-8 text-center">
-                      {branding?.logo_url && (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={branding.logo_url}
-                          alt="Agency logo"
-                          className="mx-auto mb-4 h-10 object-contain"
-                        />
-                      )}
-                      <h1
-                        className="text-2xl font-bold"
-                        style={{ color: branding?.primary_color || "#1a1a1a" }}
-                      >
-                        {entityName}
-                      </h1>
-                      <p className="mt-2 text-sm text-gray-600">Fill out the form below to get started</p>
-                    </div>
-
-                    {inputSchema && inputSchema.length > 0 ? (
-                      <div className="space-y-3">
-                        {(inputSchema ?? []).map((field, i) => (
-                          <div key={field.name} className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-2.5">
-                            <span className="flex h-6 w-6 items-center justify-center rounded-md bg-gray-100 text-[10px] font-bold text-gray-500">
-                              {i + 1}
-                            </span>
-                            <div className="flex-1">
-                              <span className="text-sm font-medium text-gray-900">{field.label}</span>
-                              <span className="ml-2 text-[10px] uppercase tracking-wide text-gray-400">{field.type}</span>
-                            </div>
-                            {field.required && (
-                              <span className="text-[10px] font-medium text-red-400">Required</span>
-                            )}
-                          </div>
-                        ))}
-                        <p className="text-xs text-gray-400">Your customers will fill out a step-by-step form.</p>
-                      </div>
-                    ) : (
-                      <div className="rounded-xl border border-dashed border-gray-300 p-8 text-center">
-                        <Info className="mx-auto h-8 w-8 text-gray-400" />
-                        <p className="mt-3 text-sm text-gray-500">
-                          Form fields will appear here once auto-detected from your workflow configuration.
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
             </div>
           </BrowserChrome>
         </motion.div>

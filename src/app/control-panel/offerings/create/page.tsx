@@ -8,7 +8,6 @@ import { createClient } from "@/lib/supabase/client";
 
 import AgentPicker from "@/components/portals/wizard/AgentPicker";
 import type { SelectedEntity, EntityItem } from "@/components/portals/wizard/AgentPicker";
-import { WizardStepSurface } from "@/components/offerings/WizardStepSurface";
 import PortalPreview from "@/components/portals/wizard/PortalPreview";
 import { WizardStepConfigure } from "@/components/offerings/WizardStepConfigure";
 import { WizardStepSuccess } from "@/components/offerings/WizardStepSuccess";
@@ -71,10 +70,9 @@ const INITIAL_STATE: WizardState = {
 
 const STEPS = [
   { number: 1, label: "Select Agent" },
-  { number: 2, label: "Choose Type" },
-  { number: 3, label: "Preview" },
-  { number: 4, label: "Name & Price" },
-  { number: 5, label: "Share" },
+  { number: 2, label: "Preview" },
+  { number: 3, label: "Name & Price" },
+  { number: 4, label: "Share" },
 ];
 
 // ── Component ───────────────────────────────────────────────
@@ -195,31 +193,6 @@ export default function CreateOfferingPage() {
     }
   }, [wizard.selectedSourceId, sources, update]);
 
-  // ── Fetch input schema when entering Step 3 with product type ──
-  useEffect(() => {
-    if (
-      currentStep === 3 &&
-      (wizard.surfaceType === "runner" || wizard.surfaceType === "both") &&
-      wizard.selectedEntityUuid &&
-      wizard.inputSchema.length === 0
-    ) {
-      fetch(`/api/entities/${wizard.selectedEntityUuid}/schema`)
-        .then((r) => r.json())
-        .then((json) => {
-          if (json.ok && json.inputSchema) {
-            update({ inputSchema: json.inputSchema });
-          }
-        })
-        .catch(() => {});
-    }
-  }, [
-    currentStep,
-    wizard.surfaceType,
-    wizard.selectedEntityUuid,
-    wizard.inputSchema.length,
-    update,
-  ]);
-
   // ── Auto-fill name when source + entity selected ──────────
   useEffect(() => {
     if (userEditedName) return; // User has manually typed — never overwrite
@@ -243,10 +216,8 @@ export default function CreateOfferingPage() {
       case 1:
         return wizard.selectedEntities.length > 0;
       case 2:
-        return !!wizard.surfaceType;
-      case 3:
         return true; // Preview is informational
-      case 4:
+      case 3:
         return wizard.name.trim().length >= 3;
       default:
         return false;
@@ -286,11 +257,6 @@ export default function CreateOfferingPage() {
           clientId: wizard.clientId.trim() || undefined,
           description: wizard.description.trim() || undefined,
         };
-
-        if (wizard.surfaceType === "runner" || wizard.surfaceType === "both") {
-          body.inputSchema = wizard.inputSchema;
-          body.executionConfig = {};
-        }
 
         if (wizard.accessType === "stripe_gate" && wizard.slug) {
           body.slug = wizard.slug;
@@ -332,7 +298,7 @@ export default function CreateOfferingPage() {
         magicLink: results.length === 1 && results[0]?.token ? `${window.location.origin}/client/${results[0].token}` : null,
         productUrl: null,
       });
-      setCurrentStep(5);
+      setCurrentStep(4);
     } catch (err: unknown) {
       setSubmitError(err instanceof Error ? err.message : "Network error");
     } finally {
@@ -342,29 +308,14 @@ export default function CreateOfferingPage() {
 
   // ── Navigation ────────────────────────────────────────────
   const goBack = () => {
-    if (currentStep === 3) {
-      // If voice agent, skip back to Step 1 (not Step 2)
-      const isVoice = wizard.selectedPlatform === 'vapi' || wizard.selectedPlatform === 'retell';
-      setCurrentStep(isVoice ? 1 : 2);
-    } else {
-      setCurrentStep((s) => Math.max(1, s - 1));
-    }
+    setCurrentStep((s) => Math.max(1, s - 1));
   };
 
   const goNext = () => {
-    if (currentStep === 4) {
+    if (currentStep === 3) {
       handleSubmit();
-    } else if (currentStep === 1) {
-      // Voice agents only have one option (analytics) — auto-select and skip Step 2
-      const isVoice = wizard.selectedPlatform === 'vapi' || wizard.selectedPlatform === 'retell';
-      if (isVoice) {
-        setWizard((prev) => ({ ...prev, surfaceType: 'analytics' }));
-        setCurrentStep(3); // Skip to Preview
-      } else {
-        setCurrentStep(2);
-      }
     } else {
-      setCurrentStep((s) => Math.min(5, s + 1));
+      setCurrentStep((s) => Math.min(4, s + 1));
     }
   };
 
@@ -385,7 +336,7 @@ export default function CreateOfferingPage() {
       slug: "",
       inputSchema: prev.inputSchema,
     }));
-    setCurrentStep(4); // Jump to Name & Price — agent + type already chosen
+    setCurrentStep(3); // Jump to Name & Price — agent already chosen
     setSubmitError(null);
   };
 
@@ -477,22 +428,14 @@ export default function CreateOfferingPage() {
               />
             )}
             {currentStep === 2 && (
-              <WizardStepSurface
-                surfaceType={wizard.surfaceType}
-                platform={wizard.selectedPlatform}
-                onSelect={(surfaceType) => update({ surfaceType })}
-              />
-            )}
-            {currentStep === 3 && (
               <PortalPreview
                 platformType={wizard.selectedPlatform || "vapi"}
                 sourceId={wizard.selectedSourceId || ""}
                 entityName={wizard.selectedEntities?.[0]?.displayName || wizard.name || "Your Portal"}
-                surfaceType={wizard.surfaceType}
-                inputSchema={wizard.inputSchema}
+                surfaceType="analytics"
               />
             )}
-            {currentStep === 4 && (
+            {currentStep === 3 && (
               <>
                 <WizardStepConfigure
                   name={wizard.name}
@@ -523,7 +466,7 @@ export default function CreateOfferingPage() {
                 )}
               </>
             )}
-            {currentStep === 5 && (
+            {currentStep === 4 && (
               <>
                 {wizard.createdOfferings.length > 1 ? (
                   <div className="space-y-3">
@@ -587,8 +530,8 @@ export default function CreateOfferingPage() {
         )}
       </div>
 
-      {/* Navigation Buttons — hidden on Step 5 */}
-      {currentStep < 5 && (
+      {/* Navigation Buttons — hidden on Step 4 */}
+      {currentStep < 4 && (
         <div className="mt-6 flex items-center justify-between">
           <button
             onClick={goBack}
@@ -604,7 +547,7 @@ export default function CreateOfferingPage() {
           >
             {submitting
               ? "Creating…"
-              : currentStep === 4
+              : currentStep === 3
                 ? "Create Portal →"
                 : "Continue →"}
           </button>
