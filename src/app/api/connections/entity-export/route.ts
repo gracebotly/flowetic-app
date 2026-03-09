@@ -377,7 +377,7 @@ export async function GET(req: Request) {
           const headers = Object.keys(nodes[0]);
           rows.push(headers.map(csvEscape).join(','));
           for (const n of nodes) {
-            rows.push(headers.map(h => csvEscape(n[h] ?? '')).join(','));
+            rows.push(headers.map(h => csvEscape((n as Record<string, unknown>)[h] ?? '')).join(','));
           }
         }
         filename = `make_node_summary_${new Date().toISOString().slice(0, 10)}.csv`;
@@ -390,7 +390,7 @@ export async function GET(req: Request) {
           rows.push(headers.map(csvEscape).join(','));
           for (const e of executions) {
             const row = headers.map(h => {
-              const v = String(e[h] ?? '');
+              const v = String((e as Record<string, unknown>)[h] ?? '');
               return csvEscape(redact ? redactPII(v) : v);
             });
             rows.push(row.join(','));
@@ -413,7 +413,7 @@ export async function GET(req: Request) {
           const headers = Object.keys(nodes[0]);
           rows.push(headers.map(csvEscape).join(','));
           for (const n of nodes) {
-            rows.push(headers.map(h => csvEscape(n[h] ?? '')).join(','));
+            rows.push(headers.map(h => csvEscape((n as Record<string, unknown>)[h] ?? '')).join(','));
           }
         }
         filename = `n8n_node_summary_${new Date().toISOString().slice(0, 10)}.csv`;
@@ -432,7 +432,7 @@ export async function GET(req: Request) {
           rows.push(headers.map(csvEscape).join(','));
           for (const e of executions) {
             rows.push(headers.map(h => {
-              const v = String(e[h] ?? '');
+              const v = String((e as Record<string, unknown>)[h] ?? '');
               return csvEscape(redact ? redactPII(v) : v);
             }).join(','));
           }
