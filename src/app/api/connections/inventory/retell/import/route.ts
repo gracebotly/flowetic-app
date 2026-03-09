@@ -276,7 +276,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, code: "PERSISTENCE_FAILED", message: upErr.message }, { status: 400 });
   }
 
-  // Insert sample events — deduplicate by platform_event_id before upsert
+  // Insert sample events
   if (eventRows.length > 0) {
     const dedupedEvents = Array.from(
       new Map(eventRows.map((r) => [r.platform_event_id, r])).values()
