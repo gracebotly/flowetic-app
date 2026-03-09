@@ -90,6 +90,7 @@ export default function CreateOfferingPage() {
   });
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [userEditedName, setUserEditedName] = useState(false);
 
   // Data
   const [sources, setSources] = useState<SourceOption[]>([]);
@@ -221,7 +222,8 @@ export default function CreateOfferingPage() {
 
   // ── Auto-fill name when source + entity selected ──────────
   useEffect(() => {
-    if (wizard.selectedEntityUuid && !wizard.name) {
+    if (userEditedName) return; // User has manually typed — never overwrite
+    if (wizard.selectedEntityUuid) {
       const entity = entities.find((e) => e.id === wizard.selectedEntityUuid);
       if (entity) {
         const suffix =
@@ -233,7 +235,7 @@ export default function CreateOfferingPage() {
         update({ name: `${entity.display_name}${suffix}` });
       }
     }
-  }, [wizard.selectedEntityUuid, wizard.surfaceType, wizard.name, entities, update]);
+  }, [wizard.selectedEntityUuid, wizard.surfaceType, userEditedName, entities, update]);
 
   // ── Step validation ───────────────────────────────────────
   const canProceed = useCallback((): boolean => {
@@ -368,6 +370,7 @@ export default function CreateOfferingPage() {
 
   // ── Batch flow: Create Another (Same Config) ─────────────
   const handleCreateAnother = () => {
+    setUserEditedName(false);
     setWizard((prev) => ({
       ...INITIAL_STATE,
       // Preserve agent + type + pricing config
@@ -462,12 +465,13 @@ export default function CreateOfferingPage() {
                 loading={dataLoading}
                 selected={wizard.selectedEntities}
                 onSelectionChange={(selected) => {
+                  const uniquePlatforms = [...new Set(selected.map((e) => e.platform))];
                   setWizard((prev) => ({
                     ...prev,
                     selectedEntities: selected,
                     selectedSourceId: selected.length > 0 ? selected[0].sourceId : null,
                     selectedEntityUuid: selected.length > 0 ? selected[0].id : null,
-                    selectedPlatform: selected.length > 0 ? selected[0].platform : null,
+                    selectedPlatform: uniquePlatforms.length > 0 ? uniquePlatforms.join(", ") : null,
                   }));
                 }}
               />
@@ -493,7 +497,10 @@ export default function CreateOfferingPage() {
                 <WizardStepConfigure
                   name={wizard.name}
                   description={wizard.description}
-                  onChange={(field, value) => update({ [field]: value })}
+                  onChange={(field, value) => {
+                    if (field === "name") setUserEditedName(true);
+                    update({ [field]: value });
+                  }}
                   clientId={wizard.clientId}
                   prefilledClientId={prefilledClientId}
                   accessType={wizard.accessType}

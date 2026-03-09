@@ -199,11 +199,11 @@ export function WizardStepConfigure({
 
       {/* Summary badges */}
       <div className="mt-5 flex flex-wrap gap-2">
-        {platform && (
-          <span className="inline-flex rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600 capitalize">
-            {platform}
+        {platform && platform.split(", ").map((p) => (
+          <span key={p} className="inline-flex rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600 capitalize">
+            {p}
           </span>
-        )}
+        ))}
         <span className="inline-flex rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
           {SURFACE_LABELS[surfaceType] ?? surfaceType}
         </span>
