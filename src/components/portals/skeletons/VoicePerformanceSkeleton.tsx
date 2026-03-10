@@ -368,7 +368,7 @@ export function VoicePerformanceSkeleton({ data, branding }: VoicePerformancePro
   if (data.health.status === 'no-data') {
     return (
       <div className="space-y-6">
-        <SkeletonHealthBanner health={data.health} entityType="voice" />
+        <SkeletonHealthBanner health={data.health} entityType="voice" isAgencyView={false} />
       </div>
     );
   }
@@ -377,7 +377,7 @@ export function VoicePerformanceSkeleton({ data, branding }: VoicePerformancePro
     <div className="space-y-6">
       {/* Health banners — show degraded/critical/sparse states */}
       {(data.health.status === 'critical' || data.health.status === 'degraded' || data.health.status === 'sparse') && (
-        <SkeletonHealthBanner health={data.health} entityType="voice" />
+        <SkeletonHealthBanner health={data.health} entityType="voice" isAgencyView={false} />
       )}
       <motion.div variants={fadeUp} initial="hidden" animate="visible" custom={0}>
         <ThemedCard glow accentColor={accentColor}>

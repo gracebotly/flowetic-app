@@ -15,9 +15,11 @@ interface SkeletonHealthBannerProps {
     latestError?: string;
   };
   entityType?: 'voice' | 'workflow' | 'combined';
+  /** When false (default), hides degraded/critical/sparse banners — client-facing portals only show no-data */
+  isAgencyView?: boolean;
 }
 
-export function SkeletonHealthBanner({ health, entityType = 'workflow' }: SkeletonHealthBannerProps) {
+export function SkeletonHealthBanner({ health, entityType = 'workflow', isAgencyView = false }: SkeletonHealthBannerProps) {
   const { theme } = usePortalTheme();
   const tokens = getThemeTokens(theme);
   const isDark = theme === 'dark';
@@ -54,6 +56,9 @@ export function SkeletonHealthBanner({ health, entityType = 'workflow' }: Skelet
       </motion.div>
     );
   }
+
+  // Client-facing portals: never show performance warnings — only show empty state
+  if (!isAgencyView) return null;
 
   if (health.status === 'critical') {
     return (
