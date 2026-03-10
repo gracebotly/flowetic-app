@@ -194,7 +194,7 @@ export default function OfferingDetailPage() {
       return;
     }
     setTokenAction("regenerating");
-    setShowTokenModal(false);
+    setTokenModalError(null);
     try {
       const res = await fetch(`/api/client-portals/${id}/token`, {
         method: "POST",
@@ -204,7 +204,12 @@ export default function OfferingDetailPage() {
       const json = await res.json();
       if (json.ok) {
         setOffering((prev) => (prev ? { ...prev, token: json.token } : prev));
+        setShowTokenModal(false);
+      } else {
+        setTokenModalError("That link is unavailable. Try another.");
       }
+    } catch {
+      setTokenModalError("Could not save link. Please try again.");
     } finally {
       setTokenAction("idle");
     }
@@ -800,16 +805,18 @@ export default function OfferingDetailPage() {
             <div className="mt-5 flex justify-end gap-2">
               <button
                 onClick={() => setShowTokenModal(false)}
-                className="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50"
+                disabled={tokenAction === "regenerating"}
+                className="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Cancel
               </button>
               <button
                 onClick={confirmRegenerateToken}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                disabled={tokenAction === "regenerating"}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Pencil className="h-3.5 w-3.5" />
-                Save Link
+                {tokenAction === "regenerating" ? "Saving…" : "Save Link"}
               </button>
             </div>
           </div>
