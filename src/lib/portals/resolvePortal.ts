@@ -114,7 +114,16 @@ export async function resolvePortal(
 
     if (entity?.external_id) {
       filteredEvents = filteredEvents.filter((e) => {
-        const wfId = String((e.state as Record<string, unknown>)?.workflow_id ?? '');
+        const state = (e.state as Record<string, unknown>) ?? {};
+        const platform = String(state.platform ?? '');
+        const pt = portal.platform_type ?? '';
+
+        if (platform === 'vapi' || platform === 'retell' || pt === 'vapi' || pt === 'retell') {
+          const voiceId = String(state.assistant_id ?? state.agent_id ?? '');
+          return voiceId === entity.external_id;
+        }
+
+        const wfId = String(state.workflow_id ?? '');
         return wfId === entity.external_id;
       });
     }
