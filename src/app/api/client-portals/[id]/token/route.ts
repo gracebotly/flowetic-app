@@ -23,6 +23,23 @@ async function getTenantId(supabase: Awaited<ReturnType<typeof createClient>>) {
   return membership?.tenant_id ?? null;
 }
 
+
+// ── Helpers ─────────────────────────────────────────────────
+function generateShortToken(portalName: string): string {
+  const slug = portalName
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, '')
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .join('-');
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  const rand = Array.from({ length: 5 }, () =>
+    chars[Math.floor(Math.random() * chars.length)]
+  ).join('');
+  return slug ? `${slug}-${rand}` : rand;
+}
+
 // ── POST: Generate new token ────────────────────────────────
 export async function POST(
   _req: Request,
@@ -33,7 +50,15 @@ export async function POST(
   const tenantId = await getTenantId(supabase);
   if (!tenantId) return json(401, { ok: false, code: 'AUTH_REQUIRED' });
 
-  const newToken = crypto.randomUUID();
+  // Fetch portal name to generate a human-friendly slug
+  const { data: existing } = await supabase
+    .from('client_portals')
+    .select('name')
+    .eq('id', id)
+    .eq('tenant_id', tenantId)
+    .maybeSingle();
+
+  const newToken = generateShortToken(existing?.name ?? 'portal');
 
   const { data: offering, error } = await supabase
     .from('client_portals')
