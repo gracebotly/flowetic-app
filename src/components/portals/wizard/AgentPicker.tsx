@@ -236,7 +236,7 @@ export default function AgentPicker({
   // ── Selection helpers ──
   const selectedIds = useMemo(() => new Set(selected.map((s) => s.id)), [selected]);
 
-  const isEntityDisabled = useCallback((): boolean => {
+  const isEntityDisabled = useCallback((_entity: EntityItem): boolean => {
     return false;
   }, []);
 
