@@ -104,6 +104,13 @@ export function WizardStepConfigure({
   const [newClientName, setNewClientName] = useState("");
   const [newClientEmail, setNewClientEmail] = useState("");
   const [newClientPhone, setNewClientPhone] = useState("");
+
+function formatPhone(value: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, 10);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+}
   const [creatingClient, setCreatingClient] = useState(false);
 
   // Load clients on mount
@@ -352,14 +359,16 @@ export function WizardStepConfigure({
                 type="email"
                 value={newClientEmail}
                 onChange={(e) => setNewClientEmail(e.target.value)}
-                placeholder="Email (optional)"
-                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
+                placeholder="email@example.com"
+                pattern="[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}$"
+                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100 invalid:border-red-300"
               />
               <input
                 type="tel"
                 value={newClientPhone}
-                onChange={(e) => setNewClientPhone(e.target.value)}
-                placeholder="Phone (optional)"
+                onChange={(e) => setNewClientPhone(formatPhone(e.target.value))}
+                placeholder="(555) 000-0000"
+                maxLength={14}
                 className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
               />
             </div>

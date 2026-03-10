@@ -331,11 +331,11 @@ export default function RevenuePage() {
     periodStart.setDate(periodStart.getDate() - days);
 
     const currentFetch = fetch(
-      `/api/offerings/analytics?period=${period}`
+      `/api/client-portals/analytics?period=${period}`
     ).then((r) => r.json());
 
     const prevFetch = fetch(
-      `/api/offerings/analytics?period=${period}&before=${periodStart.toISOString()}`
+      `/api/client-portals/analytics?period=${period}&before=${periodStart.toISOString()}`
     )
       .then((r) => r.json())
       .catch(() => null);

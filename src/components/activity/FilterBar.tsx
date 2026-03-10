@@ -17,7 +17,7 @@ interface FilterBarProps {
 const CATEGORIES = [
   { value: "", label: "All Categories" },
   { value: "connection", label: "Connections" },
-  { value: "offering", label: "Offerings" },
+  { value: "offering", label: "Client Portals" },
   { value: "client", label: "Clients" },
   { value: "execution", label: "Executions" },
   { value: "access", label: "Access" },
@@ -193,7 +193,7 @@ export function FilterBar({ filters, onFiltersChange }: FilterBarProps) {
           onChange={(e) => update({ offeringId: e.target.value || null })}
           className="rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-medium text-gray-700 outline-none focus:border-blue-300 focus:ring-1 focus:ring-blue-200"
         >
-          <option value="">All Offerings</option>
+          <option value="">All Client Portals</option>
           {offerings.map((o) => (
             <option key={o.id} value={o.id}>
               {o.name}

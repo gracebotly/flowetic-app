@@ -156,7 +156,7 @@ export default function CreateOfferingPage() {
                 last_seen_at?: string | null;
                 lastSeenAt?: string | null;
               }) => ({
-                id: e.id ?? e.entityUuid ?? "",
+                id: e.entityUuid ?? e.id ?? "",
                 source_id: e.source_id ?? e.sourceId ?? "",
                 display_name: e.display_name ?? e.name ?? "",
                 entity_kind: e.entity_kind ?? e.kind ?? "",
@@ -256,7 +256,7 @@ export default function CreateOfferingPage() {
         body.slug = wizard.slug;
       }
 
-      const res = await fetch("/api/offerings/create", {
+      const res = await fetch("/api/client-portals/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -327,7 +327,7 @@ export default function CreateOfferingPage() {
     <div className="mx-auto max-w-3xl px-6 py-8">
       {/* Back link */}
       <Link
-        href="/control-panel/offerings"
+        href="/control-panel/client-portals"
         className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700"
       >
         <ArrowLeft className="h-4 w-4" />

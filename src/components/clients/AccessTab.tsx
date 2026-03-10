@@ -53,7 +53,7 @@ export function AccessTab({ assignedOfferings }: AccessTabProps) {
 
   const handleRegenerate = async (offeringId: string) => {
     setActionLoading(offeringId);
-    const res = await fetch(`/api/offerings/${offeringId}/token`, { method: "POST" });
+    const res = await fetch(`/api/client-portals/${offeringId}/token`, { method: "POST" });
     if (res.ok) {
       const data = await res.json();
       if (data.token) {
@@ -66,7 +66,7 @@ export function AccessTab({ assignedOfferings }: AccessTabProps) {
   const handleRevoke = async (offeringId: string) => {
     if (!confirm("Revoke this link? The client will lose access.")) return;
     setActionLoading(offeringId);
-    await fetch(`/api/offerings/${offeringId}/token`, { method: "DELETE" });
+    await fetch(`/api/client-portals/${offeringId}/token`, { method: "DELETE" });
     setLocalTokens((prev) => ({ ...prev, [offeringId]: null }));
     setActionLoading(null);
   };

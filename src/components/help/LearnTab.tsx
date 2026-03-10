@@ -18,7 +18,7 @@ const VIDEOS: VideoResource[] = [
   {
     title: "Getting Started with Getflowetic",
     description:
-      "A complete walkthrough of connecting your first platform, creating an offering, and sharing it with a client.",
+      "A complete walkthrough of connecting your first platform, creating a client portal, and sharing it with a client.",
     youtubeId: "dQw4w9WgXcQ", // placeholder — replace with real video ID
   },
 ]
@@ -30,13 +30,13 @@ const GUIDES: GuideLink[] = [
     href: "#",
   },
   {
-    title: "Creating Your First Offering",
+    title: "Creating Your First Client Portal",
     description: "How to turn a connected workflow into a shareable analytics dashboard or sellable product.",
     href: "#",
   },
   {
     title: "Managing Clients & Magic Links",
-    description: "Add clients, assign offerings, and share branded portal links.",
+    description: "Add clients, assign portals, and share branded portal links.",
     href: "#",
   },
 ]

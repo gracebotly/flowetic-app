@@ -16,7 +16,7 @@ const BADGE_STYLES: Record<string, string> = {
 
 const BADGE_PREFIX: Record<string, string> = {
   client: "Client",
-  offering: "Offering",
+  offering: "Client Portal",
   connection: "Connection",
 };
 
@@ -25,7 +25,7 @@ function getHref(type: string, id: string): string | null {
     case "client":
       return `/control-panel/clients/${id}`;
     case "offering":
-      return `/control-panel/offerings/${id}`;
+      return `/control-panel/client-portals/${id}`;
     case "connection":
       return `/control-panel/connections`;
     default:

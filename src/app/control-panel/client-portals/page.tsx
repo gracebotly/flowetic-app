@@ -77,7 +77,7 @@ export default function OfferingsPage() {
           </p>
         </div>
         <Link
-          href="/control-panel/offerings/create"
+          href="/control-panel/client-portals/create"
           className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
         >
           <Plus className="h-4 w-4" />
@@ -103,7 +103,7 @@ export default function OfferingsPage() {
             Create your first client portal to deliver a branded dashboard or sellable product to your client.
           </p>
           <Link
-            href="/control-panel/offerings/create"
+            href="/control-panel/client-portals/create"
             className="mt-6 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700"
           >
             <Plus className="h-4 w-4" />
@@ -141,7 +141,7 @@ export default function OfferingsPage() {
                 >
                   <td className="px-4 py-3">
                     <Link
-                      href={`/control-panel/offerings/${o.id}`}
+                      href={`/control-panel/client-portals/${o.id}`}
                       className="font-medium text-gray-900 hover:text-blue-600"
                     >
                       {o.name}
@@ -194,7 +194,7 @@ export default function OfferingsPage() {
                   </td>
                   <td className="px-4 py-3 text-right">
                     <Link
-                      href={`/control-panel/offerings/${o.id}`}
+                      href={`/control-panel/client-portals/${o.id}`}
                       className="text-xs font-medium text-blue-600 hover:text-blue-700"
                     >
                       View →
