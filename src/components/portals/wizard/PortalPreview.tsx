@@ -16,8 +16,8 @@ import { PortalShell } from "@/components/portals/PortalShell";
 import { VoicePerformanceSkeleton } from "@/components/portals/skeletons/VoicePerformanceSkeleton";
 import { WorkflowOperationsSkeleton } from "@/components/portals/skeletons/WorkflowOperationsSkeleton";
 import { ROISummarySkeleton } from "@/components/portals/skeletons/ROISummarySkeleton";
-import { CombinedOverviewSkeleton } from "@/components/portals/skeletons/CombinedOverviewSkeleton";
-import { getSkeletonForPlatform } from "@/lib/portals/platformToSkeleton";
+import { MultiAgentVoiceSkeleton } from "@/components/portals/skeletons/MultiAgentVoiceSkeleton";
+import { getSkeletonForPlatform, getSkeletonForPlatformMix } from "@/lib/portals/platformToSkeleton";
 import { transformDataForSkeleton, type SkeletonData, type PortalEvent } from "@/lib/portals/transformData";
 
 
@@ -41,6 +41,7 @@ interface PortalPreviewProps {
   entityName: string;
   surfaceType: string;
   entityExternalIds?: string; // comma-separated external_ids for filtering
+  entityCount?: number;
 }
 
 interface Branding {
@@ -61,7 +62,7 @@ const SKELETON_COMPONENTS: Record<string, ComponentType<SkeletonProps>> = {
   "voice-performance": VoicePerformanceSkeleton,
   "workflow-operations": WorkflowOperationsSkeleton,
   "roi-summary": ROISummarySkeleton,
-  "combined-overview": CombinedOverviewSkeleton,
+  "multi-agent-voice": MultiAgentVoiceSkeleton,
 };
 
 function generateSampleVoiceData(): PreviewEvent[] {
@@ -171,6 +172,7 @@ export default function PortalPreview({
   entityName,
   surfaceType,
   entityExternalIds,
+  entityCount,
 }: PortalPreviewProps) {
   const [device, setDevice] = useState<DeviceMode>("tablet");
   const [branding, setBranding] = useState<Branding | null>(null);
@@ -179,7 +181,13 @@ export default function PortalPreview({
   const [usingSampleData, setUsingSampleData] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  const skeletonId = useMemo(() => getSkeletonForPlatform(platformType), [platformType]);
+  const skeletonId = useMemo(() => {
+    // If multiple entities are selected (passed via prop), use mix detection
+    if (typeof entityCount === 'number' && entityCount > 1) {
+      return getSkeletonForPlatformMix([platformType], entityCount);
+    }
+    return getSkeletonForPlatform(platformType);
+  }, [platformType, entityCount]);
   const SkeletonComponent = SKELETON_COMPONENTS[skeletonId];
 
   useEffect(() => {

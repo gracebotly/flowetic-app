@@ -6,7 +6,7 @@ import { PortalShell, type PortalTab } from '@/components/portals/PortalShell';
 import { VoicePerformanceSkeleton } from '@/components/portals/skeletons/VoicePerformanceSkeleton';
 import { WorkflowOperationsSkeleton } from '@/components/portals/skeletons/WorkflowOperationsSkeleton';
 import { ROISummarySkeleton } from '@/components/portals/skeletons/ROISummarySkeleton';
-import { CombinedOverviewSkeleton } from '@/components/portals/skeletons/CombinedOverviewSkeleton';
+import { MultiAgentVoiceSkeleton } from '@/components/portals/skeletons/MultiAgentVoiceSkeleton';
 import { ActivityTab } from '@/components/portals/ActivityTab';
 import type { PortalEvent, SkeletonData } from '@/lib/portals/transformData';
 
@@ -74,9 +74,9 @@ export function PortalClient({ portal, tenant, brand, data, events }: PortalClie
       {activeTab === 'dashboard' && (
         <>
           {portal.skeleton_id === 'voice-performance' && <VoicePerformanceSkeleton data={data} branding={branding} />}
+          {portal.skeleton_id === 'multi-agent-voice' && <MultiAgentVoiceSkeleton data={data} branding={branding} />}
           {portal.skeleton_id === 'workflow-operations' && <WorkflowOperationsSkeleton data={data} branding={branding} />}
           {portal.skeleton_id === 'roi-summary' && <ROISummarySkeleton data={data} branding={branding} />}
-          {portal.skeleton_id === 'combined-overview' && <CombinedOverviewSkeleton data={data} branding={branding} />}
         </>
       )}
       {activeTab === 'activity' && (

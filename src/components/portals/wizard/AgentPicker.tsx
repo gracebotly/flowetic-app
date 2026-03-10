@@ -13,16 +13,13 @@ import {
   Workflow,
   X,
   AlertTriangle,
+  Ban,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   PlatformBadge,
   getPlatformLabel,
 } from "@/components/shared/PlatformBadge";
-
-// ────────────────────────────────────────────
-// Types (UNCHANGED — parent depends on these)
-// ────────────────────────────────────────────
 
 export interface EntityItem {
   id: string;
@@ -54,10 +51,7 @@ interface AgentPickerProps {
 
 const VOICE = new Set(["vapi", "retell"]);
 const WORKFLOW = new Set(["n8n", "make"]);
-
-// ────────────────────────────────────────────
-// Constants
-// ────────────────────────────────────────────
+const MAX_SELECTION = 5;
 
 const PLATFORM_FILTERS = [
   { value: "all", label: "All" },
@@ -76,10 +70,6 @@ const KIND_ICONS: Record<string, typeof Phone> = {
   squad: Cpu,
 };
 
-// ────────────────────────────────────────────
-// Helpers
-// ────────────────────────────────────────────
-
 function formatLastSeen(dateStr: string | null): string {
   if (!dateStr) return "No activity";
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -95,62 +85,75 @@ function cleanDisplayName(name: string): string {
   return name.replace(/^\d+-/, "").replace(/[_-]/g, " ").trim();
 }
 
-// ────────────────────────────────────────────
-// EntityRow — vertical list row (replaces EntityCard)
-// ────────────────────────────────────────────
+function getCategory(platform: string): "voice" | "workflow" | "unknown" {
+  if (VOICE.has(platform)) return "voice";
+  if (WORKFLOW.has(platform)) return "workflow";
+  return "unknown";
+}
 
 function EntityRow({
   entity,
   isSelected,
+  isDisabled,
+  disabledReason,
   onToggle,
 }: {
   entity: EntityItem;
   isSelected: boolean;
+  isDisabled: boolean;
+  disabledReason: string;
   onToggle: () => void;
 }) {
   const KindIcon = KIND_ICONS[entity.entity_kind] ?? GitBranch;
 
   return (
     <div
-      onClick={onToggle}
+      onClick={isDisabled ? undefined : onToggle}
       role="checkbox"
       aria-checked={isSelected}
-      tabIndex={0}
+      aria-disabled={isDisabled}
+      tabIndex={isDisabled ? -1 : 0}
       onKeyDown={(e) => {
-        if (e.key === " " || e.key === "Enter") {
+        if (!isDisabled && (e.key === " " || e.key === "Enter")) {
           e.preventDefault();
           onToggle();
         }
       }}
+      title={isDisabled ? disabledReason : undefined}
       className={`
-        group flex cursor-pointer items-center gap-3 px-4 py-3
+        group flex items-center gap-3 px-4 py-3
         transition-colors duration-150
         ${
-          isSelected
-            ? "bg-blue-50/70 border-l-2 border-l-blue-500"
-            : "border-l-2 border-l-transparent hover:bg-gray-50"
+          isDisabled
+            ? "cursor-not-allowed opacity-40"
+            : isSelected
+            ? "cursor-pointer bg-blue-50/70 border-l-2 border-l-blue-500"
+            : "cursor-pointer border-l-2 border-l-transparent hover:bg-gray-50"
         }
+        ${!isDisabled && !isSelected ? "border-l-2 border-l-transparent" : ""}
       `}
     >
-      {/* Checkbox */}
       <div
         className={`
           flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center rounded
           transition-all duration-150
           ${
-            isSelected
+            isDisabled
+              ? "border border-gray-200 bg-gray-100"
+              : isSelected
               ? "bg-blue-600 text-white"
               : "border border-gray-300 bg-white group-hover:border-gray-400"
           }
         `}
       >
         {isSelected && <Check className="h-3 w-3" strokeWidth={3} />}
+        {isDisabled && !isSelected && (
+          <Ban className="h-3 w-3 text-gray-400" />
+        )}
       </div>
 
-      {/* Platform color badge */}
       <PlatformBadge platform={entity.platform_type} size={32} />
 
-      {/* Name + meta */}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="truncate text-sm font-semibold text-gray-900">
@@ -165,7 +168,6 @@ function EntityRow({
         </div>
       </div>
 
-      {/* Last seen — hidden on small screens */}
       <div className="hidden flex-shrink-0 text-right sm:block">
         <span className="text-xs text-gray-400">
           {formatLastSeen(entity.last_seen_at)}
@@ -174,10 +176,6 @@ function EntityRow({
     </div>
   );
 }
-
-// ────────────────────────────────────────────
-// Main Component
-// ────────────────────────────────────────────
 
 export default function AgentPicker({
   entities,
@@ -190,32 +188,26 @@ export default function AgentPicker({
   const [platformFilter, setPlatformFilter] = useState("all");
   const searchRef = useRef<HTMLInputElement>(null);
 
-  // Auto-focus search when data loads
   useEffect(() => {
     if (!loading && entities.length > 0) {
       searchRef.current?.focus();
     }
   }, [loading, entities.length]);
 
-  // ── Filter entities ──
   const filtered = useMemo(() => {
     let result = entities;
-
     if (platformFilter !== "all") {
       result = result.filter((e) => e.platform_type === platformFilter);
     }
-
     if (search.trim()) {
       const q = search.toLowerCase();
-      result = result.filter(
-        (e) => e.display_name.toLowerCase().includes(q)
+      result = result.filter((e) =>
+        e.display_name.toLowerCase().includes(q)
       );
     }
-
     return result;
   }, [entities, platformFilter, search]);
 
-  // ── Platform counts for filter chips ──
   const platformCounts = useMemo(() => {
     const counts: Record<string, number> = { all: entities.length };
     for (const e of entities) {
@@ -224,7 +216,6 @@ export default function AgentPicker({
     return counts;
   }, [entities]);
 
-  // Only show platform filters that have entities
   const visibleFilters = useMemo(
     () =>
       PLATFORM_FILTERS.filter(
@@ -233,18 +224,45 @@ export default function AgentPicker({
     [platformCounts]
   );
 
-  // ── Selection helpers ──
-  const selectedIds = useMemo(() => new Set(selected.map((s) => s.id)), [selected]);
+  const selectedIds = useMemo(
+    () => new Set(selected.map((s) => s.id)),
+    [selected]
+  );
 
-  const isEntityDisabled = useCallback((_entity: EntityItem): boolean => {
-    return false;
-  }, []);
-
-  const hasMixedCategories = useMemo(() => {
+  const selectedCategory = useMemo((): "voice" | "workflow" | null => {
+    if (selected.length === 0) return null;
     const hasVoice = selected.some((e) => VOICE.has(e.platform));
     const hasWorkflow = selected.some((e) => WORKFLOW.has(e.platform));
-    return hasVoice && hasWorkflow;
+    if (hasVoice) return "voice";
+    if (hasWorkflow) return "workflow";
+    return null;
   }, [selected]);
+
+  const isAtCap = selected.length >= MAX_SELECTION;
+  const isNearCap = selected.length === MAX_SELECTION - 1;
+
+  const getDisabledReason = useCallback(
+    (entity: EntityItem): string => {
+      if (selectedIds.has(entity.id)) return "";
+      const entityCat = getCategory(entity.platform_type);
+      if (selectedCategory !== null && entityCat !== selectedCategory) {
+        return `You cannot mix voice agents and workflows in one portal. Deselect your current ${selectedCategory} selection first.`;
+      }
+      if (isAtCap) {
+        return `Maximum ${MAX_SELECTION} agents per portal. Create a second portal for additional agents.`;
+      }
+      return "";
+    },
+    [selectedIds, selectedCategory, isAtCap]
+  );
+
+  const isEntityDisabled = useCallback(
+    (entity: EntityItem): boolean => {
+      if (selectedIds.has(entity.id)) return false;
+      return getDisabledReason(entity) !== "";
+    },
+    [selectedIds, getDisabledReason]
+  );
 
   const toggleEntity = useCallback(
     (entity: EntityItem) => {
@@ -270,26 +288,28 @@ export default function AgentPicker({
 
   const selectAllVisible = useCallback(() => {
     const newSelected = [...selected];
+    let count = selected.length;
     for (const entity of filtered) {
-      if (!selectedIds.has(entity.id)) {
-        newSelected.push({
-          id: entity.id,
-          sourceId: entity.source_id,
-          platform: entity.platform_type,
-          displayName: entity.display_name,
-          entityKind: entity.entity_kind,
-          externalId: entity.external_id,
-        });
-      }
+      if (count >= MAX_SELECTION) break;
+      if (selectedIds.has(entity.id)) continue;
+      if (isEntityDisabled(entity)) continue;
+      newSelected.push({
+        id: entity.id,
+        sourceId: entity.source_id,
+        platform: entity.platform_type,
+        displayName: entity.display_name,
+        entityKind: entity.entity_kind,
+        externalId: entity.external_id,
+      });
+      count++;
     }
     onSelectionChange(newSelected);
-  }, [filtered, selected, selectedIds, onSelectionChange]);
+  }, [filtered, selected, selectedIds, onSelectionChange, isEntityDisabled]);
 
   const clearSelection = useCallback(() => {
     onSelectionChange([]);
   }, [onSelectionChange]);
 
-  // ── Loading state ──
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
@@ -300,17 +320,19 @@ export default function AgentPicker({
 
   return (
     <div className="flex flex-col">
-      {/* Header */}
       <div className="mb-4">
-        <h2 className="text-lg font-bold text-slate-900">Select agents and workflows</h2>
+        <h2 className="text-lg font-bold text-slate-900">
+          Select agents or workflows
+        </h2>
         <p className="mt-1 text-sm text-slate-600">
-          Pick one for a single dashboard, or select multiple from the same category
-          to combine them into one unified portal.
+          Pick one for a single dashboard, or select up to{" "}
+          {MAX_SELECTION} from the same category for a combined portal.
+          Voice agents and workflows cannot be mixed.
         </p>
       </div>
 
       <AnimatePresence>
-        {hasMixedCategories && (
+        {isNearCap && !isAtCap && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
@@ -320,16 +342,35 @@ export default function AgentPicker({
             <div className="flex items-start gap-2.5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
               <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600" />
               <p className="text-xs text-amber-800">
-                <span className="font-semibold">Combined dashboard:</span>{" "}
-                You&apos;ve selected both voice agents and workflows. These will be
-                combined into a single overview portal showing both side by side.
+                <span className="font-semibold">Almost at limit:</span>{" "}
+                You can add 1 more {selectedCategory ?? "agent"} to this portal (max {MAX_SELECTION}).
               </p>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Search bar — always visible for any catalog size */}
+      <AnimatePresence>
+        {isAtCap && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="mb-3 overflow-hidden"
+          >
+            <div className="flex items-start gap-2.5 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+              <Ban className="mt-0.5 h-4 w-4 flex-shrink-0 text-red-500" />
+              <p className="text-xs text-red-800">
+                <span className="font-semibold">
+                  {MAX_SELECTION} agent maximum reached.
+                </span>{" "}
+                Create a second portal to include additional agents.
+              </p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="relative">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
         <input
@@ -343,7 +384,7 @@ export default function AgentPicker({
         {search && (
           <button
             onClick={() => setSearch("")}
-            className="absolute right-3 top-1/2 -translate-y-1/2 rounded p-0.5 text-gray-400 transition-colors duration-150 hover:text-gray-600 cursor-pointer"
+            className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer rounded p-0.5 text-gray-400 transition-colors duration-150 hover:text-gray-600"
             aria-label="Clear search"
           >
             <X className="h-4 w-4" />
@@ -351,12 +392,10 @@ export default function AgentPicker({
         )}
       </div>
 
-      {/* Platform filter pills + bulk actions */}
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {visibleFilters.map((pf) => {
           const count = platformCounts[pf.value] ?? 0;
           const isActive = platformFilter === pf.value;
-
           return (
             <button
               key={pf.value}
@@ -377,7 +416,6 @@ export default function AgentPicker({
           );
         })}
 
-        {/* Bulk actions pushed to the right */}
         <div className="ml-auto flex items-center gap-3">
           {selected.length > 0 && (
             <button
@@ -387,7 +425,7 @@ export default function AgentPicker({
               Clear ({selected.length})
             </button>
           )}
-          {filtered.length > 0 && filtered.length <= 50 && (
+          {filtered.length > 0 && filtered.length <= 50 && !isAtCap && (
             <button
               onClick={selectAllVisible}
               className="cursor-pointer text-xs font-medium text-blue-600 transition-colors duration-150 hover:text-blue-700"
@@ -398,14 +436,15 @@ export default function AgentPicker({
         </div>
       </div>
 
-      {/* Entity list — vertical rows in a scrollable bordered container */}
       <div className="mt-3 overflow-hidden rounded-lg border border-gray-200 bg-white">
-        <div className="max-h-[55vh] overflow-y-auto divide-y divide-gray-100">
+        <div className="max-h-[55vh] divide-y divide-gray-100 overflow-y-auto">
           {filtered.length === 0 ? (
             <div className="flex h-48 flex-col items-center justify-center px-4">
               <Search className="h-8 w-8 text-gray-300" />
               <p className="mt-3 text-sm font-medium text-gray-500">
-                {search ? `No results for "${search}"` : "No entities found for this platform"}
+                {search
+                  ? `No results for "${search}"`
+                  : "No entities found for this platform"}
               </p>
               {search && (
                 <button
@@ -420,27 +459,32 @@ export default function AgentPicker({
               )}
             </div>
           ) : (
-            filtered.map((entity) => (
-              <EntityRow
-                key={entity.id}
-                entity={entity}
-                isSelected={selectedIds.has(entity.id)}
-                onToggle={() => toggleEntity(entity)}
-              />
-            ))
+            filtered.map((entity) => {
+              const disabled = isEntityDisabled(entity);
+              const reason = disabled ? getDisabledReason(entity) : "";
+              return (
+                <EntityRow
+                  key={entity.id}
+                  entity={entity}
+                  isSelected={selectedIds.has(entity.id)}
+                  isDisabled={disabled}
+                  disabledReason={reason}
+                  onToggle={() => toggleEntity(entity)}
+                />
+              );
+            })
           )}
         </div>
       </div>
 
-      {/* Result count */}
       {filtered.length > 0 && (
         <div className="mt-2 text-xs text-gray-400">
           {filtered.length} {filtered.length === 1 ? "result" : "results"}
-          {filtered.length !== entities.length && ` of ${entities.length} total`}
+          {filtered.length !== entities.length &&
+            ` of ${entities.length} total`}
         </div>
       )}
 
-      {/* Selection summary bar — animated bottom bar */}
       <AnimatePresence>
         {selected.length > 0 && (
           <motion.div
@@ -467,7 +511,7 @@ export default function AgentPicker({
             {onContinue && (
               <button
                 onClick={onContinue}
-                className="cursor-pointer flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors duration-150 hover:bg-blue-700"
+                className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors duration-150 hover:bg-blue-700"
               >
                 Continue
                 <ChevronRight className="h-4 w-4" />

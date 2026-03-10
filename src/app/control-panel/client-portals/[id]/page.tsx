@@ -57,9 +57,9 @@ type Tab = "overview" | "preview" | "access" | "activity" | "branding";
 
 const SKELETON_NAMES: Record<string, string> = {
   "voice-performance": "Voice Performance Dashboard",
+  "multi-agent-voice": "Multi-Agent Voice Dashboard",
   "workflow-operations": "Workflow Operations Dashboard",
   "roi-summary": "ROI Summary Dashboard",
-  "combined-overview": "Combined Overview Dashboard",
 };
 
 const PRICING_LABELS: Record<string, string> = {
