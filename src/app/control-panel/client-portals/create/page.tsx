@@ -269,16 +269,13 @@ export default function CreateOfferingPage() {
       }
 
       const created = json.offering;
-      const token = json.magicLink
-        ? String(json.magicLink).split("/client/").pop()
-        : null;
 
       update({
         createdOffering: created || null,
         createdOfferings: [created],
         creationErrors: [],
-        magicLink: token ? `${window.location.origin}/client/${token}` : null,
-        productUrl: null,
+        magicLink: json.magicLink ?? null,
+        productUrl: json.productUrl ?? null,
       });
       setCurrentStep(4);
     } catch (err: unknown) {
@@ -517,7 +514,6 @@ export default function CreateOfferingPage() {
                     productUrl={wizard.productUrl}
                     accessType={wizard.accessType}
                     surfaceType={wizard.surfaceType}
-                    clientId={wizard.clientId || undefined}
                     onCreateAnother={handleCreateAnother}
                   />
                 )}
