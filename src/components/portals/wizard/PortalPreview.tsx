@@ -65,13 +65,24 @@ const SKELETON_COMPONENTS: Record<string, ComponentType<SkeletonProps>> = {
   "multi-agent-voice": MultiAgentVoiceSkeleton,
 };
 
-function generateSampleVoiceData(): PreviewEvent[] {
+function generateSampleVoiceData(agentCount: number = 1): PreviewEvent[] {
   const now = Date.now();
-  const assistants = ["Sales Assistant", "Support Agent", "Booking Bot"];
+  const agentDefs = [
+    { id: "asst-001", name: "Sales Assistant" },
+    { id: "asst-002", name: "Support Agent" },
+    { id: "asst-003", name: "Booking Bot" },
+    { id: "asst-004", name: "Follow-up Agent" },
+    { id: "asst-005", name: "Intake Bot" },
+  ];
+  // Only use as many agent defs as requested (capped at 5)
+  const activeAgents = agentDefs.slice(0, Math.min(agentCount, 5));
   const endedReasons = ["customer-ended-call", "assistant-ended-call", "silence-timed-out"];
-  return Array.from({ length: 24 }, (_, i) => {
+  // Generate more events when there are more agents so each tab has data
+  const totalEvents = Math.max(24, agentCount * 10);
+  return Array.from({ length: totalEvents }, (_, i) => {
     const isSuccess = Math.random() > 0.15;
     const durationMs = Math.floor(45000 + Math.random() * 300000);
+    const agent = activeAgents[i % activeAgents.length];
     return {
       id: `sample-${i}`,
       type: "call.completed",
@@ -82,8 +93,11 @@ function generateSampleVoiceData(): PreviewEvent[] {
       state: {
         status: isSuccess ? "completed" : "failed",
         duration_ms: durationMs,
-        workflow_name: assistants[i % assistants.length],
-        workflow_id: `asst-${(i % assistants.length) + 1}`,
+        // assistant_id / assistant_name are what transformMultiAgentVoiceData groups by
+        assistant_id: agent.id,
+        assistant_name: agent.name,
+        workflow_name: agent.name,
+        workflow_id: agent.id,
         execution_id: `call-sample-${i}`,
         started_at: new Date(now - i * 3600000).toISOString(),
         ended_at: new Date(now - i * 3600000 + durationMs).toISOString(),
@@ -217,12 +231,12 @@ export default function PortalPreview({
           setUsingSampleData(false);
         } else {
           const isVoice = platformType === "vapi" || platformType === "retell";
-          setEvents(isVoice ? generateSampleVoiceData() : generateSampleWorkflowData());
+          setEvents(isVoice ? generateSampleVoiceData(entityCount ?? 1) : generateSampleWorkflowData());
           setUsingSampleData(true);
         }
       } catch {
         const isVoice = platformType === "vapi" || platformType === "retell";
-        setEvents(isVoice ? generateSampleVoiceData() : generateSampleWorkflowData());
+        setEvents(isVoice ? generateSampleVoiceData(entityCount ?? 1) : generateSampleWorkflowData());
         setUsingSampleData(true);
       } finally {
         if (mounted) setLoading(false);

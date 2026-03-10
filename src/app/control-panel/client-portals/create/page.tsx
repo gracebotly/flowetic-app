@@ -411,7 +411,11 @@ export default function CreateOfferingPage() {
             )}
             {currentStep === 2 && (
               <PortalPreview
-                platformType={wizard.selectedPlatform || "vapi"}
+                platformType={
+                  // Always pass a single clean platform string, not a joined list.
+                  // getSkeletonForPlatformMix receives entityCount separately.
+                  wizard.selectedEntities?.[0]?.platform || wizard.selectedPlatform || "vapi"
+                }
                 sourceId={wizard.selectedSourceId || ""}
                 entityName={
                   wizard.selectedEntities && wizard.selectedEntities.length > 1
@@ -423,6 +427,7 @@ export default function CreateOfferingPage() {
                     ? wizard.selectedEntities.map((e) => e.externalId).filter(Boolean).join(",")
                     : undefined
                 }
+                entityCount={wizard.selectedEntities?.length ?? 1}
                 surfaceType="analytics"
               />
             )}
