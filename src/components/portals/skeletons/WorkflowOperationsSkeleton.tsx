@@ -2,8 +2,10 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import * as Tabs from '@radix-ui/react-tabs';
 import {
   AreaChart,
+  Grid,
   Text,
   Flex,
   Table,
@@ -46,6 +48,12 @@ interface WorkflowOperationsProps {
   };
 }
 
+
+
+function getPlatformEntityLabel(platform: string): { single: string; plural: string } {
+  if (platform === 'make') return { single: 'Scenario', plural: 'Scenarios' };
+  return { single: 'Workflow', plural: 'Workflows' };
+}
 
 function formatDataTransfer(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -270,7 +278,14 @@ function ExpandableRow({ row }: { row: Record<string, unknown> }) {
 // MAIN COMPONENT
 // ══════════════════════════════════════════════════════════════
 export function WorkflowOperationsSkeleton({ data, branding }: WorkflowOperationsProps) {
-  const { headline, kpis, trend, recentRows, workflowBreakdown, errorBreakdown } = data;
+  const { headline, kpis, trend, recentRows, workflowBreakdown, errorBreakdown, perWorkflowData } = data;
+
+  // Detect platform from first perWorkflowData entry or from the first recentRow's state
+  const detectedPlatform = perWorkflowData?.[0]?.platform
+    || ((recentRows[0]?.state as Record<string, unknown> | undefined)?.platform as string)
+    || 'n8n';
+  const entityLabel = getPlatformEntityLabel(detectedPlatform);
+  const hasMultipleWorkflows = perWorkflowData && perWorkflowData.length > 1;
   const { theme } = usePortalTheme();
 
   // Early return for no-data state
@@ -304,6 +319,101 @@ export function WorkflowOperationsSkeleton({ data, branding }: WorkflowOperation
     <div className="space-y-6">
       {(data.health.status === 'critical' || data.health.status === 'degraded' || data.health.status === 'sparse') && (
         <SkeletonHealthBanner health={data.health} entityType="workflow" isAgencyView={false} />
+      )}
+
+      {hasMultipleWorkflows && perWorkflowData && (
+        <Tabs.Root defaultValue="all" className="space-y-4">
+          {/* Tab navigation */}
+          <div
+            className="flex gap-1 overflow-x-auto rounded-lg p-1"
+            style={{ backgroundColor: tokens.bgExpanded, border: `1px solid ${tokens.border}` }}
+          >
+            <Tabs.List className="flex min-w-full gap-1">
+              <Tabs.Trigger
+                value="all"
+                className="flex flex-shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors duration-200 data-[state=active]:shadow-sm"
+                style={{ color: tokens.textSecondary }}
+              >
+                <Activity className="h-3.5 w-3.5" />
+                All {entityLabel.plural}
+                <span className="ml-1 rounded-full px-1.5 py-0.5 text-xs font-semibold" style={{ backgroundColor: hexToRgba(branding.primary_color, 0.2), color: branding.primary_color }}>
+                  {perWorkflowData.length}
+                </span>
+              </Tabs.Trigger>
+              {perWorkflowData.map((wf) => (
+                <Tabs.Trigger
+                  key={wf.workflowId}
+                  value={wf.workflowId}
+                  className="flex flex-shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors duration-200 data-[state=active]:shadow-sm"
+                  style={{ color: tokens.textSecondary }}
+                >
+                  <Zap className="h-3.5 w-3.5" />
+                  {wf.workflowName}
+                  <span className="ml-1 rounded-full px-1.5 py-0.5 text-xs font-semibold" style={{ backgroundColor: tokens.bgCode, color: tokens.textMuted }}>
+                    {wf.executionCount}
+                  </span>
+                </Tabs.Trigger>
+              ))}
+            </Tabs.List>
+          </div>
+
+          {/* Per-workflow tab panels */}
+          {perWorkflowData.map((wf) => (
+            <Tabs.Content key={wf.workflowId} value={wf.workflowId} className="space-y-4">
+              <Grid numItemsMd={4} className="gap-4">
+                {wf.kpis.map((kpi, i) => {
+                  const iconInfo = kpiIcons[kpi.label] ?? { icon: Activity, color: branding.primary_color };
+                  return (
+                    <KPICard
+                      key={kpi.label}
+                      label={kpi.label}
+                      value={kpi.value}
+                      icon={iconInfo.icon}
+                      color={iconInfo.color}
+                      index={i}
+                    />
+                  );
+                })}
+              </Grid>
+              {wf.trend.length > 1 && (
+                <ThemedCard>
+                  <h3 className="text-base font-semibold" style={{ color: tokens.textPrimary }}>Execution Trend</h3>
+                  <p className="text-sm" style={{ color: tokens.textSecondary }}>Daily runs — {wf.workflowName}</p>
+                  <AreaChart className="mt-4 h-48" data={wf.trend} index="date" categories={['successCount', 'failCount']} colors={['emerald', 'rose']} valueFormatter={(v: number) => v.toLocaleString()} showLegend showAnimation curveType="monotone" />
+                </ThemedCard>
+              )}
+              {wf.recentRows.length > 0 && (
+                <ThemedCard className="overflow-hidden p-0">
+                  <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: `1px solid ${tokens.border}`, backgroundColor: tokens.headerBg }}>
+                    <div>
+                      <h3 className="text-base font-semibold" style={{ color: tokens.textPrimary }}>Recent Executions</h3>
+                      <p className="text-sm" style={{ color: tokens.textSecondary }}>Last {wf.recentRows.length} runs</p>
+                    </div>
+                  </div>
+                  <Table>
+                    <TableHead>
+                      <TableRow style={{ backgroundColor: tokens.bgExpanded }}>
+                        <TableHeaderCell style={{ color: tokens.textSecondary }}>{entityLabel.single}</TableHeaderCell>
+                        <TableHeaderCell style={{ color: tokens.textSecondary }}>Status</TableHeaderCell>
+                        <TableHeaderCell style={{ color: tokens.textSecondary }}>Duration</TableHeaderCell>
+                        <TableHeaderCell style={{ color: tokens.textSecondary }}>Error</TableHeaderCell>
+                        <TableHeaderCell style={{ color: tokens.textSecondary }}>Time</TableHeaderCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {wf.recentRows.map((row) => (
+                        <ExpandableRow key={row.id} row={row} />
+                      ))}
+                    </TableBody>
+                  </Table>
+                </ThemedCard>
+              )}
+            </Tabs.Content>
+          ))}
+
+          {/* "All" tab content — aggregate view renders below */}
+          <Tabs.Content value="all" />
+        </Tabs.Root>
       )}
 
       {/* ─── Hero Headline ─── */}
@@ -632,7 +742,7 @@ export function WorkflowOperationsSkeleton({ data, branding }: WorkflowOperation
             <Table>
               <TableHead>
                 <TableRow>
-                  <TableHeaderCell>Workflow</TableHeaderCell>
+                  <TableHeaderCell>{entityLabel.single}</TableHeaderCell>
                   <TableHeaderCell>Status</TableHeaderCell>
                   <TableHeaderCell>Duration</TableHeaderCell>
                   <TableHeaderCell>Error</TableHeaderCell>

@@ -238,6 +238,12 @@ export default function AgentPicker({
     return null;
   }, [selected]);
 
+  // The platform of the first selected entity — all subsequent selections must match.
+  const selectedPlatform = useMemo((): string | null => {
+    if (selected.length === 0) return null;
+    return selected[0].platform;
+  }, [selected]);
+
   const isAtCap = selected.length >= MAX_SELECTION;
   const isNearCap = selected.length === MAX_SELECTION - 1;
 
@@ -245,15 +251,21 @@ export default function AgentPicker({
     (entity: EntityItem): string => {
       if (selectedIds.has(entity.id)) return "";
       const entityCat = getCategory(entity.platform_type);
+      // Block voice+workflow cross-category mixing
       if (selectedCategory !== null && entityCat !== selectedCategory) {
         return `You cannot mix voice agents and workflows in one portal. Deselect your current ${selectedCategory} selection first.`;
+      }
+      // Block cross-platform mixing within voice (Vapi+Retell) or workflow (n8n+Make)
+      if (selectedPlatform !== null && entity.platform_type !== selectedPlatform) {
+        const platformName = selectedPlatform.charAt(0).toUpperCase() + selectedPlatform.slice(1);
+        return `All agents in a portal must use the same platform. This portal is locked to ${platformName}.`;
       }
       if (isAtCap) {
         return `Maximum ${MAX_SELECTION} agents per portal. Create a second portal for additional agents.`;
       }
       return "";
     },
-    [selectedIds, selectedCategory, isAtCap]
+    [selectedIds, selectedCategory, selectedPlatform, isAtCap]
   );
 
   const isEntityDisabled = useCallback(

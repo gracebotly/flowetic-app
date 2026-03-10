@@ -60,6 +60,18 @@ export interface SkeletonData {
   dataTransferTotal?: number;
   estimatedCost?: number;
   errorNameBreakdown?: { name: string; count: number }[];
+  // Multi-workflow extras (for n8n / Make when multiple workflows selected)
+  perWorkflowData?: {
+    workflowId: string;
+    workflowName: string;
+    platform: string;
+    executionCount: number;
+    successRate: number;
+    avgDurationMs: number;
+    trend: TrendDataPoint[];
+    recentRows: TableRow[];
+    kpis: KPICard[];
+  }[];
   // Multi-agent voice extras
   perAgentData?: {
     agentId: string;
@@ -535,6 +547,73 @@ export function transformWorkflowData(events: PortalEvent[], platform: 'n8n' | '
   const latestErrorMsg = errorBreakdown?.[0]?.message;
   const health = computeHealth(totalCurrent, successCurrent, latestErrorMsg);
 
+  // ── Per-workflow breakdown (for multi-workflow portals) ─────
+  const wfEventMap = new Map<string, { name: string; platform: string; events: PortalEvent[] }>();
+  for (const event of currentEvents) {
+    const wfId = String(getStateField(event, fields.workflowId) || getStateField(event, 'workflow_id') || 'unknown');
+    const wfName = String(getStateField(event, fields.workflowName) || getStateField(event, 'workflow_name') || wfId);
+    const eventPlatform = getEventPlatform(event) || 'unknown';
+    if (!wfEventMap.has(wfId)) {
+      wfEventMap.set(wfId, { name: wfName, platform: eventPlatform, events: [] });
+    }
+    wfEventMap.get(wfId)!.events.push(event);
+  }
+
+  const wfEntries = Array.from(wfEventMap.entries()).slice(0, 5);
+
+  const perWorkflowData = wfEntries.map(([workflowId, wf]) => {
+    const wfSuccess = wf.events.filter((e) => getEventStatus(e) === 'success').length;
+    const wfTotal = wf.events.length;
+    const wfAvgDuration = wfTotal > 0
+      ? wf.events.reduce((sum, e) => sum + toNumber(getStateField(e, fields.durationMs)), 0) / wfTotal
+      : 0;
+
+    // Per-workflow trend
+    const wfTrendMap = new Map<string, { success: number; fail: number }>();
+    for (const e of wf.events) {
+      const day = toDateString(getStateField(e, fields.startedAt) || e.timestamp);
+      if (!day) continue;
+      const bucket = wfTrendMap.get(day) ?? { success: 0, fail: 0 };
+      if (getEventStatus(e) === 'success') bucket.success++;
+      else bucket.fail++;
+      wfTrendMap.set(day, bucket);
+    }
+    const wfTrend = Array.from(wfTrendMap.entries())
+      .map(([date, d]) => ({ date, count: d.success + d.fail, successCount: d.success, failCount: d.fail }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    // Per-workflow recent rows (last 20)
+    const wfRecentRows: TableRow[] = [...wf.events]
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, 20)
+      .map((e) => ({
+        id: String(getStateField(e, fields.executionId) || e.id || ''),
+        workflow: String(getStateField(e, fields.workflowName) || wf.name),
+        status: getEventStatus(e),
+        duration: formatDuration(toNumber(getStateField(e, fields.durationMs))),
+        error: String(getStateField(e, fields.errorMessage) || '—'),
+        time: getTimeAgo(new Date(String(e.timestamp || ''))),
+        state: e.state as Record<string, unknown>,
+      }));
+
+    return {
+      workflowId,
+      workflowName: wf.name,
+      platform: wf.platform,
+      executionCount: wfTotal,
+      successRate: wfTotal > 0 ? Math.round((wfSuccess / wfTotal) * 100) : 0,
+      avgDurationMs: wfAvgDuration,
+      trend: wfTrend,
+      recentRows: wfRecentRows,
+      kpis: [
+        { label: 'Executions', value: wfTotal, color: 'blue' as const },
+        { label: 'Success Rate', value: `${wfTotal > 0 ? Math.round((wfSuccess / wfTotal) * 100) : 0}%`, color: wfSuccess === wfTotal ? 'green' as const : 'amber' as const },
+        { label: 'Avg Runtime', value: formatDuration(wfAvgDuration), color: 'blue' as const },
+        { label: 'Failed', value: wfTotal - wfSuccess, color: (wfTotal - wfSuccess) === 0 ? 'green' as const : 'red' as const },
+      ],
+    };
+  });
+
   return {
     headline: { total: totalCurrent, totalLabel: 'executions', percentChange, periodLabel: 'last 30 days' },
     kpis: [
@@ -563,6 +642,7 @@ export function transformWorkflowData(events: PortalEvent[], platform: 'n8n' | '
     dataTransferTotal: dataTransferTotal > 0 ? dataTransferTotal : undefined,
     estimatedCost,
     errorNameBreakdown,
+    perWorkflowData: perWorkflowData.length > 1 ? perWorkflowData : undefined,
     health,
   };
 }

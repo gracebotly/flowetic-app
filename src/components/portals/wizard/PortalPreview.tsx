@@ -111,15 +111,16 @@ function generateSampleVoiceData(agentCount: number = 1): PreviewEvent[] {
   });
 }
 
-function generateSampleWorkflowData(): PreviewEvent[] {
-  const now = Date.now();
-  const sampleNames = [
-    "Lead Enrichment Pipeline",
-    "Daily Report Generator",
-    "Slack Notification Flow",
-    "CRM Sync Workflow",
-    "Invoice Processor",
+function generateSampleWorkflowData(workflowCount: number = 1): PreviewEvent[] {
+  const workflowDefs = [
+    { id: 'wf-001', name: 'Lead Qualifier' },
+    { id: 'wf-002', name: 'Email Responder' },
+    { id: 'wf-003', name: 'Invoice Processor' },
+    { id: 'wf-004', name: 'Onboarding Flow' },
+    { id: 'wf-005', name: 'Support Router' },
   ];
+  const activeWorkflows = workflowDefs.slice(0, Math.min(workflowCount, 5));
+  const now = Date.now();
   return Array.from({ length: 30 }, (_, i) => {
     const isSuccess = Math.random() > 0.08;
     return {
@@ -132,15 +133,15 @@ function generateSampleWorkflowData(): PreviewEvent[] {
       state: {
         status: isSuccess ? "success" : "error",
         duration_ms: Math.floor(800 + Math.random() * 4000),
-        workflow_name: sampleNames[i % sampleNames.length],
-        workflow_id: `wf-${(i % sampleNames.length) + 1}`,
+        workflow_id: activeWorkflows[i % activeWorkflows.length].id,
+        workflow_name: activeWorkflows[i % activeWorkflows.length].name,
         execution_id: `exec-sample-${i}`,
         started_at: new Date(now - i * 1800000).toISOString(),
         ended_at: new Date(now - i * 1800000 + 2000).toISOString(),
         error_message: isSuccess ? undefined : "Sample: timeout after 30s",
         platform: "make",
       },
-      labels: { platform: "make", workflow_name: sampleNames[i % sampleNames.length] },
+      labels: { platform: "make", workflow_name: activeWorkflows[i % activeWorkflows.length].name },
       timestamp: new Date(now - i * 1800000).toISOString(),
     };
   });
@@ -231,12 +232,12 @@ export default function PortalPreview({
           setUsingSampleData(false);
         } else {
           const isVoice = platformType === "vapi" || platformType === "retell";
-          setEvents(isVoice ? generateSampleVoiceData(entityCount ?? 1) : generateSampleWorkflowData());
+          setEvents(isVoice ? generateSampleVoiceData(entityCount ?? 1) : generateSampleWorkflowData(entityCount ?? 1));
           setUsingSampleData(true);
         }
       } catch {
         const isVoice = platformType === "vapi" || platformType === "retell";
-        setEvents(isVoice ? generateSampleVoiceData(entityCount ?? 1) : generateSampleWorkflowData());
+        setEvents(isVoice ? generateSampleVoiceData(entityCount ?? 1) : generateSampleWorkflowData(entityCount ?? 1));
         setUsingSampleData(true);
       } finally {
         if (mounted) setLoading(false);
