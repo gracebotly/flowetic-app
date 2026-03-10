@@ -701,7 +701,7 @@ export function transformMultiAgentVoiceData(events: PortalEvent[], platformType
         duration: formatDuration(toNumber(getStateField(event, 'duration_ms'))),
         cost: formatCost(toNumber(getStateField(event, 'cost'))),
         time: new Date(event.timestamp).toLocaleString(),
-        agentId: String(getStateField(event, 'assistant_id') ?? getStateField(event, 'agent_id') ?? ''),
+        agentId: String(getStateField(event, 'workflow_id') ?? getStateField(event, 'assistant_id') ?? getStateField(event, 'agent_id') ?? ''),
       };
       if (event.state && typeof event.state === 'object') {
         for (const [key, value] of Object.entries(event.state)) {
@@ -719,9 +719,14 @@ export function transformMultiAgentVoiceData(events: PortalEvent[], platformType
 
   for (const event of currentEvents) {
     const state = (event.state as Record<string, unknown>) ?? {};
-    const agentId = String(state.assistant_id ?? state.agent_id ?? 'unknown');
+    // Real Vapi events store agent ID in state.workflow_id (not state.assistant_id)
+    // Real Retell events store agent ID in state.workflow_id too
+    // Fallback chain covers both platforms and any legacy data
+    const agentId = String(
+      state.workflow_id ?? state.assistant_id ?? state.agent_id ?? 'unknown'
+    );
     const agentName = String(
-      state.assistant_name ?? state.agent_name ?? getEventWorkflowName(event) ?? agentId,
+      state.workflow_name ?? state.assistant_name ?? state.agent_name ?? getEventWorkflowName(event) ?? agentId,
     );
     const platform = getEventPlatform(event) || 'unknown';
 
