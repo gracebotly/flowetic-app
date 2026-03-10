@@ -322,24 +322,13 @@ export function WorkflowOperationsSkeleton({ data, branding }: WorkflowOperation
       )}
 
       {hasMultipleWorkflows && perWorkflowData && (
-        <Tabs.Root defaultValue="all" className="space-y-4">
+        <Tabs.Root defaultValue={perWorkflowData[0].workflowId} className="space-y-4">
           {/* Tab navigation */}
           <div
             className="flex gap-1 overflow-x-auto rounded-lg p-1"
             style={{ backgroundColor: tokens.bgExpanded, border: `1px solid ${tokens.border}` }}
           >
             <Tabs.List className="flex min-w-full gap-1">
-              <Tabs.Trigger
-                value="all"
-                className="flex flex-shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors duration-200 data-[state=active]:shadow-sm"
-                style={{ color: tokens.textSecondary }}
-              >
-                <Activity className="h-3.5 w-3.5" />
-                All {entityLabel.plural}
-                <span className="ml-1 rounded-full px-1.5 py-0.5 text-xs font-semibold" style={{ backgroundColor: hexToRgba(branding.primary_color, 0.2), color: branding.primary_color }}>
-                  {perWorkflowData.length}
-                </span>
-              </Tabs.Trigger>
               {perWorkflowData.map((wf) => (
                 <Tabs.Trigger
                   key={wf.workflowId}
@@ -411,11 +400,11 @@ export function WorkflowOperationsSkeleton({ data, branding }: WorkflowOperation
             </Tabs.Content>
           ))}
 
-          {/* "All" tab content — aggregate view renders below */}
-          <Tabs.Content value="all" />
         </Tabs.Root>
       )}
 
+      {!hasMultipleWorkflows && (
+        <>
       {/* ─── Hero Headline ─── */}
       <motion.div variants={fadeUp} initial="hidden" animate="visible" custom={0}>
         <ThemedCard glow accentColor={branding.primary_color}>
@@ -760,6 +749,12 @@ export function WorkflowOperationsSkeleton({ data, branding }: WorkflowOperation
       )}
 
       <DataFreshnessBar latestEventTimestamp={recentRows[0]?.time as string} />
+        </>
+      )}
+
+      {hasMultipleWorkflows && (
+        <DataFreshnessBar latestEventTimestamp={recentRows[0]?.time as string} />
+      )}
     </div>
   );
 }

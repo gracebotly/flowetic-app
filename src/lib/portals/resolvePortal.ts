@@ -134,72 +134,75 @@ export async function resolvePortal(
   }
 
   // ── 4c. Multi-entity portals (offering_entities) ───────────
+  // Handles both:
+  //   a) Cross-source: entities from different platform connections
+  //   b) Same-source: multiple entities (e.g. 3 Make scenarios) from the same connection
   const { data: offeringEntities } = await supabaseAdmin
     .from('portal_entities')
     .select('source_id, entity_id')
     .eq('portal_id', portal.id);
 
   if (offeringEntities && offeringEntities.length > 0) {
-    const extraEvents: typeof filteredEvents = [];
-    const extraSourceIds = [...new Set(
-      offeringEntities
-        .map((oe) => oe.source_id)
-        .filter((sid): sid is string => typeof sid === 'string' && sid !== portal.source_id)
-    )];
+    // Fetch external_ids for ALL entities in this portal
+    const allEntityIds = offeringEntities.map((oe) => String(oe.entity_id));
+    const { data: allEntityRecords } = await supabaseAdmin
+      .from('source_entities')
+      .select('id, external_id, source_id')
+      .in('id', allEntityIds);
 
-    for (const sid of extraSourceIds) {
-      const { data: srcEvents } = await supabaseAdmin
-        .from('events')
-        .select('id, type, name, value, state, labels, timestamp, platform_event_id, source_id')
-        .eq('tenant_id', portal.tenant_id)
-        .eq('source_id', sid)
-        .order('timestamp', { ascending: false })
-        .limit(200);
-      extraEvents.push(...(srcEvents ?? []));
-    }
+    if (allEntityRecords && allEntityRecords.length > 0) {
+      const allowedExternalIds = new Set(
+        allEntityRecords.map((er) => er.external_id as string)
+      );
 
-    if (extraEvents.length > 0) {
-      const entityIds = offeringEntities.map((oe) => String(oe.entity_id));
-      const { data: entityRecords } = await supabaseAdmin
-        .from('source_entities')
-        .select('id, external_id, source_id')
-        .in('id', entityIds);
+      // Fetch extra events from source IDs not yet loaded (cross-source portals)
+      const extraSourceIds = [...new Set(
+        allEntityRecords
+          .map((er) => er.source_id as string)
+          .filter((sid): sid is string => typeof sid === 'string' && sid !== portal.source_id)
+      )];
 
-      const sourceIds = [...new Set((entityRecords ?? []).map((er) => er.source_id))];
+      const extraEvents: typeof filteredEvents = [];
+      for (const sid of extraSourceIds) {
+        const { data: srcEvents } = await supabaseAdmin
+          .from('events')
+          .select('id, type, name, value, state, labels, timestamp, platform_event_id, source_id')
+          .eq('tenant_id', portal.tenant_id)
+          .eq('source_id', sid)
+          .order('timestamp', { ascending: false })
+          .limit(200);
+        extraEvents.push(...(srcEvents ?? []));
+      }
+
+      // Determine source types for voice ID detection
+      const sourceIds = [...new Set(allEntityRecords.map((er) => er.source_id as string))];
       const { data: sourceRecords } = await supabaseAdmin
         .from('sources')
         .select('id, type')
         .in('id', sourceIds);
-
       const sourceTypeMap = new Map(
         (sourceRecords ?? []).map((s) => [s.id as string, s.type as string])
       );
 
-      if (entityRecords) {
-        const allowedExternalIds = new Set(
-          entityRecords.map((er) => er.external_id as string)
-        );
+      // Combine primary + extra events, then filter to only allowed entities
+      const combined = [...filteredEvents, ...extraEvents];
+      filteredEvents = combined.filter((e) => {
+        const state = (e.state as Record<string, unknown>) ?? {};
+        const platform = String(state.platform ?? '');
+        const sourceType = sourceTypeMap.get(String((e as { source_id?: string }).source_id ?? ''));
 
-        const combined = [...filteredEvents, ...extraEvents];
-        filteredEvents = combined.filter((e) => {
-          const state = (e.state as Record<string, unknown>) ?? {};
-          const platform = String(state.platform ?? '');
+        // Voice events: agent ID is stored in state.workflow_id (normalized by import routes)
+        if (platform === 'vapi' || platform === 'retell' || sourceType === 'vapi' || sourceType === 'retell') {
+          const voiceId = String(state.workflow_id ?? state.assistant_id ?? state.agent_id ?? '');
+          if (!voiceId || voiceId === 'undefined' || voiceId === 'null') return true;
+          return allowedExternalIds.has(voiceId);
+        }
 
-          if (platform === 'vapi' || platform === 'retell') {
-            const voiceId = String(state.assistant_id ?? state.agent_id ?? '');
-            return allowedExternalIds.has(voiceId);
-          }
-
-          const sourceType = sourceTypeMap.get(String((e as { source_id?: string }).source_id ?? ''));
-          if (sourceType === 'vapi' || sourceType === 'retell') {
-            const voiceId = String(state.assistant_id ?? state.agent_id ?? '');
-            return allowedExternalIds.has(voiceId);
-          }
-
-          const wfId = String(state.workflow_id ?? '');
-          return allowedExternalIds.has(wfId);
-        });
-      }
+        // Workflow events: workflow_id is the canonical ID
+        const wfId = String(state.workflow_id ?? '');
+        if (!wfId || wfId === 'undefined' || wfId === 'null') return true;
+        return allowedExternalIds.has(wfId);
+      });
     }
   }
 
