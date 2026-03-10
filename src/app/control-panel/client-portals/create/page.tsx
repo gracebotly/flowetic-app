@@ -418,6 +418,11 @@ export default function CreateOfferingPage() {
                     ? `${wizard.selectedEntities[0].displayName} + ${wizard.selectedEntities.length - 1} more`
                     : wizard.selectedEntities?.[0]?.displayName || wizard.name || "Your Portal"
                 }
+                entityExternalIds={
+                  wizard.selectedEntities && wizard.selectedEntities.length > 0
+                    ? wizard.selectedEntities.map((e) => e.externalId).filter(Boolean).join(",")
+                    : undefined
+                }
                 surfaceType="analytics"
               />
             )}
