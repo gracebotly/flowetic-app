@@ -23,10 +23,12 @@ import {
   AlertTriangle,
   Users,
   Pencil,
+  Palette,
 } from "lucide-react";
 import { SurfaceBadge } from "@/components/offerings/SurfaceBadge";
 import { AccessBadge } from "@/components/offerings/AccessBadge";
 import { ScopedActivityFeed } from "@/components/activity/ScopedActivityFeed";
+import { BrandingTab as BrandingTabInline } from "@/components/settings/BrandingTab";
 
 // ── Types ───────────────────────────────────────────────────
 type Offering = {
@@ -51,7 +53,7 @@ type Offering = {
   last_viewed_at: string | null;
 };
 
-type Tab = "overview" | "preview" | "access" | "activity";
+type Tab = "overview" | "preview" | "access" | "activity" | "branding";
 
 const SKELETON_NAMES: Record<string, string> = {
   "voice-performance": "Voice Performance Dashboard",
@@ -290,6 +292,7 @@ export default function OfferingDetailPage() {
     { key: "preview", label: "Preview", icon: Eye },
     { key: "access", label: "Access", icon: Link2 },
     { key: "activity", label: "Activity", icon: Activity },
+    { key: "branding", label: "Branding", icon: Palette },
   ];
 
   const hasChanges =
@@ -747,6 +750,20 @@ export default function OfferingDetailPage() {
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════ */}
+      {/* TAB: Branding                                          */}
+      {/* ═══════════════════════════════════════════════════════ */}
+      {activeTab === "branding" && (
+        <div className="mt-6 space-y-6">
+          <div className="rounded-xl border border-blue-100 bg-blue-50 p-4">
+            <p className="text-sm text-blue-700">
+              Branding applies to <strong>all</strong> your client portals — logo, colors, and footer are set globally.
+            </p>
+          </div>
+          <BrandingTabInline />
         </div>
       )}
 
