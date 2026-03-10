@@ -377,6 +377,7 @@ export default function PortalPreview({
                   logoUrl={branding?.logo_url || null}
                   primaryColor={branding?.primary_color || "#3b82f6"}
                   secondaryColor={branding?.secondary_color || "#1e40af"}
+                  footerText={branding?.brand_footer || `© ${new Date().getFullYear()} ${branding?.tenant_name || "Your Agency"}. All rights reserved.`}
                 >
                   {SkeletonComponent && transformedData ? (
                     <SkeletonComponent

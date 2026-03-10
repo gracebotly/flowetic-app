@@ -23,7 +23,7 @@ const PLATFORM_DEFAULTS: ResolvedBranding = {
   logoUrl: null,
   primaryColor: '#6366f1',
   secondaryColor: '#8b5cf6',
-  footerText: 'Powered by Getflowetic',
+  footerText: 'Powered by Your Agency',
   faviconUrl: null,
   defaultTheme: 'dark',
   welcomeMessage: 'Welcome to your dashboard',
