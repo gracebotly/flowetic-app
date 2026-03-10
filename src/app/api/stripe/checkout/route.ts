@@ -122,7 +122,7 @@ export async function POST(request: NextRequest) {
           success_url: `${baseUrl}/products/${offering.slug}/run?session_id={CHECKOUT_SESSION_ID}`,
           cancel_url: `${baseUrl}/products/${offering.slug}?cancelled=true`,
           metadata: {
-            offering_id: offering.id,
+            portal_id: offering.id,
             customer_email: customerEmail,
           },
         },
@@ -147,7 +147,7 @@ export async function POST(request: NextRequest) {
           success_url: `${baseUrl}/products/${offering.slug}/run?subscribed=true`,
           cancel_url: `${baseUrl}/products/${offering.slug}?cancelled=true`,
           metadata: {
-            offering_id: offering.id,
+            portal_id: offering.id,
             customer_email: customerEmail,
           },
         },
@@ -174,7 +174,7 @@ export async function POST(request: NextRequest) {
           success_url: `${baseUrl}/products/${offering.slug}/run?subscribed=true`,
           cancel_url: `${baseUrl}/products/${offering.slug}?cancelled=true`,
           metadata: {
-            offering_id: offering.id,
+            portal_id: offering.id,
             customer_email: customerEmail,
           },
         },
@@ -187,13 +187,13 @@ export async function POST(request: NextRequest) {
     // 6. Upsert offering_customer record
     await supabaseAdmin.from('portal_customers').upsert(
       {
-        offering_id: offering.id,
+        portal_id: offering.id,
         tenant_id: offering.tenant_id,
         email: customerEmail,
         name: customerName || null,
         stripe_customer_id: stripeCustomerId,
       },
-      { onConflict: 'offering_id,email' }
+      { onConflict: 'portal_id,email' }
     );
 
     return json(200, { url: session.url, sessionId: session.id });

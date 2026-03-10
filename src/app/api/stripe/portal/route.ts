@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
     const { data: customer } = await supabaseAdmin
       .from("portal_customers")
       .select("stripe_customer_id")
-      .eq("offering_id", offeringId)
+      .eq("portal_id", offeringId)
       .eq("email", customerEmail)
       .single();
 

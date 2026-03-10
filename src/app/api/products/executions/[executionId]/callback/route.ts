@@ -30,7 +30,7 @@ export async function POST(
   // ── Validate execution exists ──────────────────────────────────────────
   const { data: execution, error: execErr } = await supabase
     .from("workflow_executions")
-    .select("id, offering_id, status, started_at, customer_id, tenant_id")
+    .select("id, portal_id, status, started_at, customer_id, tenant_id")
     .eq("id", executionId)
     .maybeSingle();
 
@@ -58,7 +58,7 @@ export async function POST(
   const { data: product } = await supabase
     .from("client_portals")
     .select("execution_config")
-    .eq("id", execution.offering_id)
+    .eq("id", execution.portal_id)
     .single();
 
   const resultMapping = (product?.execution_config as Record<string, unknown>)?.result_mapping as
@@ -108,7 +108,7 @@ export async function POST(
     const { data: offeringData } = await supabase
       .from("client_portals")
       .select("id, tenant_id, pricing_type, stripe_meter_event_name")
-      .eq("id", execution.offering_id)
+      .eq("id", execution.portal_id)
       .single();
 
     if (offeringData?.pricing_type === "usage_based" && offeringData.stripe_meter_event_name) {

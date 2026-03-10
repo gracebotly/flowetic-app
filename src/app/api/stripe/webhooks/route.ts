@@ -133,7 +133,7 @@ export async function POST(request: NextRequest) {
         await supabaseAdmin
           .from("portal_customers")
           .update(checkoutUpdate)
-          .eq("offering_id", offeringId)
+          .eq("portal_id", offeringId)
           .eq("email", customerEmail);
 
         console.log(

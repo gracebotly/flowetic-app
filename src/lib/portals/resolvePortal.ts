@@ -133,7 +133,7 @@ export async function resolvePortal(
   const { data: offeringEntities } = await supabaseAdmin
     .from('portal_entities')
     .select('source_id, entity_id')
-    .eq('offering_id', portal.id);
+    .eq('portal_id', portal.id);
 
   if (offeringEntities && offeringEntities.length > 0) {
     const extraEvents: typeof filteredEvents = [];

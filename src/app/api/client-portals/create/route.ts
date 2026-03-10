@@ -169,7 +169,7 @@ export async function POST(request: Request) {
 
   if (allEntityIds.length > 1 && offering) {
     const entityRows = allEntityIds.map((e: { id: string; sourceId: string }) => ({
-      offering_id: offering.id,
+      portal_id: offering.id,
       entity_id: e.id,
       source_id: e.sourceId,
     }));

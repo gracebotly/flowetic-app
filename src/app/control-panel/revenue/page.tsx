@@ -33,7 +33,7 @@ interface RevenueOverview {
 }
 
 interface OfferingRevenue {
-  offering_id: string;
+  portal_id: string;
   offering_name: string;
   pricing_type: string;
   revenue_cents: number;
@@ -527,7 +527,7 @@ export default function RevenuePage() {
           {per_offering.length > 0 ? (
             <div className="space-y-3">
               {per_offering.map((o) => (
-                <OfferingCard key={o.offering_id} offering={o} />
+                <OfferingCard key={o.portal_id} offering={o} />
               ))}
             </div>
           ) : (
