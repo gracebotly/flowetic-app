@@ -407,26 +407,47 @@ export default function CreateOfferingPage() {
               />
             )}
             {currentStep === 2 && (
-              <PortalPreview
-                platformType={
-                  // Always pass a single clean platform string, not a joined list.
-                  // getSkeletonForPlatformMix receives entityCount separately.
-                  wizard.selectedEntities?.[0]?.platform || wizard.selectedPlatform || "vapi"
-                }
-                sourceId={wizard.selectedSourceId || ""}
-                entityName={
-                  wizard.selectedEntities && wizard.selectedEntities.length > 1
-                    ? `${wizard.selectedEntities[0].displayName} + ${wizard.selectedEntities.length - 1} more`
-                    : wizard.selectedEntities?.[0]?.displayName || wizard.name || "Your Portal"
-                }
-                entityExternalIds={
-                  wizard.selectedEntities && wizard.selectedEntities.length > 0
-                    ? wizard.selectedEntities.map((e) => e.externalId).filter(Boolean).join(",")
-                    : undefined
-                }
-                entityCount={wizard.selectedEntities?.length ?? 1}
-                surfaceType="analytics"
-              />
+              <div className="flex flex-col gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Portal Title <span className="text-red-500">*</span>
+                  </label>
+                  <p className="mt-0.5 text-xs text-gray-400">
+                    This is the name your client will see at the top of their dashboard.
+                  </p>
+                  <input
+                    type="text"
+                    value={wizard.name}
+                    onChange={(e) => {
+                      setUserEditedName(true);
+                      update({ name: e.target.value });
+                    }}
+                    placeholder="e.g. Smith Dental — Voice Dashboard"
+                    className="mt-1.5 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+                <PortalPreview
+                  platformType={
+                    // Always pass a single clean platform string, not a joined list.
+                    // getSkeletonForPlatformMix receives entityCount separately.
+                    wizard.selectedEntities?.[0]?.platform || wizard.selectedPlatform || "vapi"
+                  }
+                  sourceId={wizard.selectedSourceId || ""}
+                  entityName={
+                    wizard.selectedEntities && wizard.selectedEntities.length > 1
+                      ? `${wizard.selectedEntities[0].displayName} + ${wizard.selectedEntities.length - 1} more`
+                      : wizard.selectedEntities?.[0]?.displayName || wizard.name || "Your Portal"
+                  }
+                  entityExternalIds={
+                    wizard.selectedEntities && wizard.selectedEntities.length > 0
+                      ? wizard.selectedEntities.map((e) => e.externalId).filter(Boolean).join(",")
+                      : undefined
+                  }
+                  entityCount={wizard.selectedEntities?.length ?? 1}
+                  surfaceType="analytics"
+                  customTitle={wizard.name}
+                />
+              </div>
             )}
             {currentStep === 3 && (
               <>

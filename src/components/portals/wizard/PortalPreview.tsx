@@ -42,6 +42,7 @@ interface PortalPreviewProps {
   surfaceType: string;
   entityExternalIds?: string; // comma-separated external_ids for filtering
   entityCount?: number;
+  customTitle?: string;
 }
 
 interface Branding {
@@ -191,6 +192,7 @@ export default function PortalPreview({
   surfaceType,
   entityExternalIds,
   entityCount,
+  customTitle,
 }: PortalPreviewProps) {
   const [device, setDevice] = useState<DeviceMode>("tablet");
   const [branding, setBranding] = useState<Branding | null>(null);
@@ -370,7 +372,7 @@ export default function PortalPreview({
               }}
             >
               <PortalShell
-                  portalName={entityName || "Your Portal"}
+                  portalName={customTitle?.trim() || entityName || "Your Portal"}
                   tenantName={branding?.tenant_name || "Your Agency"}
                   logoUrl={branding?.logo_url || null}
                   primaryColor={branding?.primary_color || "#3b82f6"}
