@@ -54,7 +54,6 @@ const WORKFLOW = new Set(["n8n", "make"]);
 const MAX_SELECTION = 5;
 
 const PLATFORM_FILTERS = [
-  { value: "all", label: "All" },
   { value: "vapi", label: "Vapi" },
   { value: "retell", label: "Retell" },
   { value: "n8n", label: "n8n" },
@@ -185,7 +184,7 @@ export default function AgentPicker({
   onContinue,
 }: AgentPickerProps) {
   const [search, setSearch] = useState("");
-  const [platformFilter, setPlatformFilter] = useState("all");
+  const [platformFilter, setPlatformFilter] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -196,7 +195,7 @@ export default function AgentPicker({
 
   const filtered = useMemo(() => {
     let result = entities;
-    if (platformFilter !== "all") {
+    if (platformFilter !== "") {
       result = result.filter((e) => e.platform_type === platformFilter);
     }
     if (search.trim()) {
@@ -219,7 +218,7 @@ export default function AgentPicker({
   const visibleFilters = useMemo(
     () =>
       PLATFORM_FILTERS.filter(
-        (pf) => pf.value === "all" || (platformCounts[pf.value] ?? 0) > 0
+        (pf) => (platformCounts[pf.value] ?? 0) > 0
       ),
     [platformCounts]
   );
@@ -462,7 +461,7 @@ export default function AgentPicker({
                 <button
                   onClick={() => {
                     setSearch("");
-                    setPlatformFilter("all");
+                    setPlatformFilter("");
                   }}
                   className="mt-2 cursor-pointer text-xs font-medium text-blue-600 transition-colors duration-150 hover:text-blue-700"
                 >
