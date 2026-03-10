@@ -121,8 +121,8 @@ export interface RevenueOverview {
 }
 
 export interface OfferingRevenue {
-  offering_id: string;
-  offering_name: string;
+  portal_id: string;
+  portal_name: string;
   pricing_type: string;
   revenue_cents: number;
   customers: number;
@@ -131,7 +131,7 @@ export interface OfferingRevenue {
 
 export interface PaymentEvent {
   customer_email: string;
-  offering_name: string;
+  portal_name: string;
   amount_cents: number;
   paid_at: string;
 }

@@ -123,7 +123,7 @@ export async function POST(req: Request) {
 
     if (
       session.payment_status !== "paid" ||
-      session.metadata?.offering_id !== productId
+      session.metadata?.portal_id !== productId
     ) {
       return json(402, {
         ok: false,

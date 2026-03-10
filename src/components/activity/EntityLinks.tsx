@@ -36,7 +36,7 @@ export function EntityLinks({
           icon: User,
         });
         break;
-      case "offering":
+      case "portal":
         links.push({
           href: `/control-panel/client-portals/${entityId}`,
           label: entityName || "View Portal",

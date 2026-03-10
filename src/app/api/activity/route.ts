@@ -26,7 +26,7 @@ async function getTenantId(supabase: Awaited<ReturnType<typeof createClient>>) {
 
 /**
  * GET /api/activity
- * Query params: category, status, client_id, offering_id, from, to, search, cursor, limit
+ * Query params: category, status, client_id, portal_id, from, to, search, cursor, limit
  */
 export async function GET(req: Request) {
   const supabase = await createClient();

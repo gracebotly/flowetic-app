@@ -17,7 +17,7 @@ interface FilterBarProps {
 const CATEGORIES = [
   { value: "", label: "All Categories" },
   { value: "connection", label: "Connections" },
-  { value: "offering", label: "Client Portals" },
+  { value: "portal", label: "Client Portals" },
   { value: "client", label: "Clients" },
   { value: "execution", label: "Executions" },
   { value: "access", label: "Access" },

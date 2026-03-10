@@ -84,8 +84,8 @@ export async function GET(request: NextRequest) {
         const oExecs = executionList.filter((e) => e.portal_id === o.id);
         const oRevenue = oCusts.reduce((sum, c) => sum + (c.total_revenue_cents || 0), 0);
         return {
-          offering_id: o.id,
-          offering_name: o.name,
+          portal_id: o.id,
+          portal_name: o.name,
           pricing_type: o.pricing_type,
           surface_type: o.surface_type || "analytics",
           view_count: o.view_count || 0,
@@ -114,7 +114,7 @@ export async function GET(request: NextRequest) {
         const offering = offeringMap.get(c.portal_id);
         return {
           customer_email: c.email,
-          offering_name: offering?.name || "Unknown",
+          portal_name: offering?.name || "Unknown",
           amount_cents: c.total_revenue_cents || 0,
           paid_at: c.last_payment_at,
         };

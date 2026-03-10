@@ -144,8 +144,8 @@ export async function POST(request: NextRequest) {
 
       case "customer.subscription.updated": {
         const subscription = event.data.object as Stripe.Subscription;
-        const subOfferingId = subscription.metadata?.offering_id;
-        if (!subOfferingId) break;
+        const subPortalId = subscription.metadata?.portal_id;
+        if (!subPortalId) break;
 
         const statusMap: Record<string, string> = {
           active: "active",

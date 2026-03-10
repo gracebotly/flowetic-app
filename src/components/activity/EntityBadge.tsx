@@ -3,7 +3,7 @@
 import Link from "next/link";
 
 interface EntityBadgeProps {
-  type: "client" | "offering" | "connection" | string;
+  type: "client" | "portal" | "connection" | string;
   id: string | null;
   name: string | null;
 }
@@ -24,7 +24,7 @@ function getHref(type: string, id: string): string | null {
   switch (type) {
     case "client":
       return `/control-panel/clients/${id}`;
-    case "offering":
+    case "portal":
       return `/control-panel/client-portals/${id}`;
     case "connection":
       return `/control-panel/connections`;

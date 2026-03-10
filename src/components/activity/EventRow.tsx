@@ -129,9 +129,9 @@ export function EventRow({ event, isSelected, onClick }: EventRowProps) {
           )}
 
           {/* Offering badge (if different from entity) */}
-          {event.portal_id && event.entity_type !== "offering" && (
+          {event.portal_id && event.entity_type !== "portal" && (
             <EntityBadge
-              type="offering"
+              type="portal"
               id={event.portal_id}
               name={null}
             />
