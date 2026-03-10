@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     );
 
     const { data: offering } = await supabaseAdmin
-      .from("offerings")
+      .from("client_portals")
       .select("id, tenant_id")
       .eq("id", offeringId)
       .single();
@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { data: customer } = await supabaseAdmin
-      .from("offering_customers")
+      .from("portal_customers")
       .select("stripe_customer_id")
       .eq("offering_id", offeringId)
       .eq("email", customerEmail)

@@ -60,7 +60,7 @@ export async function resolvePortal(
 ): Promise<ResolvedPortal | null> {
   // 1. Look up offering by token
   const { data: portal, error: portalError } = await supabaseAdmin
-    .from('offerings')
+    .from('client_portals')
     .select('*')
     .eq('token', token)
     .eq('status', 'active')
@@ -131,7 +131,7 @@ export async function resolvePortal(
 
   // ── 4c. Multi-entity portals (offering_entities) ───────────
   const { data: offeringEntities } = await supabaseAdmin
-    .from('offering_entities')
+    .from('portal_entities')
     .select('source_id, entity_id')
     .eq('offering_id', portal.id);
 
@@ -201,7 +201,7 @@ export async function resolvePortal(
 
   // 5. Update last_viewed_at (fire-and-forget)
   supabaseAdmin
-    .from('offerings')
+    .from('client_portals')
     .update({ last_viewed_at: new Date().toISOString() })
     .eq('id', portal.id)
     .then(({ error }) => {

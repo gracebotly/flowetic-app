@@ -42,14 +42,14 @@ export async function GET(request: NextRequest) {
     );
 
     const { data: customers } = await supabaseAdmin
-      .from("offering_customers")
+      .from("portal_customers")
       .select(
         "id, offering_id, email, subscription_status, total_revenue_cents, total_runs, last_payment_at, stripe_subscription_id"
       )
       .eq("tenant_id", tenantId);
 
     const { data: offerings } = await supabaseAdmin
-      .from("offerings")
+      .from("client_portals")
       .select("id, name, pricing_type, price_cents, status, surface_type, view_count, published_at")
       .eq("tenant_id", tenantId);
 

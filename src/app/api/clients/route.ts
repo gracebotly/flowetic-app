@@ -77,7 +77,7 @@ export async function GET(req: Request) {
 
   if (clientIds.length > 0) {
     const { data: offerings } = await supabase
-      .from("offerings")
+      .from("client_portals")
       .select("id, client_id")
       .eq("tenant_id", tenantId)
       .neq("status", "archived");
@@ -92,7 +92,7 @@ export async function GET(req: Request) {
     }
   } else {
     const { count } = await supabase
-      .from("offerings")
+      .from("client_portals")
       .select("id", { count: "exact", head: true })
       .eq("tenant_id", tenantId)
       .neq("status", "archived");

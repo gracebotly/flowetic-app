@@ -133,7 +133,7 @@ export async function POST(request: Request) {
 
   // ── Insert ────────────────────────────────────────────────
   const { data: offering, error: insertError } = await supabase
-    .from('offerings')
+    .from('client_portals')
     .insert({
       tenant_id: membership.tenant_id,
       name: name.trim(),
@@ -175,7 +175,7 @@ export async function POST(request: Request) {
     }));
 
     const { error: oeError } = await supabase
-      .from('offering_entities')
+      .from('portal_entities')
       .insert(entityRows);
 
     if (oeError) {
@@ -187,10 +187,10 @@ export async function POST(request: Request) {
     tenantId: membership.tenant_id,
     actorId: user.id,
     actorType: "user",
-    category: "offering",
+    category: "portal",
     action: "created",
     status: "success",
-    entityType: "offering",
+    entityType: "portal",
     entityId: offering.id,
     entityName: offering.name,
     clientId: offering.client_id ?? null,

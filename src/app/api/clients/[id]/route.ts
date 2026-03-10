@@ -48,7 +48,7 @@ export async function GET(
 
   // Get offerings assigned to this client
   const { data: assignedOfferings } = await supabase
-    .from("offerings")
+    .from("client_portals")
     .select("id, name, surface_type, access_type, platform_type, token, slug, status, last_viewed_at")
     .eq("tenant_id", tenantId)
     .eq("client_id", id)
@@ -56,7 +56,7 @@ export async function GET(
 
   // Get total offerings for tenant (for health score coverage calc)
   const { count: totalOfferings } = await supabase
-    .from("offerings")
+    .from("client_portals")
     .select("id", { count: "exact", head: true })
     .eq("tenant_id", tenantId)
     .neq("status", "archived");
@@ -186,7 +186,7 @@ export async function DELETE(
 
   // Unassign offerings from this client
   await supabase
-    .from("offerings")
+    .from("client_portals")
     .update({ client_id: null, updated_at: new Date().toISOString() })
     .eq("client_id", id)
     .eq("tenant_id", tenantId);

@@ -28,7 +28,7 @@ export async function POST(req: Request) {
   // Fetch all tenant data
   const [clients, offerings, sources, events] = await Promise.all([
     auth.supabase.from("clients").select("*").eq("tenant_id", auth.tenantId),
-    auth.supabase.from("offerings").select("*").eq("tenant_id", auth.tenantId),
+    auth.supabase.from("client_portals").select("*").eq("tenant_id", auth.tenantId),
     auth.supabase.from("sources").select("id, type, name, status, created_at").eq("tenant_id", auth.tenantId),
     auth.supabase
       .from("events")
@@ -81,7 +81,7 @@ export async function DELETE(req: Request) {
 
   const deletions = [
     auth.supabase.from("events").delete().eq("tenant_id", auth.tenantId),
-    auth.supabase.from("offerings").delete().eq("tenant_id", auth.tenantId),
+    auth.supabase.from("client_portals").delete().eq("tenant_id", auth.tenantId),
     auth.supabase.from("clients").delete().eq("tenant_id", auth.tenantId),
     auth.supabase.from("sources").delete().eq("tenant_id", auth.tenantId),
     auth.supabase.from("memberships").delete().eq("tenant_id", auth.tenantId),

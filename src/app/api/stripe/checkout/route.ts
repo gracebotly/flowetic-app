@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
 
     // 1. Load offering
     const { data: offering, error: offErr } = await supabaseAdmin
-      .from('offerings')
+      .from('client_portals')
       .select(
         'id, tenant_id, name, slug, pricing_type, price_cents, stripe_product_id, stripe_price_id, stripe_meter_event_name'
       )
@@ -185,7 +185,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 6. Upsert offering_customer record
-    await supabaseAdmin.from('offering_customers').upsert(
+    await supabaseAdmin.from('portal_customers').upsert(
       {
         offering_id: offering.id,
         tenant_id: offering.tenant_id,

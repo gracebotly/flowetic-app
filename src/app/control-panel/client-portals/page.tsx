@@ -52,7 +52,7 @@ export default function OfferingsPage() {
       if (!membership) return;
 
       const { data } = await supabase
-        .from("offerings")
+        .from("client_portals")
         .select(
           "id, name, description, surface_type, access_type, platform_type, status, created_at, last_viewed_at"
         )

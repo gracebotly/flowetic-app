@@ -44,7 +44,7 @@ export async function POST(req: Request) {
 
   // ── Load product ───────────────────────────────────────────────────────
   const { data: product, error: prodErr } = await supabase
-    .from("offerings")
+    .from("client_portals")
     .select("*")
     .eq("id", productId)
     .eq("status", "active")
@@ -143,7 +143,7 @@ export async function POST(req: Request) {
     }
 
     const { data: custRecord } = await supabase
-      .from("offering_customers")
+      .from("portal_customers")
       .select("subscription_status, subscription_current_period_end")
       .eq("offering_id", productId)
       .eq("email", customerEmail)
@@ -177,7 +177,7 @@ export async function POST(req: Request) {
   let customerId: string | null = null;
   if (customerEmail) {
     const { data: customer } = await supabase
-      .from("offering_customers")
+      .from("portal_customers")
       .upsert(
         {
           offering_id: productId,
@@ -334,13 +334,13 @@ export async function POST(req: Request) {
       if (customerId) {
         try {
           const { data: custData } = await supabase
-            .from("offering_customers")
+            .from("portal_customers")
             .select("total_runs")
             .eq("id", customerId)
             .single();
 
           await supabase
-            .from("offering_customers")
+            .from("portal_customers")
             .update({
               total_runs: (custData?.total_runs ?? 0) + 1,
               last_run_at: now,

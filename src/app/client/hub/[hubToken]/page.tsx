@@ -33,7 +33,7 @@ export default async function ClientHubPage({ params }: PageProps) {
   if (!tenant) notFound();
 
   const { data: portals } = await supabaseAdmin
-    .from('offerings')
+    .from('client_portals')
     .select('id, name, token, platform_type, skeleton_id, status, last_viewed_at, description')
     .eq('client_id', client.id)
     .eq('status', 'active')

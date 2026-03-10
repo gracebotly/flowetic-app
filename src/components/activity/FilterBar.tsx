@@ -79,7 +79,7 @@ export function FilterBar({ filters, onFiltersChange }: FilterBarProps) {
         if (!membership) return;
 
         const { data: offeringRows } = await supabase
-          .from("offerings")
+          .from("client_portals")
           .select("id, name")
           .eq("tenant_id", membership.tenant_id)
           .neq("status", "archived")
