@@ -87,7 +87,7 @@ export default function ClientsPage() {
   };
 
   const handleArchive = async (clientId: string) => {
-    if (!confirm("Archive this client? Their offerings will be unassigned.")) return;
+    if (!confirm("Archive this client? Their client portals will be unassigned.")) return;
     await fetch(`/api/clients/${clientId}`, { method: "DELETE" });
     setMenuOpenId(null);
     await fetchClients();
@@ -114,7 +114,7 @@ export default function ClientsPage() {
     const ids = Array.from(selectedIds);
     if (ids.length === 0) return;
 
-    if (action === "archive" && !confirm(`Archive ${ids.length} client(s)? Their offerings will be unassigned.`)) {
+    if (action === "archive" && !confirm(`Archive ${ids.length} client(s)? Their client portals will be unassigned.`)) {
       return;
     }
 

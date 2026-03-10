@@ -111,7 +111,7 @@ export async function POST(request: NextRequest) {
 
         // Resolve tenant from offering
         const { data: offeringData } = await supabaseAdmin
-          .from("offerings")
+          .from("client_portals")
           .select("tenant_id, pricing_type")
           .eq("id", offeringId)
           .maybeSingle();
@@ -131,9 +131,9 @@ export async function POST(request: NextRequest) {
         }
 
         await supabaseAdmin
-          .from("offering_customers")
+          .from("portal_customers")
           .update(checkoutUpdate)
-          .eq("offering_id", offeringId)
+          .eq("portal_id", offeringId)
           .eq("email", customerEmail);
 
         console.log(
@@ -144,8 +144,8 @@ export async function POST(request: NextRequest) {
 
       case "customer.subscription.updated": {
         const subscription = event.data.object as Stripe.Subscription;
-        const subOfferingId = subscription.metadata?.offering_id;
-        if (!subOfferingId) break;
+        const subPortalId = subscription.metadata?.portal_id;
+        if (!subPortalId) break;
 
         const statusMap: Record<string, string> = {
           active: "active",
@@ -159,7 +159,7 @@ export async function POST(request: NextRequest) {
         };
 
         await supabaseAdmin
-          .from("offering_customers")
+          .from("portal_customers")
           .update({
             subscription_status:
               statusMap[subscription.status] ?? "paused",
@@ -183,7 +183,7 @@ export async function POST(request: NextRequest) {
         const deletedSub = event.data.object as Stripe.Subscription;
 
         await supabaseAdmin
-          .from("offering_customers")
+          .from("portal_customers")
           .update({ subscription_status: "cancelled" })
           .eq("stripe_subscription_id", deletedSub.id);
 
@@ -222,7 +222,7 @@ export async function POST(request: NextRequest) {
         if (!failedSubId) break;
 
         await supabaseAdmin
-          .from("offering_customers")
+          .from("portal_customers")
           .update({ subscription_status: "paused" })
           .eq("stripe_subscription_id", failedSubId);
 

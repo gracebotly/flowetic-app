@@ -27,7 +27,7 @@ interface ActivityEvent {
   entity_id: string | null;
   entity_name: string | null;
   client_id: string | null;
-  offering_id: string | null;
+  portal_id: string | null;
   message: string;
   details: Record<string, unknown> | null;
   created_at: string;

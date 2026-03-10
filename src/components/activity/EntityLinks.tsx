@@ -36,10 +36,10 @@ export function EntityLinks({
           icon: User,
         });
         break;
-      case "offering":
+      case "portal":
         links.push({
-          href: `/control-panel/offerings/${entityId}`,
-          label: entityName || "View Offering",
+          href: `/control-panel/client-portals/${entityId}`,
+          label: entityName || "View Portal",
           icon: Package,
         });
         break;
@@ -66,8 +66,8 @@ export function EntityLinks({
   // Offering link (if different from entity)
   if (offeringId && entityType !== "offering") {
     links.push({
-      href: `/control-panel/offerings/${offeringId}`,
-      label: "View Offering",
+      href: `/control-panel/client-portals/${offeringId}`,
+      label: "View Portal",
       icon: Package,
     });
   }

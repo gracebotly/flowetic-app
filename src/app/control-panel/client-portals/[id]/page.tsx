@@ -107,7 +107,7 @@ export default function OfferingDetailPage() {
 
   // ── Load offering ─────────────────────────────────────────
   const loadOffering = useCallback(async () => {
-    const res = await fetch(`/api/offerings/${id}`);
+    const res = await fetch(`/api/client-portals/${id}`);
     const json = await res.json();
     if (json.ok && json.offering) {
       setOffering(json.offering);
@@ -140,7 +140,7 @@ export default function OfferingDetailPage() {
     }
 
     try {
-      const res = await fetch(`/api/offerings/${id}`, {
+      const res = await fetch(`/api/client-portals/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updates),
@@ -165,7 +165,7 @@ export default function OfferingDetailPage() {
     if (!offering) return;
     setTokenAction("regenerating");
     try {
-      const res = await fetch(`/api/offerings/${id}/token`, { method: "POST" });
+      const res = await fetch(`/api/client-portals/${id}/token`, { method: "POST" });
       const json = await res.json();
       if (json.ok) {
         setOffering((prev) => (prev ? { ...prev, token: json.token } : prev));
@@ -179,7 +179,7 @@ export default function OfferingDetailPage() {
     if (!offering) return;
     setTokenAction("revoking");
     try {
-      const res = await fetch(`/api/offerings/${id}/token`, { method: "DELETE" });
+      const res = await fetch(`/api/client-portals/${id}/token`, { method: "DELETE" });
       const json = await res.json();
       if (json.ok) {
         setOffering((prev) => (prev ? { ...prev, token: null } : prev));
@@ -193,10 +193,10 @@ export default function OfferingDetailPage() {
   const handleArchive = async () => {
     setArchiving(true);
     try {
-      const res = await fetch(`/api/offerings/${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/client-portals/${id}`, { method: "DELETE" });
       const json = await res.json();
       if (json.ok) {
-        router.push("/control-panel/offerings");
+        router.push("/control-panel/client-portals");
       }
     } finally {
       setArchiving(false);
@@ -235,7 +235,7 @@ export default function OfferingDetailPage() {
     return (
       <div className="mx-auto max-w-4xl px-6 py-8">
         <p className="text-gray-500">Portal not found.</p>
-        <Link href="/control-panel/offerings" className="mt-2 text-sm text-blue-600 hover:text-blue-700">
+        <Link href="/control-panel/client-portals" className="mt-2 text-sm text-blue-600 hover:text-blue-700">
           ← Back to Client Portals
         </Link>
       </div>
@@ -259,7 +259,7 @@ export default function OfferingDetailPage() {
     <div className="mx-auto max-w-4xl px-6 py-8">
       {/* Back link */}
       <Link
-        href="/control-panel/offerings"
+        href="/control-panel/client-portals"
         className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700"
       >
         <ArrowLeft className="h-4 w-4" />
@@ -364,7 +364,7 @@ export default function OfferingDetailPage() {
               value={editDescription}
               onChange={(e) => setEditDescription(e.target.value)}
               rows={3}
-              placeholder="Add a description for this offering..."
+              placeholder="Add a description for this client portal..."
               className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
             />
           </div>

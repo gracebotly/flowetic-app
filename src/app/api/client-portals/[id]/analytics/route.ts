@@ -47,7 +47,7 @@ export async function GET(
     );
 
     const { data: offering } = await supabaseAdmin
-      .from("offerings")
+      .from("client_portals")
       .select("id, name, pricing_type, price_cents, status")
       .eq("id", offeringId)
       .eq("tenant_id", tenantId)
@@ -56,17 +56,17 @@ export async function GET(
     if (!offering) return json(404, { error: "Offering not found" });
 
     const { data: customers } = await supabaseAdmin
-      .from("offering_customers")
+      .from("portal_customers")
       .select(
         "id, email, name, subscription_status, total_revenue_cents, total_runs, last_run_at, last_payment_at, created_at"
       )
-      .eq("offering_id", offeringId)
+      .eq("portal_id", offeringId)
       .eq("tenant_id", tenantId);
 
     const { data: executions } = await supabaseAdmin
       .from("workflow_executions")
       .select("id, customer_id, status, started_at")
-      .eq("offering_id", offeringId)
+      .eq("portal_id", offeringId)
       .eq("tenant_id", tenantId)
       .gte("started_at", since);
 

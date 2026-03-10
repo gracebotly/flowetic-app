@@ -30,7 +30,7 @@ export async function POST(
   // ── Validate execution exists ──────────────────────────────────────────
   const { data: execution, error: execErr } = await supabase
     .from("workflow_executions")
-    .select("id, offering_id, status, started_at, customer_id, tenant_id")
+    .select("id, portal_id, status, started_at, customer_id, tenant_id")
     .eq("id", executionId)
     .maybeSingle();
 
@@ -56,9 +56,9 @@ export async function POST(
 
   // ── Load product for result_mapping ────────────────────────────────────
   const { data: product } = await supabase
-    .from("offerings")
+    .from("client_portals")
     .select("execution_config")
-    .eq("id", execution.offering_id)
+    .eq("id", execution.portal_id)
     .single();
 
   const resultMapping = (product?.execution_config as Record<string, unknown>)?.result_mapping as
@@ -88,13 +88,13 @@ export async function POST(
   // ── Update customer usage ──────────────────────────────────────────────
   if (!isError && execution.customer_id) {
     const { data: customer } = await supabase
-      .from("offering_customers")
+      .from("portal_customers")
       .select("total_runs")
       .eq("id", execution.customer_id)
       .single();
 
     await supabase
-      .from("offering_customers")
+      .from("portal_customers")
       .update({
         total_runs: (customer?.total_runs ?? 0) + 1,
         last_run_at: now,
@@ -106,15 +106,15 @@ export async function POST(
   if (!isError && execution.customer_id) {
     // Load offering pricing_type and meter info
     const { data: offeringData } = await supabase
-      .from("offerings")
+      .from("client_portals")
       .select("id, tenant_id, pricing_type, stripe_meter_event_name")
-      .eq("id", execution.offering_id)
+      .eq("id", execution.portal_id)
       .single();
 
     if (offeringData?.pricing_type === "usage_based" && offeringData.stripe_meter_event_name) {
       // Load customer's Stripe ID
       const { data: customerData } = await supabase
-        .from("offering_customers")
+        .from("portal_customers")
         .select("stripe_customer_id")
         .eq("id", execution.customer_id)
         .single();

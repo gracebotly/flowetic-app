@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { X, Plus } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { X, Plus, Globe, Copy, Check } from "lucide-react";
 import { SurfaceBadge } from "@/components/offerings/SurfaceBadge";
 import { AccessBadge } from "@/components/offerings/AccessBadge";
 
@@ -50,11 +51,14 @@ export function OfferingsTab({ clientId, assignedOfferings, onChanged }: Offerin
   const [unassigned, setUnassigned] = useState<UnassignedOffering[]>([]);
   const [loadingUnassigned, setLoadingUnassigned] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [hubUrl, setHubUrl] = useState<string | null>(null);
+  const [loadingHub, setLoadingHub] = useState(false);
+  const [copiedHub, setCopiedHub] = useState(false);
 
   useEffect(() => {
     const fetchUnassigned = async () => {
       setLoadingUnassigned(true);
-      const res = await fetch("/api/offerings");
+      const res = await fetch("/api/client-portals");
       if (res.ok) {
         const data = await res.json();
         const all = data.offerings ?? [];
@@ -73,7 +77,7 @@ export function OfferingsTab({ clientId, assignedOfferings, onChanged }: Offerin
 
   const handleAssign = async (offeringId: string) => {
     setActionLoading(offeringId);
-    await fetch(`/api/offerings/${offeringId}`, {
+    await fetch(`/api/client-portals/${offeringId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ client_id: clientId }),
@@ -84,7 +88,7 @@ export function OfferingsTab({ clientId, assignedOfferings, onChanged }: Offerin
 
   const handleUnassign = async (offeringId: string) => {
     setActionLoading(offeringId);
-    await fetch(`/api/offerings/${offeringId}`, {
+    await fetch(`/api/client-portals/${offeringId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ client_id: null }),
@@ -93,10 +97,86 @@ export function OfferingsTab({ clientId, assignedOfferings, onChanged }: Offerin
     onChanged();
   };
 
+  const handleGetHubLink = async () => {
+    setLoadingHub(true);
+    try {
+      const res = await fetch(`/api/clients/${clientId}/hub-token`, {
+        method: "POST",
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setHubUrl(`${window.location.origin}/client/hub/${json.hubToken}`);
+      }
+    } finally {
+      setLoadingHub(false);
+    }
+  };
+
+  const handleCopyHub = async () => {
+    if (!hubUrl) return;
+    await navigator.clipboard.writeText(hubUrl);
+    setCopiedHub(true);
+    setTimeout(() => setCopiedHub(false), 2000);
+  };
+
   return (
     <div className="space-y-6">
+      <div className="rounded-xl border border-gray-200 bg-white p-4">
+        <div className="mb-1 flex items-center gap-2">
+          <Globe className="h-4 w-4 text-blue-600" />
+          <p className="text-sm font-semibold text-slate-900">Client Hub Link</p>
+        </div>
+        <p className="mb-3 text-xs text-slate-600">
+          One URL for your client to access all their dashboards — no login needed.
+        </p>
+
+        <AnimatePresence mode="wait">
+          {!hubUrl ? (
+            <motion.button
+              key="generate"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={handleGetHubLink}
+              disabled={loadingHub}
+              className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white transition-colors duration-200 hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Globe className="h-4 w-4" />
+              {loadingHub ? "Generating..." : "Get Hub Link"}
+            </motion.button>
+          ) : (
+            <motion.div
+              key="url"
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 p-1.5"
+            >
+              <code className="flex-1 truncate px-2 text-xs text-slate-600">
+                {hubUrl}
+              </code>
+              <button
+                onClick={handleCopyHub}
+                className="flex cursor-pointer items-center gap-1.5 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm transition-colors duration-200 hover:bg-gray-100"
+              >
+                {copiedHub ? (
+                  <>
+                    <Check className="h-4 w-4 text-emerald-500" />
+                    Copied!
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-4 w-4" />
+                    Copy
+                  </>
+                )}
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
       <div>
-        <h3 className="text-sm font-semibold text-gray-900">Assigned ({assignedOfferings.length})</h3>
+        <h3 className="text-sm font-semibold text-gray-900">Assigned Portals ({assignedOfferings.length})</h3>
         {assignedOfferings.length === 0 ? (
           <div className="mt-2 rounded-xl border border-dashed border-gray-200 bg-gray-50 p-6 text-center text-sm text-gray-500">
             No portals assigned to this client yet.
@@ -110,7 +190,7 @@ export function OfferingsTab({ clientId, assignedOfferings, onChanged }: Offerin
               >
                 <div className="min-w-0">
                   <Link
-                    href={`/control-panel/offerings/${o.id}`}
+                    href={`/control-panel/client-portals/${o.id}`}
                     className="text-sm font-semibold text-gray-900 hover:text-blue-600"
                   >
                     {o.name}
@@ -190,8 +270,8 @@ export function OfferingsTab({ clientId, assignedOfferings, onChanged }: Offerin
       </div>
 
       <Link
-        href={`/control-panel/offerings/create?client_id=${clientId}`}
-        className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 active:scale-[0.98]"
+        href={`/control-panel/client-portals/create?client_id=${clientId}`}
+        className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors duration-200 hover:bg-blue-700"
       >
         <Plus className="h-4 w-4" />
         Create Portal for This Client

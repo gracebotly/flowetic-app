@@ -47,11 +47,11 @@ type AssignedOffering = {
   last_viewed_at: string | null;
 };
 
-type TabKey = "overview" | "offerings" | "access" | "activity";
+type TabKey = "overview" | "portals" | "access" | "activity";
 
 const TABS: { key: TabKey; label: string; icon: typeof User }[] = [
   { key: "overview", label: "Overview", icon: User },
-  { key: "offerings", label: "Portals", icon: LayoutDashboard },
+  { key: "portals", label: "Portals", icon: LayoutDashboard },
   { key: "access", label: "Access", icon: Link2 },
   { key: "activity", label: "Activity", icon: Clock },
 ];
@@ -148,7 +148,7 @@ export default function ClientDetailPage() {
 
         <div className="flex flex-col items-end gap-3">
           <Link
-            href={`/control-panel/offerings/create?client_id=${id}`}
+            href={`/control-panel/client-portals/create?client_id=${id}`}
             className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 active:scale-[0.98]"
           >
             <Plus className="h-4 w-4" />
@@ -195,7 +195,7 @@ export default function ClientDetailPage() {
             onUpdated={loadClient}
           />
         )}
-        {activeTab === "offerings" && (
+        {activeTab === "portals" && (
           <OfferingsTab
             clientId={client.id}
             assignedOfferings={assignedOfferings}

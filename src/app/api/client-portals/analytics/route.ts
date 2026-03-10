@@ -42,20 +42,20 @@ export async function GET(request: NextRequest) {
     );
 
     const { data: customers } = await supabaseAdmin
-      .from("offering_customers")
+      .from("portal_customers")
       .select(
-        "id, offering_id, email, subscription_status, total_revenue_cents, total_runs, last_payment_at, stripe_subscription_id"
+        "id, portal_id, email, subscription_status, total_revenue_cents, total_runs, last_payment_at, stripe_subscription_id"
       )
       .eq("tenant_id", tenantId);
 
     const { data: offerings } = await supabaseAdmin
-      .from("offerings")
+      .from("client_portals")
       .select("id, name, pricing_type, price_cents, status, surface_type, view_count, published_at")
       .eq("tenant_id", tenantId);
 
     const { data: executions } = await supabaseAdmin
       .from("workflow_executions")
-      .select("id, offering_id, status, started_at")
+      .select("id, portal_id, status, started_at")
       .eq("tenant_id", tenantId)
       .gte("started_at", since);
 
@@ -72,7 +72,7 @@ export async function GET(request: NextRequest) {
     let mrrCents = 0;
     for (const c of customerList) {
       if (c.subscription_status !== "active") continue;
-      const offering = offeringMap.get(c.offering_id);
+      const offering = offeringMap.get(c.portal_id);
       if (offering && (offering.pricing_type === "monthly" || offering.pricing_type === "usage_based")) {
         mrrCents += offering.price_cents || 0;
       }
@@ -80,12 +80,12 @@ export async function GET(request: NextRequest) {
 
     const perOffering = offeringList
       .map((o) => {
-        const oCusts = customerList.filter((c) => c.offering_id === o.id);
-        const oExecs = executionList.filter((e) => e.offering_id === o.id);
+        const oCusts = customerList.filter((c) => c.portal_id === o.id);
+        const oExecs = executionList.filter((e) => e.portal_id === o.id);
         const oRevenue = oCusts.reduce((sum, c) => sum + (c.total_revenue_cents || 0), 0);
         return {
-          offering_id: o.id,
-          offering_name: o.name,
+          portal_id: o.id,
+          portal_name: o.name,
           pricing_type: o.pricing_type,
           surface_type: o.surface_type || "analytics",
           view_count: o.view_count || 0,
@@ -111,10 +111,10 @@ export async function GET(request: NextRequest) {
     const recentPayments = customerList
       .filter((c) => c.last_payment_at && c.last_payment_at >= since)
       .map((c) => {
-        const offering = offeringMap.get(c.offering_id);
+        const offering = offeringMap.get(c.portal_id);
         return {
           customer_email: c.email,
-          offering_name: offering?.name || "Unknown",
+          portal_name: offering?.name || "Unknown",
           amount_cents: c.total_revenue_cents || 0,
           paid_at: c.last_payment_at,
         };

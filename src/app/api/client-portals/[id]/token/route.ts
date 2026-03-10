@@ -36,7 +36,7 @@ export async function POST(
   const newToken = crypto.randomUUID();
 
   const { data: offering, error } = await supabase
-    .from('offerings')
+    .from('client_portals')
     .update({
       token: newToken,
       updated_at: new Date().toISOString(),
@@ -61,7 +61,7 @@ export async function POST(
     category: "access",
     action: "token_generated",
     status: "success",
-    entityType: "offering",
+    entityType: "portal",
     entityId: id,
     offeringId: id,
     message: `Generated magic link for offering`,
@@ -85,7 +85,7 @@ export async function DELETE(
   if (!tenantId) return json(401, { ok: false, code: 'AUTH_REQUIRED' });
 
   const { error } = await supabase
-    .from('offerings')
+    .from('client_portals')
     .update({
       token: null,
       updated_at: new Date().toISOString(),
@@ -108,7 +108,7 @@ export async function DELETE(
     category: "access",
     action: "token_revoked",
     status: "info",
-    entityType: "offering",
+    entityType: "portal",
     entityId: id,
     offeringId: id,
     message: `Revoked magic link for offering`,

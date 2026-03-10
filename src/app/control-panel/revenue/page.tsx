@@ -33,8 +33,8 @@ interface RevenueOverview {
 }
 
 interface OfferingRevenue {
-  offering_id: string;
-  offering_name: string;
+  portal_id: string;
+  portal_name: string;
   pricing_type: string;
   revenue_cents: number;
   customers: number;
@@ -51,7 +51,7 @@ interface TimelinePoint {
 
 interface PaymentEvent {
   customer_email: string;
-  offering_name: string;
+  portal_name: string;
   amount_cents: number;
   paid_at: string;
 }
@@ -236,7 +236,7 @@ function OfferingCard({ offering }: { offering: OfferingRevenue }) {
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
           <h3 className="truncate text-tremor-default font-semibold text-tremor-content-strong dark:text-dark-tremor-content-strong">
-            {offering.offering_name}
+            {offering.portal_name}
           </h3>
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
             <Badge size="xs" color={pricingColor as "gray"}>
@@ -331,11 +331,11 @@ export default function RevenuePage() {
     periodStart.setDate(periodStart.getDate() - days);
 
     const currentFetch = fetch(
-      `/api/offerings/analytics?period=${period}`
+      `/api/client-portals/analytics?period=${period}`
     ).then((r) => r.json());
 
     const prevFetch = fetch(
-      `/api/offerings/analytics?period=${period}&before=${periodStart.toISOString()}`
+      `/api/client-portals/analytics?period=${period}&before=${periodStart.toISOString()}`
     )
       .then((r) => r.json())
       .catch(() => null);
@@ -527,7 +527,7 @@ export default function RevenuePage() {
           {per_offering.length > 0 ? (
             <div className="space-y-3">
               {per_offering.map((o) => (
-                <OfferingCard key={o.offering_id} offering={o} />
+                <OfferingCard key={o.portal_id} offering={o} />
               ))}
             </div>
           ) : (
@@ -584,7 +584,7 @@ export default function RevenuePage() {
                               {p.customer_email}
                             </p>
                             <p className="text-xs text-tremor-content dark:text-dark-tremor-content">
-                              {p.offering_name}
+                              {p.portal_name}
                             </p>
                           </div>
                         </div>

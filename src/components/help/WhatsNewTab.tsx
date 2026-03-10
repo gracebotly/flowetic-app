@@ -25,7 +25,7 @@ const CHANGELOG: ChangelogEntry[] = [
     date: "March 1, 2026",
     title: "Client Health Scores",
     description:
-      "Clients now have a computed health score (0–100) based on engagement recency, portal views, and offering coverage. Visible on the client list and detail pages.",
+      "Clients now have a computed health score (0–100) based on engagement recency, portal views, and portal coverage. Visible on the client list and detail pages.",
     tag: "New",
   },
   {
@@ -37,16 +37,16 @@ const CHANGELOG: ChangelogEntry[] = [
   },
   {
     date: "February 26, 2026",
-    title: "Unified Offerings Model",
+    title: "Unified Client Portals",
     description:
-      "Portals and Products have been merged into a single Offerings tab. One creation wizard handles analytics dashboards, workflow tools, and form-based products.",
+      "Portals and Products have been merged into a single Client Portals tab. One creation wizard handles analytics dashboards, workflow tools, and form-based products.",
     tag: "Improved",
   },
   {
     date: "February 20, 2026",
     title: "Client Management Tab",
     description:
-      "Full CRM-style client management with health scores, offering assignment, magic link access, and client-scoped activity feeds.",
+      "Full CRM-style client management with health scores, portal assignment, magic link access, and client-scoped activity feeds.",
     tag: "New",
   },
   {

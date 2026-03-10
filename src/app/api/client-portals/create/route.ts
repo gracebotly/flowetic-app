@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { getSkeletonForPlatform } from '@/lib/portals/platformToSkeleton';
+import { getSkeletonForPlatform, getSkeletonForPlatformMix } from '@/lib/portals/platformToSkeleton';
 import { logActivity } from '@/lib/activity/logActivity';
 
 const VALID_SKELETONS = [
@@ -41,6 +41,7 @@ export async function POST(request: Request) {
     name,
     sourceId,
     entityId,
+    entityIds,
     surfaceType,
     accessType,
     skeletonId,
@@ -54,6 +55,12 @@ export async function POST(request: Request) {
     expiresAt,
     status,
   } = body;
+
+  const allEntityIds: { id: string; sourceId: string }[] = Array.isArray(entityIds)
+    ? entityIds
+    : entityId
+      ? [{ id: entityId, sourceId: sourceId ?? '' }]
+      : [];
 
   // ── Validate required fields ──────────────────────────────
   if (!name || typeof name !== 'string' || name.trim().length < 3) {
@@ -91,12 +98,25 @@ export async function POST(request: Request) {
   }
 
   // ── Determine skeleton ────────────────────────────────────
-  const finalSkeleton =
-    skeletonId && VALID_SKELETONS.includes(skeletonId)
-      ? skeletonId
-      : resolvedPlatformType
-        ? getSkeletonForPlatform(resolvedPlatformType)
-        : null;
+  let finalSkeleton: string | null = null;
+  let finalPlatformType: string | null = resolvedPlatformType;
+
+  if (skeletonId && VALID_SKELETONS.includes(skeletonId)) {
+    finalSkeleton = skeletonId;
+  } else if (allEntityIds.length > 1) {
+    const sourceIds = [...new Set(allEntityIds.map((e) => e.sourceId))];
+    const { data: sourceRecords } = await supabase
+      .from('sources')
+      .select('id, type')
+      .in('id', sourceIds)
+      .eq('tenant_id', membership.tenant_id);
+
+    const platformTypes = (sourceRecords ?? []).map((s: { id: string; type: string }) => s.type);
+    finalSkeleton = getSkeletonForPlatformMix(platformTypes);
+    finalPlatformType = null;
+  } else if (resolvedPlatformType) {
+    finalSkeleton = getSkeletonForPlatform(resolvedPlatformType);
+  }
 
   // ── Generate token for magic_link, slug for stripe_gate ───
   const token =
@@ -113,7 +133,7 @@ export async function POST(request: Request) {
 
   // ── Insert ────────────────────────────────────────────────
   const { data: offering, error: insertError } = await supabase
-    .from('offerings')
+    .from('client_portals')
     .insert({
       tenant_id: membership.tenant_id,
       name: name.trim(),
@@ -121,7 +141,7 @@ export async function POST(request: Request) {
       access_type: finalAccess,
       source_id: sourceId || null,
       entity_id: entityId || null,
-      platform_type: resolvedPlatformType,
+      platform_type: finalPlatformType,
       skeleton_id: finalSkeleton,
       token,
       slug: finalSlug,
@@ -146,15 +166,31 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
+
+  if (allEntityIds.length > 1 && offering) {
+    const entityRows = allEntityIds.map((e: { id: string; sourceId: string }) => ({
+      portal_id: offering.id,
+      entity_id: e.id,
+      source_id: e.sourceId,
+    }));
+
+    const { error: oeError } = await supabase
+      .from('portal_entities')
+      .insert(entityRows);
+
+    if (oeError) {
+      console.error('[create] offering_entities insert failed:', oeError.message);
+    }
+  }
   // Log activity event (fire-and-forget)
   logActivity(supabase, {
     tenantId: membership.tenant_id,
     actorId: user.id,
     actorType: "user",
-    category: "offering",
+    category: "portal",
     action: "created",
     status: "success",
-    entityType: "offering",
+    entityType: "portal",
     entityId: offering.id,
     entityName: offering.name,
     clientId: offering.client_id ?? null,

@@ -18,7 +18,7 @@ interface ActivityEvent {
   entity_id: string | null;
   entity_name: string | null;
   client_id: string | null;
-  offering_id: string | null;
+  portal_id: string | null;
   message: string;
   details: Record<string, unknown> | null;
   created_at: string;
@@ -166,7 +166,7 @@ export function EventDrawer({ event, onClose }: EventDrawerProps) {
                 entityId={event.entity_id}
                 entityName={event.entity_name}
                 clientId={event.client_id}
-                offeringId={event.offering_id}
+                offeringId={event.portal_id}
               />
 
               {/* Payload Viewer */}

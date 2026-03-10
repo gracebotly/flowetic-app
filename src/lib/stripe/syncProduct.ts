@@ -40,7 +40,7 @@ export async function syncOfferingToStripe(
       {
         name: offering.name,
         description: offering.description ?? undefined,
-        metadata: { offering_id: offering.id, tenant_id: offering.tenant_id },
+        metadata: { portal_id: offering.id, tenant_id: offering.tenant_id },
       },
       { stripeAccount: tenantStripeAccountId }
     );
@@ -50,7 +50,7 @@ export async function syncOfferingToStripe(
       {
         name: offering.name,
         description: offering.description ?? undefined,
-        metadata: { offering_id: offering.id, tenant_id: offering.tenant_id },
+        metadata: { portal_id: offering.id, tenant_id: offering.tenant_id },
       },
       { stripeAccount: tenantStripeAccountId }
     );

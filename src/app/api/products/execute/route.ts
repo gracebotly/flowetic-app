@@ -44,7 +44,7 @@ export async function POST(req: Request) {
 
   // ── Load product ───────────────────────────────────────────────────────
   const { data: product, error: prodErr } = await supabase
-    .from("offerings")
+    .from("client_portals")
     .select("*")
     .eq("id", productId)
     .eq("status", "active")
@@ -62,7 +62,7 @@ export async function POST(req: Request) {
   const { count: dailyCount } = await supabase
     .from("workflow_executions")
     .select("id", { count: "exact", head: true })
-    .eq("offering_id", productId)
+    .eq("portal_id", productId)
     .gte("started_at", `${today}T00:00:00Z`);
 
   if ((dailyCount ?? 0) >= (wp.max_runs_per_day ?? 100)) {
@@ -74,7 +74,7 @@ export async function POST(req: Request) {
     const { count: customerDailyCount } = await supabase
       .from("workflow_executions")
       .select("id", { count: "exact", head: true })
-      .eq("offering_id", productId)
+      .eq("portal_id", productId)
       .gte("started_at", `${today}T00:00:00Z`)
       .contains("inputs", { _customer_email: customerEmail });
 
@@ -123,7 +123,7 @@ export async function POST(req: Request) {
 
     if (
       session.payment_status !== "paid" ||
-      session.metadata?.offering_id !== productId
+      session.metadata?.portal_id !== productId
     ) {
       return json(402, {
         ok: false,
@@ -143,9 +143,9 @@ export async function POST(req: Request) {
     }
 
     const { data: custRecord } = await supabase
-      .from("offering_customers")
+      .from("portal_customers")
       .select("subscription_status, subscription_current_period_end")
-      .eq("offering_id", productId)
+      .eq("portal_id", productId)
       .eq("email", customerEmail)
       .maybeSingle();
 
@@ -177,15 +177,15 @@ export async function POST(req: Request) {
   let customerId: string | null = null;
   if (customerEmail) {
     const { data: customer } = await supabase
-      .from("offering_customers")
+      .from("portal_customers")
       .upsert(
         {
-          offering_id: productId,
+          portal_id: productId,
           tenant_id: wp.tenant_id,
           email: customerEmail,
           name: customerName || null,
         },
-        { onConflict: "offering_id,email" },
+        { onConflict: "portal_id,email" },
       )
       .select("id")
       .single();
@@ -203,7 +203,7 @@ export async function POST(req: Request) {
   const { data: execution, error: execInsertErr } = await supabase
     .from("workflow_executions")
     .insert({
-      offering_id: productId,
+      portal_id: productId,
       tenant_id: wp.tenant_id,
       customer_id: customerId,
       inputs: executionInputs,
@@ -334,13 +334,13 @@ export async function POST(req: Request) {
       if (customerId) {
         try {
           const { data: custData } = await supabase
-            .from("offering_customers")
+            .from("portal_customers")
             .select("total_runs")
             .eq("id", customerId)
             .single();
 
           await supabase
-            .from("offering_customers")
+            .from("portal_customers")
             .update({
               total_runs: (custData?.total_runs ?? 0) + 1,
               last_run_at: now,

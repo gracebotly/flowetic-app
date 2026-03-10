@@ -48,7 +48,7 @@ export function ProductPageClient({ product, branding }: ProductProps) {
 
   useEffect(() => {
     if (product?.id) {
-      fetch(`/api/offerings/${product.id}/view`, { method: 'POST' }).catch(() => {});
+      fetch(`/api/client-portals/${product.id}/view`, { method: 'POST' }).catch(() => {});
     }
   }, [product?.id]);
 

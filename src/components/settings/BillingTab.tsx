@@ -98,7 +98,7 @@ export function BillingTab() {
             limit={FREE_LIMITS.clients}
           />
           <UsageMeter
-            label="Offerings"
+            label="Client Portals"
             current={usage?.offerings ?? 0}
             limit={FREE_LIMITS.offerings}
           />

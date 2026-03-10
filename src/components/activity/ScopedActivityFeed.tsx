@@ -15,7 +15,7 @@ interface ActivityEvent {
   entity_id: string | null;
   entity_name: string | null;
   client_id: string | null;
-  offering_id: string | null;
+  portal_id: string | null;
   message: string;
   details: Record<string, unknown> | null;
   created_at: string;
@@ -64,7 +64,7 @@ export function ScopedActivityFeed({
     try {
       const params = new URLSearchParams();
       if (clientId) params.set("client_id", clientId);
-      if (offeringId) params.set("offering_id", offeringId);
+      if (offeringId) params.set("portal_id", offeringId);
       params.set("limit", String(limit));
 
       const res = await fetch(`/api/activity?${params}`);
@@ -89,7 +89,7 @@ export function ScopedActivityFeed({
 
   const viewAllParams = new URLSearchParams();
   if (clientId) viewAllParams.set("client_id", clientId);
-  if (offeringId) viewAllParams.set("offering_id", offeringId);
+  if (offeringId) viewAllParams.set("portal_id", offeringId);
   const viewAllHref = viewAllParams.toString()
     ? `/control-panel/activity?${viewAllParams}`
     : "/control-panel/activity";

@@ -14,7 +14,7 @@ export interface EventTemplate {
 export const CATEGORY_META: Record<string, EventTemplate> = {
   access: { color: "blue", icon: "Eye" },
   execution: { color: "emerald", icon: "Zap" },
-  offering: { color: "amber", icon: "Package" },
+  portal: { color: "amber", icon: "Package" },
   client: { color: "amber", icon: "Users" },
   connection: { color: "emerald", icon: "Plug" },
   team: { color: "blue", icon: "UserPlus" },
@@ -43,11 +43,11 @@ export const MESSAGE_TEMPLATES: Record<
   string,
   (e: { entity_name?: string | null; details?: Record<string, unknown> | null }) => string
 > = {
-  "offering.created": (e) => `Created offering "${e.entity_name ?? "Untitled"}"`,
-  "offering.updated": (e) => `Updated offering "${e.entity_name ?? "Untitled"}"`,
-  "offering.archived": (e) => `Archived offering "${e.entity_name ?? "Untitled"}"`,
-  "offering.published": (e) => `Published "${e.entity_name ?? "Untitled"}"`,
-  "offering.paused": (e) => `Paused offering "${e.entity_name ?? "Untitled"}"`,
+  "portal.created": (e) => `Created offering "${e.entity_name ?? "Untitled"}"`,
+  "portal.updated": (e) => `Updated offering "${e.entity_name ?? "Untitled"}"`,
+  "portal.archived": (e) => `Archived offering "${e.entity_name ?? "Untitled"}"`,
+  "portal.published": (e) => `Published "${e.entity_name ?? "Untitled"}"`,
+  "portal.paused": (e) => `Paused offering "${e.entity_name ?? "Untitled"}"`,
   "client.created": (e) => `Added client "${e.entity_name ?? "Unknown"}"`,
   "client.updated": (e) => `Updated client "${e.entity_name ?? "Unknown"}"`,
   "client.archived": (e) => `Archived client "${e.entity_name ?? "Unknown"}"`,
@@ -58,12 +58,12 @@ export const MESSAGE_TEMPLATES: Record<
     (e) =>
       `"${e.entity_name ?? "Workflow"}" execution failed${e.details?.error_message ? `: ${e.details.error_message}` : ""}`,
   "access.token_generated": (e) =>
-    `Generated magic link for "${e.entity_name ?? "offering"}"`,
+    `Generated magic link for "${e.entity_name ?? "portal"}"`,
   "access.token_revoked": (e) =>
-    `Revoked magic link for "${e.entity_name ?? "offering"}"`,
+    `Revoked magic link for "${e.entity_name ?? "portal"}"`,
   "access.viewed":
     (e) =>
-      `${(e.details?.viewer as string) ?? "Someone"} viewed "${e.entity_name ?? "offering"}"`,
+      `${(e.details?.viewer as string) ?? "Someone"} viewed "${e.entity_name ?? "portal"}"`,
   "connection.connected":
     (e) =>
       `Connected ${(e.details?.platform_type as string) ?? ""} source "${e.entity_name ?? ""}"`,

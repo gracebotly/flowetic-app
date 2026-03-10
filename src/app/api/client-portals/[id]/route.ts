@@ -36,7 +36,7 @@ export async function GET(
   if (!tenantId) return json(401, { ok: false, code: 'AUTH_REQUIRED' });
 
   const { data: offering, error } = await supabase
-    .from('offerings')
+    .from('client_portals')
     .select('*')
     .eq('id', id)
     .eq('tenant_id', tenantId)
@@ -97,7 +97,7 @@ export async function PATCH(
   }
 
   const { data: existingOffering, error: existingError } = await supabase
-    .from('offerings')
+    .from('client_portals')
     .select('id, published_at')
     .eq('id', id)
     .eq('tenant_id', tenantId)
@@ -114,7 +114,7 @@ export async function PATCH(
   updates.updated_at = new Date().toISOString();
 
   const { data: offering, error } = await supabase
-    .from('offerings')
+    .from('client_portals')
     .update(updates)
     .eq('id', id)
     .eq('tenant_id', tenantId)
@@ -133,10 +133,10 @@ export async function PATCH(
     tenantId,
     actorId: userId,
     actorType: "user",
-    category: "offering",
+    category: "portal",
     action: "updated",
     status: "success",
-    entityType: "offering",
+    entityType: "portal",
     entityId: id,
     entityName: offering.name as string,
     offeringId: id,
@@ -169,7 +169,7 @@ export async function PATCH(
 
         // Save Stripe IDs back to the offering
         await supabase
-          .from('offerings')
+          .from('client_portals')
           .update({
             stripe_product_id: stripeIds.stripe_product_id,
             stripe_price_id: stripeIds.stripe_price_id,
@@ -202,7 +202,7 @@ export async function DELETE(
 
   // Soft-delete: set status to 'archived'
   const { error } = await supabase
-    .from('offerings')
+    .from('client_portals')
     .update({ status: 'archived', updated_at: new Date().toISOString() })
     .eq('id', id)
     .eq('tenant_id', tenantId);
@@ -219,10 +219,10 @@ export async function DELETE(
     tenantId,
     actorId: userId,
     actorType: "user",
-    category: "offering",
+    category: "portal",
     action: "archived",
     status: "info",
-    entityType: "offering",
+    entityType: "portal",
     entityId: id,
     message: `Archived offering`,
   });

@@ -12,6 +12,7 @@ import {
   Zap,
   Workflow,
   X,
+  AlertTriangle,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -50,6 +51,9 @@ interface AgentPickerProps {
   onSelectionChange: (selected: SelectedEntity[]) => void;
   onContinue?: () => void;
 }
+
+const VOICE = new Set(["vapi", "retell"]);
+const WORKFLOW = new Set(["n8n", "make"]);
 
 // ────────────────────────────────────────────
 // Constants
@@ -232,8 +236,19 @@ export default function AgentPicker({
   // ── Selection helpers ──
   const selectedIds = useMemo(() => new Set(selected.map((s) => s.id)), [selected]);
 
+  const isEntityDisabled = useCallback((_entity: EntityItem): boolean => {
+    return false;
+  }, []);
+
+  const hasMixedCategories = useMemo(() => {
+    const hasVoice = selected.some((e) => VOICE.has(e.platform));
+    const hasWorkflow = selected.some((e) => WORKFLOW.has(e.platform));
+    return hasVoice && hasWorkflow;
+  }, [selected]);
+
   const toggleEntity = useCallback(
     (entity: EntityItem) => {
+      if (isEntityDisabled(entity)) return;
       if (selectedIds.has(entity.id)) {
         onSelectionChange(selected.filter((s) => s.id !== entity.id));
       } else {
@@ -250,7 +265,7 @@ export default function AgentPicker({
         ]);
       }
     },
-    [selected, selectedIds, onSelectionChange]
+    [selected, selectedIds, onSelectionChange, isEntityDisabled]
   );
 
   const selectAllVisible = useCallback(() => {
@@ -287,11 +302,32 @@ export default function AgentPicker({
     <div className="flex flex-col">
       {/* Header */}
       <div className="mb-4">
-        <h2 className="text-lg font-bold text-gray-900">Select agents and workflows</h2>
-        <p className="mt-1 text-sm text-gray-500">
-          Pick one or more to create portals for. Same configuration applies to all.
+        <h2 className="text-lg font-bold text-slate-900">Select agents and workflows</h2>
+        <p className="mt-1 text-sm text-slate-600">
+          Pick one for a single dashboard, or select multiple from the same category
+          to combine them into one unified portal.
         </p>
       </div>
+
+      <AnimatePresence>
+        {hasMixedCategories && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="mb-3 overflow-hidden"
+          >
+            <div className="flex items-start gap-2.5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+              <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600" />
+              <p className="text-xs text-amber-800">
+                <span className="font-semibold">Combined dashboard:</span>{" "}
+                You&apos;ve selected both voice agents and workflows. These will be
+                combined into a single overview portal showing both side by side.
+              </p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Search bar — always visible for any catalog size */}
       <div className="relative">
@@ -415,7 +451,11 @@ export default function AgentPicker({
             className="mt-4 flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-3"
           >
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-gray-900">{selected.length} selected</p>
+              <p className="text-sm font-semibold text-slate-900">
+                {selected.length === 1
+                  ? "1 agent selected"
+                  : `${selected.length} agents selected — 1 combined portal`}
+              </p>
               <p className="truncate text-xs text-gray-500">
                 {selected
                   .slice(0, 3)

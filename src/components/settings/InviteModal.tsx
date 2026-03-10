@@ -6,7 +6,7 @@ import { X, Copy, Check } from "lucide-react";
 // Matches DB CHECK constraint: ['admin', 'client', 'viewer']
 const VALID_ROLES = [
   { value: "viewer", label: "Viewer", description: "Read-only access" },
-  { value: "client", label: "Client", description: "Can create/edit offerings and clients" },
+  { value: "client", label: "Client", description: "Can create/edit client portals and clients" },
   { value: "admin", label: "Admin", description: "Full access including team and billing" },
 ];
 

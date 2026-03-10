@@ -23,7 +23,7 @@ type NavItem = { href: string; label: string; icon: React.ComponentType<{ size?:
 
 const NAV: NavItem[] = [
   { href: "/control-panel/connections", label: "Connections", icon: Zap },
-  { href: "/control-panel/offerings", label: "Client Portals", icon: LayoutDashboard },
+  { href: "/control-panel/client-portals", label: "Client Portals", icon: LayoutDashboard },
   { href: "/control-panel/revenue", label: "Revenue", icon: DollarSign },
   { href: "/control-panel/clients", label: "Clients", icon: Users },
   { href: "/control-panel/activity", label: "Activity", icon: ClipboardList },

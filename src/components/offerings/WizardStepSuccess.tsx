@@ -9,6 +9,7 @@ import {
   ExternalLink,
   ArrowLeft,
   RotateCcw,
+  Globe,
 } from "lucide-react";
 
 type Props = {
@@ -17,6 +18,7 @@ type Props = {
   productUrl: string | null;
   accessType: string;
   surfaceType: string;
+  clientId?: string;
   onCreateAnother: () => void;
 };
 
@@ -26,6 +28,7 @@ export function WizardStepSuccess({
   productUrl,
   accessType,
   surfaceType,
+  clientId,
   onCreateAnother,
 }: Props) {
   const [copiedMagic, setCopiedMagic] = useState(false);
@@ -88,6 +91,21 @@ export function WizardStepSuccess({
               )}
             </button>
           </div>
+        </div>
+      )}
+
+      {clientId && (
+        <div className="mt-3 flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-4 py-2.5">
+          <Globe className="h-4 w-4 flex-shrink-0 text-slate-600" />
+          <p className="text-xs text-slate-600">
+            This portal is assigned to a client.{" "}
+            <a
+              href={`/control-panel/clients/${clientId}?tab=portals`}
+              className="font-medium text-blue-600 transition-colors duration-200 hover:text-blue-700"
+            >
+              Get their Hub Link
+            </a>
+          </p>
         </div>
       )}
 
@@ -158,7 +176,7 @@ export function WizardStepSuccess({
       <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
         {offering?.id && (
           <Link
-            href={`/control-panel/offerings/${offering.id}`}
+            href={`/control-panel/client-portals/${offering.id}`}
             className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
           >
             View {label}
@@ -173,7 +191,7 @@ export function WizardStepSuccess({
           Create Another (Same Config)
         </button>
         <Link
-          href="/control-panel/offerings"
+          href="/control-panel/client-portals"
           className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
