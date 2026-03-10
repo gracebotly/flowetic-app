@@ -2,7 +2,7 @@ import { SupabaseClient } from "@supabase/supabase-js";
 
 export type ActivityCategory =
   | "connection"
-  | "offering"
+  | "portal"
   | "client"
   | "execution"
   | "access"

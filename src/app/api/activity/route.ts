@@ -37,7 +37,7 @@ export async function GET(req: Request) {
   const category = searchParams.get("category");
   const status = searchParams.get("status");
   const clientId = searchParams.get("client_id");
-  const offeringId = searchParams.get("offering_id");
+  const offeringId = searchParams.get("portal_id");
   const from = searchParams.get("from"); // ISO datetime
   const to = searchParams.get("to"); // ISO datetime
   const search = searchParams.get("search")?.trim() || null;
@@ -54,7 +54,7 @@ export async function GET(req: Request) {
   if (category) query = query.eq("category", category);
   if (status) query = query.eq("status", status);
   if (clientId) query = query.eq("client_id", clientId);
-  if (offeringId) query = query.eq("offering_id", offeringId);
+  if (offeringId) query = query.eq("portal_id", offeringId);
   if (from) query = query.gte("created_at", from);
   if (to) query = query.lte("created_at", to);
   if (search) query = query.ilike("message", `%${search}%`);
