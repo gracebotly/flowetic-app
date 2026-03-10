@@ -23,9 +23,26 @@ async function getTenantId(supabase: Awaited<ReturnType<typeof createClient>>) {
   return membership?.tenant_id ?? null;
 }
 
-// ── POST: Generate new token ────────────────────────────────
+
+// ── Helpers ─────────────────────────────────────────────────
+function generateShortToken(portalName: string): string {
+  const slug = portalName
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, '')
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .join('-');
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  const rand = Array.from({ length: 5 }, () =>
+    chars[Math.floor(Math.random() * chars.length)]
+  ).join('');
+  return slug ? `${slug}-${rand}` : rand;
+}
+
+// ── POST: Generate or set token ─────────────────────────────
 export async function POST(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
@@ -33,7 +50,31 @@ export async function POST(
   const tenantId = await getTenantId(supabase);
   if (!tenantId) return json(401, { ok: false, code: 'AUTH_REQUIRED' });
 
-  const newToken = crypto.randomUUID();
+  // If a custom token is provided in body, use it; otherwise auto-generate
+  let newToken: string;
+  try {
+    const body = await req.json() as { customToken?: string };
+    if (body.customToken && typeof body.customToken === 'string') {
+      const clean = body.customToken.toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 60);
+      newToken = clean || generateShortToken('portal');
+    } else {
+      const { data: existing } = await supabase
+        .from('client_portals')
+        .select('name')
+        .eq('id', id)
+        .eq('tenant_id', tenantId)
+        .maybeSingle();
+      newToken = generateShortToken(existing?.name ?? 'portal');
+    }
+  } catch {
+    const { data: existing } = await supabase
+      .from('client_portals')
+      .select('name')
+      .eq('id', id)
+      .eq('tenant_id', tenantId)
+      .maybeSingle();
+    newToken = generateShortToken(existing?.name ?? 'portal');
+  }
 
   const { data: offering, error } = await supabase
     .from('client_portals')

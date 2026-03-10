@@ -413,7 +413,16 @@ export default function CreateOfferingPage() {
               <PortalPreview
                 platformType={wizard.selectedPlatform || "vapi"}
                 sourceId={wizard.selectedSourceId || ""}
-                entityName={wizard.selectedEntities?.[0]?.displayName || wizard.name || "Your Portal"}
+                entityName={
+                  wizard.selectedEntities && wizard.selectedEntities.length > 1
+                    ? `${wizard.selectedEntities[0].displayName} + ${wizard.selectedEntities.length - 1} more`
+                    : wizard.selectedEntities?.[0]?.displayName || wizard.name || "Your Portal"
+                }
+                entityExternalIds={
+                  wizard.selectedEntities && wizard.selectedEntities.length > 0
+                    ? wizard.selectedEntities.map((e) => e.externalId).filter(Boolean).join(",")
+                    : undefined
+                }
                 surfaceType="analytics"
               />
             )}

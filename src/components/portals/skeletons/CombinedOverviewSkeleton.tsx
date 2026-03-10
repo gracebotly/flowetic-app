@@ -160,7 +160,7 @@ export function CombinedOverviewSkeleton({ data, branding }: CombinedOverviewPro
   if (data.health.status === 'no-data') {
     return (
       <div className="space-y-6">
-        <SkeletonHealthBanner health={data.health} entityType="combined" />
+        <SkeletonHealthBanner health={data.health} entityType="combined" isAgencyView={false} />
       </div>
     );
   }
@@ -178,7 +178,7 @@ export function CombinedOverviewSkeleton({ data, branding }: CombinedOverviewPro
   return (
     <div className="space-y-6">
       {(data.health.status === 'critical' || data.health.status === 'degraded' || data.health.status === 'sparse') && (
-        <SkeletonHealthBanner health={data.health} entityType="combined" />
+        <SkeletonHealthBanner health={data.health} entityType="combined" isAgencyView={false} />
       )}
 
       <motion.div variants={fadeUp} initial="hidden" animate="visible" custom={0}>

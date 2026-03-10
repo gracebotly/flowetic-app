@@ -37,6 +37,9 @@ export async function GET(req: Request) {
   const workflowName = searchParams.get("workflow_name");
   const limit = Math.min(Math.max(Number(searchParams.get("limit") ?? "50"), 1), 500);
 
+  // Optional: comma-separated list of agent/workflow external_ids to filter by
+  const entityExternalIds = searchParams.get("entity_external_ids");
+
   if (!sourceId) {
     return NextResponse.json({ error: "source_id is required" }, { status: 400 });
   }
@@ -75,5 +78,24 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "QUERY_FAILED", message: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ events: events ?? [], count: events?.length ?? 0 });
+  let filteredEvents = events ?? [];
+
+  // Entity-level filtering: if entity_external_ids provided, filter in JS
+  // (Postgres JSONB OR across multiple values is complex; JS post-filter is simpler)
+  if (entityExternalIds) {
+    const ids = new Set(entityExternalIds.split(",").map((s) => s.trim()).filter(Boolean));
+    if (ids.size > 0) {
+      filteredEvents = filteredEvents.filter((e) => {
+        const state = (e.state as Record<string, unknown>) ?? {};
+        const agentId = String(state.assistant_id ?? state.agent_id ?? "");
+        const wfId = String(state.workflow_id ?? "");
+        // If the event has no id stored, include it (can't filter, better to show than hide)
+        if ((!agentId || agentId === "undefined" || agentId === "null") &&
+            (!wfId || wfId === "undefined" || wfId === "null")) return true;
+        return ids.has(agentId) || ids.has(wfId);
+      });
+    }
+  }
+
+  return NextResponse.json({ events: filteredEvents, count: filteredEvents.length });
 }

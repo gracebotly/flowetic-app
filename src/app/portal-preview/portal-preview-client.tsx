@@ -84,6 +84,7 @@ export default function PortalPreviewClient() {
   const sourceId = params.get("source_id");
   const platform = params.get("platform") || "vapi";
   const surface = params.get("surface") || "analytics";
+  const entityExternalIds = params.get("entity_external_ids"); // comma-separated external_ids
 
   const [branding, setBranding] = useState<Branding | null>(null);
   const [events, setEvents] = useState<PreviewEvent[] | null>(null);
@@ -98,7 +99,9 @@ export default function PortalPreviewClient() {
       try {
         const [brandRes, eventsRes] = await Promise.all([
           fetch("/api/settings/branding"),
-          sourceId ? fetch(`/api/events?source_id=${sourceId}&limit=50`) : Promise.resolve(null),
+          sourceId
+            ? fetch(`/api/events?source_id=${sourceId}&limit=100${entityExternalIds ? `&entity_external_ids=${encodeURIComponent(entityExternalIds)}` : ""}`)
+            : Promise.resolve(null),
         ]);
         const brandData: Branding | null = brandRes.ok ? await brandRes.json() : null;
         const eventsData: unknown = eventsRes && eventsRes.ok ? await eventsRes.json() : null;
@@ -126,7 +129,7 @@ export default function PortalPreviewClient() {
     return () => {
       mounted = false;
     };
-  }, [sourceId, platform]);
+  }, [sourceId, platform, entityExternalIds]);
 
   const transformedData = useMemo(() => {
     if (!events || !skeletonId) return null;

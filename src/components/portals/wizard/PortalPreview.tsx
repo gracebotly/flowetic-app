@@ -40,6 +40,7 @@ interface PortalPreviewProps {
   sourceId: string;
   entityName: string;
   surfaceType: string;
+  entityExternalIds?: string; // comma-separated external_ids for filtering
 }
 
 interface Branding {
@@ -169,6 +170,7 @@ export default function PortalPreview({
   sourceId,
   entityName,
   surfaceType,
+  entityExternalIds,
 }: PortalPreviewProps) {
   const [device, setDevice] = useState<DeviceMode>("tablet");
   const [branding, setBranding] = useState<Branding | null>(null);
@@ -189,7 +191,7 @@ export default function PortalPreview({
         const brandingRes = await fetch("/api/settings/branding");
         const brandingData: Branding | null = brandingRes.ok ? await brandingRes.json() : null;
 
-        const eventsRes = await fetch(`/api/events?source_id=${sourceId}&limit=50`);
+        const eventsRes = await fetch(`/api/events?source_id=${sourceId}&limit=100${entityExternalIds ? `&entity_external_ids=${encodeURIComponent(entityExternalIds)}` : ""}`);
         const eventsData: unknown = eventsRes.ok ? await eventsRes.json() : null;
 
         if (!mounted) return;
@@ -220,7 +222,7 @@ export default function PortalPreview({
     return () => {
       mounted = false;
     };
-  }, [sourceId, platformType, refreshKey]);
+  }, [sourceId, platformType, refreshKey, entityExternalIds]);
 
   const transformedData = useMemo(() => {
     if (!events || !skeletonId) return null;
@@ -268,7 +270,7 @@ export default function PortalPreview({
         </div>
 
         <a
-          href={`/portal-preview?source_id=${sourceId}&platform=${platformType}&surface=${surfaceType}&entity_name=${encodeURIComponent(entityName)}`}
+          href={`/portal-preview?source_id=${sourceId}&platform=${platformType}&surface=${surfaceType}&entity_name=${encodeURIComponent(entityName)}${entityExternalIds ? `&entity_external_ids=${encodeURIComponent(entityExternalIds)}` : ""}`}
           target="_blank"
           rel="noopener noreferrer"
           className="cursor-pointer flex items-center gap-1.5 rounded-tremor-default border border-tremor-border px-3 py-1.5 text-xs font-medium text-tremor-content-strong transition-colors duration-200 hover:bg-tremor-background-subtle dark:border-dark-tremor-border dark:text-dark-tremor-content-strong dark:hover:bg-dark-tremor-background-subtle"

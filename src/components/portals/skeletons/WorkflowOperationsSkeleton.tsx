@@ -277,7 +277,7 @@ export function WorkflowOperationsSkeleton({ data, branding }: WorkflowOperation
   if (data.health.status === 'no-data') {
     return (
       <div className="space-y-6">
-        <SkeletonHealthBanner health={data.health} entityType="workflow" />
+        <SkeletonHealthBanner health={data.health} entityType="workflow" isAgencyView={false} />
       </div>
     );
   }
@@ -303,7 +303,7 @@ export function WorkflowOperationsSkeleton({ data, branding }: WorkflowOperation
   return (
     <div className="space-y-6">
       {(data.health.status === 'critical' || data.health.status === 'degraded' || data.health.status === 'sparse') && (
-        <SkeletonHealthBanner health={data.health} entityType="workflow" />
+        <SkeletonHealthBanner health={data.health} entityType="workflow" isAgencyView={false} />
       )}
 
       {/* ─── Hero Headline ─── */}

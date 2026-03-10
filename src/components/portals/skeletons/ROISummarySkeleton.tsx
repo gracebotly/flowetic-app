@@ -44,7 +44,7 @@ export function ROISummarySkeleton({ data }: ROISummaryProps) {
   if (data.health.status === 'no-data') {
     return (
       <div className="space-y-6">
-        <SkeletonHealthBanner health={data.health} entityType="workflow" />
+        <SkeletonHealthBanner health={data.health} entityType="workflow" isAgencyView={false} />
       </div>
     );
   }
@@ -60,7 +60,7 @@ export function ROISummarySkeleton({ data }: ROISummaryProps) {
   return (
     <div className="space-y-6">
       {(data.health.status === 'critical' || data.health.status === 'degraded' || data.health.status === 'sparse') && (
-        <SkeletonHealthBanner health={data.health} entityType="workflow" />
+        <SkeletonHealthBanner health={data.health} entityType="workflow" isAgencyView={false} />
       )}
 
       <motion.div variants={fadeUp} initial="hidden" animate="visible" custom={0}>
