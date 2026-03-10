@@ -60,11 +60,30 @@ export interface SkeletonData {
   dataTransferTotal?: number;
   estimatedCost?: number;
   errorNameBreakdown?: { name: string; count: number }[];
-  // Combined-specific extras (Phase 3)
-  platformComparison?: {
-    voice: { count: number; successRate: number; platforms: string[] };
-    workflow: { count: number; successRate: number; platforms: string[] };
-  };
+  // Multi-workflow extras (for n8n / Make when multiple workflows selected)
+  perWorkflowData?: {
+    workflowId: string;
+    workflowName: string;
+    platform: string;
+    executionCount: number;
+    successRate: number;
+    avgDurationMs: number;
+    trend: TrendDataPoint[];
+    recentRows: TableRow[];
+    kpis: KPICard[];
+  }[];
+  // Multi-agent voice extras
+  perAgentData?: {
+    agentId: string;
+    agentName: string;
+    platform: string;
+    callCount: number;
+    successRate: number;
+    avgDurationMs: number;
+    trend: TrendDataPoint[];
+    recentRows: TableRow[];
+    kpis: KPICard[];
+  }[];
   // Health status for skeleton empty/error/sparse state rendering
   health: {
     status: 'healthy' | 'degraded' | 'critical' | 'no-data' | 'sparse';
@@ -528,6 +547,73 @@ export function transformWorkflowData(events: PortalEvent[], platform: 'n8n' | '
   const latestErrorMsg = errorBreakdown?.[0]?.message;
   const health = computeHealth(totalCurrent, successCurrent, latestErrorMsg);
 
+  // ── Per-workflow breakdown (for multi-workflow portals) ─────
+  const wfEventMap = new Map<string, { name: string; platform: string; events: PortalEvent[] }>();
+  for (const event of currentEvents) {
+    const wfId = String(getStateField(event, fields.workflowId) || getStateField(event, 'workflow_id') || 'unknown');
+    const wfName = String(getStateField(event, fields.workflowName) || getStateField(event, 'workflow_name') || wfId);
+    const eventPlatform = getEventPlatform(event) || 'unknown';
+    if (!wfEventMap.has(wfId)) {
+      wfEventMap.set(wfId, { name: wfName, platform: eventPlatform, events: [] });
+    }
+    wfEventMap.get(wfId)!.events.push(event);
+  }
+
+  const wfEntries = Array.from(wfEventMap.entries()).slice(0, 5);
+
+  const perWorkflowData = wfEntries.map(([workflowId, wf]) => {
+    const wfSuccess = wf.events.filter((e) => getEventStatus(e) === 'success').length;
+    const wfTotal = wf.events.length;
+    const wfAvgDuration = wfTotal > 0
+      ? wf.events.reduce((sum, e) => sum + toNumber(getStateField(e, fields.durationMs)), 0) / wfTotal
+      : 0;
+
+    // Per-workflow trend
+    const wfTrendMap = new Map<string, { success: number; fail: number }>();
+    for (const e of wf.events) {
+      const day = toDateString(getStateField(e, fields.startedAt) || e.timestamp);
+      if (!day) continue;
+      const bucket = wfTrendMap.get(day) ?? { success: 0, fail: 0 };
+      if (getEventStatus(e) === 'success') bucket.success++;
+      else bucket.fail++;
+      wfTrendMap.set(day, bucket);
+    }
+    const wfTrend = Array.from(wfTrendMap.entries())
+      .map(([date, d]) => ({ date, count: d.success + d.fail, successCount: d.success, failCount: d.fail }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    // Per-workflow recent rows (last 20)
+    const wfRecentRows: TableRow[] = [...wf.events]
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, 20)
+      .map((e) => ({
+        id: String(getStateField(e, fields.executionId) || e.id || ''),
+        workflow: String(getStateField(e, fields.workflowName) || wf.name),
+        status: getEventStatus(e),
+        duration: formatDuration(toNumber(getStateField(e, fields.durationMs))),
+        error: String(getStateField(e, fields.errorMessage) || '—'),
+        time: getTimeAgo(new Date(String(e.timestamp || ''))),
+        state: e.state as Record<string, unknown>,
+      }));
+
+    return {
+      workflowId,
+      workflowName: wf.name,
+      platform: wf.platform,
+      executionCount: wfTotal,
+      successRate: wfTotal > 0 ? Math.round((wfSuccess / wfTotal) * 100) : 0,
+      avgDurationMs: wfAvgDuration,
+      trend: wfTrend,
+      recentRows: wfRecentRows,
+      kpis: [
+        { label: 'Executions', value: wfTotal, color: 'blue' as const },
+        { label: 'Success Rate', value: `${wfTotal > 0 ? Math.round((wfSuccess / wfTotal) * 100) : 0}%`, color: wfSuccess === wfTotal ? 'green' as const : 'amber' as const },
+        { label: 'Avg Runtime', value: formatDuration(wfAvgDuration), color: 'blue' as const },
+        { label: 'Failed', value: wfTotal - wfSuccess, color: (wfTotal - wfSuccess) === 0 ? 'green' as const : 'red' as const },
+      ],
+    };
+  });
+
   return {
     headline: { total: totalCurrent, totalLabel: 'executions', percentChange, periodLabel: 'last 30 days' },
     kpis: [
@@ -556,6 +642,7 @@ export function transformWorkflowData(events: PortalEvent[], platform: 'n8n' | '
     dataTransferTotal: dataTransferTotal > 0 ? dataTransferTotal : undefined,
     estimatedCost,
     errorNameBreakdown,
+    perWorkflowData: perWorkflowData.length > 1 ? perWorkflowData : undefined,
     health,
   };
 }
@@ -634,6 +721,217 @@ export function transformROIData(events: PortalEvent[], platformType: string): S
     trend,
     recentRows,
     health: computeHealth(currentEvents.length, currentEvents.length, undefined),
+  };
+}
+
+export function transformMultiAgentVoiceData(events: PortalEvent[], platformType: string): SkeletonData {
+  void platformType;
+  const now = new Date();
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const sixtyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
+
+  const currentEvents = events.filter((e) => new Date(e.timestamp) >= thirtyDaysAgo);
+  const previousEvents = events.filter((e) => {
+    const d = new Date(e.timestamp);
+    return d >= sixtyDaysAgo && d < thirtyDaysAgo;
+  });
+
+  // ── Aggregate top-level KPIs (All Agents tab) ──────────────
+  const totalCalls = currentEvents.length;
+  const successCount = currentEvents.filter((e) => getEventStatus(e) === 'success').length;
+  const successRate = totalCalls > 0 ? Math.round((successCount / totalCalls) * 100) : 0;
+  const failedCount = totalCalls - successCount;
+
+  const durations = currentEvents
+    .map((e) => toNumber(getStateField(e, 'duration_ms')))
+    .filter((d) => d > 0);
+  const avgDurationMs =
+    durations.length > 0 ? durations.reduce((a, b) => a + b, 0) / durations.length : 0;
+  const totalCost = currentEvents.reduce(
+    (acc, e) => acc + toNumber(getStateField(e, 'cost') || e.value),
+    0,
+  );
+
+  // ── Unified trend ──────────────────────────────────────────
+  const dayBuckets = new Map<string, { count: number; success: number; fail: number }>();
+  for (const event of currentEvents) {
+    const day = toDateString(event.timestamp);
+    if (!day) continue;
+    const bucket = dayBuckets.get(day) ?? { count: 0, success: 0, fail: 0 };
+    bucket.count++;
+    if (getEventStatus(event) === 'success') bucket.success++;
+    else bucket.fail++;
+    dayBuckets.set(day, bucket);
+  }
+  const trend = Array.from(dayBuckets.entries())
+    .map(([date, b]) => ({ date, count: b.count, successCount: b.success, failCount: b.fail }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  // ── Unified recent rows ────────────────────────────────────
+  const recentRows = [...currentEvents]
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+    .slice(0, 20)
+    .map((event) => {
+      const platform = getEventPlatform(event) || 'unknown';
+      const base: TableRow = {
+        id: event.id,
+        name: getEventWorkflowName(event),
+        status: getEventStatus(event),
+        platform,
+        duration: formatDuration(toNumber(getStateField(event, 'duration_ms'))),
+        cost: formatCost(toNumber(getStateField(event, 'cost'))),
+        time: new Date(event.timestamp).toLocaleString(),
+        agentId: String(getStateField(event, 'workflow_id') ?? getStateField(event, 'assistant_id') ?? getStateField(event, 'agent_id') ?? ''),
+      };
+      if (event.state && typeof event.state === 'object') {
+        for (const [key, value] of Object.entries(event.state)) {
+          if (!(key in base) && value !== undefined && value !== null) {
+            base[key] = value;
+          }
+        }
+      }
+      return base;
+    });
+
+  // ── Per-agent breakdown ────────────────────────────────────
+  // Group events by assistant_id / agent_id
+  const agentMap = new Map<string, { name: string; platform: string; events: PortalEvent[] }>();
+
+  for (const event of currentEvents) {
+    const state = (event.state as Record<string, unknown>) ?? {};
+    // Real Vapi events store agent ID in state.workflow_id (not state.assistant_id)
+    // Real Retell events store agent ID in state.workflow_id too
+    // Fallback chain covers both platforms and any legacy data
+    const agentId = String(
+      state.workflow_id ?? state.assistant_id ?? state.agent_id ?? 'unknown'
+    );
+    const agentName = String(
+      state.workflow_name ?? state.assistant_name ?? state.agent_name ?? getEventWorkflowName(event) ?? agentId,
+    );
+    const platform = getEventPlatform(event) || 'unknown';
+
+    if (!agentMap.has(agentId)) {
+      agentMap.set(agentId, { name: agentName, platform, events: [] });
+    }
+    agentMap.get(agentId)!.events.push(event);
+  }
+
+  // Cap at 5 agents for rendering
+  const agentEntries = Array.from(agentMap.entries()).slice(0, 5);
+
+  const perAgentData = agentEntries.map(([agentId, agent]) => {
+    const aEvents = agent.events;
+    const aTotal = aEvents.length;
+    const aSuccess = aEvents.filter((e) => getEventStatus(e) === 'success').length;
+    const aSuccessRate = aTotal > 0 ? Math.round((aSuccess / aTotal) * 100) : 0;
+    const aDurations = aEvents
+      .map((e) => toNumber(getStateField(e, 'duration_ms')))
+      .filter((d) => d > 0);
+    const aAvgDuration =
+      aDurations.length > 0 ? aDurations.reduce((a, b) => a + b, 0) / aDurations.length : 0;
+    const aCost = aEvents.reduce(
+      (acc, e) => acc + toNumber(getStateField(e, 'cost') || e.value),
+      0,
+    );
+
+    // Per-agent trend
+    const aBuckets = new Map<string, { count: number; success: number; fail: number }>();
+    for (const event of aEvents) {
+      const day = toDateString(event.timestamp);
+      if (!day) continue;
+      const bucket = aBuckets.get(day) ?? { count: 0, success: 0, fail: 0 };
+      bucket.count++;
+      if (getEventStatus(event) === 'success') bucket.success++;
+      else bucket.fail++;
+      aBuckets.set(day, bucket);
+    }
+    const aTrend = Array.from(aBuckets.entries())
+      .map(([date, b]) => ({ date, count: b.count, successCount: b.success, failCount: b.fail }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    // Per-agent recent rows
+    const aRows = [...aEvents]
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, 10)
+      .map((event) => {
+        const base: TableRow = {
+          id: event.id,
+          name: getEventWorkflowName(event),
+          status: getEventStatus(event),
+          platform: getEventPlatform(event) || 'unknown',
+          duration: formatDuration(toNumber(getStateField(event, 'duration_ms'))),
+          cost: formatCost(toNumber(getStateField(event, 'cost'))),
+          time: new Date(event.timestamp).toLocaleString(),
+        };
+        if (event.state && typeof event.state === 'object') {
+          for (const [key, value] of Object.entries(event.state)) {
+            if (!(key in base) && value !== undefined && value !== null) {
+              base[key] = value;
+            }
+          }
+        }
+        return base;
+      });
+
+    return {
+      agentId,
+      agentName: agent.name,
+      platform: agent.platform,
+      callCount: aTotal,
+      successRate: aSuccessRate,
+      avgDurationMs: aAvgDuration,
+      trend: aTrend,
+      recentRows: aRows,
+      kpis: [
+        {
+          label: 'Calls',
+          value: aTotal,
+          color: 'blue' as const,
+        },
+        {
+          label: 'Success Rate',
+          value: `${aSuccessRate}%`,
+          color: aSuccessRate >= 90 ? 'green' as const : aSuccessRate >= 70 ? 'amber' as const : 'red' as const,
+        },
+        {
+          label: 'Avg Duration',
+          value: aAvgDuration > 0 ? formatDuration(aAvgDuration) : '—',
+          color: 'blue' as const,
+        },
+        {
+          label: 'Cost',
+          value: formatCost(aCost),
+          color: 'neutral' as const,
+        },
+      ],
+    };
+  });
+
+  return {
+    headline: {
+      total: totalCalls,
+      totalLabel: 'total calls',
+      percentChange: calculatePercentChange(totalCalls, previousEvents.length),
+      periodLabel: `last 30 days · ${agentEntries.length} agent${agentEntries.length !== 1 ? 's' : ''}`,
+    },
+    kpis: [
+      {
+        label: 'Success Rate',
+        value: `${successRate}%`,
+        color: successRate >= 90 ? 'green' : successRate >= 70 ? 'amber' : 'red',
+      },
+      {
+        label: 'Avg Duration',
+        value: avgDurationMs > 0 ? formatDuration(avgDurationMs) : '—',
+        color: 'blue',
+      },
+      { label: 'Failed', value: failedCount, color: failedCount === 0 ? 'green' : 'red' },
+      { label: 'Total Cost', value: formatCost(totalCost), color: 'neutral' },
+    ],
+    trend,
+    recentRows,
+    perAgentData,
+    health: computeHealth(totalCalls, successCount, undefined),
   };
 }
 
@@ -734,10 +1032,6 @@ export function transformCombinedData(events: PortalEvent[], platformType: strin
     ],
     trend,
     recentRows,
-    platformComparison: {
-      voice: { count: voiceEvents.length, successRate: voiceSuccess, platforms: [...new Set(voiceEvents.map((e) => getEventPlatform(e) || 'unknown'))] },
-      workflow: { count: workflowEvents.length, successRate: workflowSuccess, platforms: [...new Set(workflowEvents.map((e) => getEventPlatform(e) || 'unknown'))] },
-    },
     health: computeHealth(totalOps, successCount, undefined),
   };
 }
@@ -752,12 +1046,12 @@ export function transformDataForSkeleton(
   switch (skeletonId) {
     case 'voice-performance':
       return transformVoiceData(events, platformType as 'vapi' | 'retell');
+    case 'multi-agent-voice':
+      return transformMultiAgentVoiceData(events, platformType);
     case 'workflow-operations':
       return transformWorkflowData(events, platformType as 'n8n' | 'make');
     case 'roi-summary':
       return transformROIData(events, platformType);
-    case 'combined-overview':
-      return transformCombinedData(events, platformType);
     default:
       return transformWorkflowData(events, platformType as 'n8n' | 'make');
   }

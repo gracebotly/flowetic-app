@@ -16,8 +16,8 @@ import { PortalShell } from "@/components/portals/PortalShell";
 import { VoicePerformanceSkeleton } from "@/components/portals/skeletons/VoicePerformanceSkeleton";
 import { WorkflowOperationsSkeleton } from "@/components/portals/skeletons/WorkflowOperationsSkeleton";
 import { ROISummarySkeleton } from "@/components/portals/skeletons/ROISummarySkeleton";
-import { CombinedOverviewSkeleton } from "@/components/portals/skeletons/CombinedOverviewSkeleton";
-import { getSkeletonForPlatform } from "@/lib/portals/platformToSkeleton";
+import { MultiAgentVoiceSkeleton } from "@/components/portals/skeletons/MultiAgentVoiceSkeleton";
+import { getSkeletonForPlatform, getSkeletonForPlatformMix } from "@/lib/portals/platformToSkeleton";
 import { transformDataForSkeleton, type SkeletonData, type PortalEvent } from "@/lib/portals/transformData";
 
 
@@ -41,6 +41,7 @@ interface PortalPreviewProps {
   entityName: string;
   surfaceType: string;
   entityExternalIds?: string; // comma-separated external_ids for filtering
+  entityCount?: number;
 }
 
 interface Branding {
@@ -61,16 +62,27 @@ const SKELETON_COMPONENTS: Record<string, ComponentType<SkeletonProps>> = {
   "voice-performance": VoicePerformanceSkeleton,
   "workflow-operations": WorkflowOperationsSkeleton,
   "roi-summary": ROISummarySkeleton,
-  "combined-overview": CombinedOverviewSkeleton,
+  "multi-agent-voice": MultiAgentVoiceSkeleton,
 };
 
-function generateSampleVoiceData(): PreviewEvent[] {
+function generateSampleVoiceData(agentCount: number = 1): PreviewEvent[] {
   const now = Date.now();
-  const assistants = ["Sales Assistant", "Support Agent", "Booking Bot"];
+  const agentDefs = [
+    { id: "asst-001", name: "Sales Assistant" },
+    { id: "asst-002", name: "Support Agent" },
+    { id: "asst-003", name: "Booking Bot" },
+    { id: "asst-004", name: "Follow-up Agent" },
+    { id: "asst-005", name: "Intake Bot" },
+  ];
+  // Only use as many agent defs as requested (capped at 5)
+  const activeAgents = agentDefs.slice(0, Math.min(agentCount, 5));
   const endedReasons = ["customer-ended-call", "assistant-ended-call", "silence-timed-out"];
-  return Array.from({ length: 24 }, (_, i) => {
+  // Generate more events when there are more agents so each tab has data
+  const totalEvents = Math.max(24, agentCount * 10);
+  return Array.from({ length: totalEvents }, (_, i) => {
     const isSuccess = Math.random() > 0.15;
     const durationMs = Math.floor(45000 + Math.random() * 300000);
+    const agent = activeAgents[i % activeAgents.length];
     return {
       id: `sample-${i}`,
       type: "call.completed",
@@ -81,8 +93,11 @@ function generateSampleVoiceData(): PreviewEvent[] {
       state: {
         status: isSuccess ? "completed" : "failed",
         duration_ms: durationMs,
-        workflow_name: assistants[i % assistants.length],
-        workflow_id: `asst-${(i % assistants.length) + 1}`,
+        // assistant_id / assistant_name are what transformMultiAgentVoiceData groups by
+        assistant_id: agent.id,
+        assistant_name: agent.name,
+        workflow_name: agent.name,
+        workflow_id: agent.id,
         execution_id: `call-sample-${i}`,
         started_at: new Date(now - i * 3600000).toISOString(),
         ended_at: new Date(now - i * 3600000 + durationMs).toISOString(),
@@ -96,15 +111,16 @@ function generateSampleVoiceData(): PreviewEvent[] {
   });
 }
 
-function generateSampleWorkflowData(): PreviewEvent[] {
-  const now = Date.now();
-  const sampleNames = [
-    "Lead Enrichment Pipeline",
-    "Daily Report Generator",
-    "Slack Notification Flow",
-    "CRM Sync Workflow",
-    "Invoice Processor",
+function generateSampleWorkflowData(workflowCount: number = 1): PreviewEvent[] {
+  const workflowDefs = [
+    { id: 'wf-001', name: 'Lead Qualifier' },
+    { id: 'wf-002', name: 'Email Responder' },
+    { id: 'wf-003', name: 'Invoice Processor' },
+    { id: 'wf-004', name: 'Onboarding Flow' },
+    { id: 'wf-005', name: 'Support Router' },
   ];
+  const activeWorkflows = workflowDefs.slice(0, Math.min(workflowCount, 5));
+  const now = Date.now();
   return Array.from({ length: 30 }, (_, i) => {
     const isSuccess = Math.random() > 0.08;
     return {
@@ -117,15 +133,15 @@ function generateSampleWorkflowData(): PreviewEvent[] {
       state: {
         status: isSuccess ? "success" : "error",
         duration_ms: Math.floor(800 + Math.random() * 4000),
-        workflow_name: sampleNames[i % sampleNames.length],
-        workflow_id: `wf-${(i % sampleNames.length) + 1}`,
+        workflow_id: activeWorkflows[i % activeWorkflows.length].id,
+        workflow_name: activeWorkflows[i % activeWorkflows.length].name,
         execution_id: `exec-sample-${i}`,
         started_at: new Date(now - i * 1800000).toISOString(),
         ended_at: new Date(now - i * 1800000 + 2000).toISOString(),
         error_message: isSuccess ? undefined : "Sample: timeout after 30s",
         platform: "make",
       },
-      labels: { platform: "make", workflow_name: sampleNames[i % sampleNames.length] },
+      labels: { platform: "make", workflow_name: activeWorkflows[i % activeWorkflows.length].name },
       timestamp: new Date(now - i * 1800000).toISOString(),
     };
   });
@@ -141,12 +157,15 @@ function BrowserChrome({
   if (mode === "tablet") {
     return (
       <div className="overflow-hidden rounded-2xl border-[3px] border-slate-700 shadow-2xl dark:border-slate-500">
-        <div className="flex justify-center bg-slate-700 py-1.5 dark:bg-slate-500">
-          <div className="h-1.5 w-1.5 rounded-full bg-slate-500 dark:bg-slate-400" />
+        {/* Top bezel — camera dot */}
+        <div className="flex items-center justify-center bg-slate-700 py-2 dark:bg-slate-500">
+          <div className="h-2 w-2 rounded-full bg-slate-500 dark:bg-slate-400" />
         </div>
-        <div className="overflow-hidden">{children}</div>
-        <div className="flex justify-center bg-slate-700 py-2 dark:bg-slate-500">
-          <div className="h-1 w-8 rounded-full bg-slate-500 dark:bg-slate-400" />
+        {/* Screen area — clips X overflow but allows Y scroll */}
+        <div className="overflow-x-hidden overflow-y-hidden">{children}</div>
+        {/* Bottom bezel — home bar */}
+        <div className="flex justify-center bg-slate-700 py-2.5 dark:bg-slate-500">
+          <div className="h-1 w-10 rounded-full bg-slate-500 dark:bg-slate-400" />
         </div>
       </div>
     );
@@ -171,6 +190,7 @@ export default function PortalPreview({
   entityName,
   surfaceType,
   entityExternalIds,
+  entityCount,
 }: PortalPreviewProps) {
   const [device, setDevice] = useState<DeviceMode>("tablet");
   const [branding, setBranding] = useState<Branding | null>(null);
@@ -179,7 +199,13 @@ export default function PortalPreview({
   const [usingSampleData, setUsingSampleData] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  const skeletonId = useMemo(() => getSkeletonForPlatform(platformType), [platformType]);
+  const skeletonId = useMemo(() => {
+    // If multiple entities are selected (passed via prop), use mix detection
+    if (typeof entityCount === 'number' && entityCount > 1) {
+      return getSkeletonForPlatformMix([platformType], entityCount);
+    }
+    return getSkeletonForPlatform(platformType);
+  }, [platformType, entityCount]);
   const SkeletonComponent = SKELETON_COMPONENTS[skeletonId];
 
   useEffect(() => {
@@ -206,12 +232,12 @@ export default function PortalPreview({
           setUsingSampleData(false);
         } else {
           const isVoice = platformType === "vapi" || platformType === "retell";
-          setEvents(isVoice ? generateSampleVoiceData() : generateSampleWorkflowData());
+          setEvents(isVoice ? generateSampleVoiceData(entityCount ?? 1) : generateSampleWorkflowData(entityCount ?? 1));
           setUsingSampleData(true);
         }
       } catch {
         const isVoice = platformType === "vapi" || platformType === "retell";
-        setEvents(isVoice ? generateSampleVoiceData() : generateSampleWorkflowData());
+        setEvents(isVoice ? generateSampleVoiceData(entityCount ?? 1) : generateSampleWorkflowData(entityCount ?? 1));
         setUsingSampleData(true);
       } finally {
         if (mounted) setLoading(false);
@@ -323,7 +349,10 @@ export default function PortalPreview({
         <motion.div
           layout
           transition={{ type: "spring", stiffness: 300, damping: 30 }}
-          style={{ width: Math.min(deviceWidth * scale, containerMaxWidth), overflow: "hidden" }}
+          style={{
+            width: Math.min(deviceWidth * scale, containerMaxWidth),
+            overflow: "visible", // let the device shadow render fully
+          }}
         >
           <BrowserChrome mode={device}>
             <div
@@ -331,8 +360,13 @@ export default function PortalPreview({
                 width: deviceWidth,
                 zoom: scale,
                 overflowX: "hidden",
-                maxHeight: 900,
+                // Height shown in the device frame before scrolling starts
+                // Tablet: show ~700px of content (accounts for zoom scale)
+                // Mobile: show full phone height
+                height: device === "tablet" ? Math.round(680 / scale) : 720,
                 overflowY: "auto",
+                // Prevent scroll from leaking to the outer page
+                overscrollBehavior: "contain",
               }}
             >
               <PortalShell

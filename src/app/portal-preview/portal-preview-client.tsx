@@ -8,7 +8,7 @@ import { PortalShell } from "@/components/portals/PortalShell";
 import { VoicePerformanceSkeleton } from "@/components/portals/skeletons/VoicePerformanceSkeleton";
 import { WorkflowOperationsSkeleton } from "@/components/portals/skeletons/WorkflowOperationsSkeleton";
 import { ROISummarySkeleton } from "@/components/portals/skeletons/ROISummarySkeleton";
-import { CombinedOverviewSkeleton } from "@/components/portals/skeletons/CombinedOverviewSkeleton";
+import { MultiAgentVoiceSkeleton } from "@/components/portals/skeletons/MultiAgentVoiceSkeleton";
 import { getSkeletonForPlatform } from "@/lib/portals/platformToSkeleton";
 import { transformDataForSkeleton, type SkeletonData, type PortalEvent } from "@/lib/portals/transformData";
 
@@ -35,7 +35,7 @@ const SKELETON_COMPONENTS: Record<string, ComponentType<SkeletonProps>> = {
   "voice-performance": VoicePerformanceSkeleton,
   "workflow-operations": WorkflowOperationsSkeleton,
   "roi-summary": ROISummarySkeleton,
-  "combined-overview": CombinedOverviewSkeleton,
+  "multi-agent-voice": MultiAgentVoiceSkeleton,
 };
 
 function generateSampleVoiceData(): PreviewEvent[] {

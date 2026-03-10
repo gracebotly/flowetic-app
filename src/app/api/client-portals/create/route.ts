@@ -5,9 +5,9 @@ import { logActivity } from '@/lib/activity/logActivity';
 
 const VALID_SKELETONS = [
   'voice-performance',
+  'multi-agent-voice',
   'workflow-operations',
   'roi-summary',
-  'combined-overview',
 ];
 
 const VALID_SURFACE_TYPES = ['analytics', 'runner', 'both'];
@@ -112,7 +112,7 @@ export async function POST(request: Request) {
       .eq('tenant_id', membership.tenant_id);
 
     const platformTypes = (sourceRecords ?? []).map((s: { id: string; type: string }) => s.type);
-    finalSkeleton = getSkeletonForPlatformMix(platformTypes);
+    finalSkeleton = getSkeletonForPlatformMix(platformTypes, allEntityIds.length);
     finalPlatformType = null;
   } else if (resolvedPlatformType) {
     finalSkeleton = getSkeletonForPlatform(resolvedPlatformType);
