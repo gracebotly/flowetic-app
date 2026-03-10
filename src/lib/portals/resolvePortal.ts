@@ -120,10 +120,14 @@ export async function resolvePortal(
 
         if (platform === 'vapi' || platform === 'retell' || pt === 'vapi' || pt === 'retell') {
           const voiceId = String(state.assistant_id ?? state.agent_id ?? '');
+          // If voiceId is empty/missing, fall through — source_id scoping is sufficient
+          if (!voiceId || voiceId === 'undefined' || voiceId === 'null') return true;
           return voiceId === entity.external_id;
         }
 
         const wfId = String(state.workflow_id ?? '');
+        // Same fallback for workflows
+        if (!wfId || wfId === 'undefined' || wfId === 'null') return true;
         return wfId === entity.external_id;
       });
     }
@@ -207,6 +211,18 @@ export async function resolvePortal(
     .then(({ error }) => {
       if (error) console.warn('[resolvePortal] Failed to update last_viewed_at:', error.message);
     });
+
+  // Patch platform_type from source if portal has null (legacy portals)
+  if (!portal.platform_type) {
+    const { data: source } = await supabaseAdmin
+      .from('sources')
+      .select('type')
+      .eq('id', portal.source_id)
+      .single();
+    if (source?.type) {
+      (portal as Record<string, unknown>).platform_type = source.type;
+    }
+  }
 
   return {
     portal,
