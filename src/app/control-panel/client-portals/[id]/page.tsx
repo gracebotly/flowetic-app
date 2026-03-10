@@ -22,6 +22,7 @@ import {
   Save,
   AlertTriangle,
   Users,
+  Pencil,
 } from "lucide-react";
 import { SurfaceBadge } from "@/components/offerings/SurfaceBadge";
 import { AccessBadge } from "@/components/offerings/AccessBadge";
@@ -101,6 +102,11 @@ export default function OfferingDetailPage() {
   const [tokenAction, setTokenAction] = useState<"idle" | "regenerating" | "revoking">("idle");
   const [copied, setCopied] = useState(false);
 
+  // Custom token modal state
+  const [showTokenModal, setShowTokenModal] = useState(false);
+  const [customTokenInput, setCustomTokenInput] = useState("");
+  const [tokenModalError, setTokenModalError] = useState<string | null>(null);
+
   // Archive state
   const [archiveConfirm, setArchiveConfirm] = useState(false);
   const [archiving, setArchiving] = useState(false);
@@ -161,11 +167,40 @@ export default function OfferingDetailPage() {
   };
 
   // ── Token management (Access) ─────────────────────────────
-  const regenerateToken = async () => {
+  // Opens modal pre-filled with auto-generated slug
+  const openRegenerateModal = () => {
     if (!offering) return;
+    const slug = offering.name
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, "")
+      .trim()
+      .split(/\s+/)
+      .slice(0, 2)
+      .join("-");
+    const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+    const rand = Array.from({ length: 5 }, () =>
+      chars[Math.floor(Math.random() * chars.length)]
+    ).join("");
+    setCustomTokenInput(slug ? `${slug}-${rand}` : rand);
+    setTokenModalError(null);
+    setShowTokenModal(true);
+  };
+
+  const confirmRegenerateToken = async () => {
+    if (!offering) return;
+    const clean = customTokenInput.toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 60);
+    if (!clean || clean.length < 3) {
+      setTokenModalError("Link must be at least 3 characters (letters, numbers, hyphens only).");
+      return;
+    }
     setTokenAction("regenerating");
+    setShowTokenModal(false);
     try {
-      const res = await fetch(`/api/client-portals/${id}/token`, { method: "POST" });
+      const res = await fetch(`/api/client-portals/${id}/token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customToken: clean }),
+      });
       const json = await res.json();
       if (json.ok) {
         setOffering((prev) => (prev ? { ...prev, token: json.token } : prev));
@@ -174,6 +209,8 @@ export default function OfferingDetailPage() {
       setTokenAction("idle");
     }
   };
+
+  const regenerateToken = openRegenerateModal;
 
   const revokeToken = async () => {
     if (!offering) return;
@@ -256,7 +293,8 @@ export default function OfferingDetailPage() {
     editStatus !== offering.status;
 
   return (
-    <div className="mx-auto max-w-4xl px-6 py-8">
+    <>
+      <div className="mx-auto max-w-4xl px-6 py-8">
       {/* Back link */}
       <Link
         href="/control-panel/client-portals"
@@ -715,6 +753,68 @@ export default function OfferingDetailPage() {
           <ScopedActivityFeed offeringId={id} limit={50} />
         </div>
       )}
-    </div>
+      </div>
+
+      {/* ── Custom Token Modal ──────────────────────────────── */}
+      {showTokenModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <h2 className="text-base font-semibold text-gray-900">Customize Your Link</h2>
+            <p className="mt-1 text-sm text-gray-500">
+              Edit the link your client will use. Letters, numbers, and hyphens only.
+            </p>
+
+            <div className="mt-4">
+              <div className="flex items-center rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm">
+                <span className="shrink-0 text-gray-400">{baseUrl}/client/</span>
+                <input
+                  type="text"
+                  value={customTokenInput}
+                  onChange={(e) => {
+                    setCustomTokenInput(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""));
+                    setTokenModalError(null);
+                  }}
+                  className="min-w-0 flex-1 bg-transparent font-mono text-gray-900 focus:outline-none"
+                  placeholder="my-client-link"
+                  autoFocus
+                />
+                <button
+                  onClick={() => {
+                    const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+                    const rand = Array.from({ length: 5 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+                    const slug = (offering?.name ?? "portal").toLowerCase().replace(/[^a-z0-9\s]/g, "").trim().split(/\s+/).slice(0, 2).join("-");
+                    setCustomTokenInput(slug ? `${slug}-${rand}` : rand);
+                    setTokenModalError(null);
+                  }}
+                  className="ml-2 shrink-0 text-xs text-blue-500 hover:text-blue-700"
+                  title="Randomize suffix"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              {tokenModalError && (
+                <p className="mt-1.5 text-xs text-red-600">{tokenModalError}</p>
+              )}
+            </div>
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                onClick={() => setShowTokenModal(false)}
+                className="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmRegenerateToken}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                Save Link
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

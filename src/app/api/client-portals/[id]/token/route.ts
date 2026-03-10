@@ -40,9 +40,9 @@ function generateShortToken(portalName: string): string {
   return slug ? `${slug}-${rand}` : rand;
 }
 
-// ── POST: Generate new token ────────────────────────────────
+// ── POST: Generate or set token ─────────────────────────────
 export async function POST(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
@@ -50,15 +50,31 @@ export async function POST(
   const tenantId = await getTenantId(supabase);
   if (!tenantId) return json(401, { ok: false, code: 'AUTH_REQUIRED' });
 
-  // Fetch portal name to generate a human-friendly slug
-  const { data: existing } = await supabase
-    .from('client_portals')
-    .select('name')
-    .eq('id', id)
-    .eq('tenant_id', tenantId)
-    .maybeSingle();
-
-  const newToken = generateShortToken(existing?.name ?? 'portal');
+  // If a custom token is provided in body, use it; otherwise auto-generate
+  let newToken: string;
+  try {
+    const body = await req.json() as { customToken?: string };
+    if (body.customToken && typeof body.customToken === 'string') {
+      const clean = body.customToken.toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 60);
+      newToken = clean || generateShortToken('portal');
+    } else {
+      const { data: existing } = await supabase
+        .from('client_portals')
+        .select('name')
+        .eq('id', id)
+        .eq('tenant_id', tenantId)
+        .maybeSingle();
+      newToken = generateShortToken(existing?.name ?? 'portal');
+    }
+  } catch {
+    const { data: existing } = await supabase
+      .from('client_portals')
+      .select('name')
+      .eq('id', id)
+      .eq('tenant_id', tenantId)
+      .maybeSingle();
+    newToken = generateShortToken(existing?.name ?? 'portal');
+  }
 
   const { data: offering, error } = await supabase
     .from('client_portals')
