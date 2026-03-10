@@ -142,12 +142,15 @@ function BrowserChrome({
   if (mode === "tablet") {
     return (
       <div className="overflow-hidden rounded-2xl border-[3px] border-slate-700 shadow-2xl dark:border-slate-500">
-        <div className="flex justify-center bg-slate-700 py-1.5 dark:bg-slate-500">
-          <div className="h-1.5 w-1.5 rounded-full bg-slate-500 dark:bg-slate-400" />
+        {/* Top bezel — camera dot */}
+        <div className="flex items-center justify-center bg-slate-700 py-2 dark:bg-slate-500">
+          <div className="h-2 w-2 rounded-full bg-slate-500 dark:bg-slate-400" />
         </div>
-        <div className="overflow-hidden">{children}</div>
-        <div className="flex justify-center bg-slate-700 py-2 dark:bg-slate-500">
-          <div className="h-1 w-8 rounded-full bg-slate-500 dark:bg-slate-400" />
+        {/* Screen area — clips X overflow but allows Y scroll */}
+        <div className="overflow-x-hidden overflow-y-hidden">{children}</div>
+        {/* Bottom bezel — home bar */}
+        <div className="flex justify-center bg-slate-700 py-2.5 dark:bg-slate-500">
+          <div className="h-1 w-10 rounded-full bg-slate-500 dark:bg-slate-400" />
         </div>
       </div>
     );
@@ -331,7 +334,10 @@ export default function PortalPreview({
         <motion.div
           layout
           transition={{ type: "spring", stiffness: 300, damping: 30 }}
-          style={{ width: Math.min(deviceWidth * scale, containerMaxWidth), overflow: "hidden" }}
+          style={{
+            width: Math.min(deviceWidth * scale, containerMaxWidth),
+            overflow: "visible", // let the device shadow render fully
+          }}
         >
           <BrowserChrome mode={device}>
             <div
@@ -339,8 +345,13 @@ export default function PortalPreview({
                 width: deviceWidth,
                 zoom: scale,
                 overflowX: "hidden",
-                maxHeight: 900,
+                // Height shown in the device frame before scrolling starts
+                // Tablet: show ~700px of content (accounts for zoom scale)
+                // Mobile: show full phone height
+                height: device === "tablet" ? Math.round(680 / scale) : 720,
                 overflowY: "auto",
+                // Prevent scroll from leaking to the outer page
+                overscrollBehavior: "contain",
               }}
             >
               <PortalShell
