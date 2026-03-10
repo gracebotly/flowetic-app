@@ -10,20 +10,6 @@ const nextConfig: NextConfig = {
     "@mastra/mcp",
   ],
 
-  async rewrites() {
-    return [
-      // API: /api/client-portals/* → /api/offerings/* (internal alias)
-      { source: "/api/client-portals/create", destination: "/api/offerings/create" },
-      { source: "/api/client-portals/analytics", destination: "/api/offerings/analytics" },
-      { source: "/api/client-portals/:id/analytics", destination: "/api/offerings/:id/analytics" },
-      { source: "/api/client-portals/:id/token", destination: "/api/offerings/:id/token" },
-      { source: "/api/client-portals/:id/view", destination: "/api/offerings/:id/view" },
-      { source: "/api/client-portals/:id", destination: "/api/offerings/:id" },
-      // Bare list: /api/client-portals → /api/offerings (for OfferingsTab GET)
-      { source: "/api/client-portals", destination: "/api/offerings" },
-    ];
-  },
-
   async redirects() {
     return [
       // Legacy app routes → new Control Panel shell
