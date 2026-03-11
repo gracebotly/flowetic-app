@@ -254,7 +254,7 @@ export default function PortalPreview({
               No data
             </Badge>
           )}
-          {isSparseData && !isNoData && (
+          {isSparseData && (
             <Badge size="xs" color="amber">
               Sparse data
             </Badge>
@@ -339,7 +339,7 @@ export default function PortalPreview({
           </div>
         </motion.div>
       )}
-      {isSparseData && !isNoData && (
+      {isSparseData && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
