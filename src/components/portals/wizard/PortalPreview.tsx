@@ -8,6 +8,7 @@ import {
   Loader2,
   RotateCcw,
   Info,
+  AlertTriangle,
 } from "lucide-react";
 import { Badge } from "@tremor/react";
 import { motion } from "framer-motion";
@@ -42,6 +43,7 @@ interface PortalPreviewProps {
   surfaceType: string;
   entityExternalIds?: string; // comma-separated external_ids for filtering
   entityCount?: number;
+  customTitle?: string;
 }
 
 interface Branding {
@@ -64,88 +66,6 @@ const SKELETON_COMPONENTS: Record<string, ComponentType<SkeletonProps>> = {
   "roi-summary": ROISummarySkeleton,
   "multi-agent-voice": MultiAgentVoiceSkeleton,
 };
-
-function generateSampleVoiceData(agentCount: number = 1): PreviewEvent[] {
-  const now = Date.now();
-  const agentDefs = [
-    { id: "asst-001", name: "Sales Assistant" },
-    { id: "asst-002", name: "Support Agent" },
-    { id: "asst-003", name: "Booking Bot" },
-    { id: "asst-004", name: "Follow-up Agent" },
-    { id: "asst-005", name: "Intake Bot" },
-  ];
-  // Only use as many agent defs as requested (capped at 5)
-  const activeAgents = agentDefs.slice(0, Math.min(agentCount, 5));
-  const endedReasons = ["customer-ended-call", "assistant-ended-call", "silence-timed-out"];
-  // Generate more events when there are more agents so each tab has data
-  const totalEvents = Math.max(24, agentCount * 10);
-  return Array.from({ length: totalEvents }, (_, i) => {
-    const isSuccess = Math.random() > 0.15;
-    const durationMs = Math.floor(45000 + Math.random() * 300000);
-    const agent = activeAgents[i % activeAgents.length];
-    return {
-      id: `sample-${i}`,
-      type: "call.completed",
-      name: "call.completed",
-      value: isSuccess ? 1 : 0,
-      unit: "count",
-      text: `Sample call ${i + 1}`,
-      state: {
-        status: isSuccess ? "completed" : "failed",
-        duration_ms: durationMs,
-        // assistant_id / assistant_name are what transformMultiAgentVoiceData groups by
-        assistant_id: agent.id,
-        assistant_name: agent.name,
-        workflow_name: agent.name,
-        workflow_id: agent.id,
-        execution_id: `call-sample-${i}`,
-        started_at: new Date(now - i * 3600000).toISOString(),
-        ended_at: new Date(now - i * 3600000 + durationMs).toISOString(),
-        ended_reason: endedReasons[i % endedReasons.length],
-        cost: Number((0.03 + Math.random() * 0.15).toFixed(4)),
-        platform: "vapi",
-      },
-      labels: { platform: "vapi" },
-      timestamp: new Date(now - i * 3600000).toISOString(),
-    };
-  });
-}
-
-function generateSampleWorkflowData(workflowCount: number = 1): PreviewEvent[] {
-  const workflowDefs = [
-    { id: 'wf-001', name: 'Lead Qualifier' },
-    { id: 'wf-002', name: 'Email Responder' },
-    { id: 'wf-003', name: 'Invoice Processor' },
-    { id: 'wf-004', name: 'Onboarding Flow' },
-    { id: 'wf-005', name: 'Support Router' },
-  ];
-  const activeWorkflows = workflowDefs.slice(0, Math.min(workflowCount, 5));
-  const now = Date.now();
-  return Array.from({ length: 30 }, (_, i) => {
-    const isSuccess = Math.random() > 0.08;
-    return {
-      id: `sample-${i}`,
-      type: "workflow_execution",
-      name: "workflow_execution",
-      value: isSuccess ? 1 : 0,
-      unit: "count",
-      text: `Execution ${i + 1}`,
-      state: {
-        status: isSuccess ? "success" : "error",
-        duration_ms: Math.floor(800 + Math.random() * 4000),
-        workflow_id: activeWorkflows[i % activeWorkflows.length].id,
-        workflow_name: activeWorkflows[i % activeWorkflows.length].name,
-        execution_id: `exec-sample-${i}`,
-        started_at: new Date(now - i * 1800000).toISOString(),
-        ended_at: new Date(now - i * 1800000 + 2000).toISOString(),
-        error_message: isSuccess ? undefined : "Sample: timeout after 30s",
-        platform: "make",
-      },
-      labels: { platform: "make", workflow_name: activeWorkflows[i % activeWorkflows.length].name },
-      timestamp: new Date(now - i * 1800000).toISOString(),
-    };
-  });
-}
 
 function BrowserChrome({
   mode,
@@ -191,12 +111,12 @@ export default function PortalPreview({
   surfaceType,
   entityExternalIds,
   entityCount,
+  customTitle,
 }: PortalPreviewProps) {
   const [device, setDevice] = useState<DeviceMode>("tablet");
   const [branding, setBranding] = useState<Branding | null>(null);
   const [events, setEvents] = useState<PreviewEvent[] | null>(null);
   const [loading, setLoading] = useState(true);
-  const [usingSampleData, setUsingSampleData] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
   const skeletonId = useMemo(() => {
@@ -229,16 +149,11 @@ export default function PortalPreview({
 
         if (Array.isArray(realEvents) && realEvents.length > 0) {
           setEvents(realEvents as PreviewEvent[]);
-          setUsingSampleData(false);
         } else {
-          const isVoice = platformType === "vapi" || platformType === "retell";
-          setEvents(isVoice ? generateSampleVoiceData(entityCount ?? 1) : generateSampleWorkflowData(entityCount ?? 1));
-          setUsingSampleData(true);
+          setEvents([]);
         }
       } catch {
-        const isVoice = platformType === "vapi" || platformType === "retell";
-        setEvents(isVoice ? generateSampleVoiceData(entityCount ?? 1) : generateSampleWorkflowData(entityCount ?? 1));
-        setUsingSampleData(true);
+        setEvents([]);
       } finally {
         if (mounted) setLoading(false);
       }
@@ -258,6 +173,10 @@ export default function PortalPreview({
       return null;
     }
   }, [events, skeletonId, platformType]);
+
+  const dataHealth = transformedData?.health?.status ?? "no-data";
+  const isNoData = dataHealth === "no-data";
+  const isSparseData = dataHealth === "sparse";
 
   const containerMaxWidth = 900;
   const deviceWidth = DEVICES[device].width;
@@ -296,7 +215,7 @@ export default function PortalPreview({
         </div>
 
         <a
-          href={`/portal-preview?source_id=${sourceId}&platform=${platformType}&surface=${surfaceType}&entity_name=${encodeURIComponent(entityName)}${entityExternalIds ? `&entity_external_ids=${encodeURIComponent(entityExternalIds)}` : ""}`}
+          href={`/portal-preview?source_id=${sourceId}&platform=${platformType}&surface=${surfaceType}&entity_name=${encodeURIComponent(entityName)}&entity_count=${entityCount ?? 1}${entityExternalIds ? `&entity_external_ids=${encodeURIComponent(entityExternalIds)}` : ""}`}
           target="_blank"
           rel="noopener noreferrer"
           className="cursor-pointer flex items-center gap-1.5 rounded-tremor-default border border-tremor-border px-3 py-1.5 text-xs font-medium text-tremor-content-strong transition-colors duration-200 hover:bg-tremor-background-subtle dark:border-dark-tremor-border dark:text-dark-tremor-content-strong dark:hover:bg-dark-tremor-background-subtle"
@@ -330,9 +249,14 @@ export default function PortalPreview({
         </div>
 
         <div className="flex items-center gap-2">
-          {usingSampleData && (
+          {isNoData && (
+            <Badge size="xs" color="orange">
+              No data
+            </Badge>
+          )}
+          {isSparseData && (
             <Badge size="xs" color="amber">
-              Sample data
+              Sparse data
             </Badge>
           )}
           <button
@@ -370,11 +294,12 @@ export default function PortalPreview({
               }}
             >
               <PortalShell
-                  portalName={entityName || "Your Portal"}
+                  portalName={customTitle?.trim() || entityName || "Your Portal"}
                   tenantName={branding?.tenant_name || "Your Agency"}
                   logoUrl={branding?.logo_url || null}
                   primaryColor={branding?.primary_color || "#3b82f6"}
                   secondaryColor={branding?.secondary_color || "#1e40af"}
+                  footerText={branding?.brand_footer || `© ${new Date().getFullYear()} ${branding?.tenant_name || "Your Agency"}. All rights reserved.`}
                 >
                   {SkeletonComponent && transformedData ? (
                     <SkeletonComponent
@@ -397,16 +322,38 @@ export default function PortalPreview({
         </motion.div>
       </div>
 
-      {usingSampleData && (
+      {isNoData && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="flex items-start gap-2 rounded-lg border border-orange-200 bg-orange-50 p-3 dark:border-orange-800 dark:bg-orange-900/20"
+        >
+          <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-orange-600 dark:text-orange-400" />
+          <div>
+            <p className="text-xs font-semibold text-orange-700 dark:text-orange-300">
+              No events recorded yet
+            </p>
+            <p className="mt-0.5 text-xs text-orange-600 dark:text-orange-400">
+              This agent or workflow has no activity in the last 30 days. Your client will see an empty dashboard until data starts flowing. You can still share this portal — it will populate automatically once activity begins.
+            </p>
+          </div>
+        </motion.div>
+      )}
+      {isSparseData && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-900/20"
         >
           <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600 dark:text-amber-400" />
-          <p className="text-xs text-amber-700 dark:text-amber-300">
-            Showing sample data because this agent has no events yet. Once your client starts using the portal, real data will populate automatically.
-          </p>
+          <div>
+            <p className="text-xs font-semibold text-amber-700 dark:text-amber-300">
+              Limited data — {transformedData?.health?.eventCount ?? 0} events recorded
+            </p>
+            <p className="mt-0.5 text-xs text-amber-600 dark:text-amber-400">
+              Analytics will become more accurate as more activity is recorded. Charts and trends may not yet be fully representative.
+            </p>
+          </div>
         </motion.div>
       )}
     </div>

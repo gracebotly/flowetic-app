@@ -9,7 +9,7 @@ import { VoicePerformanceSkeleton } from "@/components/portals/skeletons/VoicePe
 import { WorkflowOperationsSkeleton } from "@/components/portals/skeletons/WorkflowOperationsSkeleton";
 import { ROISummarySkeleton } from "@/components/portals/skeletons/ROISummarySkeleton";
 import { MultiAgentVoiceSkeleton } from "@/components/portals/skeletons/MultiAgentVoiceSkeleton";
-import { getSkeletonForPlatform } from "@/lib/portals/platformToSkeleton";
+import { getSkeletonForPlatformMix } from "@/lib/portals/platformToSkeleton";
 import { transformDataForSkeleton, type SkeletonData, type PortalEvent } from "@/lib/portals/transformData";
 
 type PreviewEvent = PortalEvent;
@@ -38,36 +38,6 @@ const SKELETON_COMPONENTS: Record<string, ComponentType<SkeletonProps>> = {
   "multi-agent-voice": MultiAgentVoiceSkeleton,
 };
 
-function generateSampleVoiceData(): PreviewEvent[] {
-  const now = Date.now();
-  return Array.from({ length: 24 }, (_, i) => ({
-    id: `sample-${i}`,
-    type: "call.completed",
-    name: "call.completed",
-    value: Math.random() > 0.15 ? 1 : 0,
-    unit: "count",
-    text: `Sample call ${i + 1}`,
-    state: { status: Math.random() > 0.15 ? "completed" : "failed", duration_seconds: Math.floor(45 + Math.random() * 300) },
-    labels: { platform: "vapi" },
-    timestamp: new Date(now - i * 3600000).toISOString(),
-  }));
-}
-
-function generateSampleWorkflowData(): PreviewEvent[] {
-  const now = Date.now();
-  return Array.from({ length: 30 }, (_, i) => ({
-    id: `sample-${i}`,
-    type: "execution.completed",
-    name: "execution.completed",
-    value: Math.random() > 0.08 ? 1 : 0,
-    unit: "count",
-    text: `Execution ${i + 1}`,
-    state: { status: Math.random() > 0.08 ? "success" : "error", duration_ms: Math.floor(800 + Math.random() * 4000) },
-    labels: { platform: "make" },
-    timestamp: new Date(now - i * 1800000).toISOString(),
-  }));
-}
-
 export default function PortalPreviewClient() {
   const params = useSearchParams();
   const router = useRouter();
@@ -85,12 +55,16 @@ export default function PortalPreviewClient() {
   const platform = params.get("platform") || "vapi";
   const surface = params.get("surface") || "analytics";
   const entityExternalIds = params.get("entity_external_ids"); // comma-separated external_ids
+  const entityCount = Number(params.get("entity_count") ?? "1") || 1;
 
   const [branding, setBranding] = useState<Branding | null>(null);
   const [events, setEvents] = useState<PreviewEvent[] | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const skeletonId = useMemo(() => getSkeletonForPlatform(platform), [platform]);
+  const skeletonId = useMemo(
+    () => getSkeletonForPlatformMix([platform], entityCount),
+    [platform, entityCount]
+  );
   const SkeletonComponent = SKELETON_COMPONENTS[skeletonId];
 
   useEffect(() => {
@@ -100,7 +74,7 @@ export default function PortalPreviewClient() {
         const [brandRes, eventsRes] = await Promise.all([
           fetch("/api/settings/branding"),
           sourceId
-            ? fetch(`/api/events?source_id=${sourceId}&limit=100${entityExternalIds ? `&entity_external_ids=${encodeURIComponent(entityExternalIds)}` : ""}`)
+            ? fetch(`/api/events?source_id=${sourceId}&limit=500${entityExternalIds ? `&entity_external_ids=${encodeURIComponent(entityExternalIds)}` : ""}`)
             : Promise.resolve(null),
         ]);
         const brandData: Branding | null = brandRes.ok ? await brandRes.json() : null;
@@ -115,12 +89,10 @@ export default function PortalPreviewClient() {
         if (Array.isArray(real) && real.length > 0) {
           setEvents(real as PreviewEvent[]);
         } else {
-          const isVoice = platform === "vapi" || platform === "retell";
-          setEvents(isVoice ? generateSampleVoiceData() : generateSampleWorkflowData());
+          setEvents([]);
         }
       } catch {
-        const isVoice = platform === "vapi" || platform === "retell";
-        setEvents(isVoice ? generateSampleVoiceData() : generateSampleWorkflowData());
+        setEvents([]);
       } finally {
         if (mounted) setLoading(false);
       }

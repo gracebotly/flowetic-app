@@ -8,8 +8,7 @@ import {
   Check,
   ExternalLink,
   ArrowLeft,
-  RotateCcw,
-  Globe,
+  RotateCcw
 } from "lucide-react";
 
 type Props = {
@@ -18,7 +17,6 @@ type Props = {
   productUrl: string | null;
   accessType: string;
   surfaceType: string;
-  clientId?: string;
   onCreateAnother: () => void;
 };
 
@@ -28,7 +26,6 @@ export function WizardStepSuccess({
   productUrl,
   accessType,
   surfaceType,
-  clientId,
   onCreateAnother,
 }: Props) {
   const [copiedMagic, setCopiedMagic] = useState(false);
@@ -94,20 +91,6 @@ export function WizardStepSuccess({
         </div>
       )}
 
-      {clientId && (
-        <div className="mt-3 flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-4 py-2.5">
-          <Globe className="h-4 w-4 flex-shrink-0 text-slate-600" />
-          <p className="text-xs text-slate-600">
-            This portal is assigned to a client.{" "}
-            <a
-              href={`/control-panel/clients/${clientId}?tab=portals`}
-              className="font-medium text-blue-600 transition-colors duration-200 hover:text-blue-700"
-            >
-              Get their Hub Link
-            </a>
-          </p>
-        </div>
-      )}
 
       {/* Product URL */}
       {prodUrl && (
