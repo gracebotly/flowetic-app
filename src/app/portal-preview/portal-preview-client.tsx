@@ -9,7 +9,7 @@ import { VoicePerformanceSkeleton } from "@/components/portals/skeletons/VoicePe
 import { WorkflowOperationsSkeleton } from "@/components/portals/skeletons/WorkflowOperationsSkeleton";
 import { ROISummarySkeleton } from "@/components/portals/skeletons/ROISummarySkeleton";
 import { MultiAgentVoiceSkeleton } from "@/components/portals/skeletons/MultiAgentVoiceSkeleton";
-import { getSkeletonForPlatform } from "@/lib/portals/platformToSkeleton";
+import { getSkeletonForPlatformMix } from "@/lib/portals/platformToSkeleton";
 import { transformDataForSkeleton, type SkeletonData, type PortalEvent } from "@/lib/portals/transformData";
 
 type PreviewEvent = PortalEvent;
@@ -85,12 +85,16 @@ export default function PortalPreviewClient() {
   const platform = params.get("platform") || "vapi";
   const surface = params.get("surface") || "analytics";
   const entityExternalIds = params.get("entity_external_ids"); // comma-separated external_ids
+  const entityCount = Number(params.get("entity_count") ?? "1") || 1;
 
   const [branding, setBranding] = useState<Branding | null>(null);
   const [events, setEvents] = useState<PreviewEvent[] | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const skeletonId = useMemo(() => getSkeletonForPlatform(platform), [platform]);
+  const skeletonId = useMemo(
+    () => getSkeletonForPlatformMix([platform], entityCount),
+    [platform, entityCount]
+  );
   const SkeletonComponent = SKELETON_COMPONENTS[skeletonId];
 
   useEffect(() => {
