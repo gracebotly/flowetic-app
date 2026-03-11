@@ -13,6 +13,22 @@ const VALID_SKELETONS = [
 const VALID_SURFACE_TYPES = ['analytics', 'runner', 'both'];
 const VALID_ACCESS_TYPES = ['magic_link', 'stripe_gate'];
 
+
+function generateShortToken(portalName: string): string {
+  const slug = portalName
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, '')
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .join('-');
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  const rand = Array.from({ length: 5 }, () =>
+    chars[Math.floor(Math.random() * chars.length)]
+  ).join('');
+  return slug ? `${slug}-${rand}` : rand;
+}
+
 export async function POST(request: Request) {
   const supabase = await createClient();
 
@@ -120,7 +136,7 @@ export async function POST(request: Request) {
 
   // ── Generate token for magic_link, slug for stripe_gate ───
   const token =
-    finalAccess === 'magic_link' ? crypto.randomUUID() : null;
+    finalAccess === 'magic_link' ? generateShortToken(name.trim()) : null;
 
   const finalSlug =
     finalAccess === 'stripe_gate' && slug

@@ -15,7 +15,7 @@ export async function GET() {
 
   const { data: tenant, error } = await auth.supabase
     .from("tenants")
-    .select("logo_url, primary_color, secondary_color, welcome_message, brand_footer, favicon_url, default_theme")
+    .select("name, logo_url, primary_color, secondary_color, welcome_message, brand_footer, favicon_url, default_theme")
     .eq("id", auth.tenantId)
     .maybeSingle();
 
@@ -74,7 +74,7 @@ export async function PATCH(req: Request) {
     .from("tenants")
     .update(updates)
     .eq("id", auth.tenantId)
-    .select("logo_url, primary_color, secondary_color, welcome_message, brand_footer, favicon_url, default_theme")
+    .select("name, logo_url, primary_color, secondary_color, welcome_message, brand_footer, favicon_url, default_theme")
     .maybeSingle();
 
   if (error || !tenant) {
