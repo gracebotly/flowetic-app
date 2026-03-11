@@ -63,7 +63,7 @@ export function BrandingPreview({
       {/* Footer */}
       <div className="px-5 py-3 text-center">
         <p className="text-xs text-gray-400">
-          {brandFooter || "Powered by Your Agency"}
+          {brandFooter || "Powered by Getflowetic"}
         </p>
       </div>
     </div>

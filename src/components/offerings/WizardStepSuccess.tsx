@@ -7,8 +7,8 @@ import {
   Copy,
   Check,
   ExternalLink,
-  ArrowLeft,
-  RotateCcw
+  RotateCcw,
+  Palette,
 } from "lucide-react";
 
 type Props = {
@@ -28,12 +28,23 @@ export function WizardStepSuccess({
   surfaceType,
   onCreateAnother,
 }: Props) {
-  const [copiedMagic, setCopiedMagic] = useState(false);
-  const [copiedProduct, setCopiedProduct] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  void accessType;
 
   const base = typeof window !== "undefined" ? window.location.origin : "";
-  const magicUrl = magicLink ? `${base}${magicLink}` : null;
-  const prodUrl = productUrl ? `${base}${productUrl}` : null;
+  const primaryUrl = magicLink
+    ? `${base}${magicLink}`
+    : productUrl
+      ? `${base}${productUrl}`
+      : null;
+
+  const urlLabel =
+    surfaceType === "runner"
+      ? "Product URL"
+      : surfaceType === "both"
+        ? "Portal Link"
+        : "Client Link";
 
   const label =
     surfaceType === "runner"
@@ -42,42 +53,50 @@ export function WizardStepSuccess({
         ? "Portal + Product"
         : "Portal";
 
-  const handleCopy = async (url: string, setter: (v: boolean) => void) => {
-    await navigator.clipboard.writeText(url);
-    setter(true);
-    setTimeout(() => setter(false), 2000);
+  const handleCopy = async () => {
+    if (!primaryUrl) return;
+    await navigator.clipboard.writeText(primaryUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   return (
-    <div className="flex flex-col items-center py-4 text-center">
+    <div className="flex flex-col items-center py-6 text-center">
       {/* Success icon */}
       <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100">
         <CheckCircle2 className="h-9 w-9 text-emerald-600" />
       </div>
 
       <h2 className="mt-5 text-xl font-bold text-gray-900">{label} Created!</h2>
-      <p className="mt-2 max-w-md text-sm text-gray-500">
-        <strong className="text-gray-700">{offering?.name}</strong> is live.
-        {accessType === "magic_link"
-          ? " Share the link below with your client — no login needed."
-          : " Your client can access this via the product URL."}
+      <p className="mt-2 max-w-sm text-sm text-gray-500">
+        <span className="font-medium text-gray-700">{offering?.name}</span> is
+        live. Share the link below with your client.
       </p>
 
-      {/* Magic Link */}
-      {magicUrl && (
-        <div className="mt-6 w-full max-w-lg">
-          <label className="block text-left text-xs font-medium uppercase tracking-wide text-gray-400">
-            Client Link
+      {/* Primary URL */}
+      {primaryUrl && (
+        <div className="mt-7 w-full max-w-lg">
+          <label className="mb-1.5 block text-left text-xs font-medium uppercase tracking-wide text-gray-400">
+            {urlLabel}
           </label>
-          <div className="mt-1.5 flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 p-1.5">
+          <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 p-2">
             <code className="flex-1 truncate px-2 text-left text-sm text-gray-700">
-              {magicUrl}
+              {primaryUrl}
             </code>
-            <button
-              onClick={() => handleCopy(magicUrl, setCopiedMagic)}
-              className="flex items-center gap-1.5 rounded-md bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm transition hover:bg-gray-100"
+            <a
+              href={primaryUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center rounded-lg p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
+              title="Open in new tab"
             >
-              {copiedMagic ? (
+              <ExternalLink className="h-4 w-4" />
+            </a>
+            <button
+              onClick={handleCopy}
+              className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 shadow-sm transition hover:bg-gray-100"
+            >
+              {copied ? (
                 <>
                   <Check className="h-3.5 w-3.5 text-emerald-500" /> Copied!
                 </>
@@ -91,94 +110,39 @@ export function WizardStepSuccess({
         </div>
       )}
 
-
-      {/* Product URL */}
-      {prodUrl && (
-        <div className="mt-4 w-full max-w-lg">
-          <label className="block text-left text-xs font-medium uppercase tracking-wide text-gray-400">
-            Product URL
-          </label>
-          <div className="mt-1.5 flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 p-1.5">
-            <code className="flex-1 truncate px-2 text-left text-sm text-gray-700">
-              {prodUrl}
-            </code>
-            <button
-              onClick={() => handleCopy(prodUrl, setCopiedProduct)}
-              className="flex items-center gap-1.5 rounded-md bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm transition hover:bg-gray-100"
-            >
-              {copiedProduct ? (
-                <>
-                  <Check className="h-3.5 w-3.5 text-emerald-500" /> Copied!
-                </>
-              ) : (
-                <>
-                  <Copy className="h-3.5 w-3.5" /> Copy
-                </>
-              )}
-            </button>
-          </div>
+      {/* Branding nudge card */}
+      <div className="mt-5 flex w-full max-w-lg items-center justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
+        <div className="flex items-center gap-2.5 text-left">
+          <Palette className="h-4 w-4 shrink-0 text-gray-400" />
+          <p className="text-xs text-gray-500">
+            Your client sees{" "}
+            <span className="font-medium text-gray-700">Getflowetic</span>{" "}
+            branding by default.
+          </p>
         </div>
-      )}
-
-      {/* View link(s) */}
-      <div className="mt-3 flex flex-wrap items-center justify-center gap-3">
-        {magicUrl && (
-          <a
-            href={magicUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700"
-          >
-            View Dashboard <ExternalLink className="h-3.5 w-3.5" />
-          </a>
-        )}
-        {prodUrl && (
-          <a
-            href={prodUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700"
-          >
-            View Product Page <ExternalLink className="h-3.5 w-3.5" />
-          </a>
-        )}
-      </div>
-
-      {/* Branding hint */}
-      <p className="mt-6 text-xs text-gray-400">
-        Your client sees your agency&apos;s branding, not Getflowetic&apos;s.{" "}
         <Link
           href="/control-panel/settings?tab=branding"
-          className="text-blue-500 hover:text-blue-600"
+          className="shrink-0 whitespace-nowrap text-xs font-medium text-blue-600 hover:text-blue-700"
         >
-          Edit branding →
+          Add yours →
         </Link>
-      </p>
+      </div>
 
       {/* Action buttons */}
-      <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-        {offering?.id && (
-          <Link
-            href={`/control-panel/client-portals/${offering.id}`}
-            className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
-          >
-            View {label}
-          </Link>
-        )}
+      <div className="mt-8 flex items-center gap-3">
         <button
           type="button"
           onClick={onCreateAnother}
-          className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700"
+          className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50"
         >
           <RotateCcw className="h-4 w-4" />
-          Create Another (Same Config)
+          Create Another
         </button>
         <Link
-          href="/control-panel/client-portals"
-          className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
+          href="/control-panel/offerings"
+          className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
         >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Back to Client Portals
+          View All Portals
         </Link>
       </div>
     </div>
