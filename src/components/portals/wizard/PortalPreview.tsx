@@ -47,12 +47,12 @@ interface PortalPreviewProps {
 }
 
 interface Branding {
+  name?: string | null;
   logo_url: string | null;
   primary_color: string | null;
   secondary_color: string | null;
   welcome_message: string | null;
   brand_footer: string | null;
-  tenant_name: string | null;
 }
 
 const DEVICES: Record<DeviceMode, { width: number; label: string; icon: typeof Tablet }> = {
@@ -295,11 +295,11 @@ export default function PortalPreview({
             >
               <PortalShell
                   portalName={customTitle?.trim() || entityName || "Your Portal"}
-                  tenantName={branding?.tenant_name || "Getflowetic"}
+                  tenantName={branding?.name || "Getflowetic"}
                   logoUrl={branding?.logo_url || null}
                   primaryColor={branding?.primary_color || "#3b82f6"}
                   secondaryColor={branding?.secondary_color || "#1e40af"}
-                  footerText={branding?.brand_footer || `© ${new Date().getFullYear()} Getflowetic. All rights reserved.`}
+                  footerText={branding?.brand_footer || `© ${new Date().getFullYear()} ${branding?.name || "Getflowetic"}. All rights reserved.`}
                 >
                   {SkeletonComponent && transformedData ? (
                     <SkeletonComponent
@@ -308,7 +308,7 @@ export default function PortalPreview({
                         primary_color: branding?.primary_color || "#3b82f6",
                         secondary_color: branding?.secondary_color || "#1e40af",
                         logo_url: branding?.logo_url || null,
-                        portalName: branding?.tenant_name || entityName,
+                        portalName: branding?.name || entityName,
                       }}
                     />
                   ) : (
