@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowLeft, Check } from "lucide-react";
+import { ArrowLeft, Check, AlertTriangle } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
 import AgentPicker from "@/components/portals/wizard/AgentPicker";
@@ -92,6 +92,40 @@ export default function CreateOfferingPage() {
   const [entities, setEntities] = useState<EntityItem[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
   const [stripeConnected, setStripeConnected] = useState(false);
+
+  // ── Plan limit gate ──────────────────────────────────────
+  const [limitCheck, setLimitCheck] = useState<{
+    allowed: boolean;
+    current: number;
+    limit: number;
+    reason?: string;
+  } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/settings/usage")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.ok && data.usage?.portals) {
+          const p = data.usage.portals;
+          const limit = p.limit === Infinity ? 999 : p.limit;
+          const trialExpired =
+            data.plan_status === "trialing" &&
+            data.trial_ends_at &&
+            new Date(data.trial_ends_at) < new Date();
+          setLimitCheck({
+            allowed: !trialExpired && p.current < limit,
+            current: p.current,
+            limit,
+            reason: trialExpired
+              ? "trial_expired"
+              : p.current >= limit
+                ? "limit_reached"
+                : undefined,
+          });
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const update = useCallback(
     (partial: Partial<WizardState>) =>
@@ -321,7 +355,44 @@ export default function CreateOfferingPage() {
 
     // ── Render ────────────────────────────────────────────────
   return (
-    <div className="mx-auto max-w-3xl px-6 py-8">
+    <>
+      {/* Plan limit gate */}
+      {limitCheck && !limitCheck.allowed && (
+        <div className="mx-auto max-w-5xl px-6 py-8">
+          <Link
+            href="/control-panel/client-portals"
+            className="mb-6 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to Client Portals
+          </Link>
+          <div className="mt-8 flex flex-col items-center text-center">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-50">
+              <AlertTriangle className="h-8 w-8 text-amber-500" />
+            </div>
+            <h2 className="mt-4 text-lg font-semibold text-gray-900">
+              {limitCheck.reason === "trial_expired"
+                ? "Your free trial has expired"
+                : "Portal limit reached"}
+            </h2>
+            <p className="mt-2 max-w-sm text-sm text-gray-500">
+              {limitCheck.reason === "trial_expired"
+                ? "Subscribe to a plan to continue creating client portals."
+                : `You've used ${limitCheck.current} of ${limitCheck.limit} portals on your current plan. Upgrade to create more.`}
+            </p>
+            <Link
+              href="/control-panel/settings?tab=billing"
+              className="mt-6 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700"
+            >
+              {limitCheck.reason === "trial_expired" ? "Subscribe Now" : "Upgrade Plan"}
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {/* Normal wizard — only show when allowed */}
+      {(!limitCheck || limitCheck.allowed) && (
+        <div className="mx-auto max-w-3xl px-6 py-8">
       {/* Back link */}
       <Link
         href="/control-panel/client-portals"
@@ -567,6 +638,8 @@ export default function CreateOfferingPage() {
           </button>
         </div>
       )}
-    </div>
+        </div>
+      )}
+    </>
   );
 }

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { Plus, Layers } from "lucide-react";
+import { Plus, Layers, ArrowUpRight } from "lucide-react";
 import { SurfaceBadge } from "@/components/offerings/SurfaceBadge";
 import { AccessBadge } from "@/components/offerings/AccessBadge";
 
@@ -34,6 +34,8 @@ function timeAgo(dateStr: string): string {
 export default function OfferingsPage() {
   const [offerings, setOfferings] = useState<Offering[]>([]);
   const [loading, setLoading] = useState(true);
+  const [usageData, setUsageData] = useState<{ current: number; limit: number } | null>(null);
+  const atLimit = usageData ? usageData.current >= usageData.limit : false;
 
   useEffect(() => {
     async function load() {
@@ -65,6 +67,19 @@ export default function OfferingsPage() {
     }
     load();
   }, []);
+  useEffect(() => {
+    fetch("/api/settings/usage")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.ok && data.usage?.portals) {
+          setUsageData({
+            current: data.usage.portals.current,
+            limit: data.usage.portals.limit === Infinity ? 999 : data.usage.portals.limit,
+          });
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-8">
@@ -76,14 +91,54 @@ export default function OfferingsPage() {
             Deliver analytics dashboards and workflow tools to your clients
           </p>
         </div>
-        <Link
-          href="/control-panel/client-portals/create"
-          className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-        >
-          <Plus className="h-4 w-4" />
-          New Portal
-        </Link>
+        {atLimit ? (
+          <Link
+            href="/control-panel/settings?tab=billing"
+            className="inline-flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-2"
+          >
+            <ArrowUpRight className="h-4 w-4" />
+            Upgrade Plan
+          </Link>
+        ) : (
+          <Link
+            href="/control-panel/client-portals/create"
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+          >
+            <Plus className="h-4 w-4" />
+            New Portal
+          </Link>
+        )}
       </div>
+
+      {/* Usage indicator */}
+      {usageData && (
+        <div className="mt-3 flex items-center gap-3">
+          <div className="flex-1">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-gray-500">
+                {usageData.current} / {usageData.limit === 999 ? "∞" : usageData.limit} portals used
+              </span>
+              {atLimit && (
+                <span className="font-medium text-amber-600">Limit reached</span>
+              )}
+            </div>
+            <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
+              <div
+                className={`h-full rounded-full transition-all ${
+                  atLimit
+                    ? "bg-amber-500"
+                    : usageData.current / usageData.limit >= 0.8
+                      ? "bg-amber-400"
+                      : "bg-blue-500"
+                }`}
+                style={{
+                  width: `${Math.min((usageData.current / (usageData.limit === 999 ? Math.max(usageData.current, 1) : usageData.limit)) * 100, 100)}%`,
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Loading */}
       {loading && (
