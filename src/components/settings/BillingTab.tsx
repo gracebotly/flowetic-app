@@ -280,7 +280,7 @@ export function BillingTab() {
               ) : (
                 <CreditCard className="h-3.5 w-3.5" />
               )}
-              Subscribe — ${priceCents ? (priceCents / 100).toFixed(0) : "150"}/mo
+              Subscribe — ${priceCents ? (priceCents / 100).toFixed(0) : "149"}/mo
             </button>
           ) : planStatus === "trialing" && !hasCard ? (
             <button
@@ -330,7 +330,7 @@ export function BillingTab() {
                 disabled={actionLoading === "subscribe"}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
               >
-                Upgrade to Scale — $300/mo
+                Upgrade to Scale — $299/mo
                 <ArrowUpRight className="h-3.5 w-3.5" />
               </button>
             )}

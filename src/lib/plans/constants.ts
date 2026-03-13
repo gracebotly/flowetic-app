@@ -1,7 +1,7 @@
 export const PLAN_LIMITS = {
   agency: {
     label: "Agency",
-    price_cents: 15000,
+    price_cents: 14900,
     portal_limit: 5,
     team_limit: 1,
     platform_fee_percent: 5,
@@ -10,7 +10,7 @@ export const PLAN_LIMITS = {
   },
   scale: {
     label: "Scale",
-    price_cents: 30000,
+    price_cents: 29900,
     portal_limit: 15,
     team_limit: Infinity,
     platform_fee_percent: 2,
