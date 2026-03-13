@@ -60,7 +60,6 @@ import { validateBeforeRender, type RenderValidationResult } from "@/lib/spec/va
 import { resolveComponentType } from "@/components/preview/componentRegistry";
 import { ValidationOverlay } from "@/components/preview/ValidationOverlay";
 import { EmptyPreviewState } from './EmptyPreviewState';
-import { useEditActions } from "@/hooks/useEditActions";
 
 type ViewMode = "preview" | "edit";
 
@@ -859,27 +858,9 @@ export function ChatWorkspace({
     };
   }, [loadedDesignTokens, selectedPaletteId, editPalettes]);
 
-  // Initialize edit actions hook
-  const editActions = useEditActions({
-    tenantId: authContext.tenantId ?? "default",
-    userId: authContext.userId ?? "default",
-    interfaceId: vibeContext?.interfaceId ?? "",
-    platformType: vibeContext?.platformType ?? "vapi",
-    onSuccess: (result) => {
-      // Update preview URL when edits are applied
-      if (result.previewUrl) {
-        setVibeContext((prev) => prev ? { ...prev, previewUrl: result.previewUrl } : prev);
-      }
-    },
-    onError: (error) => {
-      console.error("[ChatWorkspace] Edit action error:", error);
-    },
-  });
-
   // Widget reorder handler
   const handleReorderWidgets = (widgets: WidgetConfig[]) => {
     setEditWidgets(widgets);
-    editActions.reorderWidgets(widgets.map((w) => w.id));
   };
 
   function buildCopilotEnvelope(userText: string) {
@@ -2326,7 +2307,7 @@ return (
                 density={editDensity}
                 isOpen={editPanelOpen}
                 isMobile={isMobile}
-                isLoading={editActions.isLoading}
+                isLoading={false}
                 docked={true}
                 onClose={() => {
                   setEditPanelOpen(false);
@@ -2336,28 +2317,23 @@ return (
                   setEditWidgets((prev) =>
                     prev.map((w) => (w.id === widgetId ? { ...w, enabled: !w.enabled } : w))
                   );
-                  editActions.toggleWidget(widgetId);
                 }}
                 onRenameWidget={(widgetId, title) => {
                   setEditWidgets((prev) =>
                     prev.map((w) => (w.id === widgetId ? { ...w, title } : w))
                   );
-                  editActions.renameWidget(widgetId, title);
                 }}
                 onChartTypeChange={(widgetId, chartType) => {
                   setEditWidgets((prev) =>
                     prev.map((w) => (w.id === widgetId ? { ...w, chartType } : w))
                   );
-                  editActions.changeChartType(widgetId, chartType);
                 }}
                 onReorderWidgets={handleReorderWidgets}
                 onDensityChange={(density) => {
                   setEditDensity(density);
-                  editActions.setDensity(density);
                 }}
                 onPaletteChange={(paletteId) => {
                   setSelectedPaletteId(paletteId);
-                  editActions.setPalette(paletteId);
                 }}
               />
             )}
