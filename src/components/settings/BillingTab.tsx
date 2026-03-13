@@ -50,6 +50,7 @@ export function BillingTab() {
   const [billing, setBilling] = useState<BillingStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -80,6 +81,68 @@ export function BillingTab() {
     };
   }, []);
 
+  // Re-fetch after returning from Stripe
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("billing") === "success") {
+      // Refetch billing status after successful checkout
+      fetch("/api/billing/status")
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.ok) setBilling(data);
+        })
+        .catch(() => {});
+      // Clean URL
+      const url = new URL(window.location.href);
+      url.searchParams.delete("billing");
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, []);
+
+  const handleSubscribe = async (plan: string) => {
+    setActionLoading("subscribe");
+    try {
+      const res = await fetch("/api/billing/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan }),
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+        return;
+      }
+      if (data.error) {
+        setError(data.error);
+      }
+    } catch {
+      setError("Failed to start subscription.");
+    }
+    setActionLoading(null);
+  };
+
+  const handlePortal = async () => {
+    setActionLoading("portal");
+    try {
+      const res = await fetch("/api/billing/portal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+        return;
+      }
+      if (data.error) {
+        setError(data.error);
+      }
+    } catch {
+      setError("Failed to open billing portal.");
+    }
+    setActionLoading(null);
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center py-16">
@@ -92,6 +155,12 @@ export function BillingTab() {
     return (
       <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-center text-sm text-red-600">
         {error}
+        <button
+          onClick={() => setError(null)}
+          className="ml-3 text-red-700 underline hover:no-underline"
+        >
+          Dismiss
+        </button>
       </div>
     );
   }
@@ -103,6 +172,7 @@ export function BillingTab() {
   const trialEndsAt = billing?.trial_ends_at;
   const priceCents = billing?.price_cents;
   const feePercent = billing?.platform_fee_percent ?? 5;
+  const currentPlan = billing?.plan ?? "agency";
 
   // ── Determine plan badge ──────────────────────────────────
   let badgeText = planLabel;
@@ -197,51 +267,74 @@ export function BillingTab() {
           Platform fee on client payments: {feePercent}%
         </div>
 
-        {/* CTA buttons */}
+        {/* CTA buttons — now wired to real API calls */}
         <div className="mt-6 flex flex-wrap gap-3">
           {trialExpired || planStatus === "cancelled" ? (
             <button
-              disabled
-              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white opacity-60 cursor-not-allowed"
-              title="Subscription flow coming in Phase 3"
+              onClick={() => handleSubscribe(currentPlan)}
+              disabled={actionLoading === "subscribe"}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
             >
-              <CreditCard className="h-3.5 w-3.5" />
+              {actionLoading === "subscribe" ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <CreditCard className="h-3.5 w-3.5" />
+              )}
               Subscribe — ${priceCents ? (priceCents / 100).toFixed(0) : "150"}/mo
             </button>
           ) : planStatus === "trialing" && !hasCard ? (
             <button
-              disabled
-              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white opacity-60 cursor-not-allowed"
-              title="Card collection coming in Phase 3"
+              onClick={() => handleSubscribe(currentPlan)}
+              disabled={actionLoading === "subscribe"}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
             >
-              <CreditCard className="h-3.5 w-3.5" />
+              {actionLoading === "subscribe" ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <CreditCard className="h-3.5 w-3.5" />
+              )}
               Add Card &amp; Extend Trial
             </button>
           ) : planStatus === "active" || (planStatus === "trialing" && hasCard) ? (
             <button
-              disabled
-              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 opacity-60 cursor-not-allowed"
-              title="Billing portal coming in Phase 3"
+              onClick={handlePortal}
+              disabled={actionLoading === "portal"}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
             >
+              {actionLoading === "portal" ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : null}
               Manage Billing
               <ArrowUpRight className="h-3.5 w-3.5" />
             </button>
+          ) : planStatus === "past_due" ? (
+            <button
+              onClick={handlePortal}
+              disabled={actionLoading === "portal"}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+            >
+              {actionLoading === "portal" ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <CreditCard className="h-3.5 w-3.5" />
+              )}
+              Update Payment Method
+            </button>
           ) : null}
 
-          {billing?.plan === "agency" && planStatus !== "cancelled" && !trialExpired && (
-            <button
-              disabled
-              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 opacity-60 cursor-not-allowed"
-              title="Upgrade flow coming in Phase 3"
-            >
-              Upgrade to Scale
-              <ArrowUpRight className="h-3.5 w-3.5" />
-            </button>
-          )}
+          {currentPlan === "agency" &&
+            planStatus !== "cancelled" &&
+            !trialExpired && (
+              <button
+                onClick={() => handleSubscribe("scale")}
+                disabled={actionLoading === "subscribe"}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Upgrade to Scale — $300/mo
+                <ArrowUpRight className="h-3.5 w-3.5" />
+              </button>
+            )}
         </div>
-        <p className="mt-2 text-xs text-gray-400">
-          Subscription and billing management will be enabled in a future update.
-        </p>
       </div>
     </div>
   );
