@@ -6,7 +6,6 @@
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { notFound } from "next/navigation";
 import { FormWizard } from "@/components/products/FormWizard";
-import type { WorkflowProduct } from "@/lib/products/types";
 
 export const dynamic = "force-dynamic";
 
@@ -22,8 +21,8 @@ export default async function ProductRunPage({ params }: PageProps) {
   const supabase = createServiceClient(supabaseUrl, serviceKey);
 
   const { data: product } = await supabase
-    .from("workflow_products")
-    .select("id, name, slug, input_schema, design_tokens, pricing_model, price_cents")
+    .from("client_portals")
+    .select("id, name, slug, input_schema, design_tokens, pricing_type, price_cents")
     .eq("slug", slug)
     .eq("status", "active")
     .maybeSingle();
@@ -35,7 +34,7 @@ export default async function ProductRunPage({ params }: PageProps) {
       productId={product.id}
       productName={product.name}
       productSlug={product.slug}
-      inputSchema={product.input_schema as WorkflowProduct["input_schema"]}
+      inputSchema={product.input_schema as any[]}
       designTokens={product.design_tokens as Record<string, any>}
     />
   );

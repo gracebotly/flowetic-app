@@ -22,7 +22,7 @@ export default async function ResultsPage({ params }: PageProps) {
 
   // Load product for design tokens
   const { data: product } = await supabase
-    .from("workflow_products")
+    .from("client_portals")
     .select("id, name, slug, design_tokens")
     .eq("slug", slug)
     .maybeSingle();
@@ -34,7 +34,7 @@ export default async function ResultsPage({ params }: PageProps) {
     .from("workflow_executions")
     .select("id, status, mapped_results, error_message, duration_ms, started_at, completed_at")
     .eq("id", executionId)
-    .eq("product_id", product.id)
+    .eq("portal_id", product.id)
     .maybeSingle();
 
   if (!execution) notFound();

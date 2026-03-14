@@ -9,6 +9,10 @@ const PUBLIC_PATHS = [
   "/auth/auth-code-error",
   // Explicitly allow the auth API we need during signup
   "/api/auth/signup",
+  // Client-facing public routes (no auth required)
+  "/client",      // /client/[token] portal + /client/hub/[hubToken]
+  "/products",    // /products/[slug] landing, run, results
+  "/invite",      // /invite/[token] team invite
 ];
 
 export async function updateSession(request: NextRequest) {
