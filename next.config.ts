@@ -12,6 +12,8 @@ const nextConfig: NextConfig = {
 
   async redirects() {
     return [
+      // Auth alias
+      { source: "/auth", destination: "/login", permanent: false },
       // Legacy app routes → new Control Panel shell
       { source: "/dashboard", destination: "/control-panel/connections", permanent: true },
       { source: "/sources", destination: "/control-panel/connections", permanent: true },
