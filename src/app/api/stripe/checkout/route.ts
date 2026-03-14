@@ -90,9 +90,9 @@ export async function POST(request: NextRequest) {
       stripeCustomerId = newCustomer.id;
     }
 
-    // 4. Resolve application fee
+    // 4. Resolve application fee (null-safe: plan column may be absent on old tenants)
     const feePercent = resolveApplicationFeePercent(
-      tenant.plan,
+      tenant.plan ?? "agency",
       tenant.stripe_application_fee_percent
     );
 

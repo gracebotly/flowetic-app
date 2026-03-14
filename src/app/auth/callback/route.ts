@@ -35,7 +35,15 @@ export async function GET(request: Request) {
 
       const { data: tenant, error: tErr } = await supabase
         .from("tenants")
-        .insert({ name: workspaceName })
+        .insert({
+          name: workspaceName,
+          plan: "agency",
+          plan_status: "trialing",
+          has_card_on_file: false,
+          trial_ends_at: new Date(
+            Date.now() + 7 * 24 * 60 * 60 * 1000
+          ).toISOString(),
+        })
         .select()
         .single();
 

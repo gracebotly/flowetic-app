@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getSkeletonForPlatform, getSkeletonForPlatformMix } from '@/lib/portals/platformToSkeleton';
 import { logActivity } from '@/lib/activity/logActivity';
+import { checkPortalLimit } from '@/lib/plans/checkLimits';
 
 const VALID_SKELETONS = [
   'voice-performance',
@@ -49,6 +50,33 @@ export async function POST(request: Request) {
 
   if (!membership) {
     return NextResponse.json({ error: 'No tenant membership' }, { status: 403 });
+  }
+
+  // ── Plan limit check ─────────────────────────────────────
+  try {
+    const limitCheck = await checkPortalLimit(supabase, membership.tenant_id);
+    if (!limitCheck.allowed) {
+      const message =
+        limitCheck.reason === 'trial_expired'
+          ? 'Your free trial has expired. Please subscribe to continue.'
+          : limitCheck.reason === 'plan_inactive'
+            ? 'Your subscription is not active. Please update your billing.'
+            : `Portal limit reached (${limitCheck.current}/${limitCheck.limit}). Upgrade your plan for more.`;
+      return NextResponse.json(
+        {
+          error: message,
+          code: 'LIMIT_REACHED',
+          reason: limitCheck.reason,
+          current: limitCheck.current,
+          limit: limitCheck.limit,
+          plan: limitCheck.plan,
+        },
+        { status: 403 }
+      );
+    }
+  } catch (err) {
+    console.error('[POST /api/client-portals/create] Limit check failed:', err);
+    // Don't block portal creation if the RPC fails — log and continue
   }
 
   // ── Parse body ────────────────────────────────────────────

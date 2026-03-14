@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client"
 
 export function AccountCardPanel({
   email,
-  plan = "Starter Plan",
+  plan = "Agency",
 }: {
   email: string
   plan?: string

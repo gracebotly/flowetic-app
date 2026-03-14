@@ -11,10 +11,13 @@ export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
 
 // ── Tiered platform fee by plan ──────────────────────────────
 const PLAN_FEE_MAP: Record<string, number> = {
-  free: 5, // Free/Starter tier — 5% platform fee
+  agency: 5,      // Agency tier — 5% platform fee
+  scale: 2,       // Scale tier — 2% platform fee
+  enterprise: 0,  // Enterprise — 0% platform fee
+  // Legacy names (fallback for old data)
+  free: 5,
   starter: 5,
-  pro: 2, // Pro tier — 2% platform fee
-  enterprise: 0, // Enterprise — 0% platform fee
+  pro: 2,
 };
 
 /**

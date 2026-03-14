@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getTenantAdmin } from "@/lib/settings/getTenantAdmin";
+import { checkTeamLimit } from "@/lib/plans/checkLimits";
 
 export const runtime = "nodejs";
 
@@ -65,6 +66,30 @@ export async function POST(req: Request) {
 
   const email = body.email?.trim().toLowerCase();
   const role = body.role ?? "viewer";
+
+  // ── Plan seat limit check ───────────────────────────────
+  try {
+    const teamLimit = await checkTeamLimit(auth.supabase, auth.tenantId);
+    if (!teamLimit.allowed) {
+      const message =
+        teamLimit.reason === 'trial_expired'
+          ? 'Your free trial has expired. Please subscribe to continue.'
+          : teamLimit.reason === 'plan_inactive'
+            ? 'Your subscription is not active. Please update your billing.'
+            : `Team seat limit reached (${teamLimit.current}/${teamLimit.limit}). Upgrade to Scale for unlimited team members.`;
+      return json(403, {
+        ok: false,
+        code: "SEAT_LIMIT_REACHED",
+        message,
+        reason: teamLimit.reason,
+        current: teamLimit.current,
+        limit: teamLimit.limit,
+      });
+    }
+  } catch (err) {
+    console.error("[POST /api/settings/team] Seat limit check failed:", err);
+    // Don't block invite if the RPC fails — log and continue
+  }
 
   if (!email || !email.includes("@")) {
     return json(400, { ok: false, code: "INVALID_EMAIL" });
