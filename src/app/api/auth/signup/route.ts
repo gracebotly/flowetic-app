@@ -22,6 +22,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, message: "Email and password are required." }, { status: 400 });
   }
 
+  if (password.length < 8) {
+    return NextResponse.json({ ok: false, message: "Password must be at least 8 characters." }, { status: 400 });
+  }
+
   const redirectTo = `${siteUrl(req)}/auth/callback`;
 
   const { data, error } = await supabase.auth.signUp({
