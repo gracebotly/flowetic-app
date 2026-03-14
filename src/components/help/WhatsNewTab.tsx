@@ -15,46 +15,18 @@ const TAG_STYLES: Record<string, string> = {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
-    date: "March 2, 2026",
-    title: "Help & Updates Page",
+    date: "March 14, 2026",
+    title: "Getflowetic is Live",
     description:
-      "New Help page with changelog, learning resources, and a contact form. Access it from the account menu in the sidebar.",
+      "Connect your Vapi, Retell, n8n, or Make account and create a white-labeled client portal in under 60 seconds. Share it with your clients via magic link or charge them with Stripe. Your branding, your pricing, your clients.",
     tag: "New",
   },
   {
-    date: "March 1, 2026",
-    title: "Client Health Scores",
+    date: "March 10, 2026",
+    title: "Plans & Billing",
     description:
-      "Clients now have a computed health score (0–100) based on engagement recency, portal views, and portal coverage. Visible on the client list and detail pages.",
+      "Subscribe to the Agency ($149/mo) or Scale ($299/mo) plan directly from Settings. Manage your subscription, view usage, and track portal limits — all from your billing dashboard.",
     tag: "New",
-  },
-  {
-    date: "February 28, 2026",
-    title: "Settings Tab Overhaul",
-    description:
-      "Redesigned Settings with five sub-tabs: Workspace, Branding, Billing, Team, and Danger Zone. Upload logos, pick brand colors, and manage your team.",
-    tag: "Improved",
-  },
-  {
-    date: "February 26, 2026",
-    title: "Unified Client Portals",
-    description:
-      "Portals and Products have been merged into a single Client Portals tab. One creation wizard handles analytics dashboards, workflow tools, and form-based products.",
-    tag: "Improved",
-  },
-  {
-    date: "February 20, 2026",
-    title: "Client Management Tab",
-    description:
-      "Full CRM-style client management with health scores, portal assignment, magic link access, and client-scoped activity feeds.",
-    tag: "New",
-  },
-  {
-    date: "February 10, 2026",
-    title: "Connection Wizard Improvements",
-    description:
-      "Fixed credential validation for n8n and Make connections. Added clearer error messages and a guided setup flow.",
-    tag: "Fixed",
   },
 ]
 

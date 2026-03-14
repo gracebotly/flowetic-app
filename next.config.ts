@@ -15,7 +15,7 @@ const nextConfig: NextConfig = {
       // Legacy app routes → new Control Panel shell
       { source: "/dashboard", destination: "/control-panel/connections", permanent: true },
       { source: "/sources", destination: "/control-panel/connections", permanent: true },
-      { source: "/interfaces", destination: "/control-panel/dashboards", permanent: true },
+      { source: "/interfaces", destination: "/control-panel/connections", permanent: true },
       { source: "/settings", destination: "/control-panel/settings", permanent: true },
       { source: "/control-panel/projects", destination: "/control-panel/client-portals", permanent: true },
       { source: "/control-panel/chat", destination: "/control-panel/client-portals", permanent: true },

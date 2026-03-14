@@ -38,7 +38,7 @@ export async function GET(
   if (!tenantId) return json(401, { ok: false, code: "AUTH_REQUIRED" });
 
   const { data: product, error } = await supabase
-    .from("workflow_products")
+    .from("client_portals")
     .select("*")
     .eq("id", productId)
     .eq("tenant_id", tenantId)
@@ -70,7 +70,7 @@ export async function PATCH(
   if (typeof body.name === "string") updates.name = body.name.trim();
   if (typeof body.description === "string") updates.description = body.description.trim();
   if (typeof body.status === "string") updates.status = body.status;
-  if (typeof body.pricingModel === "string") updates.pricing_model = body.pricingModel;
+  if (typeof body.pricingModel === "string") updates.pricing_type = body.pricingModel;
   if (typeof body.priceCents === "number") updates.price_cents = body.priceCents;
   if (Array.isArray(body.inputSchema)) updates.input_schema = body.inputSchema;
   if (body.executionConfig && typeof body.executionConfig === "object") updates.execution_config = body.executionConfig;
@@ -83,7 +83,7 @@ export async function PATCH(
   }
 
   const { data: product, error } = await supabase
-    .from("workflow_products")
+    .from("client_portals")
     .update(updates)
     .eq("id", productId)
     .eq("tenant_id", tenantId)
@@ -106,7 +106,7 @@ export async function DELETE(
 
   // Soft-delete: archive instead of hard delete
   const { error } = await supabase
-    .from("workflow_products")
+    .from("client_portals")
     .update({ status: "archived" })
     .eq("id", productId)
     .eq("tenant_id", tenantId);

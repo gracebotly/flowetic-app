@@ -58,9 +58,6 @@ export interface WorkflowProduct {
   price_cents: number;
   input_schema: InputField[];
   execution_config: ExecutionConfig;
-  landing_page_id: string | null;
-  form_wizard_id: string | null;
-  results_display_id: string | null;
   design_tokens: Record<string, unknown>;
   status: ProductStatus;
   max_runs_per_day: number;

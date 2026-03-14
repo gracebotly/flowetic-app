@@ -2,6 +2,9 @@
 // Level 4: Products CRUD API
 // GET  /api/products → list products for tenant
 // POST /api/products → create new product
+//
+// NOTE: Products are stored in client_portals with surface_type = 'runner' or 'both'.
+// This route provides a product-oriented API for the product pages.
 // ============================================================================
 
 import { NextResponse } from "next/server";
@@ -31,13 +34,14 @@ export async function GET() {
   if (!membership?.tenant_id) return json(403, { ok: false, code: "TENANT_ACCESS_DENIED" });
 
   const { data: products, error } = await supabase
-    .from("workflow_products")
+    .from("client_portals")
     .select(`
-      id, name, description, slug, status, pricing_model, price_cents,
-      max_runs_per_day, created_at, updated_at,
-      source_entities!source_entity_id ( display_name, entity_kind )
+      id, name, description, slug, status, pricing_type, price_cents,
+      max_runs_per_day, created_at, updated_at, surface_type,
+      source_entities!entity_id ( display_name, entity_kind )
     `)
     .eq("tenant_id", membership.tenant_id)
+    .in("surface_type", ["runner", "both"])
     .order("created_at", { ascending: false });
 
   if (error) return json(500, { ok: false, code: "QUERY_FAILED", message: error.message });
@@ -46,12 +50,12 @@ export async function GET() {
   const productIds = (products ?? []).map((p: any) => p.id);
   const { data: execCounts } = await supabase
     .from("workflow_executions")
-    .select("product_id, status")
-    .in("product_id", productIds.length > 0 ? productIds : ["00000000-0000-0000-0000-000000000000"]);
+    .select("portal_id, status")
+    .in("portal_id", productIds.length > 0 ? productIds : ["00000000-0000-0000-0000-000000000000"]);
 
   const countMap: Record<string, { total: number; success: number }> = {};
   for (const ex of execCounts ?? []) {
-    const pid = ex.product_id as string;
+    const pid = (ex as any).portal_id as string;
     if (!countMap[pid]) countMap[pid] = { total: 0, success: 0 };
     countMap[pid].total++;
     if (ex.status === "success") countMap[pid].success++;
@@ -89,9 +93,9 @@ export async function POST(req: Request) {
 
   const name = typeof body.name === "string" ? body.name.trim() : "";
   const description = typeof body.description === "string" ? body.description.trim() : null;
-  const sourceEntityId = typeof body.sourceEntityId === "string" ? body.sourceEntityId : null;
+  const entityId = typeof body.sourceEntityId === "string" ? body.sourceEntityId : null;
   const sourceId = typeof body.sourceId === "string" ? body.sourceId : null;
-  const pricingModel = typeof body.pricingModel === "string" ? body.pricingModel : "free";
+  const pricingType = typeof body.pricingModel === "string" ? body.pricingModel : "free";
   const priceCents = typeof body.priceCents === "number" ? body.priceCents : 0;
   const inputSchema = Array.isArray(body.inputSchema) ? body.inputSchema as InputField[] : [];
   const executionConfig = (body.executionConfig && typeof body.executionConfig === "object")
@@ -111,7 +115,7 @@ export async function POST(req: Request) {
   while (true) {
     const candidate = slugAttempt === 0 ? slug : appendSlugSuffix(slug, slugAttempt);
     const { data: existing } = await supabase
-      .from("workflow_products")
+      .from("client_portals")
       .select("id")
       .eq("tenant_id", membership.tenant_id)
       .eq("slug", candidate)
@@ -141,15 +145,17 @@ export async function POST(req: Request) {
   }
 
   const { data: product, error: insertErr } = await supabase
-    .from("workflow_products")
+    .from("client_portals")
     .insert({
       tenant_id: membership.tenant_id,
-      source_entity_id: sourceEntityId,
+      entity_id: entityId,
       source_id: sourceId,
       name,
       description,
       slug,
-      pricing_model: pricingModel,
+      surface_type: "runner",
+      access_type: "stripe_gate",
+      pricing_type: pricingType,
       price_cents: priceCents,
       input_schema: inputSchema,
       execution_config: executionConfig,

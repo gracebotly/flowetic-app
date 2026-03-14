@@ -6,7 +6,6 @@
 
 import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { notFound } from 'next/navigation';
-import type { WorkflowProduct } from '@/lib/products/types';
 import { PremiumLanding } from './PremiumLanding';
 
 export const dynamic = 'force-dynamic';
@@ -22,9 +21,9 @@ export default async function ProductLandingPage({ params }: PageProps) {
   const { slug } = await params;
   const supabase = createServiceClient(supabaseUrl, serviceKey);
 
-  // Load product
+  // Load product from client_portals (runner or both surface types)
   const { data: product } = await supabase
-    .from('workflow_products')
+    .from('client_portals')
     .select('*')
     .eq('slug', slug)
     .eq('status', 'active')
@@ -32,33 +31,31 @@ export default async function ProductLandingPage({ params }: PageProps) {
 
   if (!product) notFound();
 
-  const wp = product as WorkflowProduct;
-
   // Load agency branding
   const { data: tenant } = await supabase
     .from('tenants')
     .select('name, logo_url, primary_color, secondary_color')
-    .eq('id', wp.tenant_id)
+    .eq('id', product.tenant_id)
     .single();
 
   // Execution count for trust badge
   const { count: totalExecutions } = await supabase
     .from('workflow_executions')
     .select('id', { count: 'exact', head: true })
-    .eq('product_id', wp.id)
+    .eq('portal_id', product.id)
     .eq('status', 'success');
 
   return (
     <PremiumLanding
       product={{
-        id: wp.id,
-        name: wp.name,
-        description: wp.description,
-        slug: wp.slug,
-        pricingModel: wp.pricing_model,
-        priceCents: wp.price_cents,
-        inputSchema: (wp.input_schema as unknown[]) ?? [],
-        designTokens: (wp.design_tokens as Record<string, unknown> | null) ?? null,
+        id: product.id,
+        name: product.name,
+        description: product.description,
+        slug: product.slug,
+        pricingModel: product.pricing_type ?? 'free',
+        priceCents: product.price_cents,
+        inputSchema: (product.input_schema as unknown[]) ?? [],
+        designTokens: (product.design_tokens as Record<string, unknown> | null) ?? null,
       }}
       branding={{
         agencyName: tenant?.name ?? 'Agency',
