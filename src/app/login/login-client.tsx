@@ -154,7 +154,9 @@ export default function AuthShell() {
   const urlErrorMessage =
     urlError === "not_registered"
       ? "No account found for that Google address. Please sign up first."
-      : null;
+      : urlError === "auth_failed"
+        ? "Sign-in failed. Please try again."
+        : null;
 
   const cfg = MODE_CONFIG[mode];
   const isPayNow = mode === "agency-pay" || mode === "scale-pay";
