@@ -100,6 +100,20 @@ export function MakeDetailPanel({ sourceId, externalId, onHealthChange }: MakeDe
       };
       return deriveEntityHealth(enrichedStats, data?.error ?? null);
     }
+    // Safety net: use make_total_executions from details if stats is still empty
+    if ((!stats || stats.totalEvents === 0) && typeof data?.details?.make_total_executions === 'number' && (data.details.make_total_executions as number) > 0) {
+      const mExecs = data.details.make_total_executions as number;
+      const mErrors = (data.details.make_total_errors as number) ?? 0;
+      const enrichedStats = {
+        totalEvents: mExecs,
+        successEvents: Math.max(0, mExecs - mErrors),
+        successRate: mExecs > 0 ? Math.round(((mExecs - mErrors) / mExecs) * 100) : 0,
+        avgDuration: 0,
+        totalCost: 0,
+        latestError: null,
+      };
+      return deriveEntityHealth(enrichedStats, data?.error ?? null);
+    }
     const h = deriveEntityHealth(stats, data?.error ?? null);
     return h.status === 'no-data' ? { ...h, entityKind: 'scenario' } : h;
   }, [data?.stats, data?.error, executions, aggregateStats]);
@@ -135,6 +149,19 @@ export function MakeDetailPanel({ sourceId, externalId, onHealthChange }: MakeDe
         totalCost: 0,
       };
     }
+    // Final safety net: if stats still show 0 but entity-details returned make_total_executions > 0,
+    // use those directly. This catches cases where the enrichedStats from the API didn't flow through.
+    if (stats.totalEvents === 0 && typeof data?.details?.make_total_executions === 'number' && (data.details.make_total_executions as number) > 0) {
+      const mExecs = data.details.make_total_executions as number;
+      const mErrors = (data.details.make_total_errors as number) ?? 0;
+      stats = {
+        totalEvents: mExecs,
+        successEvents: Math.max(0, mExecs - mErrors),
+        successRate: mExecs > 0 ? Math.round(((mExecs - mErrors) / mExecs) * 100) : 0,
+        avgDuration: 0,
+        totalCost: 0,
+      };
+    }
     return [
       { label: 'Executions', value: String(stats.totalEvents), sublabel: 'All time', icon: BarChart3, accent: '', sparkData, sparkColor: 'blue' },
       {
@@ -166,7 +193,10 @@ export function MakeDetailPanel({ sourceId, externalId, onHealthChange }: MakeDe
   const triggerModule = String(data?.details?.trigger_module ?? '');
 
   // Determine if we should show "aggregate only" message instead of empty
-  const hasAggregateOnly = executions.length === 0 && aggregateStats && aggregateStats.totalExecutions > 0;
+  const makeExecsFromDetails = typeof data?.details?.make_total_executions === 'number' ? (data.details.make_total_executions as number) : 0;
+  const hasAggregateOnly = executions.length === 0 && (
+    (aggregateStats && aggregateStats.totalExecutions > 0) || makeExecsFromDetails > 0
+  );
 
   return (
     <div className="space-y-5">
@@ -200,35 +230,41 @@ export function MakeDetailPanel({ sourceId, externalId, onHealthChange }: MakeDe
           </div>
         </div>
         {loading ? <div className="flex items-center gap-2 py-3 text-sm text-gray-400"><Loader2 className="h-4 w-4 animate-spin" />Loading executions...</div> : null}
-        {!loading && isInstantTrigger && hasAggregateOnly ? (
-          <div className="space-y-3 py-2">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-lg bg-gray-50 p-3">
-                <div className="text-xs text-gray-400">Total Executions</div>
-                <div className="mt-1 text-lg font-semibold text-gray-900">{aggregateStats!.totalExecutions.toLocaleString()}</div>
-              </div>
-              <div className="rounded-lg bg-gray-50 p-3">
-                <div className="text-xs text-gray-400">Total Operations</div>
-                <div className="mt-1 text-lg font-semibold text-gray-900">{aggregateStats!.totalOperations.toLocaleString()}</div>
-              </div>
-              <div className="rounded-lg bg-gray-50 p-3">
-                <div className="text-xs text-gray-400">Errors</div>
-                <div className="mt-1 text-lg font-semibold text-gray-900">{aggregateStats!.totalErrors.toLocaleString()}</div>
-              </div>
-              <div className="rounded-lg bg-gray-50 p-3">
-                <div className="text-xs text-gray-400">Credits Used</div>
-                <div className="mt-1 text-lg font-semibold text-gray-900">{aggregateStats!.totalCenticredits.toLocaleString()}</div>
+        {!loading && isInstantTrigger && hasAggregateOnly ? (() => {
+          const aExecs = aggregateStats?.totalExecutions ?? makeExecsFromDetails;
+          const aOps = aggregateStats?.totalOperations ?? (typeof data?.details?.make_total_operations === 'number' ? (data.details.make_total_operations as number) : 0);
+          const aErrors = aggregateStats?.totalErrors ?? (typeof data?.details?.make_total_errors === 'number' ? (data.details.make_total_errors as number) : 0);
+          const aCredits = aggregateStats?.totalCenticredits ?? (typeof data?.details?.make_centicredits === 'number' ? (data.details.make_centicredits as number) : 0);
+          return (
+            <div className="space-y-3 py-2">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-lg bg-gray-50 p-3">
+                  <div className="text-xs text-gray-400">Total Executions</div>
+                  <div className="mt-1 text-lg font-semibold text-gray-900">{aExecs.toLocaleString()}</div>
+                </div>
+                <div className="rounded-lg bg-gray-50 p-3">
+                  <div className="text-xs text-gray-400">Total Operations</div>
+                  <div className="mt-1 text-lg font-semibold text-gray-900">{aOps.toLocaleString()}</div>
+                </div>
+                <div className="rounded-lg bg-gray-50 p-3">
+                  <div className="text-xs text-gray-400">Errors</div>
+                  <div className="mt-1 text-lg font-semibold text-gray-900">{aErrors.toLocaleString()}</div>
+                </div>
+                <div className="rounded-lg bg-gray-50 p-3">
+                  <div className="text-xs text-gray-400">Credits Used</div>
+                  <div className="mt-1 text-lg font-semibold text-gray-900">{aCredits.toLocaleString()}</div>
+                </div>
               </div>
             </div>
-          </div>
-        ) : null}
+          );
+        })() : null}
         {!loading && isInstantTrigger && !hasAggregateOnly && (data?.stats?.totalEvents ?? 0) === 0 ? (
           <div className="py-4 text-sm text-gray-400">No executions recorded yet. Trigger this scenario from its webhook source to see data here.</div>
         ) : null}
         {!loading && !isInstantTrigger && executions.length === 0 && !hasAggregateOnly ? <div className="py-4 text-sm text-gray-400">No executions recorded yet.</div> : null}
         {!loading && !isInstantTrigger && hasAggregateOnly ? (
           <div className="py-4 text-sm text-gray-500">
-            <span className="font-medium">{aggregateStats!.totalExecutions} executions</span> recorded on Make.
+            <span className="font-medium">{(aggregateStats?.totalExecutions ?? makeExecsFromDetails)} executions</span> recorded on Make.
             <span className="ml-1 text-gray-400">Individual execution details are not available from the Make API for this scenario type.</span>
           </div>
         ) : null}
