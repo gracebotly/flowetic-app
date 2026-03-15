@@ -2641,9 +2641,9 @@ export default function ConnectionsPage() {
                       <div className="text-sm font-medium text-gray-600">
                         {selectedEntity?.platform === 'make'
                           ? 'No execution logs available'
-                          : 'No call history available'}
+                          : 'No activity recorded'}
                       </div>
-                      <div className="mt-1 text-xs text-gray-400">
+                      <div className="mt-1 text-xs text-gray-400 max-w-xs mx-auto">
                         {selectedEntity?.platform === 'make'
                           ? 'Individual execution logs are not available from Make for this scenario type. See totals in the Overview tab.'
                           : selectedEntity?.platform === 'vapi' || selectedEntity?.platform === 'retell'
