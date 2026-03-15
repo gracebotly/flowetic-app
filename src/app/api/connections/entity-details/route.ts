@@ -229,7 +229,7 @@ async function fetchMakeDetails(secret: Record<string, unknown>, scenarioId: str
     makeExecs = makeOps;
   }
 
-  console.error(`[entity-details/make] scenarioId=${scenarioId} teamId=${teamId} makeExecs=${makeExecs} makeOps=${makeOps} makeErrors=${makeErrors}`);
+  console.info(`[entity-details/make] scenarioId=${scenarioId} teamId=${teamId} makeExecs=${makeExecs} makeOps=${makeOps} makeErrors=${makeErrors}`);
 
   // ── Check for recent execution errors ──
   let latestError: string | undefined;
