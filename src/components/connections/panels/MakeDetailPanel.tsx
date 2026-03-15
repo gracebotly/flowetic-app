@@ -174,7 +174,7 @@ export function MakeDetailPanel({ sourceId, externalId, onHealthChange }: MakeDe
         <div className="mb-3 flex items-center justify-between">
           <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400">Execution History (Last 30 Days)</h3>
           <div className="flex items-center gap-2">
-            <ExportButton sourceId={sourceId} externalId={externalId} platform="make" type="executions" />
+            <ExportButton sourceId={sourceId} externalId={externalId} platform="make" mode="scenario-structure" />
             <span className="text-xs text-gray-400">{executions.length} in window</span>
           </div>
         </div>

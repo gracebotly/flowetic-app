@@ -20,7 +20,6 @@ import { HealthBanner, type EntityHealth } from './shared/HealthBanner';
 import { MetricsBar, type MetricKPI } from './shared/MetricsBar';
 import { deriveEntityHealth } from './shared/deriveEntityHealth';
 import { CallRow, type CallData } from './shared/CallRow';
-import { ExportButton } from './shared/ExportButton';
 
 interface VoiceDetailPanelProps {
   platform: 'retell' | 'vapi';
@@ -208,7 +207,6 @@ export function VapiDetailPanel({ sourceId, externalId, onHealthChange }: VoiceD
         <div className="mb-3 flex items-center justify-between">
           <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400">Recent Calls</h3>
           <div className="flex items-center gap-2">
-            <ExportButton sourceId={sourceId} externalId={externalId} platform="vapi" type="calls" />
             <span className="text-xs text-gray-400">{calls.length} calls</span>
           </div>
         </div>

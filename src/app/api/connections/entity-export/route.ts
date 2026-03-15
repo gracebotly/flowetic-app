@@ -175,24 +175,50 @@ async function fetchN8nExecutions(apiKey: string, instanceUrl: string, workflowI
     const resultData = ((e.data as Record<string, unknown>)?.resultData ?? {}) as Record<string, unknown>;
     const runData = (resultData.runData ?? {}) as Record<string, unknown[]>;
 
-    // Extract trigger node payload (first node = trigger)
-    const triggerNodeKey = Object.keys(runData)[0];
-    const triggerRuns = triggerNodeKey ? (runData[triggerNodeKey] as Record<string, unknown>[]) : [];
-    const triggerOutput = triggerRuns?.[0];
-    const items = ((triggerOutput?.data as Record<string, unknown>)?.main as unknown[][])?.[0] ?? [];
-    const firstItem = (items[0] as Record<string, unknown>)?.json as Record<string, unknown> ?? {};
+    // Extract business data from the LAST meaningful output node (not the trigger).
+    // Walk backwards from lastNodeExecuted to find the richest data.
+    const lastNode = String(resultData.lastNodeExecuted ?? '');
+    const nodeNames = Object.keys(runData);
+    const skipMeta = new Set(['headers', 'params', 'query', 'webhookUrl', 'executionMode',
+      'pairedItem', 'pairedItems', '_meta', '__meta', 'binary', 'executionData',
+      'responseHeaders', 'statusCode', 'statusMessage']);
 
-    // Webhook payloads nest data inside .body; fall back to the json directly
-    const payload: Record<string, unknown> = (firstItem.body as Record<string, unknown>) ?? firstItem;
+    // Build priority list: lastNodeExecuted first, then reverse order
+    const ordered = nodeNames
+      .map(name => ({ name, idx: (runData[name] as { executionIndex?: number }[])?.[0]?.executionIndex ?? 999 }))
+      .sort((a, b) => a.idx - b.idx);
+    const priorityList: string[] = [];
+    if (lastNode && nodeNames.includes(lastNode)) priorityList.push(lastNode);
+    for (let i = ordered.length - 1; i >= 0; i--) {
+      if (!priorityList.includes(ordered[i].name)) priorityList.push(ordered[i].name);
+    }
 
-    // Strip internal webhook metadata (headers, params, query, webhookUrl, executionMode)
-    const skipKeys = new Set(['headers', 'params', 'query', 'webhookUrl', 'executionMode']);
     const cleanPayload: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(payload)) {
-      if (!skipKeys.has(k)) {
-        // Flatten arrays to pipe-separated strings for CSV readability
-        cleanPayload[k] = Array.isArray(v) ? (v as unknown[]).join(' | ') : v;
+    for (const nodeName of priorityList) {
+      if (Object.keys(cleanPayload).length >= 20) break;
+      const nodeRuns = runData[nodeName] as Record<string, unknown>[];
+      if (!Array.isArray(nodeRuns) || nodeRuns.length === 0) continue;
+      const lastRun = nodeRuns[nodeRuns.length - 1];
+      const mainOutput = (((lastRun?.data as Record<string, unknown>)?.main as unknown[][])?.[0] ?? []);
+      if (!Array.isArray(mainOutput) || mainOutput.length === 0) continue;
+      const json = (mainOutput[0] as Record<string, unknown>)?.json;
+      if (!json || typeof json !== 'object' || Array.isArray(json)) continue;
+
+      let fieldCount = 0;
+      for (const [k, v] of Object.entries(json as Record<string, unknown>)) {
+        if (skipMeta.has(k) || k.startsWith('_')) continue;
+        if (v === null || v === undefined) continue;
+        if (typeof v === 'string' && v.length > 1000) continue;
+        if (Array.isArray(v) && v.length > 10) continue;
+
+        const normalizedKey = k.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
+        if (cleanPayload[normalizedKey] !== undefined) continue;
+        cleanPayload[normalizedKey] = Array.isArray(v) ? (v as unknown[]).join(' | ') : v;
+        fieldCount++;
+        if (Object.keys(cleanPayload).length >= 20) break;
       }
+      // If we found 3+ fields from this node, that's enough — stop walking
+      if (fieldCount >= 3) break;
     }
 
     return {
@@ -244,16 +270,33 @@ async function fetchMakeNodeSummary(apiKey: string, zone: string, scenarioId: st
   const json = await res.json() as Record<string, unknown>;
   const scenario = (json.scenario ?? json) as Record<string, unknown>;
   const blueprint = (scenario.blueprint ?? {}) as Record<string, unknown>;
-  const modules = Array.isArray(blueprint.modules) ? blueprint.modules as Record<string, unknown>[] : [];
+  const modules = Array.isArray(blueprint.flow) ? blueprint.flow as Record<string, unknown>[]
+    : Array.isArray(blueprint.modules) ? blueprint.modules as Record<string, unknown>[]
+      : [];
 
-  return modules.map((m) => ({
-    'Module Name': String(m.label ?? m.name ?? ''),
-    Type: String(m.module ?? m.type ?? ''),
-    ID: String(m.id ?? ''),
-    'Connected To': Array.isArray(m.routes)
-      ? (m.routes as Record<string, unknown>[]).map(r => String(r.label ?? '')).join(' | ')
-      : '',
-  }));
+  return modules.map((m, i) => {
+    // Extract a readable module name from metadata or mapper
+    const meta = (m.metadata as Record<string, unknown>) ?? {};
+    const moduleName = String(
+      (meta.expect as { label?: string }[] | undefined)?.[0]?.label
+      ?? m.module
+      ?? m.type
+      ?? ''
+    ).replace(/^.*:/, ''); // Strip package prefix like "airtable:" or "google-email:"
+
+    // The next module in the flow array is the implicit connection
+    const nextModule = modules[i + 1];
+    const connectsTo = nextModule
+      ? String(nextModule.module ?? nextModule.type ?? '').replace(/^.*:/, '')
+      : '';
+
+    return {
+      '#': String(m.id ?? i + 1),
+      Module: String(m.module ?? m.type ?? ''),
+      Type: moduleName,
+      'Connects To': connectsTo,
+    };
+  });
 }
 
 // ─── Handler ──────────────────────────────────────────────────────────────────

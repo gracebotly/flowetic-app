@@ -15,7 +15,6 @@ import {
   PlusCircle,
   X,
   Cpu,
-  Copy,
   RefreshCw,
   Loader2,
   CheckCircle2,
@@ -32,6 +31,7 @@ import {
 import { EntityDetailsPanel } from "@/components/connections/EntityDetailsPanel";
 import { PortalReadyBadge } from "@/components/connections/panels/shared/PortalReadyBadge";
 import type { EntityHealth } from "@/components/connections/panels/shared/HealthBanner";
+import { ExportButton } from '@/components/connections/panels/shared/ExportButton';
 
 type EntityType = "workflow" | "agent" | "voice_agent" | "automation";
 
@@ -2601,104 +2601,25 @@ export default function ConnectionsPage() {
               {/* Activity tab — real event feed */}
               {drawerTab === "activity" ? (
                 <div>
-                  {/* Header with download */}
+                  {/* Header with export */}
                   <div className="mb-4 flex items-center justify-between">
                     <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Execution History
+                      {selectedEntity?.platform === 'retell' || selectedEntity?.platform === 'vapi'
+                        ? 'Call History'
+                        : 'Execution History'}
                     </span>
                     {selectedEntity ? (
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          // Generate markdown report — use Supabase events if available, otherwise fetch from platform
-                          const entity = selectedEntity;
-                          if (!entity) return;
-
-                          let eventsForReport = drawerEvents;
-
-                          // If no events in Supabase, try fetching fresh from the platform
-                          if (eventsForReport.length === 0) {
-                            try {
-                              const refreshRes = await fetch("/api/connections/refresh-events", {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ sourceId: entity.sourceId }),
-                              });
-                              if (refreshRes.ok) {
-                                const evRes = await fetch(`/api/events?source_id=${entity.sourceId}&limit=100`);
-                                const evJson = await evRes.json();
-                                const allEvs = evJson.events ?? [];
-                                eventsForReport = allEvs.filter((ev: any) => {
-                                  const s = ev.state as Record<string, unknown> | null;
-                                  if (!s) return false;
-                                  return (
-                                    String(s.workflow_id ?? "") === entity.externalId ||
-                                    String(s.assistant_id ?? "") === entity.externalId ||
-                                    String(s.agent_id ?? "") === entity.externalId ||
-                                    String(s.scenario_id ?? "") === entity.externalId
-                                  );
-                                });
-                                // Also update drawer events state so Activity tab shows them
-                                setDrawerEvents(eventsForReport);
-                              }
-                            } catch {
-                              // fall through — will generate empty report
-                            }
-                          }
-
-                          if (eventsForReport.length === 0) {
-                            alert("No execution data available. Use Sync All from the main page first.");
-                            return;
-                          }
-
-                          let md = `# Execution Report: ${entity.name}
-
-`;
-                          md += `**Platform:** ${entity.platform} · **Type:** ${entity.kind}
-`;
-                          md += `**Generated:** ${new Date().toLocaleString()}
-
-`;
-                          md += `---
-
-`;
-                          md += `| # | Status | Duration | Date | Details |
-`;
-                          md += `|---|--------|----------|------|----------|
-`;
-                          eventsForReport.forEach((ev, i) => {
-                            const st = ev.state as Record<string, unknown> | null;
-                            const status = String(st?.status ?? "unknown");
-                            const dur = Number(st?.duration_ms ?? 0);
-                            const durStr = dur > 0 ? (dur < 1000 ? `${dur}ms` : dur < 60000 ? `${Math.round(dur / 1000)}s` : `${Math.round(dur / 60000)}m`) : "—";
-                            const ts = new Date(ev.timestamp).toLocaleString();
-                            const details: string[] = [];
-                            if (st?.topic) details.push(`Topic: ${String(st.topic)}`);
-                            if (st?.customer_id && st.customer_id !== "anonymous") details.push(`Customer: ${String(st.customer_id)}`);
-                            if (typeof st?.operations_used === "number") details.push(`${st.operations_used} ops`);
-                            if (st?.error_message) details.push(`Error: ${String(st.error_message).slice(0, 80)}`);
-                            if (st?.depth) details.push(`Depth: ${String(st.depth)}`);
-                            md += `| ${i + 1} | ${status} | ${durStr} | ${ts} | ${details.join(", ") || "—"} |
-`;
-                          });
-                          md += `
----
-
-*${eventsForReport.length} execution(s) total*
-`;
-                          const blob = new Blob([md], { type: "text/markdown" });
-                          const url = URL.createObjectURL(blob);
-                          const a = document.createElement("a");
-                          a.href = url;
-                          a.download = `${entity.name.replace(/[^a-zA-Z0-9]/g, "_")}_report.md`;
-                          a.click();
-                          URL.revokeObjectURL(url);
-                        }}
-                        className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-600 shadow-sm transition hover:bg-gray-50"
-                      >
-                        <Copy className="h-3 w-3" />
-                        Download Report
-                      </button>
+                      <ExportButton
+                        sourceId={selectedEntity.sourceId}
+                        externalId={selectedEntity.externalId}
+                        platform={selectedEntity.platform}
+                        mode={
+                          selectedEntity.platform === 'retell' || selectedEntity.platform === 'vapi'
+                            ? 'transcripts'
+                            : 'executions'
+                        }
+                        entityName={selectedEntity.name}
+                      />
                     ) : null}
                   </div>
 
