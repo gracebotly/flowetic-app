@@ -1181,11 +1181,11 @@ export default function ConnectionsPage() {
 
     if (selectedPlatform === "n8n" && selectedMethod === "api") {
       setIsPostConnectSelection(true);
-      setSaving(false); // Stop loading first
-      await loadN8nInventory(sid);
-      // Ensure modal stays open and step transitions
+      setSaving(false);
+      // Transition to entities step IMMEDIATELY so loading spinner is visible
       setConnectOpen(true);
       setStep("entities");
+      await loadN8nInventory(sid);
       return;
     }
 
@@ -2712,9 +2712,9 @@ export default function ConnectionsPage() {
                       <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-gray-100">
                         <Activity className="h-5 w-5 text-gray-400" />
                       </div>
-                      <div className="text-sm font-medium text-gray-600">No executions recorded</div>
+                      <div className="text-sm font-medium text-gray-600">No activity yet</div>
                       <div className="mt-1 text-xs text-gray-400">
-                        Use Sync All or Sync Events from the Credentials tab to pull execution data.
+                        Execution data will appear here after your agent or workflow runs.
                       </div>
                     </div>
                   ) : (
