@@ -74,28 +74,36 @@ export async function GET(req: Request) {
 
   // When logs endpoint returns zero executions (common for webhook-triggered scenarios),
   // fetch aggregate stats from the scenario list API as fallback.
+  // Use teamId from scenario detail for a direct, reliable lookup.
   let aggregateStats: { totalExecutions: number; totalErrors: number; totalOperations: number; totalCenticredits: number } | null = null;
   if (executions.length === 0) {
     try {
-      // Try org-based lookup to get scenario with aggregate stats
-      const orgRes = await fetch(`${baseUrl}/api/v2/organizations`, { headers: makeHeaders });
-      if (orgRes.ok) {
-        const orgData = await orgRes.json();
-        const orgs = Array.isArray(orgData?.organizations) ? orgData.organizations : [];
-        for (const org of orgs) {
-          const listRes = await fetch(`${baseUrl}/api/v2/scenarios?organizationId=${org.id}`, { headers: makeHeaders });
-          if (!listRes.ok) continue;
-          const listData = await listRes.json();
-          const match = (Array.isArray(listData?.scenarios) ? listData.scenarios : [])
-            .find((sc: { id?: number | string; executions?: number; errors?: number; operations?: number; centicredits?: number }) => String(sc.id) === scenarioId);
-          if (match && typeof match.executions === 'number' && match.executions > 0) {
-            aggregateStats = {
-              totalExecutions: match.executions,
-              totalErrors: typeof match.errors === 'number' ? match.errors : 0,
-              totalOperations: typeof match.operations === 'number' ? match.operations : 0,
-              totalCenticredits: typeof match.centicredits === 'number' ? match.centicredits : 0,
-            };
-            break;
+      // Step 1: Get teamId from scenario detail
+      const scenarioRes = await fetch(
+        `${baseUrl}/api/v2/scenarios/${scenarioId}`,
+        { headers: makeHeaders },
+      );
+      if (scenarioRes.ok) {
+        const scenarioData = await scenarioRes.json();
+        const teamId = (scenarioData.scenario ?? scenarioData)?.teamId;
+        if (teamId) {
+          // Step 2: Fetch scenario list by teamId to get aggregate stats
+          const listRes = await fetch(
+            `${baseUrl}/api/v2/scenarios?teamId=${teamId}`,
+            { headers: makeHeaders },
+          );
+          if (listRes.ok) {
+            const listData = await listRes.json();
+            const match = (Array.isArray(listData?.scenarios) ? listData.scenarios : [])
+              .find((sc: { id?: number | string }) => String(sc.id) === scenarioId);
+            if (match && typeof match.executions === 'number' && match.executions > 0) {
+              aggregateStats = {
+                totalExecutions: match.executions,
+                totalErrors: typeof match.errors === 'number' ? match.errors : 0,
+                totalOperations: typeof match.operations === 'number' ? match.operations : 0,
+                totalCenticredits: typeof match.centicredits === 'number' ? match.centicredits : 0,
+              };
+            }
           }
         }
       }

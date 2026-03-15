@@ -427,7 +427,50 @@ export async function GET(req: Request) {
       } else {
         const executions = await fetchMakeExecutions(apiKey, zone, externalId, 100);
         if (executions.length === 0) {
-          rows.push(['Timestamp', 'Status', 'Duration (ms)', 'Operations', 'Credits', 'Error Name', 'Error Message'].map(csvEscape).join(','));
+          // No individual execution logs (common for webhook-triggered scenarios).
+          // Try to export aggregate summary from scenario list API via teamId.
+          let aggregateExported = false;
+          try {
+            const exportBaseUrl = zone.includes('.') ? `https://${zone}` : `https://${zone}.make.com`;
+            const scenarioRes = await fetch(
+              `${exportBaseUrl}/api/v2/scenarios/${externalId}`,
+              { headers: { Authorization: `Token ${apiKey}` } },
+            );
+            if (scenarioRes.ok) {
+              const scenarioData = await scenarioRes.json();
+              const scen = scenarioData.scenario ?? scenarioData;
+              const teamId = scen?.teamId;
+              if (teamId) {
+                const listRes = await fetch(
+                  `${exportBaseUrl}/api/v2/scenarios?teamId=${teamId}`,
+                  { headers: { Authorization: `Token ${apiKey}` } },
+                );
+                if (listRes.ok) {
+                  const listData = await listRes.json();
+                  const match = (Array.isArray(listData?.scenarios) ? listData.scenarios : [])
+                    .find((sc: { id?: number | string }) => String(sc.id) === externalId);
+                  if (match && typeof match.executions === 'number' && match.executions > 0) {
+                    rows.push(['Metric', 'Value'].map(csvEscape).join(','));
+                    rows.push([csvEscape('Total Executions'), csvEscape(match.executions)].join(','));
+                    rows.push([csvEscape('Total Operations'), csvEscape(match.operations ?? 0)].join(','));
+                    rows.push([csvEscape('Total Errors'), csvEscape(match.errors ?? 0)].join(','));
+                    rows.push([csvEscape('Credits Used'), csvEscape(match.centicredits ?? 0)].join(','));
+                    rows.push([csvEscape('Data Transfer (bytes)'), csvEscape(match.transfer ?? 0)].join(','));
+                    rows.push([csvEscape('Scenario Name'), csvEscape(scen.name ?? '')].join(','));
+                    rows.push([csvEscape('Trigger Type'), csvEscape(scen.scheduling?.type ?? 'unknown')].join(','));
+                    rows.push(['', ''].map(csvEscape).join(','));
+                    rows.push([csvEscape('Note'), csvEscape('Individual execution details are not available from the Make API for webhook-triggered scenarios. This export contains aggregate totals.')].join(','));
+                    aggregateExported = true;
+                  }
+                }
+              }
+            }
+          } catch {
+            // non-fatal — fall through to empty header row
+          }
+          if (!aggregateExported) {
+            rows.push(['Timestamp', 'Status', 'Duration (ms)', 'Operations', 'Credits', 'Error Name', 'Error Message'].map(csvEscape).join(','));
+          }
         } else {
           const headers = Object.keys(executions[0]);
           rows.push(headers.map(csvEscape).join(','));

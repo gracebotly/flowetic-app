@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { AlertTriangle, BarChart3, CheckCircle2, ChevronDown, ChevronUp, Loader2, XCircle, Zap } from 'lucide-react';
+import { AlertTriangle, BarChart3, CheckCircle2, ChevronDown, ChevronUp, Info, Loader2, XCircle, Zap } from 'lucide-react';
 import { HealthBanner, type EntityHealth } from './shared/HealthBanner';
 import { MetricsBar, type MetricKPI } from './shared/MetricsBar';
 import { deriveEntityHealth } from './shared/deriveEntityHealth';
@@ -161,6 +161,10 @@ export function MakeDetailPanel({ sourceId, externalId, onHealthChange }: MakeDe
   const integrations = Array.isArray(data?.details?.used_packages) ? data?.details?.used_packages as string[] : [];
   const hasMore = limit < 20 && executions.length >= limit;
 
+  // Detect instant/webhook trigger — these don't return individual execution logs
+  const isInstantTrigger = data?.details?.is_instant_trigger === true || data?.details?.scheduling_type === 'immediately';
+  const triggerModule = String(data?.details?.trigger_module ?? '');
+
   // Determine if we should show "aggregate only" message instead of empty
   const hasAggregateOnly = executions.length === 0 && aggregateStats && aggregateStats.totalExecutions > 0;
 
@@ -170,24 +174,70 @@ export function MakeDetailPanel({ sourceId, externalId, onHealthChange }: MakeDe
       <MetricsBar kpis={kpis} />
       <IntegrationPills packages={integrations} />
 
+      {/* Instant trigger info banner */}
+      {!loading && isInstantTrigger && (data?.stats?.totalEvents ?? 0) > 0 ? (
+        <div className="flex items-start gap-3 rounded-xl border border-amber-100 bg-amber-50/50 p-4">
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+          <div className="text-sm text-amber-800">
+            <p className="font-medium">Instant (Webhook) Trigger Detected</p>
+            <p className="mt-1 text-amber-700">
+              This scenario uses {triggerModule ? <span className="rounded bg-amber-100 px-1 py-0.5 font-mono text-xs">{triggerModule}</span> : 'an instant trigger'} which
+              runs immediately when triggered by an external event. The Make API provides accurate totals shown above but does not return
+              per-execution detail for this trigger type. <span className="font-medium">This is a Make platform limitation, not a data issue.</span>
+            </p>
+          </div>
+        </div>
+      ) : null}
+
       <div className="rounded-xl border border-gray-100 bg-white p-4">
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400">Execution History (Last 30 Days)</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+            {isInstantTrigger ? 'Execution Summary' : 'Execution History (Last 30 Days)'}
+          </h3>
           <div className="flex items-center gap-2">
             <ExportButton sourceId={sourceId} externalId={externalId} platform="make" mode="scenario-structure" />
-            <span className="text-xs text-gray-400">{executions.length} in window</span>
+            {!isInstantTrigger ? <span className="text-xs text-gray-400">{executions.length} in window</span> : null}
           </div>
         </div>
         {loading ? <div className="flex items-center gap-2 py-3 text-sm text-gray-400"><Loader2 className="h-4 w-4 animate-spin" />Loading executions...</div> : null}
-        {!loading && executions.length === 0 && !hasAggregateOnly ? <div className="py-4 text-sm text-gray-400">No executions recorded yet.</div> : null}
-        {!loading && hasAggregateOnly ? (
+        {!loading && isInstantTrigger && hasAggregateOnly ? (
+          <div className="space-y-3 py-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-lg bg-gray-50 p-3">
+                <div className="text-xs text-gray-400">Total Executions</div>
+                <div className="mt-1 text-lg font-semibold text-gray-900">{aggregateStats!.totalExecutions.toLocaleString()}</div>
+              </div>
+              <div className="rounded-lg bg-gray-50 p-3">
+                <div className="text-xs text-gray-400">Total Operations</div>
+                <div className="mt-1 text-lg font-semibold text-gray-900">{aggregateStats!.totalOperations.toLocaleString()}</div>
+              </div>
+              <div className="rounded-lg bg-gray-50 p-3">
+                <div className="text-xs text-gray-400">Errors</div>
+                <div className="mt-1 text-lg font-semibold text-gray-900">{aggregateStats!.totalErrors.toLocaleString()}</div>
+              </div>
+              <div className="rounded-lg bg-gray-50 p-3">
+                <div className="text-xs text-gray-400">Credits Used</div>
+                <div className="mt-1 text-lg font-semibold text-gray-900">{aggregateStats!.totalCenticredits.toLocaleString()}</div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+        {!loading && isInstantTrigger && !hasAggregateOnly && (data?.stats?.totalEvents ?? 0) === 0 ? (
+          <div className="py-4 text-sm text-gray-400">No executions recorded yet. Trigger this scenario from its webhook source to see data here.</div>
+        ) : null}
+        {!loading && !isInstantTrigger && executions.length === 0 && !hasAggregateOnly ? <div className="py-4 text-sm text-gray-400">No executions recorded yet.</div> : null}
+        {!loading && !isInstantTrigger && hasAggregateOnly ? (
           <div className="py-4 text-sm text-gray-500">
             <span className="font-medium">{aggregateStats!.totalExecutions} executions</span> recorded on Make.
             <span className="ml-1 text-gray-400">Individual execution details are not available from the Make API for this scenario type.</span>
           </div>
         ) : null}
-        <div className="space-y-1">{executions.map((e) => <ExecutionRow key={e.id} execution={e} platform="make" />)}</div>
-        {hasMore ? <button type="button" onClick={() => { setLoading(true); setLimit(20); }} className="mt-3 cursor-pointer rounded-md border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors duration-200 hover:bg-gray-50">Load More</button> : null}
+        {!isInstantTrigger ? (
+          <>
+            <div className="space-y-1">{executions.map((e) => <ExecutionRow key={e.id} execution={e} platform="make" />)}</div>
+            {hasMore ? <button type="button" onClick={() => { setLoading(true); setLimit(20); }} className="mt-3 cursor-pointer rounded-md border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors duration-200 hover:bg-gray-50">Load More</button> : null}
+          </>
+        ) : null}
       </div>
 
       <div className="rounded-xl border border-gray-100 bg-white p-4">
