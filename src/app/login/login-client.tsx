@@ -155,7 +155,7 @@ export default function AuthShell() {
     urlError === "not_registered"
       ? "No account found for that Google address. Please sign up first."
       : urlError === "auth_failed"
-        ? "Sign-in failed. Please try again."
+        ? 'Sign-in was interrupted. Please click "Continue with Google" to try again.'
         : null;
 
   const cfg = MODE_CONFIG[mode];
@@ -387,7 +387,7 @@ export default function AuthShell() {
               )}
 
               {urlErrorMessage && (
-                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-700">
+                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-xs text-red-700">
                   {urlErrorMessage}
                 </div>
               )}
