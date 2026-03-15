@@ -162,12 +162,16 @@ export async function POST(req: Request) {
             ? call.call_cost.combined_cost / 100
             : undefined;
 
-          // Use the call-level agent_id from the Retell response — NOT the outer loop variable.
-          // This is critical because the Retell API may return calls from other agents
-          // if the filter fails, and even when filtering works, this is the correct source of truth.
+          // Use the call-level agent_id and agent_name from the Retell response.
+          // The Retell v2/list-calls API returns agent_name on every call object,
+          // which is the most reliable source. Fall back to the agents map if missing.
           const callAgentId = String(call.agent_id || agentId);
-          const callAgentRecord = byExternalId.get(callAgentId);
-          const callAgentName = callAgentRecord?.agent_name || agent.agent_name || callAgentId;
+          const callAgentName = String(
+            call.agent_name
+            || byExternalId.get(callAgentId)?.agent_name
+            || agent.agent_name
+            || callAgentId
+          );
 
           eventRows.push({
             tenant_id: membership.tenant_id,
@@ -291,14 +295,30 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, code: "PERSISTENCE_FAILED", message: upErr.message }, { status: 400 });
   }
 
-  // Insert sample events
+  // Delete existing events for this source, then insert fresh ones.
+  // This is necessary because previous imports may have stored events with
+  // incorrect labels/state (wrong agent_id, wrong workflow_name). Using
+  // ignoreDuplicates:true would silently keep the old corrupted data forever.
+  // Since we re-fetch ALL calls from the Retell API on every sync, deleting
+  // and re-inserting is safe — no data is lost.
   if (eventRows.length > 0) {
+    const { error: delErr } = await supabase
+      .from("events")
+      .delete()
+      .eq("tenant_id", membership.tenant_id)
+      .eq("source_id", sourceId)
+      .eq("type", "agent_call");
+
+    if (delErr) {
+      console.error('[retell import] Failed to delete old events:', delErr);
+    }
+
     const dedupedEvents = Array.from(
       new Map(eventRows.map((r) => [r.platform_event_id, r])).values()
     );
     const { error: evErr } = await supabase
       .from("events")
-      .upsert(dedupedEvents, { onConflict: "tenant_id,source_id,platform_event_id", ignoreDuplicates: true });
+      .insert(dedupedEvents);
     if (evErr) {
       console.error('[retell import] Failed to insert events:', evErr);
     }
