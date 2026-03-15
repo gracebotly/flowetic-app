@@ -221,9 +221,15 @@ async function fetchMakeDetails(secret: Record<string, unknown>, scenarioId: str
         }
       }
     }
-  } catch {
-    // non-fatal — fall back to Supabase stats
+  } catch (err) {
+    console.error('[entity-details/make] teamId lookup failed:', err instanceof Error ? err.message : err);
   }
+
+  if (makeOps > 0 && makeExecs === 0) {
+    makeExecs = makeOps;
+  }
+
+  console.error(`[entity-details/make] scenarioId=${scenarioId} teamId=${teamId} makeExecs=${makeExecs} makeOps=${makeOps} makeErrors=${makeErrors}`);
 
   // ── Check for recent execution errors ──
   let latestError: string | undefined;

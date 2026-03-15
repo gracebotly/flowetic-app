@@ -61,7 +61,20 @@ export async function GET(req: Request) {
   try { parsed = text ? JSON.parse(text) : null; } catch { parsed = null; }
 
   const agents = Array.isArray(parsed?.agents) ? parsed.agents : Array.isArray(parsed) ? parsed : [];
-  const inventoryEntities = agents
+
+  // Retell API returns multiple versions of the same agent as separate entries.
+  // Deduplicate by agent_id, keeping the entry with the highest version number.
+  const agentMap = new Map<string, any>();
+  for (const a of agents) {
+    const id = String(a?.agent_id ?? a?.id ?? "");
+    if (!id) continue;
+    const existing = agentMap.get(id);
+    if (!existing || (typeof a?.version === "number" && a.version > (existing.version ?? -1))) {
+      agentMap.set(id, a);
+    }
+  }
+
+  const inventoryEntities = Array.from(agentMap.values())
     .map((a: any) => ({
       entityKind: "agent",
       externalId: String(a?.agent_id ?? a?.id ?? ""),
