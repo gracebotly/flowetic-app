@@ -41,9 +41,11 @@ export async function GET(req: Request) {
   const baseUrl = zone.includes('.') ? `https://${zone}` : `https://${zone}.make.com`;
   if (!apiKey) return NextResponse.json({ ok: false, code: 'MISSING_API_KEY' }, { status: 400 });
 
+  const makeHeaders = { Authorization: `Token ${apiKey}` };
+
   let raw: MakeExecution[] = [];
   try {
-    const res = await fetch(`${baseUrl}/api/v2/scenarios/${scenarioId}/logs?pg[limit]=${limit}&pg[sortDir]=desc`, { headers: { Authorization: `Token ${apiKey}` } });
+    const res = await fetch(`${baseUrl}/api/v2/scenarios/${scenarioId}/logs?pg[limit]=${limit}&pg[sortDir]=desc`, { headers: makeHeaders });
     if (!res.ok) {
       const text = await res.text().catch(() => '');
       console.error(`[entity-executions/make] Make API returned ${res.status}: ${text.slice(0, 200)}`);
@@ -70,5 +72,37 @@ export async function GET(req: Request) {
       errorMessage: e.status === 3 ? (e.error?.message ?? null) : null,
     }));
 
-  return NextResponse.json({ ok: true, executions });
+  // When logs endpoint returns zero executions (common for webhook-triggered scenarios),
+  // fetch aggregate stats from the scenario list API as fallback.
+  let aggregateStats: { totalExecutions: number; totalErrors: number; totalOperations: number; totalCenticredits: number } | null = null;
+  if (executions.length === 0) {
+    try {
+      // Try org-based lookup to get scenario with aggregate stats
+      const orgRes = await fetch(`${baseUrl}/api/v2/organizations`, { headers: makeHeaders });
+      if (orgRes.ok) {
+        const orgData = await orgRes.json();
+        const orgs = Array.isArray(orgData?.organizations) ? orgData.organizations : [];
+        for (const org of orgs) {
+          const listRes = await fetch(`${baseUrl}/api/v2/scenarios?organizationId=${org.id}`, { headers: makeHeaders });
+          if (!listRes.ok) continue;
+          const listData = await listRes.json();
+          const match = (Array.isArray(listData?.scenarios) ? listData.scenarios : [])
+            .find((sc: { id?: number | string; executions?: number; errors?: number; operations?: number; centicredits?: number }) => String(sc.id) === scenarioId);
+          if (match && typeof match.executions === 'number' && match.executions > 0) {
+            aggregateStats = {
+              totalExecutions: match.executions,
+              totalErrors: typeof match.errors === 'number' ? match.errors : 0,
+              totalOperations: typeof match.operations === 'number' ? match.operations : 0,
+              totalCenticredits: typeof match.centicredits === 'number' ? match.centicredits : 0,
+            };
+            break;
+          }
+        }
+      }
+    } catch {
+      // non-fatal
+    }
+  }
+
+  return NextResponse.json({ ok: true, executions, aggregateStats });
 }

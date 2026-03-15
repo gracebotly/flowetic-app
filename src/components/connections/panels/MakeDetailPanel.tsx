@@ -16,6 +16,13 @@ interface MakeDetailPanelProps {
   onHealthChange?: (health: EntityHealth) => void;
 }
 
+interface AggregateStats {
+  totalExecutions: number;
+  totalErrors: number;
+  totalOperations: number;
+  totalCenticredits: number;
+}
+
 interface MakeData {
   ok: boolean;
   details: Record<string, unknown> | null;
@@ -42,6 +49,7 @@ function computeSparkData(items: Array<{ timestamp: string }>, days = 7): { idx:
 export function MakeDetailPanel({ sourceId, externalId, onHealthChange }: MakeDetailPanelProps) {
   const [data, setData] = useState<MakeData | null>(null);
   const [executions, setExecutions] = useState<ExecutionData[]>([]);
+  const [aggregateStats, setAggregateStats] = useState<AggregateStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [limit, setLimit] = useState(5);
   const [configOpen, setConfigOpen] = useState(false);
@@ -55,6 +63,7 @@ export function MakeDetailPanel({ sourceId, externalId, onHealthChange }: MakeDe
       if (!mounted) return;
       setData(d);
       setExecutions(Array.isArray(e?.executions) ? e.executions : []);
+      if (e?.aggregateStats) setAggregateStats(e.aggregateStats);
     }).catch(() => {
       if (!mounted) return;
       setData({ ok: false, details: null, stats: { totalEvents: 0, successEvents: 0, successRate: 0, avgDuration: 0, totalCost: 0 }, error: 'Unknown error' });
@@ -65,6 +74,7 @@ export function MakeDetailPanel({ sourceId, externalId, onHealthChange }: MakeDe
 
   const health = useMemo(() => {
     const stats = data?.stats ?? null;
+    // Try executions from logs first
     if (stats && stats.totalEvents === 0 && executions.length > 0) {
       const successExecs = executions.filter((e) => e.status === 'success').length;
       const total = executions.length;
@@ -78,9 +88,21 @@ export function MakeDetailPanel({ sourceId, externalId, onHealthChange }: MakeDe
       };
       return deriveEntityHealth(enrichedStats, data?.error ?? null);
     }
+    // Try aggregate stats fallback
+    if (stats && stats.totalEvents === 0 && executions.length === 0 && aggregateStats && aggregateStats.totalExecutions > 0) {
+      const enrichedStats = {
+        totalEvents: aggregateStats.totalExecutions,
+        successEvents: Math.max(0, aggregateStats.totalExecutions - aggregateStats.totalErrors),
+        successRate: aggregateStats.totalExecutions > 0 ? Math.round(((aggregateStats.totalExecutions - aggregateStats.totalErrors) / aggregateStats.totalExecutions) * 100) : 0,
+        avgDuration: 0,
+        totalCost: 0,
+        latestError: null,
+      };
+      return deriveEntityHealth(enrichedStats, data?.error ?? null);
+    }
     const h = deriveEntityHealth(stats, data?.error ?? null);
     return h.status === 'no-data' ? { ...h, entityKind: 'scenario' } : h;
-  }, [data?.stats, data?.error, executions]);
+  }, [data?.stats, data?.error, executions, aggregateStats]);
 
   useEffect(() => { if (data) onHealthChange?.(health); }, [data, health, onHealthChange]);
 
@@ -88,7 +110,7 @@ export function MakeDetailPanel({ sourceId, externalId, onHealthChange }: MakeDe
 
   const kpis: MetricKPI[] = useMemo(() => {
     let stats = data?.stats ?? { totalEvents: 0, successEvents: 0, successRate: 0, avgDuration: 0, totalCost: 0 };
-    // Enrich from platform API data when Supabase is empty
+    // Enrich from platform API execution logs when Supabase is empty
     if (stats.totalEvents === 0 && executions.length > 0) {
       const successCount = executions.filter((e) => e.status === 'success').length;
       const total = executions.length;
@@ -96,6 +118,19 @@ export function MakeDetailPanel({ sourceId, externalId, onHealthChange }: MakeDe
         totalEvents: total,
         successEvents: successCount,
         successRate: total > 0 ? Math.round((successCount / total) * 100) : 0,
+        avgDuration: 0,
+        totalCost: 0,
+      };
+    }
+    // Fallback: use aggregate stats from Make scenario list API
+    // This covers webhook-triggered scenarios where the logs endpoint returns nothing
+    if (stats.totalEvents === 0 && executions.length === 0 && aggregateStats && aggregateStats.totalExecutions > 0) {
+      stats = {
+        totalEvents: aggregateStats.totalExecutions,
+        successEvents: Math.max(0, aggregateStats.totalExecutions - aggregateStats.totalErrors),
+        successRate: aggregateStats.totalExecutions > 0
+          ? Math.round(((aggregateStats.totalExecutions - aggregateStats.totalErrors) / aggregateStats.totalExecutions) * 100)
+          : 0,
         avgDuration: 0,
         totalCost: 0,
       };
@@ -116,15 +151,18 @@ export function MakeDetailPanel({ sourceId, externalId, onHealthChange }: MakeDe
       },
       {
         label: 'Operations',
-        value: String(data?.details?.make_total_operations ?? 0),
+        value: String(aggregateStats?.totalOperations ?? data?.details?.make_total_operations ?? 0),
         icon: Zap,
         accent: '',
       },
     ];
-  }, [data?.stats, data?.details, sparkData, executions]);
+  }, [data?.stats, data?.details, sparkData, executions, aggregateStats]);
 
   const integrations = Array.isArray(data?.details?.used_packages) ? data?.details?.used_packages as string[] : [];
   const hasMore = limit < 20 && executions.length >= limit;
+
+  // Determine if we should show "aggregate only" message instead of empty
+  const hasAggregateOnly = executions.length === 0 && aggregateStats && aggregateStats.totalExecutions > 0;
 
   return (
     <div className="space-y-5">
@@ -136,12 +174,18 @@ export function MakeDetailPanel({ sourceId, externalId, onHealthChange }: MakeDe
         <div className="mb-3 flex items-center justify-between">
           <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400">Execution History (Last 30 Days)</h3>
           <div className="flex items-center gap-2">
-            <ExportButton sourceId={sourceId} externalId={externalId} platform="make" type="executions" />
+            <ExportButton sourceId={sourceId} externalId={externalId} platform="make" mode="scenario-structure" />
             <span className="text-xs text-gray-400">{executions.length} in window</span>
           </div>
         </div>
         {loading ? <div className="flex items-center gap-2 py-3 text-sm text-gray-400"><Loader2 className="h-4 w-4 animate-spin" />Loading executions...</div> : null}
-        {!loading && executions.length === 0 ? <div className="py-4 text-sm text-gray-400">No executions recorded yet.</div> : null}
+        {!loading && executions.length === 0 && !hasAggregateOnly ? <div className="py-4 text-sm text-gray-400">No executions recorded yet.</div> : null}
+        {!loading && hasAggregateOnly ? (
+          <div className="py-4 text-sm text-gray-500">
+            <span className="font-medium">{aggregateStats!.totalExecutions} executions</span> recorded on Make.
+            <span className="ml-1 text-gray-400">Individual execution details are not available from the Make API for this scenario type.</span>
+          </div>
+        ) : null}
         <div className="space-y-1">{executions.map((e) => <ExecutionRow key={e.id} execution={e} platform="make" />)}</div>
         {hasMore ? <button type="button" onClick={() => { setLoading(true); setLimit(20); }} className="mt-3 cursor-pointer rounded-md border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors duration-200 hover:bg-gray-50">Load More</button> : null}
       </div>
