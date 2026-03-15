@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 
 export async function GET(request: Request) {
@@ -33,7 +34,12 @@ export async function GET(request: Request) {
     if (!mErr && (!memberships || memberships.length === 0)) {
       const workspaceName = user.email ? `${user.email.split("@")[0]}'s Workspace` : "My Workspace";
 
-      const { data: tenant, error: tErr } = await supabase
+      // Use service client to bypass RLS for initial tenant + membership creation.
+      // The memberships_insert_admin policy requires an existing membership row,
+      // which creates a chicken-and-egg block for brand new users.
+      const serviceClient = createServiceClient();
+
+      const { data: tenant, error: tErr } = await serviceClient
         .from("tenants")
         .insert({
           name: workspaceName,
@@ -48,7 +54,7 @@ export async function GET(request: Request) {
         .single();
 
       if (!tErr && tenant) {
-        await supabase.from("memberships").insert({
+        await serviceClient.from("memberships").insert({
           tenant_id: tenant.id,
           user_id: user.id,
           role: "admin",
