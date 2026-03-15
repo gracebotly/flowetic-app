@@ -17,6 +17,7 @@ type IndexedEntity = {
   createdAt: string;
   createdAtTs: number;
   lastUpdatedTs: number;
+  healthStatus: 'healthy' | 'degraded' | 'critical' | 'no-data';
 };
 
 export async function GET() {
@@ -50,7 +51,7 @@ export async function GET() {
 
   const { data: entities, error: eErr } = await supabase
     .from("source_entities")
-    .select("id,source_id,entity_kind,external_id,display_name,last_seen_at")
+    .select("id,source_id,entity_kind,external_id,display_name,last_seen_at,aggregate_stats")
     .in("source_id", sourceIds)
     .eq("tenant_id", membership.tenant_id)
     .eq("enabled_for_analytics", true);
@@ -117,6 +118,23 @@ export async function GET() {
       ? createdAtTs
       : Date.now();
 
+    // Derive health status from aggregate_stats
+    let healthStatus: 'healthy' | 'degraded' | 'critical' | 'no-data' = 'no-data';
+    const stats = e.aggregate_stats as Record<string, unknown> | null;
+    if (stats) {
+      const totalCalls = Number(stats.total_calls ?? stats.total_executions ?? 0);
+      const successRate = Number(stats.success_rate ?? 0);
+      if (totalCalls > 0) {
+        if (successRate === 0) {
+          healthStatus = 'critical';
+        } else if (successRate < 70) {
+          healthStatus = 'degraded';
+        } else {
+          healthStatus = 'healthy';
+        }
+      }
+    }
+
     return {
       id: `${sourceId}:${String(e.external_id)}`,
       entityUuid: String(e.id),
@@ -129,6 +147,7 @@ export async function GET() {
       createdAt,
       createdAtTs: Number.isFinite(createdAtTs) ? createdAtTs : Date.now(),
       lastUpdatedTs,
+      healthStatus,
     };
   });
 

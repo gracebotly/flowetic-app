@@ -30,6 +30,7 @@ export interface EntityItem {
   platform_type: string;
   source_name: string;
   last_seen_at: string | null;
+  healthStatus?: 'healthy' | 'degraded' | 'critical' | 'no-data';
 }
 
 export interface SelectedEntity {
@@ -249,6 +250,10 @@ export default function AgentPicker({
   const getDisabledReason = useCallback(
     (entity: EntityItem): string => {
       if (selectedIds.has(entity.id)) return "";
+      // Block entities with critical health status (all executions failing)
+      if (entity.healthStatus === 'critical') {
+        return "This agent has critical issues. Check the Connections tab for details.";
+      }
       const entityCat = getCategory(entity.platform_type);
       // Block voice+workflow cross-category mixing
       if (selectedCategory !== null && entityCat !== selectedCategory) {
