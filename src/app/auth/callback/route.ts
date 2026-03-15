@@ -1,10 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
-import {
-  TRIAL_DAYS_WITH_CARD,
-  TRIAL_DAYS_WITHOUT_CARD,
-} from "@/lib/plans/constants";
+import { TRIAL_DAYS_WITHOUT_CARD } from "@/lib/plans/constants";
 
 // Service role client — bypasses RLS for tenant + membership creation
 const supabaseAdmin = createServiceClient(
@@ -18,9 +15,9 @@ export async function GET(request: Request) {
   const code = searchParams.get("code");
   const next = searchParams.get("next") ?? "/control-panel/connections";
 
-  // trial=14 → 14-day trial (user will add card separately via billing)
-  // trial=7  → 7-day trial, no card required
-  // trial=0  → pay-now, skip trial, redirect to billing immediately
+  // trial=7 (default) → 7-day free trial, no card required
+  // trial=0           → pay-now, redirect straight to billing
+  // Google OAuth users always land here with no trial param → defaults to 7
   const trialParam = searchParams.get("trial") ?? "7";
 
   if (!code) {
@@ -39,7 +36,6 @@ export async function GET(request: Request) {
   } = await supabase.auth.getUser();
 
   if (user) {
-    // Check if tenant already exists for this user
     const { data: memberships, error: mErr } = await supabaseAdmin
       .from("memberships")
       .select("tenant_id")
@@ -51,15 +47,9 @@ export async function GET(request: Request) {
         ? `${user.email.split("@")[0]}'s Workspace`
         : "My Workspace";
 
-      // Determine trial length from the param passed through email link
-      const trialDays =
-        trialParam === "14"
-          ? TRIAL_DAYS_WITH_CARD
-          : trialParam === "0"
-            ? 0
-            : TRIAL_DAYS_WITHOUT_CARD;
+      // trial=0 → pay-now (no trial period), everyone else gets 7 days
+      const trialDays = trialParam === "0" ? 0 : TRIAL_DAYS_WITHOUT_CARD;
 
-      // Insert tenant using service role (no INSERT RLS policy on tenants)
       const { data: tenant, error: tErr } = await supabaseAdmin
         .from("tenants")
         .insert({
@@ -78,7 +68,6 @@ export async function GET(request: Request) {
         .single();
 
       if (!tErr && tenant) {
-        // Insert membership using service role (INSERT policy requires existing admin)
         await supabaseAdmin.from("memberships").insert({
           tenant_id: tenant.id,
           user_id: user.id,
@@ -88,7 +77,7 @@ export async function GET(request: Request) {
     }
   }
 
-  // Pay-now: send straight to billing so they can subscribe immediately
+  // Pay-now: send to billing immediately
   const destination =
     trialParam === "0"
       ? "/control-panel/settings?tab=billing&intent=subscribe"
