@@ -21,7 +21,7 @@ const MODE_CONFIG: Record<
     title: "Start your free trial",
     sub: "Explore the platform free for 7 days.",
     btnText: "Start free trial →",
-    btnSub: "No card needed. Upgrade anytime during your trial.",
+    btnSub: "",
     pillTitle: "7-day free trial",
     pillDesc: "No card needed, cancel anytime",
   },
@@ -517,7 +517,9 @@ export default function AuthShell() {
                 {suLoading ? "Creating account..." : cfg.btnText}
               </button>
 
-              <p className="text-center text-xs text-gray-400">{cfg.btnSub}</p>
+              {cfg.btnSub && (
+                <p className="text-center text-xs text-gray-400">{cfg.btnSub}</p>
+              )}
 
               <div className="flex items-center gap-2 py-1">
                 <div className="h-px flex-1 bg-gray-100" />
