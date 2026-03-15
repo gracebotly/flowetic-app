@@ -282,6 +282,10 @@ async function fetchMakeDetails(secret: Record<string, unknown>, scenarioId: str
       make_data_transfer_bytes: makeTransfer,
       // Connection health
       latest_error: latestError,
+      // Trigger type detection — webhook/instant scenarios don't return execution logs
+      is_instant_trigger: scenario.scheduling?.type === "immediately",
+      hook_id: scenario.hookId ?? null,
+      trigger_module: modules.length > 0 ? String(modules[0].module ?? "") : null,
     },
     stats: enrichedStats,
   });
