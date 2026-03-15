@@ -35,6 +35,8 @@ export async function GET(request: Request) {
     data: { user },
   } = await supabase.auth.getUser();
 
+  const intent = searchParams.get("intent") ?? "signin";
+
   if (user) {
     const { data: memberships, error: mErr } = await supabaseAdmin
       .from("memberships")
@@ -42,7 +44,17 @@ export async function GET(request: Request) {
       .eq("user_id", user.id)
       .limit(1);
 
-    if (!mErr && (!memberships || memberships.length === 0)) {
+    const isNewUser = !mErr && (!memberships || memberships.length === 0);
+
+    if (isNewUser && intent !== "signup") {
+      // User tried to sign in with Google but has no account — sign them out and reject
+      await supabase.auth.signOut();
+      return NextResponse.redirect(
+        new URL("/login?error=not_registered", request.url)
+      );
+    }
+
+    if (isNewUser && intent === "signup") {
       const workspaceName = user.email
         ? `${user.email.split("@")[0]}'s Workspace`
         : "My Workspace";

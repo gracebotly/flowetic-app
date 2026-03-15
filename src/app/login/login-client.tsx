@@ -150,6 +150,12 @@ export default function AuthShell() {
   const [suLoading, setSuLoading] = useState(false);
   const [suSuccess, setSuSuccess] = useState(false);
 
+  const urlError = searchParams.get("error");
+  const urlErrorMessage =
+    urlError === "not_registered"
+      ? "No account found for that Google address. Please sign up first."
+      : null;
+
   const cfg = MODE_CONFIG[mode];
   const isPayNow = mode === "agency-pay" || mode === "scale-pay";
   const selectedPlan = mode === "scale-pay" ? "scale" : "agency";
@@ -171,14 +177,19 @@ export default function AuthShell() {
     router.refresh();
   };
 
-  const signInWithGoogle = async () => {
+  const signInWithGoogle = async (intent: "signin" | "signup" = "signin") => {
     setGoogleLoading(true);
     setSiError(null);
     setSuError(null);
+    const params = new URLSearchParams({ intent });
+    if (intent === "signup") {
+      const trialParam = isPayNow ? "0" : "7";
+      params.set("trial", trialParam);
+    }
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: `${window.location.origin}/auth/callback?${params.toString()}`,
       },
     });
     if (error) {
@@ -373,9 +384,15 @@ export default function AuthShell() {
                 </div>
               )}
 
+              {urlErrorMessage && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-700">
+                  {urlErrorMessage}
+                </div>
+              )}
+
               <button
                 type="button"
-                onClick={signInWithGoogle}
+                onClick={() => signInWithGoogle("signin")}
                 disabled={googleLoading}
                 className="flex w-full items-center justify-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
               >
@@ -455,7 +472,7 @@ export default function AuthShell() {
               {/* Google OAuth — signup */}
               <button
                 type="button"
-                onClick={signInWithGoogle}
+                onClick={() => signInWithGoogle("signup")}
                 disabled={googleLoading}
                 className="flex w-full items-center justify-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
               >
