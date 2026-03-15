@@ -1411,7 +1411,7 @@ export default function ConnectionsPage() {
         <div>
           <h1 className="text-3xl font-semibold text-gray-900">Connections</h1>
           <p className="mt-1 text-sm text-gray-600">
-            All the workflows, agents and credentials you have access to
+            Connect your platforms. Your agents and workflows appear here.
           </p>
         </div>
 
