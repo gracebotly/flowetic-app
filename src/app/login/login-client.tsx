@@ -26,20 +26,20 @@ const MODE_CONFIG: Record<
     pillDesc: "No card needed, cancel anytime",
   },
   "agency-pay": {
-    title: "Subscribe to Getflowetic",
-    sub: "Agency plan — full access from day one.",
-    btnText: "Subscribe to Agency →",
-    btnSub: "You'll be charged $149/mo. Cancel anytime.",
-    pillTitle: "Agency — $149/mo",
-    pillDesc: "5 portals, 1 team member, 5% platform fee",
+    title: "Get started today",
+    sub: "Full access, billed monthly.",
+    btnText: "Get Agency access",
+    btnSub: "Charged $149/mo. Cancel anytime.",
+    pillTitle: "Agency Plan $149/mo",
+    pillDesc: "",
   },
   "scale-pay": {
-    title: "Subscribe to Getflowetic",
-    sub: "Scale plan — more portals, lower fees.",
-    btnText: "Subscribe to Scale →",
-    btnSub: "You'll be charged $299/mo. Cancel anytime.",
-    pillTitle: "Scale — $299/mo",
-    pillDesc: "15 portals, unlimited team, custom domain",
+    title: "Get started today",
+    sub: "More portals, more team, billed monthly.",
+    btnText: "Get Scale access",
+    btnSub: "Charged $299/mo. Cancel anytime.",
+    pillTitle: "Scale Plan $299/mo",
+    pillDesc: "",
   },
 };
 
@@ -87,7 +87,9 @@ function PillRadio({
       </div>
       <div className="min-w-0 flex-1">
         <p className="text-xs font-medium text-gray-900">{c.pillTitle}</p>
-        <p className="text-xs text-gray-500">{c.pillDesc}</p>
+        {c.pillDesc && (
+          <p className="text-xs text-gray-500">{c.pillDesc}</p>
+        )}
       </div>
       {tag && (
         <span
