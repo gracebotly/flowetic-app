@@ -429,6 +429,43 @@ export function transformWorkflowData(events: PortalEvent[], platform: 'n8n' | '
     };
   }
 
+  // ── Handle aggregate-only data (webhook-triggered scenarios) ──
+  // When resolvePortal synthesizes a single aggregate event, extract totals
+  // and return a SkeletonData with populated KPIs but no trend/rows.
+  const aggregateEvent = events.find(e => (e.state as Record<string, unknown>)?.is_aggregate === true);
+  if (aggregateEvent && events.length === 1) {
+    const s = aggregateEvent.state as Record<string, unknown>;
+    const totalExecs = Number(s.aggregate_total ?? 0);
+    const totalErrors = Number(s.aggregate_errors ?? 0);
+    const opsConsumed = Number(s.operations_used ?? 0);
+    const centicredits = Number(s.centicredits ?? 0);
+    const dataTransfer = Number(s.data_transfer_bytes ?? 0);
+
+    return {
+      headline: { total: totalExecs, totalLabel: 'executions', percentChange: null, periodLabel: 'all time' },
+      kpis: [
+        { label: 'Failed', value: totalErrors, color: totalErrors === 0 ? 'green' : 'red' },
+        { label: 'Avg Runtime', value: '—', color: 'neutral' },
+        { label: 'Last Run', value: '—', color: 'neutral' },
+      ],
+      trend: [],
+      recentRows: [],
+      workflowBreakdown: undefined,
+      errorBreakdown: undefined,
+      operationsConsumed: opsConsumed > 0 ? opsConsumed : undefined,
+      dataTransferTotal: dataTransfer > 0 ? dataTransfer : undefined,
+      estimatedCost: centicredits > 0 ? centicredits / 100 : undefined,
+      health: {
+        status: totalErrors > 0 && totalErrors >= totalExecs ? 'critical'
+          : totalErrors > 0 && (totalErrors / totalExecs) >= 0.3 ? 'degraded'
+          : totalExecs < 5 ? 'sparse'
+          : 'healthy',
+        errorRate: totalExecs > 0 ? Math.round((totalErrors / totalExecs) * 100) : 0,
+        eventCount: totalExecs,
+      },
+    };
+  }
+
   const now = new Date();
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
   const sixtyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);

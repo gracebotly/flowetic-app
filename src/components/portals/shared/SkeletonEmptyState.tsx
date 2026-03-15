@@ -49,8 +49,8 @@ export function SkeletonHealthBanner({ health, entityType = 'workflow', isAgency
           </h3>
           <p className="mx-auto mt-2 max-w-sm text-sm" style={{ color: tokens.textSecondary }}>
             {entityType === 'voice'
-              ? 'Once your AI agent starts receiving calls, you\'ll see call volume, success rates, sentiment analysis, and more here.'
-              : 'Once your automation starts running, you\'ll see execution counts, success rates, and performance trends here.'}
+              ? 'Activity data will appear here once calls are received. Check back soon.'
+              : 'Activity data will appear here once executions are recorded. Check back soon.'}
           </p>
         </div>
       </motion.div>

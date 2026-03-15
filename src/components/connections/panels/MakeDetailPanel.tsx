@@ -209,11 +209,9 @@ export function MakeDetailPanel({ sourceId, externalId, onHealthChange }: MakeDe
         <div className="flex items-start gap-3 rounded-xl border border-amber-100 bg-amber-50/50 p-4">
           <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
           <div className="text-sm text-amber-800">
-            <p className="font-medium">Instant (Webhook) Trigger Detected</p>
+            <p className="font-medium">Webhook-Triggered Scenario</p>
             <p className="mt-1 text-amber-700">
-              This scenario uses {triggerModule ? <span className="rounded bg-amber-100 px-1 py-0.5 font-mono text-xs">{triggerModule}</span> : 'an instant trigger'} which
-              runs immediately when triggered by an external event. The Make API provides accurate totals shown above but does not return
-              per-execution detail for this trigger type. <span className="font-medium">This is a Make platform limitation, not a data issue.</span>
+              Individual execution logs are not available from Make for this scenario type. The totals shown above are accurate.
             </p>
           </div>
         </div>

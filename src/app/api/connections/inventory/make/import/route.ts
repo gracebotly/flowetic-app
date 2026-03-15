@@ -261,13 +261,26 @@ export async function POST(req: Request) {
       console.error(`[make import] Failed to index scenario ${scenarioId} to workspace:`, e);
     }
 
+    // Build aggregate stats from Make scenario list API
+    // These are available even for webhook-triggered scenarios that don't expose individual execution logs
+    const aggregateStats: Record<string, unknown> = {};
+    if (typeof scenario.executions === 'number') aggregateStats.total_executions = scenario.executions;
+    if (typeof scenario.operations === 'number') aggregateStats.total_operations = scenario.operations;
+    if (typeof scenario.errors === 'number') aggregateStats.total_errors = scenario.errors;
+    if (typeof scenario.centicredits === 'number') aggregateStats.total_centicredits = scenario.centicredits;
+    if (typeof scenario.transfer === 'number') aggregateStats.data_transfer_bytes = scenario.transfer;
+    if (detailedScenario.scheduling?.type) aggregateStats.scheduling_type = detailedScenario.scheduling.type;
+    if (detailedScenario.scheduling?.type === 'immediately') aggregateStats.is_instant_trigger = true;
+    aggregateStats.updated_at = now;
+
     rows.push({
       tenant_id: membership.tenant_id,
       source_id: sourceId,
       entity_kind: "scenario",
       external_id: scenarioId,
       display_name: workflowData.name,
-      skill_md: skillMd, // ✅ NOW POPULATED
+      skill_md: skillMd,
+      aggregate_stats: Object.keys(aggregateStats).length > 0 ? aggregateStats : null,
       enabled_for_analytics: existing?.enabled_for_analytics ?? false,
       enabled_for_actions: existing?.enabled_for_actions ?? false,
       last_seen_at: now,

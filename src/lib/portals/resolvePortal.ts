@@ -133,6 +133,58 @@ export async function resolvePortal(
     }
   }
 
+  // ── 4b-synth. Synthesize events from aggregate_stats when no real events exist ──
+  // This handles webhook-triggered Make scenarios where individual execution logs
+  // are not available but the platform provides aggregate totals.
+  if (filteredEvents.length === 0 && portal.entity_id) {
+    const { data: entityWithStats } = await supabaseAdmin
+      .from('source_entities')
+      .select('external_id, display_name, aggregate_stats')
+      .eq('id', portal.entity_id)
+      .single();
+
+    const stats = entityWithStats?.aggregate_stats as Record<string, unknown> | null;
+    if (stats && typeof stats.total_executions === 'number' && (stats.total_executions as number) > 0) {
+      const totalExecs = stats.total_executions as number;
+      const totalErrors = (stats.total_errors as number) ?? 0;
+      const totalOps = (stats.total_operations as number) ?? 0;
+      const totalCenticredits = (stats.total_centicredits as number) ?? 0;
+      const totalTransfer = (stats.data_transfer_bytes as number) ?? 0;
+
+      // Create a single synthetic summary event that transformWorkflowData can consume.
+      // It won't produce per-execution rows or trends, but it will populate
+      // headline, KPIs, health status, and resource metrics.
+      const synthEvent = {
+        id: `synth-aggregate-${portal.entity_id}`,
+        type: 'scenario_execution_summary',
+        name: `make:${entityWithStats?.display_name ?? 'scenario'}:aggregate`,
+        value: totalExecs - totalErrors,
+        state: {
+          workflow_id: entityWithStats?.external_id ?? '',
+          workflow_name: entityWithStats?.display_name ?? 'Scenario',
+          status: 'success',
+          platform: 'make',
+          is_aggregate: true,
+          aggregate_total: totalExecs,
+          aggregate_errors: totalErrors,
+          aggregate_success: totalExecs - totalErrors,
+          operations_used: totalOps,
+          centicredits: totalCenticredits,
+          data_transfer_bytes: totalTransfer,
+          duration_ms: 0,
+        },
+        labels: {
+          scenario_id: entityWithStats?.external_id ?? '',
+          platformType: 'make',
+        },
+        timestamp: (stats.updated_at as string) ?? new Date().toISOString(),
+        platform_event_id: null,
+      };
+
+      filteredEvents = [synthEvent as typeof filteredEvents[number]];
+    }
+  }
+
   // ── 4c. Multi-entity portals (offering_entities) ───────────
   // Handles both:
   //   a) Cross-source: entities from different platform connections
