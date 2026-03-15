@@ -194,26 +194,21 @@ async function fetchMakeDetails(secret: Record<string, unknown>, scenarioId: str
   // ── Pull aggregate stats ──
   // The single-scenario GET endpoint does NOT return execution stats.
   // We must call the list endpoint to get executions/errors/operations/centicredits.
+  // Use teamId (from scenario detail) for a direct, reliable lookup.
   let makeExecs = 0;
   let makeErrors = 0;
   let makeOps = 0;
   let makeCenticredits = 0;
   let makeTransfer = 0;
 
+  const teamId = scenario.teamId;
   try {
-    // Step 1: Fetch organizations (required to get the correct org ID for the list endpoint)
-    const orgRes = await fetch(`${baseUrl}/api/v2/organizations`, { headers: makeHeaders });
-    if (orgRes.ok) {
-      const orgData = await orgRes.json();
-      const orgs = Array.isArray(orgData?.organizations) ? orgData.organizations : [];
-
-      // Step 2: Try each org until we find our scenario in the list response
-      for (const org of orgs) {
-        const listRes = await fetch(
-          `${baseUrl}/api/v2/scenarios?organizationId=${org.id}`,
-          { headers: makeHeaders },
-        );
-        if (!listRes.ok) continue;
+    if (teamId) {
+      const listRes = await fetch(
+        `${baseUrl}/api/v2/scenarios?teamId=${teamId}`,
+        { headers: makeHeaders },
+      );
+      if (listRes.ok) {
         const listData = await listRes.json();
         const allScenarios = Array.isArray(listData?.scenarios) ? listData.scenarios : [];
         const match = allScenarios.find((s: any) => String(s.id) === scenarioId);
@@ -223,7 +218,6 @@ async function fetchMakeDetails(secret: Record<string, unknown>, scenarioId: str
           makeOps = typeof match.operations === "number" ? match.operations : 0;
           makeCenticredits = typeof match.centicredits === "number" ? match.centicredits : 0;
           makeTransfer = typeof match.transfer === "number" ? match.transfer : 0;
-          break;
         }
       }
     }
