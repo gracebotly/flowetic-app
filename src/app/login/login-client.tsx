@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useState } from "react";
 
-type SignupMode = "7day" | "paynow";
+type SignupMode = "7day" | "agency-pay" | "scale-pay";
 
 const MODE_CONFIG: Record<
   SignupMode,
@@ -25,13 +25,21 @@ const MODE_CONFIG: Record<
     pillTitle: "7-day free trial",
     pillDesc: "No card needed, cancel anytime",
   },
-  paynow: {
+  "agency-pay": {
     title: "Subscribe to Getflowetic",
-    sub: "Full access from day one. Cancel anytime.",
-    btnText: "Subscribe and get started →",
+    sub: "Agency plan — full access from day one.",
+    btnText: "Subscribe to Agency →",
     btnSub: "You'll be charged $149/mo. Cancel anytime.",
-    pillTitle: "Subscribe now",
-    pillDesc: "Skip the trial, get full access today",
+    pillTitle: "Agency — $149/mo",
+    pillDesc: "5 portals, 1 team member, 5% platform fee",
+  },
+  "scale-pay": {
+    title: "Subscribe to Getflowetic",
+    sub: "Scale plan — more portals, lower fees.",
+    btnText: "Subscribe to Scale →",
+    btnSub: "You'll be charged $299/mo. Cancel anytime.",
+    pillTitle: "Scale — $299/mo",
+    pillDesc: "15 portals, unlimited team, custom domain",
   },
 };
 
@@ -48,12 +56,21 @@ function PillRadio({
 }) {
   const c = MODE_CONFIG[mode];
   const selected = mode === current;
+
   const borderColor = selected
     ? mode === "7day"
       ? "border-gray-400 bg-gray-50"
-      : "border-emerald-400 bg-emerald-50"
+      : mode === "agency-pay"
+        ? "border-blue-400 bg-blue-50"
+        : "border-blue-400 bg-blue-50"
     : "border-gray-200";
-  const dotColor = mode === "7day" ? "bg-gray-600" : "bg-emerald-600";
+
+  const dotColor =
+    mode === "7day"
+      ? "bg-blue-600"
+      : mode === "agency-pay"
+        ? "bg-blue-600"
+        : "bg-blue-600";
 
   return (
     <button
@@ -114,8 +131,6 @@ export default function AuthShell() {
       ? "signup"
       : "signin";
   const [tab, setTab] = useState<"signin" | "signup">(defaultTab);
-
-  // Default is now 7day — 14day removed
   const [mode, setMode] = useState<SignupMode>("7day");
 
   // Sign-in state
@@ -134,6 +149,8 @@ export default function AuthShell() {
   const [suSuccess, setSuSuccess] = useState(false);
 
   const cfg = MODE_CONFIG[mode];
+  const isPayNow = mode === "agency-pay" || mode === "scale-pay";
+  const selectedPlan = mode === "scale-pay" ? "scale" : "agency";
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -181,9 +198,9 @@ export default function AuthShell() {
       return;
     }
 
-    // trial=7 → 7-day free trial (default)
-    // trial=0 → pay-now, redirect straight to billing
-    const trialParam = mode === "paynow" ? "0" : "7";
+    // trial=7 → 7-day free trial
+    // trial=0 → pay-now, redirect to billing with plan pre-selected
+    const trialParam = isPayNow ? "0" : "7";
     const redirectTo = `${siteUrl}/auth/callback?trial=${trialParam}`;
 
     try {
@@ -209,8 +226,10 @@ export default function AuthShell() {
       }
 
       if (body?.hasSession) {
-        if (mode === "paynow") {
-          router.push("/control-panel/settings?tab=billing&intent=subscribe");
+        if (isPayNow) {
+          router.push(
+            `/control-panel/settings?tab=billing&intent=subscribe&plan=${selectedPlan}`
+          );
         } else {
           router.push("/control-panel/connections");
         }
@@ -270,10 +289,13 @@ export default function AuthShell() {
     <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-12">
       <div className="flex w-full max-w-3xl overflow-hidden rounded-2xl border border-gray-200 shadow-sm">
 
-        {/* ── Brand panel ── */}
-        <div className="relative hidden w-[42%] flex-col justify-between overflow-hidden bg-[#0F1117] p-9 md:flex">
+        {/* ── Brand panel ──
+            justify-start + gap-8 keeps content tight at the top
+            instead of spreading awkwardly across the full height */}
+        <div className="relative hidden w-[42%] flex-col justify-start gap-8 overflow-hidden bg-[#0F1117] p-9 md:flex">
           <div className="pointer-events-none absolute -right-20 -top-20 h-60 w-60 rounded-full bg-blue-600/10" />
 
+          {/* Logo */}
           <div className="relative z-10 flex items-center gap-2.5">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-sm font-semibold text-white">
               G
@@ -283,6 +305,7 @@ export default function AuthShell() {
             </span>
           </div>
 
+          {/* Headline */}
           <div className="relative z-10">
             <h2 className="text-xl font-medium leading-snug tracking-tight text-white">
               Your AI agent.
@@ -293,6 +316,7 @@ export default function AuthShell() {
             </h2>
           </div>
 
+          {/* Feature list */}
           <div className="relative z-10 space-y-2">
             {[
               "White-labeled portals in 60 seconds",
@@ -335,8 +359,9 @@ export default function AuthShell() {
                 <h1 className="text-lg font-semibold tracking-tight text-gray-900">
                   Welcome back
                 </h1>
+                {/* CHANGED: "Sign in to your account" (was "Sign in to your agency dashboard") */}
                 <p className="mt-0.5 text-xs text-gray-400">
-                  Sign in to your agency dashboard
+                  Sign in to your account
                 </p>
               </div>
 
@@ -485,7 +510,7 @@ export default function AuthShell() {
               <button
                 type="submit"
                 disabled={suLoading}
-                className="w-full rounded-lg bg-gray-700 py-2.5 text-sm font-medium text-white transition-colors hover:bg-gray-800 disabled:opacity-50"
+                className="w-full rounded-lg bg-blue-600 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
               >
                 {suLoading ? "Creating account..." : cfg.btnText}
               </button>
@@ -501,19 +526,31 @@ export default function AuthShell() {
               </div>
 
               <div className="space-y-2">
+                {/* Free trial */}
                 <PillRadio
                   mode="7day"
                   current={mode}
                   onClick={() => setMode("7day")}
                   tag={{ label: "Free", color: "bg-gray-100 text-gray-600" }}
                 />
+                {/* Agency plan — pay now */}
                 <PillRadio
-                  mode="paynow"
+                  mode="agency-pay"
                   current={mode}
-                  onClick={() => setMode("paynow")}
+                  onClick={() => setMode("agency-pay")}
                   tag={{
-                    label: "Full access",
-                    color: "bg-emerald-50 text-emerald-600",
+                    label: "$149/mo",
+                    color: "bg-blue-50 text-blue-600",
+                  }}
+                />
+                {/* Scale plan — pay now */}
+                <PillRadio
+                  mode="scale-pay"
+                  current={mode}
+                  onClick={() => setMode("scale-pay")}
+                  tag={{
+                    label: "$299/mo",
+                    color: "bg-blue-50 text-blue-600",
                   }}
                 />
               </div>
