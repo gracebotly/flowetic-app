@@ -789,6 +789,8 @@ export default function ConnectionsPage() {
       setDetailsOpen(false);
       setSelectedEntity(null);
       setDrawerHealth(null);
+      setDrawerEvents([]);
+      setDrawerEventsLoading(false);
     }, 300);
   }
 
@@ -1586,6 +1588,9 @@ export default function ConnectionsPage() {
                 onClick={() => {
                   setSelectedEntity(openEntity);
                   setDrawerTab("overview");
+                  setDrawerEvents([]);
+                  setDrawerEventsLoading(false);
+                  setDrawerHealth(null);
                   setDetailsOpen(true);
                   setOpenEntityMenuId(null);
                   setDeleteConfirmId(null);
@@ -2633,9 +2638,17 @@ export default function ConnectionsPage() {
                       <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-gray-100">
                         <Activity className="h-5 w-5 text-gray-400" />
                       </div>
-                      <div className="text-sm font-medium text-gray-600">No activity yet</div>
+                      <div className="text-sm font-medium text-gray-600">
+                        {selectedEntity?.platform === 'make'
+                          ? 'No execution logs available'
+                          : 'No call history available'}
+                      </div>
                       <div className="mt-1 text-xs text-gray-400">
-                        Execution data will appear here after your agent or workflow runs.
+                        {selectedEntity?.platform === 'make'
+                          ? 'Individual execution logs are not available from Make for this scenario type. See totals in the Overview tab.'
+                          : selectedEntity?.platform === 'vapi' || selectedEntity?.platform === 'retell'
+                            ? 'Call data syncs when the connection is refreshed. Try clicking Sync All to pull the latest data.'
+                            : 'Execution data syncs when the connection is refreshed. Try clicking Sync All to pull the latest data.'}
                       </div>
                     </div>
                   ) : (
