@@ -49,7 +49,7 @@ export async function logActivity(
       entity_id: params.entityId ?? null,
       entity_name: params.entityName ?? null,
       client_id: params.clientId ?? null,
-      offering_id: params.offeringId ?? null,
+      portal_id: params.offeringId ?? null,
       message: params.message,
       details: params.details ?? null,
     });
