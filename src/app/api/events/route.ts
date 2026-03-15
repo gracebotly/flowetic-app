@@ -87,12 +87,14 @@ export async function GET(req: Request) {
     if (ids.size > 0) {
       filteredEvents = filteredEvents.filter((e) => {
         const state = (e.state as Record<string, unknown>) ?? {};
-        const agentId = String(state.assistant_id ?? state.agent_id ?? "");
+        // Check workflow_id first — this is the canonical entity identifier set by all import routes.
+        // Then fall back to assistant_id / agent_id for any legacy data.
         const wfId = String(state.workflow_id ?? "");
-        // If the event has no id stored, include it (can't filter, better to show than hide)
-        if ((!agentId || agentId === "undefined" || agentId === "null") &&
-            (!wfId || wfId === "undefined" || wfId === "null")) return true;
-        return ids.has(agentId) || ids.has(wfId);
+        const agentId = String(state.assistant_id ?? state.agent_id ?? "");
+        // If no entity identifier is stored at all, include the event
+        if ((!wfId || wfId === "undefined" || wfId === "null") &&
+            (!agentId || agentId === "undefined" || agentId === "null")) return true;
+        return ids.has(wfId) || ids.has(agentId);
       });
     }
   }

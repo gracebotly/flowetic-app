@@ -119,14 +119,14 @@ export async function resolvePortal(
         const pt = portal.platform_type ?? '';
 
         if (platform === 'vapi' || platform === 'retell' || pt === 'vapi' || pt === 'retell') {
-          const voiceId = String(state.assistant_id ?? state.agent_id ?? '');
-          // If voiceId is empty/missing, fall through — source_id scoping is sufficient
+          // Voice events: check workflow_id first (canonical field set by import),
+          // then fall back to assistant_id / agent_id for legacy data
+          const voiceId = String(state.workflow_id ?? state.assistant_id ?? state.agent_id ?? '');
           if (!voiceId || voiceId === 'undefined' || voiceId === 'null') return true;
           return voiceId === entity.external_id;
         }
 
         const wfId = String(state.workflow_id ?? '');
-        // Same fallback for workflows
         if (!wfId || wfId === 'undefined' || wfId === 'null') return true;
         return wfId === entity.external_id;
       });

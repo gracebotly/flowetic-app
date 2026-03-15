@@ -97,29 +97,40 @@ export async function POST(req: NextRequest) {
       try {
         const { data: latestEvents } = await supabase
           .from("events")
-          .select("labels, timestamp")
+          .select("state, labels, timestamp")
           .eq("tenant_id", tenantId)
           .eq("source_id", sourceId)
           .order("timestamp", { ascending: false })
           .limit(200);
 
         if (latestEvents && latestEvents.length > 0) {
-          // Build map of entity external_id → latest timestamp
-          // Different platforms use different label keys for the entity ID
-          const entityIdKeys = platformType === "vapi" ? ["assistant_id"]
+          // Use state.workflow_id as the primary entity identifier — it is the canonical
+          // field set by ALL import routes (Retell, Vapi, Make, n8n).
+          // Fall back to labels for legacy compatibility.
+          const labelKeys = platformType === "vapi" ? ["assistant_id"]
             : platformType === "retell" ? ["agent_id"]
             : platformType === "make" ? ["scenario_id", "workflow_id"]
             : ["workflow_id"];
 
           const latestByEntity = new Map<string, string>();
           for (const ev of latestEvents) {
+            const state = ev.state as Record<string, unknown> | null;
             const labels = ev.labels as Record<string, string> | null;
-            if (!labels) continue;
 
-            for (const key of entityIdKeys) {
-              const entityId = labels[key];
-              if (entityId && !latestByEntity.has(String(entityId))) {
-                latestByEntity.set(String(entityId), String(ev.timestamp));
+            // Primary: state.workflow_id (canonical for all platforms)
+            const stateWfId = state ? String(state.workflow_id ?? "") : "";
+            if (stateWfId && stateWfId !== "undefined" && stateWfId !== "null" && !latestByEntity.has(stateWfId)) {
+              latestByEntity.set(stateWfId, String(ev.timestamp));
+              continue;
+            }
+
+            // Fallback: labels
+            if (labels) {
+              for (const key of labelKeys) {
+                const entityId = labels[key];
+                if (entityId && !latestByEntity.has(String(entityId))) {
+                  latestByEntity.set(String(entityId), String(ev.timestamp));
+                }
               }
             }
           }

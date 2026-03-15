@@ -189,6 +189,8 @@ export default function CreateOfferingPage() {
                 sourceName?: string;
                 last_seen_at?: string | null;
                 lastSeenAt?: string | null;
+                healthStatus?: 'healthy' | 'degraded' | 'critical' | 'no-data';
+                health_status?: 'healthy' | 'degraded' | 'critical' | 'no-data';
               }) => ({
                 id: e.entityUuid ?? e.id ?? "",
                 source_id: e.source_id ?? e.sourceId ?? "",
@@ -198,6 +200,7 @@ export default function CreateOfferingPage() {
                 platform_type: e.platform_type ?? e.platform ?? "",
                 source_name: e.source_name ?? e.sourceName ?? e.platform ?? "Unknown",
                 last_seen_at: e.last_seen_at ?? e.lastSeenAt ?? null,
+                healthStatus: e.healthStatus ?? e.health_status ?? undefined,
               })
             )
           );

@@ -128,7 +128,7 @@ export async function POST(req: Request) {
         method: "POST",
         headers: retellHeaders,
         body: JSON.stringify({
-          agent_id: agentId,
+          filter_criteria: { agent_id: [agentId] },
           limit: 1000,
           sort_order: "descending",
         }),
@@ -162,17 +162,24 @@ export async function POST(req: Request) {
             ? call.call_cost.combined_cost / 100
             : undefined;
 
+          // Use the call-level agent_id from the Retell response — NOT the outer loop variable.
+          // This is critical because the Retell API may return calls from other agents
+          // if the filter fails, and even when filtering works, this is the correct source of truth.
+          const callAgentId = String(call.agent_id || agentId);
+          const callAgentRecord = byExternalId.get(callAgentId);
+          const callAgentName = callAgentRecord?.agent_name || agent.agent_name || callAgentId;
+
           eventRows.push({
             tenant_id: membership.tenant_id,
             source_id: sourceId,
             platform_event_id: String(call.call_id),
             type: 'agent_call',
-            name: `retell:${agent.agent_name || agentId}:call`,
+            name: `retell:${callAgentName}:call`,
             value: call.call_status === 'ended' || call.call_status === 'completed' ? 1 : 0,
             state: {
               // Identifiers
-              workflow_id: String(call.agent_id || ''),
-              workflow_name: agent.agent_name || '',
+              workflow_id: callAgentId,
+              workflow_name: callAgentName,
               execution_id: String(call.call_id),
 
               // Status & timing
@@ -199,8 +206,8 @@ export async function POST(req: Request) {
               platform: 'retell',
             },
             labels: {
-              agent_id: agentId,
-              agent_name: agent.agent_name,
+              agent_id: callAgentId,
+              agent_name: callAgentName,
               call_id: call.call_id,
               status: call.call_status,
             },
@@ -258,10 +265,18 @@ export async function POST(req: Request) {
       entity_kind: "agent",
       external_id: agentId,
       display_name: workflowData.name,
-      skill_md: skillMd, // ✅ NOW POPULATED
+      skill_md: skillMd,
       enabled_for_analytics: existing?.enabled_for_analytics ?? false,
       enabled_for_actions: existing?.enabled_for_actions ?? false,
-      last_seen_at: now,
+      last_seen_at: callStats.lastCall || now,
+      aggregate_stats: {
+        total_calls: callStats.total,
+        success_calls: callStats.success,
+        failed_calls: callStats.failed,
+        success_rate: callStats.total > 0 ? Math.round((callStats.success / callStats.total) * 100) : 0,
+        last_call_at: callStats.lastCall || null,
+        updated_at: now,
+      },
       created_at: now,
       updated_at: now,
     });
