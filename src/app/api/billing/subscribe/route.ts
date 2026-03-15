@@ -99,8 +99,13 @@ export async function POST(request: NextRequest) {
         .eq("id", tenantId);
     }
 
-    // 7. Determine trial — if currently trialing and no card, give them 14-day trial
+    // 7. Determine trial days
+    // skipTrial=true → pay-now flow, charge immediately, no trial period injected
+    // otherwise → 14-day trial if still within trialing window
+    const skipTrial = body.skipTrial === true;
+
     const isCurrentlyTrialing =
+      !skipTrial &&
       tenant.plan_status === "trialing" &&
       (!tenant.trial_ends_at || new Date(tenant.trial_ends_at) > new Date());
 
