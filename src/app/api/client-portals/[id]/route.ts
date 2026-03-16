@@ -77,6 +77,7 @@ export async function PATCH(
     'client_id',
     'pricing_type',
     'price_cents',
+    'slug',
     'input_schema',
     'execution_config',
     'branding',
@@ -244,6 +245,7 @@ export async function DELETE(
     status: "info",
     entityType: "portal",
     entityId: id,
+    offeringId: id,
     message: `Deleted client portal`,
   });
 
