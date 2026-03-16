@@ -13,27 +13,35 @@ export function getBlockStatus(tenant: {
   plan_status: string;
   trial_ends_at: string | null;
   has_card_on_file: boolean;
+  has_ever_paid?: boolean;
   plan_updated_at: string | null;
 }): BlockInfo {
   const now = Date.now();
   const msPerDay = 24 * 60 * 60 * 1000;
 
-  // 1. Trial expired without ever adding a card → HARD BLOCK (freeloader)
+  // 1. Trial expired without ever paying → HARD BLOCK (freeloader)
+  //    This catches both: never added card, AND added card but never got charged
   if (
     tenant.plan_status === "trialing" &&
     tenant.trial_ends_at &&
     new Date(tenant.trial_ends_at).getTime() < now &&
-    !tenant.has_card_on_file
+    !tenant.has_ever_paid
   ) {
     return { level: "hard_block", reason: "trial_expired", daysRemaining: null };
   }
 
-  // 2. Cancelled subscription (they paid before)
+  // 2. Cancelled subscription
   if (tenant.plan_status === "cancelled" && tenant.plan_updated_at) {
     const cancelledAt = new Date(tenant.plan_updated_at).getTime();
     const daysSince = Math.floor((now - cancelledAt) / msPerDay);
-    const daysLeft = SOFT_BLOCK_GRACE_DAYS - daysSince;
 
+    // Never paid → hard block immediately (freeloader who cancelled during trial)
+    if (!tenant.has_ever_paid) {
+      return { level: "hard_block", reason: "cancelled", daysRemaining: null };
+    }
+
+    // Paid before → soft block with 30-day grace
+    const daysLeft = SOFT_BLOCK_GRACE_DAYS - daysSince;
     if (daysLeft > 0) {
       return { level: "soft_block", reason: "cancelled", daysRemaining: daysLeft };
     }
@@ -50,7 +58,12 @@ export function getBlockStatus(tenant: {
       return { level: null, reason: null, daysRemaining: null };
     }
 
-    // Past 3-day grace → soft block with 30-day countdown from when past_due started
+    // Never paid → hard block immediately (card added during trial then bounced)
+    if (!tenant.has_ever_paid) {
+      return { level: "hard_block", reason: "payment_failed", daysRemaining: null };
+    }
+
+    // Paid before → soft block with 30-day countdown
     const daysIntoSoftBlock = daysPastDue - PAST_DUE_GRACE_DAYS;
     const daysLeft = SOFT_BLOCK_GRACE_DAYS - daysIntoSoftBlock;
 

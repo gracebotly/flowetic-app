@@ -212,6 +212,7 @@ export async function POST(request: NextRequest) {
           .update({
             plan_status: "active",
             has_card_on_file: true,
+            has_ever_paid: true,
             plan_updated_at: new Date().toISOString(),
           })
           .eq("id", tenant.id);

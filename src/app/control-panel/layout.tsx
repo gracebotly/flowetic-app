@@ -43,7 +43,7 @@ export default async function ControlPanelLayout({
       const { data: tenant } = await supabase
         .from("tenants")
         .select(
-          "plan, plan_status, trial_ends_at, has_card_on_file, plan_updated_at, name, logo_url, primary_color"
+          "plan, plan_status, trial_ends_at, has_card_on_file, has_ever_paid, plan_updated_at, name, logo_url, primary_color"
         )
         .eq("id", membership.tenant_id)
         .single();
