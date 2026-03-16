@@ -14,22 +14,22 @@ export function UsageMeter({ label, current, limit }: UsageMeterProps) {
   return (
     <div>
       <div className="flex items-baseline justify-between">
-        <span className="text-sm font-medium text-gray-700">{label}</span>
+        <span className="text-xs text-slate-500">{label}</span>
         <span
-          className={`text-sm font-semibold ${
+          className={`text-xs font-medium ${
             isAtLimit
               ? "text-red-600"
               : isNearLimit
                 ? "text-amber-600"
-                : "text-gray-900"
+                : "text-slate-900"
           }`}
         >
           {current} / {limit}
         </span>
       </div>
-      <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-gray-100">
+      <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-slate-100">
         <div
-          className={`h-full rounded-full transition-all ${
+          className={`h-full rounded-full transition-all duration-300 ${
             isAtLimit
               ? "bg-red-500"
               : isNearLimit

@@ -1,7 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, ArrowUpRight, CreditCard, Clock, CheckCircle2 } from "lucide-react";
+import {
+  Loader2,
+  ArrowUpRight,
+  CreditCard,
+  Clock,
+  CheckCircle2,
+  Info,
+} from "lucide-react";
 import { StripeConnectCard } from "@/components/settings/StripeConnectCard";
 import { UsageMeter } from "@/components/settings/UsageMeter";
 
@@ -81,18 +88,15 @@ export function BillingTab() {
     };
   }, []);
 
-  // Re-fetch after returning from Stripe
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("billing") === "success") {
-      // Refetch billing status after successful checkout
       fetch("/api/billing/status")
         .then((r) => r.json())
         .then((data) => {
           if (data.ok) setBilling(data);
         })
         .catch(() => {});
-      // Clean URL
       const url = new URL(window.location.href);
       url.searchParams.delete("billing");
       window.history.replaceState({}, "", url.toString());
@@ -146,14 +150,14 @@ export function BillingTab() {
   if (loading) {
     return (
       <div className="flex justify-center py-16">
-        <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+        <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-center text-sm text-red-600">
+      <div className="rounded-lg border border-red-200 bg-red-50 p-5 text-center text-sm text-red-600">
         {error}
         <button
           onClick={() => setError(null)}
@@ -174,151 +178,180 @@ export function BillingTab() {
   const feePercent = billing?.platform_fee_percent ?? 5;
   const currentPlan = billing?.plan ?? "agency";
 
-  // ── Determine plan badge ──────────────────────────────────
+  // ── Plan badge ──
   let badgeText = planLabel;
-  let badgeClass = "bg-blue-100 text-blue-700";
+  let badgeDotClass = "bg-blue-500";
+  let badgeBgClass = "bg-blue-50 text-blue-700";
 
   if (trialExpired) {
-    badgeText = `${planLabel} — Trial Expired`;
-    badgeClass = "bg-red-100 text-red-700";
+    badgeText = `${planLabel} — Trial expired`;
+    badgeDotClass = "bg-red-500";
+    badgeBgClass = "bg-red-50 text-red-700";
   } else if (planStatus === "trialing") {
     const days = trialEndsAt ? daysUntil(trialEndsAt) : 0;
     badgeText = `${planLabel} — Trial (${days} day${days !== 1 ? "s" : ""} left)`;
-    badgeClass = "bg-amber-100 text-amber-700";
+    badgeDotClass = "bg-amber-500";
+    badgeBgClass = "bg-amber-50 text-amber-700";
   } else if (planStatus === "active") {
-    badgeText = planLabel;
-    badgeClass = "bg-green-100 text-green-700";
+    badgeText = `${planLabel} — Active`;
+    badgeDotClass = "bg-emerald-500";
+    badgeBgClass = "bg-emerald-50 text-emerald-700";
   } else if (planStatus === "past_due") {
-    badgeText = `${planLabel} — Past Due`;
-    badgeClass = "bg-red-100 text-red-700";
+    badgeText = `${planLabel} — Past due`;
+    badgeDotClass = "bg-red-500";
+    badgeBgClass = "bg-red-50 text-red-700";
   } else if (planStatus === "cancelled") {
     badgeText = `${planLabel} — Cancelled`;
-    badgeClass = "bg-gray-100 text-gray-600";
+    badgeDotClass = "bg-slate-400";
+    badgeBgClass = "bg-slate-100 text-slate-600";
   }
 
+  // ── Plan card border color ──
+  const planBorderColor =
+    trialExpired || planStatus === "past_due"
+      ? "border-l-red-500"
+      : planStatus === "trialing"
+        ? "border-l-amber-500"
+        : planStatus === "active"
+          ? "border-l-slate-900"
+          : "border-l-slate-300";
+
   return (
-    <div className="space-y-8">
-      {/* Stripe Connect — for collecting from agency's clients */}
+    <div className="space-y-3">
+      {/* Stripe Connect */}
       <StripeConnectCard />
 
-      {/* Plan + Usage */}
-      <div className="rounded-xl border border-gray-200 bg-white p-6">
-        <h3 className="text-base font-semibold text-gray-900">Your Plan</h3>
-        <div className="mt-1 flex items-center gap-2">
+      {/* Your Plan */}
+      <div
+        className={`rounded-lg border border-gray-200 border-l-[3px] bg-white p-5 ${planBorderColor}`}
+      >
+        <div className="flex items-center gap-2 text-sm font-medium text-slate-900">
+          Your plan
           <span
-            className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${badgeClass}`}
+            className={`ml-1 inline-flex items-center gap-1.5 rounded px-2 py-0.5 text-[11px] font-medium ${badgeBgClass}`}
           >
+            <span className={`h-1.5 w-1.5 rounded-full ${badgeDotClass}`} />
             {badgeText}
           </span>
         </div>
 
         {/* Trial info */}
         {planStatus === "trialing" && !trialExpired && trialEndsAt && (
-          <div className="mt-3 rounded-lg bg-gray-50 p-3">
+          <div className="mt-3 flex gap-2 rounded-md bg-slate-50 p-3">
             {hasCard ? (
-              <div className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-green-500" />
+              <>
+                <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-500" />
                 <div>
-                  <p className="text-sm text-gray-700">
+                  <p className="text-xs text-slate-600">
                     Card on file. You won&apos;t be charged until{" "}
                     <span className="font-medium">{formatDate(trialEndsAt)}</span>.
                   </p>
                   {priceCents && (
-                    <p className="mt-0.5 text-xs text-gray-500">
+                    <p className="mt-0.5 text-[11px] text-slate-400">
                       Then ${(priceCents / 100).toFixed(0)}/month.
                     </p>
                   )}
                 </div>
-              </div>
+              </>
             ) : (
-              <div className="flex items-start gap-2">
-                <Clock className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+              <>
+                <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
                 <div>
-                  <p className="text-sm text-gray-700">
+                  <p className="text-xs text-slate-600">
                     Add a payment method to extend your trial to 14 days.
                   </p>
-                  <p className="mt-0.5 text-xs text-gray-500">
+                  <p className="mt-0.5 text-[11px] text-slate-400">
                     Current trial expires {formatDate(trialEndsAt)}.
                   </p>
                 </div>
-              </div>
+              </>
             )}
           </div>
         )}
 
         {/* Usage meters */}
         {usage && (
-          <div className="mt-6 space-y-4">
+          <div className="mt-4 space-y-3">
             <UsageMeter
-              label="Client Portals"
+              label="Client portals"
               current={usage.usage.portals.current}
-              limit={usage.usage.portals.limit === Infinity ? 999 : usage.usage.portals.limit}
+              limit={
+                usage.usage.portals.limit === Infinity
+                  ? 999
+                  : usage.usage.portals.limit
+              }
             />
             <UsageMeter
-              label="Team Members"
+              label="Team members"
               current={usage.usage.members.current}
-              limit={usage.usage.members.limit === Infinity ? 999 : usage.usage.members.limit}
+              limit={
+                usage.usage.members.limit === Infinity
+                  ? 999
+                  : usage.usage.members.limit
+              }
             />
           </div>
         )}
 
-        {/* Platform fee info */}
-        <div className="mt-4 text-xs text-gray-500">
+        {/* Platform fee */}
+        <p className="mt-3 text-[11px] text-slate-400">
           Platform fee on client payments: {feePercent}%
-        </div>
+        </p>
 
-        {/* CTA buttons — now wired to real API calls */}
-        <div className="mt-6 flex flex-wrap gap-3">
+        {/* Action buttons */}
+        <div className="mt-4 flex flex-wrap gap-2">
           {trialExpired || planStatus === "cancelled" ? (
             <button
               onClick={() => handleSubscribe(currentPlan)}
               disabled={actionLoading === "subscribe"}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition-colors duration-200 hover:bg-slate-800 disabled:opacity-50"
             >
               {actionLoading === "subscribe" ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : (
                 <CreditCard className="h-3.5 w-3.5" />
               )}
-              Subscribe — ${priceCents ? (priceCents / 100).toFixed(0) : "149"}/mo
+              Subscribe — $
+              {priceCents ? (priceCents / 100).toFixed(0) : "149"}/mo
             </button>
           ) : planStatus === "trialing" && !hasCard ? (
             <button
               onClick={() => handleSubscribe(currentPlan)}
               disabled={actionLoading === "subscribe"}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition-colors duration-200 hover:bg-slate-800 disabled:opacity-50"
             >
               {actionLoading === "subscribe" ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : (
                 <CreditCard className="h-3.5 w-3.5" />
               )}
-              Add Card &amp; Extend Trial
+              Add card &amp; extend trial
             </button>
-          ) : planStatus === "active" || (planStatus === "trialing" && hasCard) ? (
+          ) : planStatus === "active" ||
+            (planStatus === "trialing" && hasCard) ? (
             <button
               onClick={handlePortal}
               disabled={actionLoading === "portal"}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors duration-200 hover:bg-slate-50 disabled:opacity-50"
             >
               {actionLoading === "portal" ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : null}
-              Manage Billing
+              Manage billing
               <ArrowUpRight className="h-3.5 w-3.5" />
             </button>
           ) : planStatus === "past_due" ? (
             <button
               onClick={handlePortal}
               disabled={actionLoading === "portal"}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors duration-200 hover:bg-red-700 disabled:opacity-50"
             >
               {actionLoading === "portal" ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : (
                 <CreditCard className="h-3.5 w-3.5" />
               )}
-              Update Payment Method
+              Update payment method
             </button>
           ) : null}
 
@@ -328,7 +361,7 @@ export function BillingTab() {
               <button
                 onClick={() => handleSubscribe("scale")}
                 disabled={actionLoading === "subscribe"}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors duration-200 hover:bg-slate-50 disabled:opacity-50"
               >
                 Upgrade to Scale — $299/mo
                 <ArrowUpRight className="h-3.5 w-3.5" />

@@ -3,10 +3,9 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   CreditCard,
-  CheckCircle2,
-  AlertTriangle,
   ExternalLink,
   Loader2,
+  ArrowRight,
 } from "lucide-react";
 
 type ConnectStatus = {
@@ -41,12 +40,13 @@ export function StripeConnectCard() {
     void fetchStatus();
   }, [fetchStatus]);
 
-  // Re-fetch on return from Stripe onboarding
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get("stripe") === "complete" || params.get("stripe") === "refresh") {
+    if (
+      params.get("stripe") === "complete" ||
+      params.get("stripe") === "refresh"
+    ) {
       void fetchStatus();
-      // Clean URL
       const url = new URL(window.location.href);
       url.searchParams.delete("stripe");
       window.history.replaceState({}, "", url.toString());
@@ -70,123 +70,148 @@ export function StripeConnectCard() {
     }
   };
 
+  /* ── Loading ── */
   if (loading) {
     return (
-      <div className="rounded-xl border border-gray-200 bg-white p-6">
-        <div className="flex justify-center py-8">
-          <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+      <div className="rounded-lg border border-gray-200 bg-white p-6">
+        <div className="flex justify-center py-6">
+          <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
         </div>
       </div>
     );
   }
 
-  // ── State 1: Not connected ──
+  /* ── State 1: Not connected ── */
   if (!status?.connected) {
     return (
-      <div className="rounded-xl border border-gray-200 bg-white p-6">
-        <div className="flex items-start gap-4">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-purple-50">
-            <CreditCard className="h-5 w-5 text-purple-600" />
-          </div>
-          <div className="flex-1">
-            <h3 className="text-base font-semibold text-gray-900">Stripe Connect</h3>
-            <p className="mt-1 text-sm text-gray-500">
-              Connect your Stripe account to collect payments from your products.
-              Platform fee is based on your plan (Starter 5%, Pro 2%, Enterprise
-              0%).
-            </p>
-            {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
-            <button
-              onClick={handleConnect}
-              disabled={connecting}
-              className="mt-4 inline-flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-700 disabled:opacity-50"
-            >
-              {connecting ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <CreditCard className="h-4 w-4" />
-              )}
-              {connecting ? "Redirecting..." : "Connect Stripe"}
-            </button>
-          </div>
+      <div className="rounded-lg border border-gray-200 border-l-[3px] border-l-slate-300 bg-white p-5">
+        <div className="flex items-center gap-2 text-sm font-medium text-slate-900">
+          <CreditCard className="h-4 w-4" />
+          Stripe Connect
+          <span className="ml-1 inline-flex items-center gap-1.5 rounded bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">
+            <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+            Not connected
+          </span>
         </div>
+        <p className="mt-1.5 text-xs text-slate-500 leading-relaxed">
+          Connect your Stripe account to collect payments from your clients.
+          Platform fee is based on your plan.
+        </p>
+        {error && (
+          <p className="mt-2 text-xs text-red-600">{error}</p>
+        )}
+        <button
+          onClick={handleConnect}
+          disabled={connecting}
+          className="mt-3 inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition-colors duration-200 hover:bg-slate-800 disabled:opacity-50"
+        >
+          {connecting ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <CreditCard className="h-3.5 w-3.5" />
+          )}
+          {connecting ? "Redirecting..." : "Connect Stripe"}
+        </button>
       </div>
     );
   }
 
-  // ── State 2: Onboarding incomplete ──
+  /* ── State 2: Onboarding incomplete ── */
   if (!status.onboarding_complete || !status.charges_enabled) {
     return (
-      <div className="rounded-xl border border-yellow-200 bg-yellow-50 p-6">
-        <div className="flex items-start gap-4">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-yellow-100">
-            <AlertTriangle className="h-5 w-5 text-yellow-600" />
-          </div>
-          <div className="flex-1">
-            <h3 className="text-base font-semibold text-gray-900">
-              Stripe Setup Incomplete
-            </h3>
-            <p className="mt-1 text-sm text-gray-600">
-              Your Stripe account is connected but setup is not complete. Please
-              finish onboarding to start accepting payments.
-            </p>
-            {!status.payouts_enabled && status.charges_enabled && (
-              <p className="mt-1 text-sm text-yellow-700">
-                Stripe needs additional information to enable payouts.
-              </p>
-            )}
-            {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
-            <button
-              onClick={handleConnect}
-              disabled={connecting}
-              className="mt-4 inline-flex items-center gap-2 rounded-lg bg-yellow-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-yellow-700 disabled:opacity-50"
-            >
-              {connecting ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <AlertTriangle className="h-4 w-4" />
-              )}
-              {connecting ? "Redirecting..." : "Complete Setup"}
-            </button>
-          </div>
+      <div className="rounded-lg border border-gray-200 border-l-[3px] border-l-amber-500 bg-white p-5">
+        <div className="flex items-center gap-2 text-sm font-medium text-slate-900">
+          <CreditCard className="h-4 w-4" />
+          Stripe Connect
+          <span className="ml-1 inline-flex items-center gap-1.5 rounded bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
+            <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+            Setup incomplete
+          </span>
         </div>
+        <p className="mt-1.5 text-xs text-slate-500 leading-relaxed">
+          Your Stripe account is connected but setup is not complete.
+          Finish onboarding to start accepting payments.
+        </p>
+        {!status.payouts_enabled && status.charges_enabled && (
+          <p className="mt-1 text-xs text-amber-600">
+            Stripe needs additional information to enable payouts.
+          </p>
+        )}
+        {error && (
+          <p className="mt-2 text-xs text-red-600">{error}</p>
+        )}
+        <button
+          onClick={handleConnect}
+          disabled={connecting}
+          className="mt-3 inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition-colors duration-200 hover:bg-slate-800 disabled:opacity-50"
+        >
+          {connecting ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <ArrowRight className="h-3.5 w-3.5" />
+          )}
+          {connecting ? "Redirecting..." : "Complete setup"}
+        </button>
       </div>
     );
   }
 
-  // ── State 3: Fully connected ──
+  /* ── State 3: Fully connected ── */
   return (
-    <div className="rounded-xl border border-green-200 bg-green-50 p-6">
-      <div className="flex items-start gap-4">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-green-100">
-          <CheckCircle2 className="h-5 w-5 text-green-600" />
-        </div>
-        <div className="flex-1">
-          <h3 className="text-base font-semibold text-gray-900">Stripe Connected</h3>
-          <p className="mt-1 text-sm text-gray-600">
-            Your Stripe account is active and ready to accept payments.
+    <div className="rounded-lg border border-gray-200 border-l-[3px] border-l-emerald-500 bg-white p-5">
+      <div className="flex items-center gap-2 text-sm font-medium text-slate-900">
+        <CreditCard className="h-4 w-4" />
+        Stripe Connect
+        <span className="ml-1 inline-flex items-center gap-1.5 rounded bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+          Connected
+        </span>
+      </div>
+      <p className="mt-1.5 text-xs text-slate-500">
+        Your Stripe account is active and ready to accept payments.
+      </p>
+
+      <div className="mt-3 flex gap-6">
+        <div>
+          <p className="text-[11px] text-slate-400">Account</p>
+          <p className="mt-0.5 font-mono text-xs font-medium text-slate-900">
+            {status.stripe_account_id}
           </p>
-          <div className="mt-3 space-y-1 text-sm text-gray-500">
-            <p>
-              Account:{" "}
-              <code className="rounded bg-white px-1.5 py-0.5 text-xs">
-                {status.stripe_account_id}
-              </code>
-            </p>
-            <p>Charges: {status.charges_enabled ? "✅ Enabled" : "❌ Disabled"}</p>
-            <p>Payouts: {status.payouts_enabled ? "✅ Enabled" : "⚠️ Pending"}</p>
-          </div>
-          <a
-            href="https://dashboard.stripe.com/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-green-700 hover:text-green-800"
-          >
-            View Stripe Dashboard
-            <ExternalLink className="h-3.5 w-3.5" />
-          </a>
+        </div>
+        <div>
+          <p className="text-[11px] text-slate-400">Charges</p>
+          <p className="mt-0.5 flex items-center gap-1.5 text-xs font-medium text-slate-900">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            Enabled
+          </p>
+        </div>
+        <div>
+          <p className="text-[11px] text-slate-400">Payouts</p>
+          <p className="mt-0.5 flex items-center gap-1.5 text-xs font-medium text-slate-900">
+            {status.payouts_enabled ? (
+              <>
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                Enabled
+              </>
+            ) : (
+              <>
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                Pending
+              </>
+            )}
+          </p>
         </div>
       </div>
+
+      <a
+        href="https://dashboard.stripe.com/"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3.5 py-1.5 text-xs font-medium text-slate-700 transition-colors duration-200 hover:bg-slate-50"
+      >
+        View Stripe dashboard
+        <ExternalLink className="h-3 w-3" />
+      </a>
     </div>
   );
 }
