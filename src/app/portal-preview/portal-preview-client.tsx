@@ -139,7 +139,7 @@ export default function PortalPreviewClient() {
       {showAnalytics && (
         <PortalShell
           portalName={params.get("entity_name") || "Your Portal"}
-          tenantName={branding?.name || ""}
+          tenantName={branding?.name || "Getflowetic"}
           logoUrl={branding?.logo_url || null}
           primaryColor={branding?.primary_color || "#3b82f6"}
           secondaryColor={branding?.secondary_color || "#1e40af"}

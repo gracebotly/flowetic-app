@@ -1,13 +1,11 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback, type ComponentType, type ReactNode } from "react";
+import { useState, useEffect, useMemo, type ComponentType, type ReactNode } from "react";
 import {
   Tablet,
   Smartphone,
   ExternalLink,
   Loader2,
-  RotateCcw,
-  Info,
   AlertTriangle,
 } from "lucide-react";
 import { Badge } from "@tremor/react";
@@ -117,7 +115,6 @@ export default function PortalPreview({
   const [branding, setBranding] = useState<Branding | null>(null);
   const [events, setEvents] = useState<PreviewEvent[] | null>(null);
   const [loading, setLoading] = useState(true);
-  const [refreshKey, setRefreshKey] = useState(0);
 
   const skeletonId = useMemo(() => {
     // If multiple entities are selected (passed via prop), use mix detection
@@ -169,7 +166,7 @@ export default function PortalPreview({
     return () => {
       mounted = false;
     };
-  }, [sourceId, platformType, refreshKey, entityExternalIds]);
+  }, [sourceId, platformType, entityExternalIds]);
 
   const transformedData = useMemo(() => {
     if (!events || !skeletonId) return null;
@@ -182,7 +179,6 @@ export default function PortalPreview({
 
   const dataHealth = transformedData?.health?.status ?? "no-data";
   const isNoData = dataHealth === "no-data";
-  const isSparseData = dataHealth === "sparse";
 
   const containerMaxWidth = 900;
   const deviceWidth = DEVICES[device].width;
@@ -194,10 +190,6 @@ export default function PortalPreview({
     : device === "mobile"
       ? 0.92
       : 1;
-
-  const handleRefresh = useCallback(() => {
-    setRefreshKey((k) => k + 1);
-  }, []);
 
   if (loading) {
     return (
@@ -262,18 +254,6 @@ export default function PortalPreview({
               No data
             </Badge>
           )}
-          {isSparseData && (
-            <Badge size="xs" color="amber">
-              Sparse data
-            </Badge>
-          )}
-          <button
-            onClick={handleRefresh}
-            className="cursor-pointer rounded-md p-1.5 text-tremor-content transition-colors duration-200 hover:text-tremor-content-strong dark:text-dark-tremor-content dark:hover:text-dark-tremor-content-strong"
-            title="Refresh preview"
-          >
-            <RotateCcw className="h-4 w-4" />
-          </button>
         </div>
       </div>
 
@@ -303,7 +283,7 @@ export default function PortalPreview({
             >
               <PortalShell
                   portalName={customTitle?.trim() || entityName || "Your Portal"}
-                  tenantName={branding?.name || ""}
+                  tenantName={branding?.name || "Getflowetic"}
                   logoUrl={branding?.logo_url || null}
                   primaryColor={branding?.primary_color || "#3b82f6"}
                   secondaryColor={branding?.secondary_color || "#1e40af"}
@@ -343,23 +323,6 @@ export default function PortalPreview({
             </p>
             <p className="mt-0.5 text-xs text-orange-600 dark:text-orange-400">
               This agent or workflow has no activity in the last 30 days. Your client will see an empty dashboard until data starts flowing. You can still share this portal — it will populate automatically once activity begins.
-            </p>
-          </div>
-        </motion.div>
-      )}
-      {isSparseData && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-900/20"
-        >
-          <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600 dark:text-amber-400" />
-          <div>
-            <p className="text-xs font-semibold text-amber-700 dark:text-amber-300">
-              Limited data — {transformedData?.health?.eventCount ?? 0} events recorded
-            </p>
-            <p className="mt-0.5 text-xs text-amber-600 dark:text-amber-400">
-              Analytics will become more accurate as more activity is recorded. Charts and trends may not yet be fully representative.
             </p>
           </div>
         </motion.div>
