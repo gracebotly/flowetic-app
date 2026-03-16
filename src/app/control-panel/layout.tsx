@@ -1,7 +1,14 @@
 import { createClient } from "@/lib/supabase/server";
 import { ControlPanelSidebar } from "@/components/layout/cp-sidebar";
 import { TrialBanner } from "@/components/layout/TrialBanner";
+import { BlockedPage } from "@/components/billing/BlockedPage";
+import { SoftBlockBanner } from "@/components/billing/SoftBlockBanner";
 import { getPlanLimits } from "@/lib/plans/constants";
+import { getBlockStatus } from "@/lib/billing/getBlockStatus";
+import { headers } from "next/headers";
+
+// Pages accessible even when hard-blocked
+const ALWAYS_ALLOWED = ["/control-panel/settings", "/control-panel/help"];
 
 export default async function ControlPanelLayout({
   children,
@@ -14,11 +21,16 @@ export default async function ControlPanelLayout({
   } = await supabase.auth.getUser();
   const email = user?.email ?? "you@workspace.com";
 
-  // Resolve actual plan + tenant branding from tenant
   let plan = "Agency";
   let tenantName = "";
   let tenantLogoUrl: string | null = null;
   let tenantColor = "#3B82F6";
+  let blockInfo = getBlockStatus({
+    plan_status: "active",
+    trial_ends_at: null,
+    has_card_on_file: false,
+    plan_updated_at: null,
+  });
 
   if (user) {
     const { data: membership } = await supabase
@@ -30,7 +42,9 @@ export default async function ControlPanelLayout({
     if (membership) {
       const { data: tenant } = await supabase
         .from("tenants")
-        .select("plan, plan_status, trial_ends_at, name, logo_url, primary_color")
+        .select(
+          "plan, plan_status, trial_ends_at, has_card_on_file, plan_updated_at, name, logo_url, primary_color"
+        )
         .eq("id", membership.tenant_id)
         .single();
 
@@ -45,17 +59,40 @@ export default async function ControlPanelLayout({
           !!tenant.trial_ends_at &&
           new Date(tenant.trial_ends_at) < new Date();
 
-        if (trialExpired) {
+        if (trialExpired && !tenant.has_card_on_file) {
           plan = `${limits.label} (Trial Expired)`;
         } else if (tenant.plan_status === "trialing") {
           plan = `${limits.label} (Trial)`;
         } else if (tenant.plan_status === "past_due") {
           plan = `${limits.label} (Past Due)`;
+        } else if (tenant.plan_status === "cancelled") {
+          plan = `${limits.label} (Cancelled)`;
         } else {
           plan = limits.label;
         }
+
+        blockInfo = getBlockStatus(tenant);
       }
     }
+  }
+
+  // Determine current path
+  const headersList = await headers();
+  const pathname =
+    headersList.get("x-next-pathname") ||
+    headersList.get("x-invoke-path") ||
+    "";
+  const isAllowedPage = ALWAYS_ALLOWED.some((p) => pathname.startsWith(p));
+
+  // Determine what to render in <main>
+  let mainContent: React.ReactNode;
+
+  if (blockInfo.level === "hard_block" && !isAllowedPage) {
+    // Hard block: full-page takeover
+    mainContent = <BlockedPage reason={blockInfo.reason!} />;
+  } else {
+    // Active or soft-blocked: show normal content
+    mainContent = children;
   }
 
   return (
@@ -68,9 +105,17 @@ export default async function ControlPanelLayout({
         tenantColor={tenantColor}
       />
       <div className="flex flex-1 flex-col">
-        <TrialBanner />
-        <main className="flex-1 bg-[hsl(var(--main-bg))] min-h-screen">
-          {children}
+        {/* Show soft block banner OR trial banner, not both */}
+        {blockInfo.level === "soft_block" && blockInfo.reason ? (
+          <SoftBlockBanner
+            reason={blockInfo.reason as "cancelled" | "payment_failed"}
+            daysRemaining={blockInfo.daysRemaining ?? 0}
+          />
+        ) : (
+          <TrialBanner />
+        )}
+        <main className="min-h-screen flex-1 bg-[hsl(var(--main-bg))]">
+          {mainContent}
         </main>
       </div>
     </div>
