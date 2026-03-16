@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import Image from "next/image"
 import { useState, useEffect } from "react"
 import { usePathname } from "next/navigation"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
@@ -16,6 +17,7 @@ import {
   ChevronLeft,
   ChevronRight,
   DollarSign,
+  User,
 } from "lucide-react"
 import * as Popover from "@radix-ui/react-popover"
 
@@ -30,9 +32,22 @@ const NAV: NavItem[] = [
   { href: "/control-panel/settings", label: "Settings", icon: SettingsIcon },
 ]
 
-export function ControlPanelSidebar({ userEmail, plan }: { userEmail: string; plan: string }) {
+interface SidebarProps {
+  userEmail: string
+  plan: string
+  tenantName: string
+  tenantLogoUrl: string | null
+  tenantColor: string
+}
+
+export function ControlPanelSidebar({
+  userEmail,
+  plan,
+  tenantName,
+  tenantLogoUrl,
+  tenantColor,
+}: SidebarProps) {
   const pathname = usePathname()
-  // collapsed = true -> 64px icons-only; false -> 120px icons + tiny labels
   const [collapsed, setCollapsed] = useLocalStorageBoolean("cp_collapsed", true)
 
   // ── Settings badge: warn if branding incomplete ───────────
@@ -47,7 +62,6 @@ export function ControlPanelSidebar({ userEmail, plan }: { userEmail: string; pl
         if (!active) return
         if (json.ok && json.branding) {
           const b = json.branding
-          // Show badge if logo missing OR colors are defaults
           const incomplete =
             !b.logo_url ||
             b.primary_color === "#3B82F6" ||
@@ -55,9 +69,7 @@ export function ControlPanelSidebar({ userEmail, plan }: { userEmail: string; pl
             b.brand_footer === "Powered by Getflowetic"
           setSettingsBadge(incomplete)
         }
-      } catch {
-        // ignore — don't show badge on error
-      }
+      } catch {}
     })()
     return () => {
       active = false
@@ -65,6 +77,9 @@ export function ControlPanelSidebar({ userEmail, plan }: { userEmail: string; pl
   }, [])
 
   const width = collapsed ? 64 : 120
+
+  // Tenant initial for fallback logo
+  const tenantInitial = tenantName?.charAt(0)?.toUpperCase() || "W"
 
   const NavEntry = ({ href, label, Icon, active, badge }: { href: string; label: string; Icon: React.ComponentType<{ size?: number; className?: string }>; active: boolean; badge?: boolean }) => {
     const base = (
@@ -86,7 +101,6 @@ export function ControlPanelSidebar({ userEmail, plan }: { userEmail: string; pl
         {!collapsed && <span className="text-[11px] font-medium leading-4 text-center">{label}</span>}
       </Link>
     )
-    // Tooltips only when collapsed
     return collapsed ? (
       <Tooltip>
         <TooltipTrigger asChild>{base}</TooltipTrigger>
@@ -104,10 +118,27 @@ export function ControlPanelSidebar({ userEmail, plan }: { userEmail: string; pl
         style={{ width, backgroundColor: "hsl(var(--sidebar-bg))" }}
         aria-label="Control Panel Sidebar"
       >
-        {/* Header: icon only (no brand text) + toggle */}
+        {/* Header: tenant logo + toggle */}
         <div className="border-b border-white/10 p-2">
           <div className="flex items-center justify-between">
-            <div className="h-9 w-9 rounded-lg bg-blue-500 text-center text-white font-bold leading-9">GF</div>
+            {tenantLogoUrl ? (
+              <div className="h-9 w-9 shrink-0 overflow-hidden rounded-lg">
+                <Image
+                  src={tenantLogoUrl}
+                  alt={tenantName || "Workspace"}
+                  width={36}
+                  height={36}
+                  className="h-full w-full object-cover"
+                />
+              </div>
+            ) : (
+              <div
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xs font-bold text-white"
+                style={{ backgroundColor: tenantColor }}
+              >
+                {tenantInitial}
+              </div>
+            )}
             <button
               onClick={() => setCollapsed(!collapsed)}
               className="ml-1 flex h-7 w-7 items-center justify-center rounded-md border border-white/15 bg-white/5 text-white hover:bg-white/10"
@@ -129,20 +160,27 @@ export function ControlPanelSidebar({ userEmail, plan }: { userEmail: string; pl
           })}
         </nav>
 
-        {/* Bottom avatar trigger and working popover */}
+        {/* Bottom: user icon + popover */}
         <div className="border-t border-white/10 p-2">
           <Popover.Root>
-            {/* Use Popover.Trigger directly (not asChild) to avoid event swallowing */}
             <Popover.Trigger
               className="w-full rounded-md text-center outline-none focus-visible:ring-2 focus-visible:ring-white/40"
               aria-label="Open account menu"
             >
-              <div className="mx-auto h-8 w-8 rounded-full bg-gray-600 text-white text-[12px] font-bold leading-8">AG</div>
-              {!collapsed && <div className="mt-1 text-[10px] text-gray-400">Agency</div>}
+              <div className="mx-auto flex h-8 w-8 items-center justify-center rounded-full bg-gray-600">
+                <User size={14} className="text-gray-300" />
+              </div>
+              {!collapsed && <div className="mt-1 truncate text-[10px] text-gray-400">{tenantName || "Account"}</div>}
             </Popover.Trigger>
             <Popover.Portal>
               <Popover.Content side="right" align="end" sideOffset={12} className="z-50 outline-none">
-                <AccountCardPanel email={userEmail} plan={plan} />
+                <AccountCardPanel
+                  email={userEmail}
+                  plan={plan}
+                  tenantName={tenantName}
+                  tenantColor={tenantColor}
+                  tenantLogoUrl={tenantLogoUrl}
+                />
               </Popover.Content>
             </Popover.Portal>
           </Popover.Root>

@@ -14,8 +14,11 @@ export default async function ControlPanelLayout({
   } = await supabase.auth.getUser();
   const email = user?.email ?? "you@workspace.com";
 
-  // Resolve actual plan from tenant
+  // Resolve actual plan + tenant branding from tenant
   let plan = "Agency";
+  let tenantName = "";
+  let tenantLogoUrl: string | null = null;
+  let tenantColor = "#3B82F6";
 
   if (user) {
     const { data: membership } = await supabase
@@ -27,11 +30,15 @@ export default async function ControlPanelLayout({
     if (membership) {
       const { data: tenant } = await supabase
         .from("tenants")
-        .select("plan, plan_status, trial_ends_at")
+        .select("plan, plan_status, trial_ends_at, name, logo_url, primary_color")
         .eq("id", membership.tenant_id)
         .single();
 
       if (tenant) {
+        tenantName = tenant.name || "";
+        tenantLogoUrl = tenant.logo_url || null;
+        tenantColor = tenant.primary_color || "#3B82F6";
+
         const limits = getPlanLimits(tenant.plan);
         const trialExpired =
           tenant.plan_status === "trialing" &&
@@ -53,7 +60,13 @@ export default async function ControlPanelLayout({
 
   return (
     <div className="flex min-h-screen">
-      <ControlPanelSidebar userEmail={email} plan={plan} />
+      <ControlPanelSidebar
+        userEmail={email}
+        plan={plan}
+        tenantName={tenantName}
+        tenantLogoUrl={tenantLogoUrl}
+        tenantColor={tenantColor}
+      />
       <div className="flex flex-1 flex-col">
         <TrialBanner />
         <main className="flex-1 bg-[hsl(var(--main-bg))] min-h-screen">
