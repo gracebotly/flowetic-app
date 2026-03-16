@@ -323,19 +323,21 @@ export function MultiAgentVoiceSkeleton({ data, branding }: MultiAgentVoiceProps
 
       {/* ── Overall timeline (above agent table) ── */}
       {trend.length > 1 && (
-        <motion.div variants={fadeUp} initial="hidden" animate="visible" custom={2}>
-          <ThemedCard>
+        <motion.div variants={fadeUp} initial="hidden" animate="visible" custom={2} className="overflow-visible">
+          <ThemedCard className="overflow-visible">
             <p className="text-base font-semibold" style={{ color: tokens.textPrimary }}>All Agents Timeline</p>
             <p className="mt-0.5 text-xs" style={{ color: tokens.textSecondary }}>Daily calls across all agents — success vs failed</p>
-            <AreaChart
-              className="mt-4 h-64"
-              data={trend}
-              index="date"
-              categories={['successCount', 'failCount']}
-              colors={['emerald', 'rose']}
-              valueFormatter={(v: number) => v.toLocaleString()}
-              showLegend showAnimation curveType="monotone" showGridLines={false}
-            />
+            <div className="relative mt-4 overflow-visible">
+              <AreaChart
+                className="h-52 sm:h-64"
+                data={trend}
+                index="date"
+                categories={['successCount', 'failCount']}
+                colors={['emerald', 'rose']}
+                valueFormatter={(v: number) => v.toLocaleString()}
+                showLegend showAnimation curveType="monotone" showGridLines={false}
+              />
+            </div>
           </ThemedCard>
         </motion.div>
       )}
