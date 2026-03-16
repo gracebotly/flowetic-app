@@ -33,31 +33,47 @@ export async function GET(request: NextRequest) {
     const tenantId = membership.tenant_id;
 
     const period = request.nextUrl.searchParams.get("period") || "30d";
+    const beforeParam = request.nextUrl.searchParams.get("before");
     const days = parseInt(period) || 30;
-    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+
+    // If "before" is provided, compute a window ending at that date
+    // (used by the frontend to fetch the previous period for % change)
+    const anchorMs = beforeParam ? new Date(beforeParam).getTime() : Date.now();
+    const since = new Date(anchorMs - days * 24 * 60 * 60 * 1000).toISOString();
+    const until = beforeParam || null;
 
     const supabaseAdmin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    const { data: customers } = await supabaseAdmin
+    // Build customer query — if until is set, only include customers created before that date
+    let customerQuery = supabaseAdmin
       .from("portal_customers")
       .select(
         "id, portal_id, email, subscription_status, total_revenue_cents, total_runs, last_payment_at, stripe_subscription_id"
       )
       .eq("tenant_id", tenantId);
+    if (until) {
+      customerQuery = customerQuery.lte("created_at", until);
+    }
+    const { data: customers } = await customerQuery;
 
     const { data: offerings } = await supabaseAdmin
       .from("client_portals")
       .select("id, name, pricing_type, price_cents, status, surface_type, view_count, published_at")
       .eq("tenant_id", tenantId);
 
-    const { data: executions } = await supabaseAdmin
+    // Build execution query — filter by date window
+    let executionQuery = supabaseAdmin
       .from("workflow_executions")
       .select("id, portal_id, status, started_at")
       .eq("tenant_id", tenantId)
       .gte("started_at", since);
+    if (until) {
+      executionQuery = executionQuery.lte("started_at", until);
+    }
+    const { data: executions } = await executionQuery;
 
     const customerList = customers || [];
     const offeringList = offerings || [];

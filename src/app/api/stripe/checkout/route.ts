@@ -142,7 +142,7 @@ export async function POST(request: NextRequest) {
           line_items: [{ price: offering.stripe_price_id, quantity: 1 }],
           subscription_data: {
             application_fee_percent: feePercent,
-            metadata: { offering_id: offering.id },
+            metadata: { portal_id: offering.id },
           },
           success_url: `${baseUrl}/products/${offering.slug}/run?subscribed=true`,
           cancel_url: `${baseUrl}/products/${offering.slug}?cancelled=true`,
@@ -169,7 +169,7 @@ export async function POST(request: NextRequest) {
           line_items: [{ price: offering.stripe_price_id }],
           subscription_data: {
             application_fee_percent: feePercent,
-            metadata: { offering_id: offering.id },
+            metadata: { portal_id: offering.id },
           },
           success_url: `${baseUrl}/products/${offering.slug}/run?subscribed=true`,
           cancel_url: `${baseUrl}/products/${offering.slug}?cancelled=true`,

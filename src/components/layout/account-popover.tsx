@@ -2,16 +2,25 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import Image from "next/image"
 import { Settings, HelpCircle, LogOut, Copy } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
+
+interface AccountCardProps {
+  email: string
+  plan?: string
+  tenantName?: string
+  tenantColor?: string
+  tenantLogoUrl?: string | null
+}
 
 export function AccountCardPanel({
   email,
   plan = "Agency",
-}: {
-  email: string
-  plan?: string
-}) {
+  tenantName,
+  tenantColor = "#3B82F6",
+  tenantLogoUrl,
+}: AccountCardProps) {
   const router = useRouter()
   const [copied, setCopied] = useState(false)
 
@@ -30,18 +39,38 @@ export function AccountCardPanel({
     router.refresh()
   }
 
+  const initial = tenantName?.charAt(0)?.toUpperCase() || email?.charAt(0)?.toUpperCase() || "A"
+
   return (
     <div className="w-72 rounded-xl border border-gray-200 bg-white shadow-xl outline-none">
-      {/* Header — clean, no gradient */}
+      {/* Header */}
       <div className="border-b border-gray-100 px-4 py-3">
         <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white">
-            {email?.charAt(0)?.toUpperCase() || "A"}
-          </div>
+          {tenantLogoUrl ? (
+            <div className="h-9 w-9 shrink-0 overflow-hidden rounded-lg">
+              <Image
+                src={tenantLogoUrl}
+                alt={tenantName || "Workspace"}
+                width={36}
+                height={36}
+                className="h-full w-full object-cover"
+              />
+            </div>
+          ) : (
+            <div
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xs font-bold text-white"
+              style={{ backgroundColor: tenantColor }}
+            >
+              {initial}
+            </div>
+          )}
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium text-gray-900">{plan}</p>
+            {tenantName && (
+              <p className="truncate text-sm font-medium text-gray-900">{tenantName}</p>
+            )}
+            <p className="text-xs text-gray-500">{plan}</p>
             <div className="flex items-center gap-1.5">
-              <p className="truncate text-xs text-gray-500">{email}</p>
+              <p className="truncate text-xs text-gray-400">{email}</p>
               <button
                 onClick={copyEmail}
                 className="shrink-0 rounded p-0.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
