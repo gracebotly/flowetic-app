@@ -247,7 +247,7 @@ export function BillingTab() {
                     <span className="font-medium">{formatDate(trialEndsAt)}</span>.
                   </p>
                   {priceCents && (
-                    <p className="mt-0.5 text-[11px] text-slate-400">
+                    <p className="mt-0.5 text-[11px] text-slate-500">
                       Then ${(priceCents / 100).toFixed(0)}/month.
                     </p>
                   )}
@@ -255,12 +255,12 @@ export function BillingTab() {
               </>
             ) : (
               <>
-                <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
+                <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-500" />
                 <div>
                   <p className="text-xs text-slate-600">
                     Add a payment method to extend your trial to 14 days.
                   </p>
-                  <p className="mt-0.5 text-[11px] text-slate-400">
+                  <p className="mt-0.5 text-[11px] text-slate-500">
                     Current trial expires {formatDate(trialEndsAt)}.
                   </p>
                 </div>
@@ -294,7 +294,7 @@ export function BillingTab() {
         )}
 
         {/* Platform fee */}
-        <p className="mt-3 text-[11px] text-slate-400">
+        <p className="mt-3 text-[11px] text-slate-500">
           Platform fee on client payments: {feePercent}%
         </p>
 
@@ -304,7 +304,7 @@ export function BillingTab() {
             <button
               onClick={() => handleSubscribe(currentPlan)}
               disabled={actionLoading === "subscribe"}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition-colors duration-200 hover:bg-slate-800 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-gray-800 px-4 py-2 text-sm font-medium text-white transition-colors duration-200 hover:bg-gray-700 disabled:opacity-50"
             >
               {actionLoading === "subscribe" ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -318,7 +318,7 @@ export function BillingTab() {
             <button
               onClick={() => handleSubscribe(currentPlan)}
               disabled={actionLoading === "subscribe"}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition-colors duration-200 hover:bg-slate-800 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-gray-800 px-4 py-2 text-sm font-medium text-white transition-colors duration-200 hover:bg-gray-700 disabled:opacity-50"
             >
               {actionLoading === "subscribe" ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />

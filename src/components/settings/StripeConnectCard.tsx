@@ -103,7 +103,7 @@ export function StripeConnectCard() {
         <button
           onClick={handleConnect}
           disabled={connecting}
-          className="mt-3 inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition-colors duration-200 hover:bg-slate-800 disabled:opacity-50"
+          className="mt-3 inline-flex items-center gap-2 rounded-lg bg-gray-800 px-4 py-2 text-sm font-medium text-white transition-colors duration-200 hover:bg-gray-700 disabled:opacity-50"
         >
           {connecting ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -143,7 +143,7 @@ export function StripeConnectCard() {
         <button
           onClick={handleConnect}
           disabled={connecting}
-          className="mt-3 inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition-colors duration-200 hover:bg-slate-800 disabled:opacity-50"
+          className="mt-3 inline-flex items-center gap-2 rounded-lg bg-gray-800 px-4 py-2 text-sm font-medium text-white transition-colors duration-200 hover:bg-gray-700 disabled:opacity-50"
         >
           {connecting ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -173,20 +173,20 @@ export function StripeConnectCard() {
 
       <div className="mt-3 flex gap-6">
         <div>
-          <p className="text-[11px] text-slate-400">Account</p>
+          <p className="text-[11px] text-slate-500">Account</p>
           <p className="mt-0.5 font-mono text-xs font-medium text-slate-900">
             {status.stripe_account_id}
           </p>
         </div>
         <div>
-          <p className="text-[11px] text-slate-400">Charges</p>
+          <p className="text-[11px] text-slate-500">Charges</p>
           <p className="mt-0.5 flex items-center gap-1.5 text-xs font-medium text-slate-900">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
             Enabled
           </p>
         </div>
         <div>
-          <p className="text-[11px] text-slate-400">Payouts</p>
+          <p className="text-[11px] text-slate-500">Payouts</p>
           <p className="mt-0.5 flex items-center gap-1.5 text-xs font-medium text-slate-900">
             {status.payouts_enabled ? (
               <>
