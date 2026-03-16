@@ -365,20 +365,22 @@ function ScenarioRow({
                     <p className="text-sm font-semibold" style={{ color: tokens.textPrimary }}>Recent Executions</p>
                     <p className="mt-0.5 text-xs" style={{ color: tokens.textSecondary }}>Last {wf.recentRows.length} runs</p>
                   </div>
-                  <Table>
-                    <TableHead>
-                      <TableRow style={{ backgroundColor: tokens.bgExpanded }}>
-                        <TableHeaderCell style={{ color: tokens.textSecondary }}>{entityLabel.single}</TableHeaderCell>
-                        <TableHeaderCell style={{ color: tokens.textSecondary }}>Status</TableHeaderCell>
-                        <TableHeaderCell style={{ color: tokens.textSecondary }}>Duration</TableHeaderCell>
-                        <TableHeaderCell style={{ color: tokens.textSecondary }}>Error</TableHeaderCell>
-                        <TableHeaderCell style={{ color: tokens.textSecondary }}>Time</TableHeaderCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {wf.recentRows.map((row) => <ExpandableRow key={row.id} row={row} />)}
-                    </TableBody>
-                  </Table>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHead>
+                        <TableRow style={{ backgroundColor: tokens.bgExpanded }}>
+                          <TableHeaderCell style={{ color: tokens.textSecondary }}>{entityLabel.single}</TableHeaderCell>
+                          <TableHeaderCell style={{ color: tokens.textSecondary }}>Status</TableHeaderCell>
+                          <TableHeaderCell style={{ color: tokens.textSecondary }}>Duration</TableHeaderCell>
+                          <TableHeaderCell style={{ color: tokens.textSecondary }}>Error</TableHeaderCell>
+                          <TableHeaderCell style={{ color: tokens.textSecondary }}>Time</TableHeaderCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {wf.recentRows.map((row) => <ExpandableRow key={row.id} row={row} />)}
+                      </TableBody>
+                    </Table>
+                  </div>
                 </ThemedCard>
               )}
             </div>
@@ -456,7 +458,7 @@ export function WorkflowOperationsSkeleton({ data, branding }: WorkflowOperation
       </motion.div>
 
       {/* ─── KPI cards (always shown) ─── */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
         {kpis.map((kpi, i) => {
           const cfg = kpiIcons[kpi.label] || { icon: Activity, color: branding.primary_color };
           return <KPICard key={kpi.label} label={kpi.label} value={kpi.value} icon={cfg.icon} color={cfg.color} trend={kpi.trend} trendValue={kpi.trendValue} index={i + 1} />;
@@ -465,7 +467,7 @@ export function WorkflowOperationsSkeleton({ data, branding }: WorkflowOperation
 
       {/* ─── Make resource metrics (always shown when present) ─── */}
       {(data.operationsConsumed || data.dataTransferTotal || data.estimatedCost) && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
           {data.operationsConsumed != null && data.operationsConsumed > 0 && (
             <motion.div variants={fadeUp} initial="hidden" animate="visible" custom={kpis.length + 1}>
               <ThemedCard>
@@ -590,7 +592,7 @@ export function WorkflowOperationsSkeleton({ data, branding }: WorkflowOperation
             </motion.div>
           )}
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {workflowBreakdown && workflowBreakdown.length > 0 && (
               <motion.div variants={fadeUp} initial="hidden" animate="visible" custom={5}>
                 <ThemedCard>
@@ -696,20 +698,22 @@ export function WorkflowOperationsSkeleton({ data, branding }: WorkflowOperation
                     <Download className="h-3.5 w-3.5" />Export
                   </button>
                 </Flex>
-                <Table>
-                  <TableHead>
-                    <TableRow>
-                      <TableHeaderCell>{entityLabel.single}</TableHeaderCell>
-                      <TableHeaderCell>Status</TableHeaderCell>
-                      <TableHeaderCell>Duration</TableHeaderCell>
-                      <TableHeaderCell>Error</TableHeaderCell>
-                      <TableHeaderCell>Time</TableHeaderCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {recentRows.map((row) => <ExpandableRow key={row.id} row={row} />)}
-                  </TableBody>
-                </Table>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHead>
+                      <TableRow>
+                        <TableHeaderCell>{entityLabel.single}</TableHeaderCell>
+                        <TableHeaderCell>Status</TableHeaderCell>
+                        <TableHeaderCell>Duration</TableHeaderCell>
+                        <TableHeaderCell>Error</TableHeaderCell>
+                        <TableHeaderCell>Time</TableHeaderCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {recentRows.map((row) => <ExpandableRow key={row.id} row={row} />)}
+                    </TableBody>
+                  </Table>
+                </div>
               </ThemedCard>
             </motion.div>
           )}
