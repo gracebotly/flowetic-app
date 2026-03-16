@@ -1,13 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { ArrowRight, Zap, Shield, Clock, CheckCircle, Users } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { ArrowRight, Zap, Shield, Clock, CheckCircle } from 'lucide-react';
-import {
-  ProductThemeProvider,
-  ThemeToggle,
-  useTheme,
-} from '@/lib/products/ThemeProvider';
 
 interface PremiumLandingProps {
   product: {
@@ -15,8 +9,11 @@ interface PremiumLandingProps {
     name: string;
     description: string | null;
     slug: string;
+    surfaceType: string;
+    accessType: string;
     pricingModel: string;
     priceCents: number;
+    token: string | null;
     inputSchema: unknown[];
     designTokens: Record<string, unknown> | null;
   };
@@ -31,25 +28,12 @@ interface PremiumLandingProps {
   };
 }
 
-export function PremiumLanding(props: PremiumLandingProps) {
-  return (
-    <ProductThemeProvider
-      designTokens={props.product.designTokens}
-      primaryColor={props.branding.primaryColor}
-    >
-      <LandingContent {...props} />
-    </ProductThemeProvider>
-  );
-}
-
-function LandingContent({ product, branding, stats }: PremiumLandingProps) {
-  const { theme, colors } = useTheme();
-  const [mounted] = useState(true);
-
-  const fieldCount = product.inputSchema?.length ?? 0;
+export function PremiumLanding({ product, branding, stats }: PremiumLandingProps) {
   const isFree = product.pricingModel === 'free';
   const priceDisplay =
-    product.priceCents > 0 ? `$${(product.priceCents / 100).toFixed(2)}` : null;
+    product.priceCents > 0
+      ? `$${(product.priceCents / 100).toFixed(0)}`
+      : null;
   const priceSuffix =
     product.pricingModel === 'monthly'
       ? '/mo'
@@ -59,221 +43,150 @@ function LandingContent({ product, branding, stats }: PremiumLandingProps) {
           ? '/use'
           : '';
 
-  return (
-    <div className="relative overflow-hidden">
-      {/* Ambient background gradient blobs */}
-      <div
-        className="pointer-events-none fixed inset-0 -z-10 opacity-30"
-        style={{
-          background:
-            theme === 'dark'
-              ? `radial-gradient(ellipse 80% 60% at 50% -20%, ${colors.primary}22, transparent),
-               radial-gradient(ellipse 60% 50% at 80% 100%, ${colors.primary}11, transparent)`
-              : `radial-gradient(ellipse 80% 60% at 50% -20%, ${colors.primary}15, transparent),
-               radial-gradient(ellipse 60% 50% at 80% 100%, ${colors.primary}08, transparent)`,
-        }}
-      />
+  const fieldCount = product.inputSchema?.length ?? 0;
+  const isAnalytics = product.surfaceType === 'analytics';
 
-      {/* Sticky top bar with glassmorphism */}
-      <header
-        className="sticky top-0 z-50 flex items-center justify-between px-6 py-4 backdrop-blur-xl"
-        style={{
-          backgroundColor:
-            theme === 'dark' ? 'rgba(15,15,20,0.8)' : 'rgba(255,255,255,0.8)',
-          borderBottom: `1px solid ${colors.border}`,
-        }}
-      >
-        <div className="flex items-center gap-3">
-          {branding.logoUrl && (
-            <img
-              src={branding.logoUrl}
-              alt={branding.agencyName}
-              className="h-7 w-auto object-contain"
-            />
+  // Route CTA based on surface_type:
+  // - analytics portals → /products/[slug]/subscribe (PricingGate → dashboard)
+  // - runner/both portals → /products/[slug]/run (FormWizard)
+  const ctaHref = isAnalytics
+    ? `/products/${product.slug}/subscribe`
+    : `/products/${product.slug}/run`;
+
+  const ctaLabel = isAnalytics
+    ? isFree
+      ? 'View dashboard'
+      : 'Subscribe and view dashboard'
+    : 'Get started';
+
+  return (
+    <div className="min-h-screen bg-white">
+      {/* Header */}
+      <header className="border-b border-gray-100">
+        <div className="mx-auto flex max-w-3xl items-center justify-between px-6 py-4">
+          <div className="flex items-center gap-2.5">
+            {branding.logoUrl && (
+              <img
+                src={branding.logoUrl}
+                alt={branding.agencyName}
+                className="h-7 w-auto object-contain"
+              />
+            )}
+            <span className="text-sm font-medium text-slate-600">
+              {branding.agencyName}
+            </span>
+          </div>
+          {!isFree && priceDisplay && (
+            <span className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">
+              {priceDisplay}{priceSuffix}
+            </span>
           )}
-          <span className="text-sm font-medium" style={{ color: colors.textMuted }}>
-            {branding.agencyName}
-          </span>
         </div>
-        <ThemeToggle />
       </header>
 
       {/* Hero */}
-      <main className="flex min-h-[85vh] flex-col items-center justify-center px-6 py-20">
-        <div className="mx-auto max-w-2xl text-center">
-          {/* Pricing / free badge */}
-          {!isFree && priceDisplay && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={mounted ? { opacity: 1, y: 0 } : {}}
-              transition={{ delay: 0.1 }}
-              className="mb-6 inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-semibold"
-              style={{
-                backgroundColor:
-                  theme === 'dark' ? `${colors.primary}20` : `${colors.primary}10`,
-                color: colors.primary,
-                border: `1px solid ${colors.primary}30`,
-              }}
-            >
-              <Zap className="h-3.5 w-3.5" />
-              {priceDisplay}
-              {priceSuffix}
-            </motion.div>
-          )}
+      <main className="mx-auto max-w-2xl px-6 py-20 text-center">
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+        >
+          {/* Badge */}
+          {isAnalytics ? (
+            <span className="mb-5 inline-flex items-center gap-1.5 rounded-md bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+              <Users className="h-3 w-3" />
+              Client analytics portal
+            </span>
+          ) : fieldCount > 0 ? (
+            <span className="mb-5 inline-flex items-center gap-1.5 rounded-md bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+              <Zap className="h-3 w-3" />
+              {fieldCount} input{fieldCount !== 1 ? 's' : ''} · Instant results
+            </span>
+          ) : null}
 
-          {isFree && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={mounted ? { opacity: 1, y: 0 } : {}}
-              transition={{ delay: 0.1 }}
-              className="mb-6 inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-semibold"
-              style={{
-                backgroundColor: `${colors.success}15`,
-                color: colors.success,
-                border: `1px solid ${colors.success}30`,
-              }}
-            >
-              <CheckCircle className="h-3.5 w-3.5" />
-              Free to use
-            </motion.div>
-          )}
-
-          {/* Product title — gradient text */}
-          <motion.h1
-            initial={{ opacity: 0, y: 20 }}
-            animate={mounted ? { opacity: 1, y: 0 } : {}}
-            transition={{ delay: 0.2, duration: 0.6 }}
-            className="text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl"
-            style={{
-              lineHeight: 1.1,
-              background: `linear-gradient(135deg, ${colors.text} 0%, ${colors.textMuted} 100%)`,
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-            }}
-          >
+          {/* Title */}
+          <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
             {product.name}
-          </motion.h1>
+          </h1>
 
           {/* Description */}
           {product.description && (
-            <motion.p
-              initial={{ opacity: 0, y: 15 }}
-              animate={mounted ? { opacity: 1, y: 0 } : {}}
-              transition={{ delay: 0.35, duration: 0.5 }}
-              className="mx-auto mt-5 max-w-lg text-lg leading-relaxed"
-              style={{ color: colors.textMuted }}
-            >
+            <p className="mx-auto mt-4 max-w-lg text-base leading-relaxed text-slate-500">
               {product.description}
-            </motion.p>
+            </p>
           )}
 
-          {/* CTA button with glow shadow */}
-          <motion.div
-            initial={{ opacity: 0, y: 15 }}
-            animate={mounted ? { opacity: 1, y: 0 } : {}}
-            transition={{ delay: 0.5, duration: 0.5 }}
-            className="mt-10"
-          >
+          {/* CTA */}
+          <div className="mt-8">
             <a
-              href={`/products/${product.slug}/run`}
-              className="group inline-flex items-center gap-3 rounded-2xl px-8 py-4 text-lg font-semibold text-white shadow-xl transition-all duration-300 hover:scale-[1.03] hover:shadow-2xl active:scale-[0.98]"
-              style={{
-                backgroundColor: colors.primary,
-                boxShadow: `0 8px 30px ${colors.primary}40`,
-              }}
+              href={ctaHref}
+              className="inline-flex items-center gap-2 rounded-lg px-6 py-3 text-sm font-medium text-white transition-colors duration-200 hover:opacity-90"
+              style={{ backgroundColor: branding.primaryColor }}
             >
-              Get Started
-              <ArrowRight className="h-5 w-5 transition-transform duration-300 group-hover:translate-x-1" />
+              {ctaLabel}
+              <ArrowRight className="h-4 w-4" />
             </a>
-          </motion.div>
+          </div>
 
-          {/* Input count hint */}
-          {fieldCount > 0 && (
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={mounted ? { opacity: 1 } : {}}
-              transition={{ delay: 0.7 }}
-              className="mt-5 text-sm"
-              style={{ color: colors.textMuted }}
-            >
-              {fieldCount} quick question{fieldCount !== 1 ? 's' : ''} · Results in seconds
-            </motion.p>
+          {/* Price note */}
+          {!isFree && priceDisplay && (
+            <p className="mt-3 text-xs text-slate-400">
+              {product.pricingModel === 'monthly'
+                ? `${priceDisplay}/month · Cancel anytime`
+                : product.pricingModel === 'per_run'
+                  ? `${priceDisplay} per execution`
+                  : `${priceDisplay}${priceSuffix}`}
+            </p>
           )}
-        </div>
+          {isFree && (
+            <p className="mt-3 flex items-center justify-center gap-1 text-xs text-emerald-600">
+              <CheckCircle className="h-3 w-3" />
+              Free to use
+            </p>
+          )}
+        </motion.div>
       </main>
 
-      {/* Trust Badges */}
+      {/* Trust section */}
       <motion.section
-        initial={{ opacity: 0, y: 30 }}
-        animate={mounted ? { opacity: 1, y: 0 } : {}}
-        transition={{ delay: 0.8, duration: 0.6 }}
-        className="mx-auto max-w-3xl px-6 pb-20"
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.3, duration: 0.5 }}
+        className="mx-auto max-w-2xl px-6 pb-20"
       >
-        <div
-          className="grid grid-cols-1 gap-4 rounded-2xl p-6 sm:grid-cols-3"
-          style={{ backgroundColor: colors.surface, border: `1px solid ${colors.border}` }}
-        >
-          {/* Execution count */}
-          <div className="flex items-center gap-3 px-3 py-2">
-            <div
-              className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl"
-              style={{ backgroundColor: `${colors.primary}15` }}
-            >
-              <Zap className="h-5 w-5" style={{ color: colors.primary }} />
-            </div>
+        <div className="grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-gray-200 bg-gray-200">
+          <div className="flex items-center gap-3 bg-white p-4">
+            <Zap className="h-4 w-4 shrink-0 text-slate-400" />
             <div>
-              <p className="text-sm font-semibold">
+              <p className="text-xs font-medium text-slate-900">
                 {stats.totalExecutions > 0
                   ? `${stats.totalExecutions.toLocaleString()} runs`
-                  : 'Ready to go'}
+                  : 'Ready'}
               </p>
-              <p className="text-xs" style={{ color: colors.textMuted }}>
-                {stats.totalExecutions > 0
-                  ? 'Successful executions'
-                  : 'Start your first run'}
+              <p className="text-[11px] text-slate-500">
+                {stats.totalExecutions > 0 ? 'Successful' : 'Start now'}
               </p>
             </div>
           </div>
-
-          {/* Speed badge */}
-          <div className="flex items-center gap-3 px-3 py-2">
-            <div
-              className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl"
-              style={{ backgroundColor: `${colors.success}15` }}
-            >
-              <Clock className="h-5 w-5" style={{ color: colors.success }} />
-            </div>
+          <div className="flex items-center gap-3 bg-white p-4">
+            <Clock className="h-4 w-4 shrink-0 text-slate-400" />
             <div>
-              <p className="text-sm font-semibold">Instant results</p>
-              <p className="text-xs" style={{ color: colors.textMuted }}>
-                Powered by AI automation
-              </p>
+              <p className="text-xs font-medium text-slate-900">Instant</p>
+              <p className="text-[11px] text-slate-500">Real-time results</p>
             </div>
           </div>
-
-          {/* Security badge */}
-          <div className="flex items-center gap-3 px-3 py-2">
-            <div
-              className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl"
-              style={{ backgroundColor: `${colors.primary}15` }}
-            >
-              <Shield className="h-5 w-5" style={{ color: colors.primary }} />
-            </div>
+          <div className="flex items-center gap-3 bg-white p-4">
+            <Shield className="h-4 w-4 shrink-0 text-slate-400" />
             <div>
-              <p className="text-sm font-semibold">Secure & private</p>
-              <p className="text-xs" style={{ color: colors.textMuted }}>
-                Data encrypted end-to-end
-              </p>
+              <p className="text-xs font-medium text-slate-900">Secure</p>
+              <p className="text-[11px] text-slate-500">Encrypted</p>
             </div>
           </div>
         </div>
       </motion.section>
 
       {/* Footer */}
-      <footer
-        className="py-6 text-center text-xs"
-        style={{ color: colors.textMuted, opacity: 0.5 }}
-      >
+      <footer className="py-6 text-center text-[11px] text-slate-300">
         Powered by AI
       </footer>
     </div>
