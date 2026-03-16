@@ -5,11 +5,12 @@ import { Loader2, Lock, CreditCard, RefreshCw } from 'lucide-react';
 
 interface PricingGateProps {
   offeringId: string;
-  pricingType: string; // 'free' | 'per_run' | 'monthly' | 'usage_based'
+  pricingType: string;
   priceCents: number;
   slug: string;
-  subscriptionStatus?: string | null; // from offering_customer lookup
-  children: React.ReactNode; // the FormWizard to render when unlocked
+  subscriptionStatus?: string | null;
+  dashboardToken?: string | null;
+  children: React.ReactNode;
 }
 
 export function PricingGate({
@@ -17,6 +18,7 @@ export function PricingGate({
   pricingType,
   priceCents,
   subscriptionStatus,
+  dashboardToken,
   children,
 }: PricingGateProps) {
   const [loading, setLoading] = useState(false);
@@ -24,12 +26,10 @@ export function PricingGate({
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
 
-  // Free offerings pass through immediately
   if (pricingType === 'free') {
     return <>{children}</>;
   }
 
-  // Monthly with active subscription — pass through
   if (pricingType === 'monthly' && subscriptionStatus === 'active') {
     return <>{children}</>;
   }
@@ -50,6 +50,8 @@ export function PricingGate({
           offeringId,
           customerEmail: email,
           customerName: name || undefined,
+          // Tell checkout where to redirect after payment
+          dashboardToken: dashboardToken || undefined,
         }),
       });
 
@@ -66,12 +68,11 @@ export function PricingGate({
     }
   };
 
-  const formatPrice = (cents: number) => {
-    return new Intl.NumberFormat('en-US', {
+  const formatPrice = (cents: number) =>
+    new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD',
     }).format(cents / 100);
-  };
 
   const isResubscribe =
     pricingType === 'monthly' &&
@@ -79,38 +80,40 @@ export function PricingGate({
     subscriptionStatus !== 'active';
 
   return (
-    <div className="mx-auto max-w-md space-y-6 rounded-xl border border-gray-200 bg-white p-8">
-      <div className="text-center">
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-purple-100">
+    <div className="rounded-lg border border-gray-200 bg-white p-6">
+      <div className="mb-5 text-center">
+        <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100">
           {isResubscribe ? (
-            <RefreshCw className="h-6 w-6 text-purple-600" />
+            <RefreshCw className="h-4 w-4 text-slate-600" />
           ) : (
-            <Lock className="h-6 w-6 text-purple-600" />
+            <Lock className="h-4 w-4 text-slate-600" />
           )}
         </div>
-        <h3 className="mt-4 text-lg font-semibold text-gray-900">
+        <h3 className="text-base font-semibold text-slate-900">
           {isResubscribe
             ? 'Resubscribe to continue'
             : pricingType === 'per_run'
               ? `${formatPrice(priceCents)} per run`
               : `${formatPrice(priceCents)}/month`}
         </h3>
-        <p className="mt-1 text-sm text-gray-500">
+        <p className="mt-1 text-xs text-slate-500">
           {pricingType === 'per_run'
             ? 'Pay once to run this workflow'
             : isResubscribe
-              ? 'Your subscription has ended. Resubscribe for unlimited runs.'
-              : 'Subscribe for unlimited runs each month'}
+              ? 'Your subscription has ended. Resubscribe to continue.'
+              : dashboardToken
+                ? 'Subscribe for full dashboard access'
+                : 'Subscribe for unlimited runs each month'}
         </p>
       </div>
 
-      <div className="space-y-3">
+      <div className="space-y-2.5">
         <input
           type="email"
           placeholder="Your email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="w-full rounded-lg border border-gray-200 px-4 py-2.5 text-sm outline-none focus:border-purple-300 focus:ring-2 focus:ring-purple-100"
+          className="w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm outline-none transition-colors duration-200 focus:border-slate-400 focus:ring-1 focus:ring-slate-200"
           required
         />
         <input
@@ -118,28 +121,30 @@ export function PricingGate({
           placeholder="Your name (optional)"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="w-full rounded-lg border border-gray-200 px-4 py-2.5 text-sm outline-none focus:border-purple-300 focus:ring-2 focus:ring-purple-100"
+          className="w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm outline-none transition-colors duration-200 focus:border-slate-400 focus:ring-1 focus:ring-slate-200"
         />
       </div>
 
-      {error && <p className="text-center text-sm text-red-600">{error}</p>}
+      {error && (
+        <p className="mt-3 text-center text-xs text-red-600">{error}</p>
+      )}
 
       <button
         onClick={handleCheckout}
         disabled={loading}
-        className="flex w-full items-center justify-center gap-2 rounded-lg bg-purple-600 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-purple-700 disabled:opacity-50"
+        className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-gray-800 px-4 py-2.5 text-sm font-medium text-white transition-colors duration-200 hover:bg-gray-700 disabled:opacity-50"
       >
         {loading ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
         ) : (
-          <CreditCard className="h-4 w-4" />
+          <CreditCard className="h-3.5 w-3.5" />
         )}
         {loading
           ? 'Redirecting to checkout...'
           : isResubscribe
             ? `Resubscribe — ${formatPrice(priceCents)}/mo`
             : pricingType === 'per_run'
-              ? `Pay ${formatPrice(priceCents)} & Run`
+              ? `Pay ${formatPrice(priceCents)} and run`
               : `Subscribe — ${formatPrice(priceCents)}/mo`}
       </button>
     </div>

@@ -163,8 +163,12 @@ export async function POST(request: Request) {
   }
 
   // ── Generate token for magic_link, slug for stripe_gate ───
-  const token =
-    finalAccess === 'magic_link' ? generateShortToken(name.trim()) : null;
+  // Generate token for magic_link OR for analytics stripe_gate portals
+  // (analytics portals need a token for dashboard access after payment)
+  const needsToken =
+    finalAccess === 'magic_link' ||
+    (finalAccess === 'stripe_gate' && finalSurface === 'analytics');
+  const token = needsToken ? generateShortToken(name.trim()) : null;
 
   const finalSlug =
     finalAccess === 'stripe_gate' && slug
@@ -226,6 +230,57 @@ export async function POST(request: Request) {
       console.error('[create] offering_entities insert failed:', oeError.message);
     }
   }
+  // ── Sync to Stripe if paid portal ─────────────────────────
+  if (
+    offering &&
+    offering.pricing_type &&
+    offering.pricing_type !== 'free' &&
+    offering.access_type === 'stripe_gate'
+  ) {
+    try {
+      const { data: tenant } = await supabase
+        .from('tenants')
+        .select('stripe_account_id, stripe_charges_enabled')
+        .eq('id', membership.tenant_id)
+        .single();
+
+      if (tenant?.stripe_charges_enabled && tenant.stripe_account_id) {
+        const { syncOfferingToStripe } = await import(
+          '@/lib/stripe/syncProduct'
+        );
+        const stripeIds = await syncOfferingToStripe(
+          {
+            id: offering.id,
+            tenant_id: offering.tenant_id,
+            name: offering.name,
+            description: offering.description,
+            pricing_type: offering.pricing_type,
+            price_cents: offering.price_cents,
+            stripe_product_id: null,
+            stripe_price_id: null,
+          },
+          tenant.stripe_account_id
+        );
+
+        // Save Stripe IDs back to the portal
+        await supabase
+          .from('client_portals')
+          .update({
+            stripe_product_id: stripeIds.stripe_product_id,
+            stripe_price_id: stripeIds.stripe_price_id,
+          })
+          .eq('id', offering.id)
+          .eq('tenant_id', membership.tenant_id);
+
+        offering.stripe_product_id = stripeIds.stripe_product_id;
+        offering.stripe_price_id = stripeIds.stripe_price_id;
+      }
+    } catch (syncErr) {
+      console.error('[POST /api/client-portals/create] Stripe sync error:', syncErr);
+      // Non-blocking: portal was created, Stripe sync can be retried via PATCH
+    }
+  }
+
   // Log activity event (fire-and-forget)
   logActivity(supabase, {
     tenantId: membership.tenant_id,

@@ -24,10 +24,12 @@ export async function POST(request: NextRequest) {
       offeringId,
       customerEmail,
       customerName,
+      dashboardToken: bodyDashboardToken,
     } = body as {
       offeringId?: string;
       customerEmail?: string;
       customerName?: string;
+      dashboardToken?: string;
     };
 
     if (!offeringId || !customerEmail) {
@@ -98,6 +100,23 @@ export async function POST(request: NextRequest) {
 
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
 
+    // Resolve dashboard token for analytics portals
+    const dashboardToken = bodyDashboardToken || null;
+    let resolvedToken = dashboardToken;
+    if (!resolvedToken) {
+      // Check if this is an analytics portal with a token
+      const { data: tokenRow } = await supabaseAdmin
+        .from('client_portals')
+        .select('token')
+        .eq('id', offeringId)
+        .maybeSingle();
+      resolvedToken = tokenRow?.token || null;
+    }
+
+    const successBase = resolvedToken
+      ? `${baseUrl}/client/${resolvedToken}`
+      : `${baseUrl}/products/${offering.slug}/run`;
+
     // 5. Create Checkout Session based on pricing_type
     let session;
 
@@ -119,7 +138,7 @@ export async function POST(request: NextRequest) {
               feePercent
             ),
           },
-          success_url: `${baseUrl}/products/${offering.slug}/run?session_id={CHECKOUT_SESSION_ID}`,
+          success_url: `${successBase}?session_id={CHECKOUT_SESSION_ID}`,
           cancel_url: `${baseUrl}/products/${offering.slug}?cancelled=true`,
           metadata: {
             portal_id: offering.id,
@@ -144,7 +163,7 @@ export async function POST(request: NextRequest) {
             application_fee_percent: feePercent,
             metadata: { portal_id: offering.id },
           },
-          success_url: `${baseUrl}/products/${offering.slug}/run?subscribed=true`,
+          success_url: `${successBase}?subscribed=true`,
           cancel_url: `${baseUrl}/products/${offering.slug}?cancelled=true`,
           metadata: {
             portal_id: offering.id,
@@ -171,7 +190,7 @@ export async function POST(request: NextRequest) {
             application_fee_percent: feePercent,
             metadata: { portal_id: offering.id },
           },
-          success_url: `${baseUrl}/products/${offering.slug}/run?subscribed=true`,
+          success_url: `${successBase}?subscribed=true`,
           cancel_url: `${baseUrl}/products/${offering.slug}?cancelled=true`,
           metadata: {
             portal_id: offering.id,
