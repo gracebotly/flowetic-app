@@ -51,8 +51,8 @@ export function ControlPanelSidebar({ userEmail, plan }: { userEmail: string; pl
           const incomplete =
             !b.logo_url ||
             b.primary_color === "#3B82F6" ||
-            b.welcome_message === "Welcome to your dashboard" ||
-            b.brand_footer === "Powered by Getflowetic"
+            b.brand_footer === "Powered by Your Agency" ||
+            !b.brand_footer
           setSettingsBadge(incomplete)
         }
       } catch {

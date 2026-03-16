@@ -132,9 +132,12 @@ export function BrandingTab() {
       {/* Colors */}
       <div>
         <label className="block text-xs font-medium uppercase tracking-wider text-gray-400">
-          Colors
+          Accent Colors
         </label>
-        <div className="mt-2 flex flex-wrap gap-6">
+        <p className="mt-1 text-xs text-gray-500">
+          These colors appear as accent highlights in your client portals — gradient bars, KPI icons, and badges. Your clients can toggle between light and dark mode independently.
+        </p>
+        <div className="mt-3 flex flex-wrap gap-6">
           <ColorPicker
             label="Primary"
             value={primaryColor}
@@ -148,33 +151,30 @@ export function BrandingTab() {
         </div>
       </div>
 
-      {/* Portal Defaults */}
+      {/* Portal Text */}
       <div>
         <label className="block text-xs font-medium uppercase tracking-wider text-gray-400">
-          Portal Defaults
+          Portal Text
         </label>
         <div className="mt-2">
           <label className="block text-sm font-medium text-gray-700">Welcome Message</label>
+          <p className="mt-0.5 text-xs text-gray-500">Shown in the portal header beneath your logo.</p>
           <input
             type="text"
             value={welcomeMessage}
             onChange={(e) => setWelcomeMessage(e.target.value)}
+            placeholder="Welcome to your dashboard"
             className="mt-1 w-full max-w-lg rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
           />
         </div>
-      </div>
-
-      {/* Product Defaults */}
-      <div>
-        <label className="block text-xs font-medium uppercase tracking-wider text-gray-400">
-          Product Defaults
-        </label>
-        <div className="mt-2">
-          <label className="block text-sm font-medium text-gray-700">Brand Footer</label>
+        <div className="mt-4">
+          <label className="block text-sm font-medium text-gray-700">Footer Text</label>
+          <p className="mt-0.5 text-xs text-gray-500">Appears at the bottom of all portals and product pages.</p>
           <input
             type="text"
             value={brandFooter}
             onChange={(e) => setBrandFooter(e.target.value)}
+            placeholder="Powered by Your Agency Name"
             className="mt-1 w-full max-w-lg rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
           />
         </div>

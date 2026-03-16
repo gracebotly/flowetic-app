@@ -82,7 +82,7 @@ export function LogoUploader({ currentUrl, onUploaded, onRemoved }: LogoUploader
   if (currentUrl) {
     return (
       <div className="flex items-center gap-4">
-        <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-xl border border-gray-200 bg-white">
+        <div className="flex h-16 w-40 items-center justify-center overflow-hidden rounded-xl border border-gray-200 bg-white">
           <img
             src={currentUrl}
             alt="Agency logo"
@@ -145,6 +145,7 @@ export function LogoUploader({ currentUrl, onUploaded, onRemoved }: LogoUploader
           {uploading ? "Uploading..." : "Drag & drop your logo, or click to browse"}
         </p>
         <p className="text-xs text-gray-400">PNG, JPG, SVG, or WebP. Max 2MB.</p>
+        <p className="text-xs text-gray-400">Best results: horizontal logo, at least 200px wide. Displays at 32px tall in the portal header.</p>
       </div>
       <input
         ref={inputRef}

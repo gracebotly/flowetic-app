@@ -111,20 +111,19 @@ export function WizardStepSuccess({
       )}
 
       {/* Branding nudge card */}
-      <div className="mt-5 flex w-full max-w-lg items-center justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
+      <div className="mt-5 flex w-full max-w-lg items-center justify-between gap-3 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3">
         <div className="flex items-center gap-2.5 text-left">
-          <Palette className="h-4 w-4 shrink-0 text-gray-400" />
-          <p className="text-xs text-gray-500">
-            Your client sees{" "}
-            <span className="font-medium text-gray-700">Getflowetic</span>{" "}
-            branding by default.
+          <Palette className="h-4 w-4 shrink-0 text-blue-400" />
+          <p className="text-xs text-blue-700">
+            Customize your portal&apos;s logo, accent colors, and footer in{" "}
+            <span className="font-medium">Branding Settings</span>.
           </p>
         </div>
         <Link
           href="/control-panel/settings?tab=branding"
           className="shrink-0 whitespace-nowrap text-xs font-medium text-blue-600 hover:text-blue-700"
         >
-          Add yours →
+          Customize →
         </Link>
       </div>
 

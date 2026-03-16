@@ -77,7 +77,13 @@ export default function PortalPreviewClient() {
             ? fetch(`/api/events?source_id=${sourceId}&limit=500${entityExternalIds ? `&entity_external_ids=${encodeURIComponent(entityExternalIds)}` : ""}`)
             : Promise.resolve(null),
         ]);
-        const brandData: Branding | null = brandRes.ok ? await brandRes.json() : null;
+        let brandData: Branding | null = null;
+        if (brandRes.ok) {
+          const json = await brandRes.json();
+          if (json.ok && json.branding) {
+            brandData = json.branding as Branding;
+          }
+        }
         const eventsData: unknown = eventsRes && eventsRes.ok ? await eventsRes.json() : null;
 
         if (!mounted) return;
@@ -133,7 +139,7 @@ export default function PortalPreviewClient() {
       {showAnalytics && (
         <PortalShell
           portalName={params.get("entity_name") || "Your Portal"}
-          tenantName={branding?.name || "Your Agency"}
+          tenantName={branding?.name || ""}
           logoUrl={branding?.logo_url || null}
           primaryColor={branding?.primary_color || "#3b82f6"}
           secondaryColor={branding?.secondary_color || "#1e40af"}
