@@ -93,7 +93,7 @@ export function ROISummarySkeleton({ data }: ROISummaryProps) {
         </ThemedCard>
       </motion.div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
         {kpis.map((kpi, i) => {
           const iconConfig = kpiIcons[kpi.label] || { icon: Activity, color: STATUS.info };
           return (
@@ -135,21 +135,25 @@ export function ROISummarySkeleton({ data }: ROISummaryProps) {
           <ThemedCard>
             <p className="text-base font-semibold" style={{ color: tokens.textPrimary }}>Breakdown by Event Type</p>
             <div className="mt-4 overflow-hidden rounded-lg" style={{ border: `1px solid ${tokens.border}` }}>
-              <div className="grid grid-cols-4 gap-2 px-4 py-2 text-xs font-semibold uppercase" style={{ backgroundColor: tokens.bgExpanded, color: tokens.textSecondary }}>
-                <span>Type</span>
-                <span>Count</span>
-                <span>Est Savings</span>
-                <span>Cost / Task</span>
-              </div>
-              <div>
-                {recentRows.map((row) => (
-                  <div key={String(row.id)} className="grid grid-cols-4 gap-2 px-4 py-3 text-sm" style={{ borderTop: `1px solid ${tokens.border}` }}>
-                    <span style={{ color: tokens.textPrimary }}>{String(row.type)}</span>
-                    <span style={{ color: tokens.textSecondary }}>{String(row.count)}</span>
-                    <span style={{ color: STATUS.success }}>{String(row.estSavings)}</span>
-                    <span style={{ color: tokens.textSecondary }}>{String(row.costPerTask)}</span>
+              <div className="overflow-x-auto">
+                <div className="min-w-[360px]">
+                  <div className="grid grid-cols-4 gap-2 px-4 py-2 text-xs font-semibold uppercase" style={{ backgroundColor: tokens.bgExpanded, color: tokens.textSecondary }}>
+                    <span>Type</span>
+                    <span>Count</span>
+                    <span>Est Savings</span>
+                    <span>Cost / Task</span>
                   </div>
-                ))}
+                  <div>
+                    {recentRows.map((row) => (
+                      <div key={String(row.id)} className="grid grid-cols-4 gap-2 px-4 py-3 text-sm" style={{ borderTop: `1px solid ${tokens.border}` }}>
+                        <span style={{ color: tokens.textPrimary }}>{String(row.type)}</span>
+                        <span style={{ color: tokens.textSecondary }}>{String(row.count)}</span>
+                        <span style={{ color: STATUS.success }}>{String(row.estSavings)}</span>
+                        <span style={{ color: tokens.textSecondary }}>{String(row.costPerTask)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
           </ThemedCard>
