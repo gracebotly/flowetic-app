@@ -5,11 +5,11 @@ import {
   Loader2,
   ArrowUpRight,
   CreditCard,
-  Clock,
   CheckCircle2,
   Info,
 } from "lucide-react";
 import { StripeConnectCard } from "@/components/settings/StripeConnectCard";
+import { CancelPlanModal } from "@/components/billing/CancelPlanModal";
 import { UsageMeter } from "@/components/settings/UsageMeter";
 
 type UsageData = {
@@ -58,6 +58,7 @@ export function BillingTab() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [showCancelModal, setShowCancelModal] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -367,8 +368,27 @@ export function BillingTab() {
                 <ArrowUpRight className="h-3.5 w-3.5" />
               </button>
             )}
+
+          {(planStatus === "active" ||
+            (planStatus === "trialing" && hasCard)) && (
+            <button
+              onClick={() => setShowCancelModal(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium text-slate-400 transition-colors duration-200 hover:text-red-600"
+            >
+              Cancel plan
+            </button>
+          )}
         </div>
       </div>
+
+      <CancelPlanModal
+        open={showCancelModal}
+        onClose={() => setShowCancelModal(false)}
+        onCancelled={() => {
+          setShowCancelModal(false);
+          window.location.reload();
+        }}
+      />
     </div>
   );
 }
