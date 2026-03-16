@@ -112,6 +112,9 @@ function formatPhone(value: string): string {
   return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
 }
   const [creatingClient, setCreatingClient] = useState(false);
+  const [priceDisplay, setPriceDisplay] = useState(
+    priceCents > 0 ? (priceCents / 100).toFixed(2) : ""
+  );
 
   // Load clients on mount
   useEffect(() => {
@@ -183,9 +186,11 @@ function formatPhone(value: string): string {
     }
   }, [newClientName, newClientEmail, newClientPhone, onChange]);
 
-  // Auto-generate slug from name
+  // Auto-generate slug from name — only if user hasn't manually edited slug
+  const [slugManuallyEdited, setSlugManuallyEdited] = useState(false);
+
   useEffect(() => {
-    if (accessType === "stripe_gate" && name.trim()) {
+    if (accessType === "stripe_gate" && name.trim() && !slugManuallyEdited) {
       const autoSlug = name
         .trim()
         .toLowerCase()
@@ -193,7 +198,7 @@ function formatPhone(value: string): string {
         .replace(/(^-|-$)/g, "");
       onChange("slug", autoSlug);
     }
-  }, [name, accessType, onChange]);
+  }, [name, accessType, onChange, slugManuallyEdited]);
 
   return (
     <div>
@@ -451,13 +456,20 @@ function formatPhone(value: string): string {
                         $
                       </span>
                       <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={priceCents > 0 ? (priceCents / 100).toFixed(2) : ""}
+                        type="text"
+                        inputMode="decimal"
+                        value={priceDisplay}
                         onChange={(e) => {
-                          const dollars = parseFloat(e.target.value) || 0;
+                          const raw = e.target.value.replace(/[^0-9.]/g, "");
+                          setPriceDisplay(raw);
+                          const dollars = parseFloat(raw) || 0;
                           onPricingChange(pricingType, Math.round(dollars * 100));
+                        }}
+                        onBlur={() => {
+                          if (priceDisplay) {
+                            const dollars = parseFloat(priceDisplay) || 0;
+                            setPriceDisplay(dollars > 0 ? dollars.toFixed(2) : "");
+                          }
                         }}
                         placeholder="0.00"
                         className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-8 pr-4 text-sm outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
@@ -475,15 +487,16 @@ function formatPhone(value: string): string {
                       <input
                         type="text"
                         value={slug}
-                        onChange={(e) =>
+                        onChange={(e) => {
+                          setSlugManuallyEdited(true);
                           onChange(
                             "slug",
                             e.target.value
                               .toLowerCase()
                               .replace(/[^a-z0-9-]/g, "-")
                               .replace(/-+/g, "-")
-                          )
-                        }
+                          );
+                        }}
                         placeholder="smith-dental-voice"
                         className="w-full border-0 bg-transparent py-2 pr-3 text-sm outline-none"
                       />
