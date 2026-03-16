@@ -77,6 +77,7 @@ export async function PATCH(
     'client_id',
     'pricing_type',
     'price_cents',
+    'slug',
     'input_schema',
     'execution_config',
     'branding',

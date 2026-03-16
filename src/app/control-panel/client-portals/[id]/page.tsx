@@ -109,6 +109,12 @@ export default function OfferingDetailPage() {
   const [customTokenInput, setCustomTokenInput] = useState("");
   const [tokenModalError, setTokenModalError] = useState<string | null>(null);
 
+  // Slug editing state (stripe_gate portals)
+  const [editingSlug, setEditingSlug] = useState(false);
+  const [slugDraft, setSlugDraft] = useState("");
+  const [slugSaving, setSlugSaving] = useState(false);
+  const [slugError, setSlugError] = useState<string | null>(null);
+
   // Delete state
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -231,6 +237,55 @@ export default function OfferingDetailPage() {
     } finally {
       setTokenAction("idle");
     }
+  };
+
+  // ── Slug editing (stripe_gate) ─────────────────────────────
+  const startEditSlug = () => {
+    setSlugDraft(offering?.slug || "");
+    setSlugError(null);
+    setEditingSlug(true);
+  };
+
+  const saveSlug = async () => {
+    const clean = slugDraft
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 60);
+
+    if (clean.length < 3) {
+      setSlugError("Slug must be at least 3 characters.");
+      return;
+    }
+
+    setSlugSaving(true);
+    setSlugError(null);
+    try {
+      const res = await fetch(`/api/client-portals/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slug: clean }),
+      });
+      const json = await res.json();
+      if (json.ok) {
+        setOffering((prev) => (prev ? { ...prev, slug: clean } : prev));
+        setEditingSlug(false);
+      } else if (json.code === "UPDATE_FAILED") {
+        setSlugError("That slug is already taken. Try another.");
+      } else {
+        setSlugError("Could not save slug. Please try again.");
+      }
+    } catch {
+      setSlugError("Could not save slug. Please try again.");
+    } finally {
+      setSlugSaving(false);
+    }
+  };
+
+  const cancelEditSlug = () => {
+    setEditingSlug(false);
+    setSlugError(null);
   };
 
   // ── Delete ────────────────────────────────────────────────
@@ -717,37 +772,103 @@ export default function OfferingDetailPage() {
                 </div>
               </div>
 
-              {offering.slug && (
-                <>
-                  <div className="mt-4 rounded-lg border border-gray-100 bg-gray-50 px-4 py-3">
-                    <p className="break-all font-mono text-sm text-gray-700">
-                      {baseUrl}/products/{offering.slug}
-                    </p>
-                  </div>
-                  <div className="mt-3 flex gap-2">
+              {/* Product URL — editable slug */}
+              <div className="mt-4">
+                <div className="flex items-baseline justify-between">
+                  <p className="text-xs font-medium text-gray-600">Product URL</p>
+                  {offering.slug && !editingSlug && (
                     <button
-                      onClick={() => copyToClipboard(`${baseUrl}/products/${offering.slug}`)}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50"
+                      onClick={startEditSlug}
+                      className="text-xs font-medium text-blue-600 hover:text-blue-700 transition-colors duration-200"
                     >
-                      {copied ? (
-                        <Check className="h-4 w-4 text-emerald-500" />
-                      ) : (
-                        <Copy className="h-4 w-4" />
-                      )}
-                      {copied ? "Copied!" : "Copy URL"}
+                      Edit
                     </button>
-                    <a
-                      href={`${baseUrl}/products/${offering.slug}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 transition hover:bg-blue-100"
-                    >
-                      <ExternalLink className="h-4 w-4" />
-                      Open
-                    </a>
+                  )}
+                </div>
+
+                {editingSlug ? (
+                  <div className="mt-1.5">
+                    <div className="flex items-center rounded-lg border border-blue-300 bg-white text-sm ring-2 ring-blue-100">
+                      <span className="flex-shrink-0 px-3 text-gray-400">/products/</span>
+                      <input
+                        type="text"
+                        value={slugDraft}
+                        maxLength={60}
+                        onChange={(e) => {
+                          setSlugDraft(
+                            e.target.value
+                              .toLowerCase()
+                              .replace(/[^a-z0-9-]/g, "-")
+                              .replace(/-+/g, "-")
+                              .replace(/^-/, "")
+                          );
+                          setSlugError(null);
+                        }}
+                        autoFocus
+                        className="w-full border-0 bg-transparent py-2 pr-3 text-sm outline-none"
+                      />
+                    </div>
+                    <div className="mt-1 flex items-center justify-between">
+                      <span className={`text-[11px] ${slugDraft.length > 50 ? "text-amber-600" : "text-gray-400"}`}>
+                        {slugDraft.length}/60
+                      </span>
+                    </div>
+                    {slugError && (
+                      <p className="mt-1 text-xs text-red-600">{slugError}</p>
+                    )}
+                    <div className="mt-2 flex gap-2">
+                      <button
+                        onClick={saveSlug}
+                        disabled={slugSaving}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-blue-700 disabled:opacity-50"
+                      >
+                        {slugSaving ? "Saving…" : "Save"}
+                      </button>
+                      <button
+                        onClick={cancelEditSlug}
+                        disabled={slugSaving}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 transition hover:bg-gray-50"
+                      >
+                        Cancel
+                      </button>
+                    </div>
                   </div>
-                </>
-              )}
+                ) : offering.slug ? (
+                  <>
+                    <div className="mt-1.5 rounded-lg border border-gray-100 bg-gray-50 px-4 py-3">
+                      <p className="break-all font-mono text-sm text-gray-700">
+                        {baseUrl}/products/{offering.slug}
+                      </p>
+                    </div>
+                    <div className="mt-3 flex gap-2">
+                      <button
+                        onClick={() => copyToClipboard(`${baseUrl}/products/${offering.slug}`)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50"
+                      >
+                        {copied ? (
+                          <Check className="h-4 w-4 text-emerald-500" />
+                        ) : (
+                          <Copy className="h-4 w-4" />
+                        )}
+                        {copied ? "Copied!" : "Copy URL"}
+                      </button>
+                      <a
+                        href={`${baseUrl}/products/${offering.slug}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 transition hover:bg-blue-100"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                        Open
+                      </a>
+                    </div>
+                  </>
+                ) : (
+                  <p className="mt-1.5 text-sm text-gray-500">
+                    No product URL configured.
+                  </p>
+                )}
+              </div>
             </div>
           )}
         </div>
