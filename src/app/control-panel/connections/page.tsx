@@ -1507,7 +1507,12 @@ export default function ConnectionsPage() {
 
         <div className="mt-6">
           {indexedErr ? (
-            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{indexedErr}</div>
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+              <div className="flex items-start gap-2">
+                <span className="mt-0.5 shrink-0 text-amber-500">⚠</span>
+                <span>{indexedErr}</span>
+              </div>
+            </div>
           ) : null}
 
           {indexedLoading ? <EntitiesLoadingSkeleton /> : null}
@@ -1625,7 +1630,11 @@ export default function ConnectionsPage() {
                   setMenuPos(null);
 
                   if (!res.ok || !json?.ok) {
-                    setIndexedErr(json?.message || "Failed to remove from index.");
+                    if (json?.code === "ENTITY_IN_USE") {
+                      setIndexedErr(json.message);
+                    } else {
+                      setIndexedErr(json?.message || "Failed to remove from index.");
+                    }
                     return;
                   }
 
