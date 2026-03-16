@@ -180,12 +180,14 @@ export default function PortalPreview({
 
   const containerMaxWidth = 900;
   const deviceWidth = DEVICES[device].width;
-  // Tablet (768px) needs slight scaling to fit wizard container (~700px usable)
-  // Mobile (375px) fits naturally
+  // Both tablet and mobile benefit from slight scaling to fit the wizard container.
+  // Mobile (375px): scale to ~92% so content doesn't feel cramped in the phone chrome.
   const WIZARD_USABLE_WIDTH = 700;
   const scale = deviceWidth > WIZARD_USABLE_WIDTH
     ? WIZARD_USABLE_WIDTH / deviceWidth
-    : 1;
+    : device === "mobile"
+      ? 0.92
+      : 1;
 
   const handleRefresh = useCallback(() => {
     setRefreshKey((k) => k + 1);
@@ -287,7 +289,7 @@ export default function PortalPreview({
                 // Height shown in the device frame before scrolling starts
                 // Tablet: show ~700px of content (accounts for zoom scale)
                 // Mobile: show full phone height
-                height: device === "tablet" ? Math.round(680 / scale) : 720,
+                height: device === "tablet" ? Math.round(680 / scale) : Math.round(720 / scale),
                 overflowY: "auto",
                 // Prevent scroll from leaking to the outer page
                 overscrollBehavior: "contain",
