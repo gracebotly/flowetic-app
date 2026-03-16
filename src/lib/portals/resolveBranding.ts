@@ -21,9 +21,9 @@ export interface ResolvedBranding {
 // Tier 1: Platform defaults (used when tenant has no branding set)
 const PLATFORM_DEFAULTS: ResolvedBranding = {
   logoUrl: null,
-  primaryColor: '#6366f1',
-  secondaryColor: '#8b5cf6',
-  footerText: 'Powered by Getflowetic',
+  primaryColor: '#3B82F6',
+  secondaryColor: '#1E40AF',
+  footerText: '',
   faviconUrl: null,
   defaultTheme: 'dark',
   welcomeMessage: 'Welcome to your dashboard',

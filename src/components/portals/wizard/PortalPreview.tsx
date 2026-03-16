@@ -135,7 +135,13 @@ export default function PortalPreview({
       setLoading(true);
       try {
         const brandingRes = await fetch("/api/settings/branding");
-        const brandingData: Branding | null = brandingRes.ok ? await brandingRes.json() : null;
+        let brandingData: Branding | null = null;
+        if (brandingRes.ok) {
+          const json = await brandingRes.json();
+          if (json.ok && json.branding) {
+            brandingData = json.branding as Branding;
+          }
+        }
 
         const eventsRes = await fetch(`/api/events?source_id=${sourceId}&limit=100${entityExternalIds ? `&entity_external_ids=${encodeURIComponent(entityExternalIds)}` : ""}`);
         const eventsData: unknown = eventsRes.ok ? await eventsRes.json() : null;
@@ -297,11 +303,11 @@ export default function PortalPreview({
             >
               <PortalShell
                   portalName={customTitle?.trim() || entityName || "Your Portal"}
-                  tenantName={branding?.name || "Getflowetic"}
+                  tenantName={branding?.name || ""}
                   logoUrl={branding?.logo_url || null}
                   primaryColor={branding?.primary_color || "#3b82f6"}
                   secondaryColor={branding?.secondary_color || "#1e40af"}
-                  footerText={branding?.brand_footer || `© ${new Date().getFullYear()} ${branding?.name || "Getflowetic"}. All rights reserved.`}
+                  footerText={branding?.brand_footer || ""}
                 >
                   {SkeletonComponent && transformedData ? (
                     <SkeletonComponent

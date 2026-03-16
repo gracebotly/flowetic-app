@@ -148,7 +148,7 @@ export function PortalShell({
                   className="flex h-8 w-8 items-center justify-center rounded-lg text-white text-sm font-bold"
                   style={{ backgroundColor: primaryColor }}
                 >
-                  {tenantName.charAt(0).toUpperCase()}
+                  {tenantName ? tenantName.charAt(0).toUpperCase() : "●"}
                 </div>
               )}
               <div>

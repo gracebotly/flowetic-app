@@ -26,7 +26,7 @@ export function BrandingPreview({
           <img
             src={logoUrl}
             alt="Logo preview"
-            className="h-7 w-7 rounded object-contain bg-white/20"
+            className="h-7 w-auto max-w-[120px] rounded object-contain bg-white/20"
           />
         ) : (
           <div className="flex h-7 w-7 items-center justify-center rounded bg-white/20 text-xs font-bold text-white">
@@ -63,7 +63,7 @@ export function BrandingPreview({
       {/* Footer */}
       <div className="px-5 py-3 text-center">
         <p className="text-xs text-gray-400">
-          {brandFooter || "Powered by Getflowetic"}
+          {brandFooter || "© Your Agency Name"}
         </p>
       </div>
     </div>
