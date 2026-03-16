@@ -109,9 +109,9 @@ export default function OfferingDetailPage() {
   const [customTokenInput, setCustomTokenInput] = useState("");
   const [tokenModalError, setTokenModalError] = useState<string | null>(null);
 
-  // Archive state
-  const [archiveConfirm, setArchiveConfirm] = useState(false);
-  const [archiving, setArchiving] = useState(false);
+  // Delete state
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   // ── Load offering ─────────────────────────────────────────
   const loadOffering = useCallback(async () => {
@@ -233,9 +233,9 @@ export default function OfferingDetailPage() {
     }
   };
 
-  // ── Archive ───────────────────────────────────────────────
-  const handleArchive = async () => {
-    setArchiving(true);
+  // ── Delete ────────────────────────────────────────────────
+  const handleDelete = async () => {
+    setDeleting(true);
     try {
       const res = await fetch(`/api/client-portals/${id}`, { method: "DELETE" });
       const json = await res.json();
@@ -243,7 +243,7 @@ export default function OfferingDetailPage() {
         router.push("/control-panel/client-portals");
       }
     } finally {
-      setArchiving(false);
+      setDeleting(false);
     }
   };
 
@@ -533,27 +533,27 @@ export default function OfferingDetailPage() {
               {saving ? "Saving…" : saveSuccess ? "Saved ✓" : "Save Changes"}
             </button>
 
-            {/* Archive */}
-            {!archiveConfirm ? (
+            {/* Delete */}
+            {!deleteConfirm ? (
               <button
-                onClick={() => setArchiveConfirm(true)}
+                onClick={() => setDeleteConfirm(true)}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50"
               >
                 <Trash2 className="h-4 w-4" />
-                Archive
+                Delete
               </button>
             ) : (
               <div className="flex items-center gap-2">
-                <span className="text-sm text-red-600">Are you sure?</span>
+                <span className="text-sm text-red-600">This will permanently remove this portal.</span>
                 <button
-                  onClick={handleArchive}
-                  disabled={archiving}
+                  onClick={handleDelete}
+                  disabled={deleting}
                   className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700"
                 >
-                  {archiving ? "Archiving…" : "Yes, archive"}
+                  {deleting ? "Deleting…" : "Yes, delete"}
                 </button>
                 <button
-                  onClick={() => setArchiveConfirm(false)}
+                  onClick={() => setDeleteConfirm(false)}
                   className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50"
                 >
                   Cancel

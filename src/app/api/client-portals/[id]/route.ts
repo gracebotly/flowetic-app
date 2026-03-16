@@ -200,18 +200,38 @@ export async function DELETE(
   const tenantId = await getTenantId(supabase);
   if (!tenantId) return json(401, { ok: false, code: 'AUTH_REQUIRED' });
 
-  // Soft-delete: set status to 'archived'
+  // Soft-delete: set status to 'archived' and NULL out FK references
+  // so this row doesn't block credential/connection deletion later.
+  // Both client_portals_entity_id_fkey and client_portals_source_id_fkey
+  // are NO ACTION — archived rows with non-null FKs block source_entities
+  // and sources deletion.
   const { error } = await supabase
     .from('client_portals')
-    .update({ status: 'archived', updated_at: new Date().toISOString() })
+    .update({
+      status: 'archived',
+      entity_id: null,
+      source_id: null,
+      updated_at: new Date().toISOString(),
+    })
     .eq('id', id)
     .eq('tenant_id', tenantId);
 
   if (error) {
-    console.error('[DELETE /api/offerings] Archive failed:', error);
+    console.error('[DELETE /api/offerings] Delete failed:', error);
     return json(500, { ok: false, code: 'DELETE_FAILED' });
   }
 
+  // Clean up portal_entities junction rows — deleted portals don't need them
+  // and they block credential deletion via FK constraints on source_entities
+  const { error: junctionErr } = await supabase
+    .from('portal_entities')
+    .delete()
+    .eq('portal_id', id);
+
+  if (junctionErr) {
+    // Non-fatal — log but don't fail the delete
+    console.warn('[DELETE /api/offerings] Junction cleanup failed:', junctionErr.message);
+  }
 
   // Log activity event
   const userId = await getUserId(supabase);
@@ -220,11 +240,11 @@ export async function DELETE(
     actorId: userId,
     actorType: "user",
     category: "portal",
-    action: "archived",
+    action: "deleted",
     status: "info",
     entityType: "portal",
     entityId: id,
-    message: `Archived offering`,
+    message: `Deleted client portal`,
   });
 
   return json(200, { ok: true });

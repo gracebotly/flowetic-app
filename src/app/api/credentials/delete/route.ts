@@ -22,8 +22,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, code: "MISSING_SOURCE_ID", message: "Source ID is required" }, { status: 400 });
   }
 
-  // Look up source without tenant scoping first so we can resolve tenant deterministically.
-  // NOTE: This does not leak secrets; we only read tenant_id.
   const { data: source, error: sourceLookupErr } = await supabase
     .from("sources")
     .select("id, tenant_id, name")
@@ -41,7 +39,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, code: "SOURCE_NOT_FOUND", message: "Credential not found" }, { status: 404 });
   }
 
-  // Ensure user is admin in this tenant (matches RLS policy expectations)
   const { data: membership, error: membershipErr } = await supabase
     .from("memberships")
     .select("tenant_id, role")
@@ -61,12 +58,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, code: "TENANT_ACCESS_DENIED" }, { status: 403 });
   }
 
-  // ── Pre-flight: check if any client portals reference entities from this source ──
+  // ── Pre-flight: only block on NON-archived portals ──
   const { data: blockingPortals, error: portalCheckErr } = await supabase
     .from("client_portals")
     .select("id, name")
     .eq("tenant_id", source.tenant_id)
-    .eq("source_id", sourceId);
+    .eq("source_id", sourceId)
+    .neq("status", "archived");
 
   if (portalCheckErr) {
     return NextResponse.json(
@@ -82,7 +80,7 @@ export async function POST(req: Request) {
       {
         ok: false,
         code: "CONNECTION_IN_USE",
-        message: `This connection has ${count} active client portal${count > 1 ? "s" : ""} (${portalNames}). Delete or reassign ${count > 1 ? "those portals" : "that portal"} first, then try again.`,
+        message: `This connection has ${count} active client portal${count > 1 ? "s" : ""} (${portalNames}). Delete ${count > 1 ? "those portals" : "that portal"} first, then try again.`,
         blockingResource: "client_portals",
         blockingPortals: blockingPortals.map((p) => ({ id: p.id, name: p.name })),
       },
@@ -90,26 +88,71 @@ export async function POST(req: Request) {
     );
   }
 
-  // Also check portal_entities junction table for cross-platform references
+  // Check portal_entities junction — only block on NON-archived portals
   const { data: blockingJunction } = await supabase
     .from("portal_entities")
-    .select("portal_id, entity_id")
-    .eq("source_id", sourceId)
-    .limit(1);
+    .select("portal_id")
+    .eq("source_id", sourceId);
 
   if (blockingJunction && blockingJunction.length > 0) {
-    return NextResponse.json(
-      {
-        ok: false,
-        code: "CONNECTION_IN_USE",
-        message: "This connection is referenced by one or more client portals. Remove those portal references first, then try again.",
-        blockingResource: "portal_entities",
-      },
-      { status: 409 },
-    );
+    const junctionPortalIds = [...new Set(blockingJunction.map((r) => r.portal_id))];
+    const { data: activeJunctionPortals } = await supabase
+      .from("client_portals")
+      .select("id, name")
+      .in("id", junctionPortalIds)
+      .neq("status", "archived");
+
+    if (activeJunctionPortals && activeJunctionPortals.length > 0) {
+      const names = activeJunctionPortals.map((p) => p.name).join(", ");
+      const count = activeJunctionPortals.length;
+      return NextResponse.json(
+        {
+          ok: false,
+          code: "CONNECTION_IN_USE",
+          message: `This connection is referenced by ${count} active client portal${count > 1 ? "s" : ""} (${names}). Delete ${count > 1 ? "those portals" : "that portal"} first, then try again.`,
+          blockingResource: "portal_entities",
+        },
+        { status: 409 },
+      );
+    }
   }
 
-  // Safe to delete — no portals reference these entities
+  // ── Clean up any remaining archived portal FK references ──
+  // Handles portals archived BEFORE this fix was deployed
+
+  // 1. Clean portal_entities junction rows for archived portals
+  const { data: allJunctionRefs } = await supabase
+    .from("portal_entities")
+    .select("portal_id")
+    .eq("source_id", sourceId);
+
+  if (allJunctionRefs && allJunctionRefs.length > 0) {
+    const refPortalIds = [...new Set(allJunctionRefs.map((r) => r.portal_id))];
+    const { data: archivedPortals } = await supabase
+      .from("client_portals")
+      .select("id")
+      .in("id", refPortalIds)
+      .eq("status", "archived");
+
+    if (archivedPortals && archivedPortals.length > 0) {
+      const archivedIds = archivedPortals.map((p) => p.id);
+      await supabase
+        .from("portal_entities")
+        .delete()
+        .in("portal_id", archivedIds)
+        .eq("source_id", sourceId);
+    }
+  }
+
+  // 2. NULL out entity_id/source_id on archived portals referencing this source
+  await supabase
+    .from("client_portals")
+    .update({ entity_id: null, source_id: null, updated_at: new Date().toISOString() })
+    .eq("tenant_id", source.tenant_id)
+    .eq("source_id", sourceId)
+    .eq("status", "archived");
+
+  // ── Now safe to delete source_entities ──
   const { error: entitiesErr } = await supabase
     .from("source_entities")
     .delete()
@@ -117,7 +160,6 @@ export async function POST(req: Request) {
     .eq("source_id", sourceId);
 
   if (entitiesErr) {
-    // Catch any remaining FK violations gracefully
     const isFkViolation =
       entitiesErr.code === "23503" ||
       entitiesErr.message?.includes("violates foreign key constraint");
@@ -140,6 +182,7 @@ export async function POST(req: Request) {
     );
   }
 
+  // ── Delete the source itself ──
   const { data: deleted, error: sourceErr } = await supabase
     .from("sources")
     .delete()
@@ -148,34 +191,17 @@ export async function POST(req: Request) {
     .select("id");
 
   if (sourceErr) {
-    // Detect FK constraint violations and return friendly messages
     const isFkViolation =
       sourceErr.code === "23503" ||
       sourceErr.message?.includes("violates foreign key constraint");
 
     if (isFkViolation) {
-      // Determine which table is blocking the delete
       let friendlyMessage = "This connection can't be deleted because it's used by other resources. Remove those first, then try again.";
-      let blockingResource = "resources";
-
-      if (sourceErr.message?.includes("offerings")) {
-        friendlyMessage = "This connection can't be deleted because it's used by one or more offerings. Delete or reassign those offerings first.";
-        blockingResource = "offerings";
-      } else if (sourceErr.message?.includes("portals") || sourceErr.message?.includes("interfaces")) {
-        friendlyMessage = "This connection can't be deleted because it's used by one or more portals. Delete or reassign those portals first.";
-        blockingResource = "portals";
-      } else if (sourceErr.message?.includes("events")) {
-        friendlyMessage = "This connection can't be deleted because it has associated event data. Clear the events first.";
-        blockingResource = "events";
+      if (sourceErr.message?.includes("client_portals")) {
+        friendlyMessage = "This connection can't be deleted because it's used by one or more portals. Delete those portals first.";
       }
-
       return NextResponse.json(
-        {
-          ok: false,
-          code: "CONNECTION_IN_USE",
-          message: friendlyMessage,
-          blockingResource,
-        },
+        { ok: false, code: "CONNECTION_IN_USE", message: friendlyMessage },
         { status: 409 },
       );
     }
@@ -191,8 +217,7 @@ export async function POST(req: Request) {
       {
         ok: false,
         code: "DELETE_NOOP",
-        message:
-          "Delete did not remove the credential. This usually means Supabase RLS blocked DELETE on sources. Add a DELETE policy for sources (admin-only) matching your UPDATE policy.",
+        message: "Delete did not remove the credential. This usually means Supabase RLS blocked DELETE on sources.",
         debug: { sourceId, tenantId: source.tenant_id },
       },
       { status: 409 },
