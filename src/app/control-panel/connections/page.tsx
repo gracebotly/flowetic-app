@@ -8,6 +8,7 @@ import {
   Bot,
   MoreVertical,
   Eye,
+  EyeOff,
   Settings,
   Edit,
   Trash2,
@@ -1631,21 +1632,21 @@ export default function ConnectionsPage() {
                   refreshIndexedEntities();
                 }}
                 className={
-                  "flex w-full items-start gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 " +
-                  (deleteConfirmId === openEntity.id ? "bg-red-100" : "")
+                  "flex w-full items-start gap-2 px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50 " +
+                  (deleteConfirmId === openEntity.id ? "bg-amber-50" : "")
                 }
               >
-                <Trash2 className="mt-0.5 h-4 w-4" />
+                <EyeOff className="mt-0.5 h-4 w-4" />
                 <span className="leading-tight">
                   {deleteConfirmId === openEntity.id ? (
                     <>
-                      <span className="font-semibold">Confirm delete</span>
-                      <span className="mt-0.5 block text-xs font-normal text-red-500">
-                        Removes from index. You can add it back later.
+                      <span className="font-semibold text-amber-700">Confirm removal</span>
+                      <span className="mt-0.5 block text-xs font-normal text-amber-600">
+                        Hides from your index. You can re-import it later.
                       </span>
                     </>
                   ) : (
-                    "Delete"
+                    "Remove from index"
                   )}
                 </span>
               </button>

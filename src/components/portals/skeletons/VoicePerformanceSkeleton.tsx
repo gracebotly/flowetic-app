@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { AreaChart, DonutChart, BarChart, LineChart, Flex, Grid } from '@tremor/react';
+import { AreaChart, DonutChart, BarChart, LineChart, Flex } from '@tremor/react';
 import {
   ChevronDown,
   ChevronUp,
@@ -397,7 +397,7 @@ export function VoicePerformanceSkeleton({ data, branding }: VoicePerformancePro
         </ThemedCard>
       </motion.div>
 
-      <Grid numItemsMd={4} className="gap-4">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         {kpis.slice(0, 4).map((kpi, i) => {
           const { icon, color } = getKPIIcon(kpi.label);
           const iconColor = color === 'accent' ? accentColor : color;
@@ -414,7 +414,7 @@ export function VoicePerformanceSkeleton({ data, branding }: VoicePerformancePro
             />
           );
         })}
-      </Grid>
+      </div>
 
       {trend.length > 1 && (
         <motion.div variants={fadeUp} initial="hidden" animate="visible" custom={5}>
@@ -426,7 +426,7 @@ export function VoicePerformanceSkeleton({ data, branding }: VoicePerformancePro
         </motion.div>
       )}
 
-      <Grid numItemsMd={2} className="gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {endedReasonBreakdown && endedReasonBreakdown.length > 0 && (
           <motion.div variants={fadeUp} initial="hidden" animate="visible" custom={6}>
             <ThemedCard>
@@ -446,9 +446,9 @@ export function VoicePerformanceSkeleton({ data, branding }: VoicePerformancePro
             </ThemedCard>
           </motion.div>
         )}
-      </Grid>
+      </div>
 
-      <Grid numItemsMd={2} className="gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {sentimentBreakdown && sentimentBreakdown.length > 0 && (
           <motion.div variants={fadeUp} initial="hidden" animate="visible" custom={8}>
             <ThemedCard>
@@ -468,7 +468,7 @@ export function VoicePerformanceSkeleton({ data, branding }: VoicePerformancePro
             </ThemedCard>
           </motion.div>
         )}
-      </Grid>
+      </div>
 
       <motion.div variants={fadeUp} initial="hidden" animate="visible" custom={10}>
         <ThemedCard>
