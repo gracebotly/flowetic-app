@@ -32,12 +32,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, code: "MISSING_SOURCE_ID" }, { status: 400 });
   }
 
-  // ── Pre-flight: check if any client portals reference this source ──
+  // ── Pre-flight: only block on NON-archived portals ──
   const { data: blockingPortals, error: portalCheckErr } = await supabase
     .from("client_portals")
     .select("id, name")
     .eq("tenant_id", membership.tenant_id)
-    .eq("source_id", sourceId);
+    .eq("source_id", sourceId)
+    .neq("status", "archived");
 
   if (portalCheckErr) {
     return NextResponse.json(
@@ -53,7 +54,7 @@ export async function POST(req: Request) {
       {
         ok: false,
         code: "CONNECTION_IN_USE",
-        message: `This connection has ${count} active client portal${count > 1 ? "s" : ""} (${portalNames}). Delete or reassign ${count > 1 ? "those portals" : "that portal"} first, then try again.`,
+        message: `This connection has ${count} active client portal${count > 1 ? "s" : ""} (${portalNames}). Delete ${count > 1 ? "those portals" : "that portal"} first, then try again.`,
         blockingResource: "client_portals",
         blockingPortals: blockingPortals.map((p) => ({ id: p.id, name: p.name })),
       },
@@ -61,26 +62,68 @@ export async function POST(req: Request) {
     );
   }
 
-  // Also check portal_entities junction table
+  // Check portal_entities junction — only block on NON-archived portals
   const { data: blockingJunction } = await supabase
     .from("portal_entities")
-    .select("portal_id, entity_id")
-    .eq("source_id", sourceId)
-    .limit(1);
+    .select("portal_id")
+    .eq("source_id", sourceId);
 
   if (blockingJunction && blockingJunction.length > 0) {
-    return NextResponse.json(
-      {
-        ok: false,
-        code: "CONNECTION_IN_USE",
-        message: "This connection is referenced by one or more client portals. Remove those portal references first, then try again.",
-        blockingResource: "portal_entities",
-      },
-      { status: 409 },
-    );
+    const junctionPortalIds = [...new Set(blockingJunction.map((r) => r.portal_id))];
+    const { data: activeJunctionPortals } = await supabase
+      .from("client_portals")
+      .select("id, name")
+      .in("id", junctionPortalIds)
+      .neq("status", "archived");
+
+    if (activeJunctionPortals && activeJunctionPortals.length > 0) {
+      const names = activeJunctionPortals.map((p) => p.name).join(", ");
+      const count = activeJunctionPortals.length;
+      return NextResponse.json(
+        {
+          ok: false,
+          code: "CONNECTION_IN_USE",
+          message: `This connection is referenced by ${count} active client portal${count > 1 ? "s" : ""} (${names}). Delete ${count > 1 ? "those portals" : "that portal"} first, then try again.`,
+          blockingResource: "portal_entities",
+        },
+        { status: 409 },
+      );
+    }
   }
 
-  // Safe to delete entities
+  // ── Clean up archived portal FK references ──
+  const { data: allJunctionRefs } = await supabase
+    .from("portal_entities")
+    .select("portal_id")
+    .eq("source_id", sourceId);
+
+  if (allJunctionRefs && allJunctionRefs.length > 0) {
+    const refPortalIds = [...new Set(allJunctionRefs.map((r) => r.portal_id))];
+    const { data: archivedPortals } = await supabase
+      .from("client_portals")
+      .select("id")
+      .in("id", refPortalIds)
+      .eq("status", "archived");
+
+    if (archivedPortals && archivedPortals.length > 0) {
+      const archivedIds = archivedPortals.map((p) => p.id);
+      await supabase
+        .from("portal_entities")
+        .delete()
+        .in("portal_id", archivedIds)
+        .eq("source_id", sourceId);
+    }
+  }
+
+  // NULL out entity_id/source_id on archived portals
+  await supabase
+    .from("client_portals")
+    .update({ entity_id: null, source_id: null, updated_at: new Date().toISOString() })
+    .eq("tenant_id", membership.tenant_id)
+    .eq("source_id", sourceId)
+    .eq("status", "archived");
+
+  // ── Now safe to delete source_entities ──
   const { error: entitiesErr } = await supabase
     .from("source_entities")
     .delete()
@@ -97,7 +140,7 @@ export async function POST(req: Request) {
         {
           ok: false,
           code: "CONNECTION_IN_USE",
-          message: "This connection can't be deleted because it's still linked to client portals or other resources. Remove those links first, then try again.",
+          message: "This connection can't be deleted because it's still linked to resources. Remove those links first, then try again.",
         },
         { status: 409 },
       );
@@ -109,7 +152,7 @@ export async function POST(req: Request) {
     );
   }
 
-  // Then delete the source itself
+  // Delete the source itself
   const { error: sourceErr } = await supabase
     .from("sources")
     .delete()

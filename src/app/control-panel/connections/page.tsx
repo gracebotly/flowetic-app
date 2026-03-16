@@ -1547,8 +1547,13 @@ export default function ConnectionsPage() {
                             onClick={(e) => {
                               e.stopPropagation();
                               const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
+                              const menuHeight = 120; // approximate: 2 items × ~44px + border
+                              const spaceBelow = window.innerHeight - rect.bottom;
+                              const flipUp = spaceBelow < menuHeight;
                               setMenuPos({
-                                top: rect.bottom + window.scrollY + 4,
+                                top: flipUp
+                                  ? rect.top + window.scrollY - menuHeight
+                                  : rect.bottom + window.scrollY + 4,
                                 left: rect.right + window.scrollX - 160, // anchor to right edge
                               });
                               setDeleteConfirmId(null);
@@ -1750,8 +1755,13 @@ export default function ConnectionsPage() {
                             onClick={(e) => {
                               e.stopPropagation();
                               const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
+                              const menuHeight = 200; // approximate: 4 items × ~44px + border
+                              const spaceBelow = window.innerHeight - rect.bottom;
+                              const flipUp = spaceBelow < menuHeight;
                               setMenuPos({
-                                top: rect.bottom + window.scrollY + 4,
+                                top: flipUp
+                                  ? rect.top + window.scrollY - menuHeight
+                                  : rect.bottom + window.scrollY + 4,
                                 left: rect.right + window.scrollX - 160,
                               });
                               setOpenCredentialMenuId(openCredentialMenuId === cred.id ? null : cred.id);
