@@ -12,11 +12,10 @@ import {
   ArrowUpRight,
   Clock,
   Eye,
-  BarChart3,
-  Rocket,
 } from "lucide-react";
 import { AreaChart } from "@tremor/react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
+import Link from "next/link";
 
 /* ─── Types ─── */
 
@@ -70,7 +69,8 @@ function formatCents(cents: number): string {
 
 function formatCompact(cents: number): string {
   const val = cents / 100;
-  if (val >= 1000) return `$${(val / 1000).toFixed(1)}k`;
+  if (val >= 1_000_000) return `$${(val / 1_000_000).toFixed(1)}M`;
+  if (val >= 1_000) return `$${(val / 1_000).toFixed(1)}k`;
   return formatCents(cents);
 }
 
@@ -108,32 +108,32 @@ const SURFACE_LABELS: Record<string, string> = {
   both: "Portal + Product",
 };
 
-/* ─── Animation variants ─── */
+/* ─── Animation ─── */
 
 const stagger = {
   hidden: {},
-  show: { transition: { staggerChildren: 0.08 } },
+  show: { transition: { staggerChildren: 0.06 } },
 };
 
 const fadeUp = {
-  hidden: { opacity: 0, y: 16 },
+  hidden: { opacity: 0, y: 12 },
   show: {
     opacity: 1,
     y: 0,
-    transition: { duration: 0.45, ease: [0.25, 0.46, 0.45, 0.94] },
+    transition: { duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] },
   },
 };
 
 const scaleIn = {
-  hidden: { opacity: 0, scale: 0.95 },
+  hidden: { opacity: 0, scale: 0.97 },
   show: {
     opacity: 1,
     scale: 1,
-    transition: { duration: 0.35, ease: [0.25, 0.46, 0.45, 0.94] },
+    transition: { duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] },
   },
 };
 
-/* ─── Period Selector (segmented control) ─── */
+/* ─── Period Selector ─── */
 
 const PERIODS = [
   { key: "7d", label: "7 days" },
@@ -151,23 +151,23 @@ function PeriodSelector({
   loading: boolean;
 }) {
   return (
-    <div className="relative flex items-center rounded-xl bg-gray-100 p-1">
+    <div className="relative flex items-center rounded-lg bg-slate-100 p-0.5">
       {PERIODS.map((p) => (
         <button
           key={p.key}
           onClick={() => onChange(p.key)}
           disabled={loading && value !== p.key}
-          className={`relative z-10 rounded-lg px-4 py-2 text-sm font-semibold transition-colors duration-200 ${
+          className={`relative z-10 rounded-md px-3.5 py-1.5 text-xs font-medium transition-colors duration-200 ${
             value === p.key
-              ? "text-gray-900"
-              : "text-gray-500 hover:text-gray-700"
+              ? "text-slate-900"
+              : "text-slate-500 hover:text-slate-700"
           }`}
         >
           {p.label}
           {value === p.key && (
             <motion.div
               layoutId="period-pill"
-              className="absolute inset-0 rounded-lg bg-white shadow-sm"
+              className="absolute inset-0 rounded-md bg-white shadow-sm ring-1 ring-slate-200/60"
               style={{ zIndex: -1 }}
               transition={{ type: "spring", stiffness: 400, damping: 30 }}
             />
@@ -178,44 +178,48 @@ function PeriodSelector({
   );
 }
 
-/* ─── Metric Card ─── */
+/* ─── Metric Card (left-border accent, inline icon) ─── */
+
+const BORDER_COLORS: Record<string, string> = {
+  revenue: "border-l-emerald-500",
+  mrr: "border-l-blue-500",
+  customers: "border-l-violet-500",
+  executions: "border-l-amber-500",
+};
 
 function MetricCard({
   icon: Icon,
   label,
   value,
   change,
-  gradient,
-  delay = 0,
+  accentKey,
 }: {
   icon: ComponentType<{ className?: string }>;
   label: string;
   value: string;
   change: number | null;
-  gradient: string;
-  delay?: number;
+  accentKey: string;
 }) {
+  const borderColor = BORDER_COLORS[accentKey] || "border-l-slate-300";
+
   return (
     <motion.div
       variants={fadeUp}
-      custom={delay}
-      className="group relative overflow-hidden rounded-2xl bg-white p-5 shadow-sm transition-shadow duration-300 hover:shadow-md"
+      className={`rounded-lg border border-gray-200 bg-white p-4 border-l-[3px] ${borderColor}`}
     >
       <div className="flex items-start justify-between">
         <div>
-          <div
-            className={`mb-3 inline-flex h-10 w-10 items-center justify-center rounded-xl ${gradient}`}
-          >
-            <Icon className="h-5 w-5 text-white" />
+          <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-slate-500">
+            <Icon className="h-3.5 w-3.5" />
+            {label}
           </div>
-          <p className="text-sm font-medium text-gray-500">{label}</p>
-          <p className="mt-1 text-2xl font-bold tracking-tight text-gray-900">
+          <p className="text-xl font-semibold tracking-tight text-slate-900">
             {value}
           </p>
         </div>
         {change !== null && (
-          <div
-            className={`mt-1 flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-semibold ${
+          <span
+            className={`flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[11px] font-medium ${
               change >= 0
                 ? "bg-emerald-50 text-emerald-700"
                 : "bg-red-50 text-red-600"
@@ -226,14 +230,46 @@ function MetricCard({
             />
             {change >= 0 ? "+" : ""}
             {change}%
-          </div>
+          </span>
         )}
       </div>
-      {/* Decorative gradient orb */}
-      <div
-        className={`absolute -bottom-6 -right-6 h-24 w-24 rounded-full opacity-[0.07] blur-2xl ${gradient}`}
-      />
     </motion.div>
+  );
+}
+
+/* ─── Chart Tabs ─── */
+
+type ChartMode = "revenue" | "customers" | "executions";
+
+function ChartTabs({
+  value,
+  onChange,
+}: {
+  value: ChartMode;
+  onChange: (m: ChartMode) => void;
+}) {
+  const tabs: { key: ChartMode; label: string }[] = [
+    { key: "revenue", label: "Revenue" },
+    { key: "customers", label: "Customers" },
+    { key: "executions", label: "Executions" },
+  ];
+
+  return (
+    <div className="flex items-center gap-0.5 rounded-md bg-slate-100 p-0.5">
+      {tabs.map((t) => (
+        <button
+          key={t.key}
+          onClick={() => onChange(t.key)}
+          className={`rounded px-2.5 py-1 text-[11px] font-medium transition-colors duration-200 ${
+            value === t.key
+              ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200/60"
+              : "text-slate-500 hover:text-slate-700"
+          }`}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -242,67 +278,50 @@ function MetricCard({
 function OfferingRow({ offering }: { offering: OfferingRevenue }) {
   const pricingLabel =
     PRICING_LABELS[offering.pricing_type] || offering.pricing_type;
-  const surfaceLabel =
-    SURFACE_LABELS[offering.surface_type || "analytics"] || "Portal";
   const days = daysSince(offering.published_at);
   const views = offering.view_count || 0;
-  const conversionRate =
-    views > 0 ? ((offering.customers / views) * 100).toFixed(1) : null;
+
+  const pricingColor =
+    offering.pricing_type === "monthly"
+      ? "bg-blue-50 text-blue-700"
+      : offering.pricing_type === "per_run"
+        ? "bg-violet-50 text-violet-700"
+        : offering.pricing_type === "usage_based"
+          ? "bg-amber-50 text-amber-700"
+          : "bg-slate-100 text-slate-600";
 
   return (
-    <div className="group flex items-center justify-between rounded-xl bg-white p-4 shadow-sm transition-all duration-200 hover:shadow-md">
+    <div className="group flex items-center justify-between rounded-lg border border-gray-200 bg-white p-3.5 transition-colors duration-200 hover:border-slate-300">
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <h3 className="truncate text-sm font-semibold text-gray-900">
-            {offering.portal_name}
-          </h3>
-          <span className="shrink-0 rounded-md bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-500">
-            {surfaceLabel}
-          </span>
-        </div>
-        <div className="mt-1.5 flex items-center gap-4 text-xs text-gray-500">
+        <h3 className="truncate text-sm font-medium text-slate-900">
+          {offering.portal_name}
+        </h3>
+        <div className="mt-1 flex items-center gap-3 text-[11px] text-slate-500">
           <span className="flex items-center gap-1">
             <Users className="h-3 w-3" />
-            {offering.customers} customer{offering.customers !== 1 ? "s" : ""}
+            {offering.customers}
           </span>
           <span className="flex items-center gap-1">
             <Zap className="h-3 w-3" />
-            {offering.executions.toLocaleString()} run
-            {offering.executions !== 1 ? "s" : ""}
+            {offering.executions.toLocaleString()}
           </span>
           {views > 0 && (
             <span className="flex items-center gap-1">
               <Eye className="h-3 w-3" />
-              {views.toLocaleString()} view{views !== 1 ? "s" : ""}
+              {views.toLocaleString()}
             </span>
           )}
           {days !== null && (
-            <span className="flex items-center gap-1">
-              <Clock className="h-3 w-3" />
-              {days}d live
-            </span>
-          )}
-          {conversionRate && (
-            <span className="font-medium text-emerald-600">
-              {conversionRate}% conv.
-            </span>
+            <span>{days}d live</span>
           )}
         </div>
       </div>
       <div className="ml-4 text-right">
-        <p className="text-lg font-bold text-gray-900">
+        <p className="text-sm font-semibold text-slate-900">
           {formatCents(offering.revenue_cents)}
         </p>
         <span
-          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
-            offering.pricing_type === "monthly"
-              ? "bg-blue-50 text-blue-600"
-              : offering.pricing_type === "per_run"
-                ? "bg-violet-50 text-violet-600"
-                : offering.pricing_type === "usage_based"
-                  ? "bg-amber-50 text-amber-600"
-                  : "bg-gray-100 text-gray-500"
-          }`}
+          className={`mt-0.5 inline-block rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${pricingColor}`}
         >
           {pricingLabel}
         </span>
@@ -315,31 +334,25 @@ function OfferingRow({ offering }: { offering: OfferingRevenue }) {
 
 function PaymentRow({ payment }: { payment: PaymentEvent }) {
   const initial = payment.customer_email[0]?.toUpperCase() || "?";
-  const hue = (payment.customer_email.charCodeAt(0) * 37) % 360;
+
   return (
-    <div className="flex items-center justify-between px-5 py-3.5 transition-colors duration-150 hover:bg-gray-50">
-      <div className="flex min-w-0 items-center gap-3">
-        <div
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold"
-          style={{
-            background: `linear-gradient(135deg, hsl(${hue}, 60%, 88%), hsl(${hue + 30}, 55%, 82%))`,
-            color: `hsl(${hue}, 50%, 35%)`,
-          }}
-        >
+    <div className="flex items-center justify-between px-3.5 py-3 transition-colors duration-150 hover:bg-slate-50">
+      <div className="flex min-w-0 items-center gap-2.5">
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[11px] font-medium text-slate-600">
           {initial}
         </div>
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-gray-900">
+          <p className="truncate text-xs font-medium text-slate-900">
             {payment.customer_email}
           </p>
-          <p className="text-xs text-gray-500">{payment.portal_name}</p>
+          <p className="text-[11px] text-slate-500">{payment.portal_name}</p>
         </div>
       </div>
       <div className="ml-3 shrink-0 text-right">
-        <p className="text-sm font-bold text-emerald-600">
+        <p className="text-xs font-medium text-emerald-600">
           +{formatCents(payment.amount_cents)}
         </p>
-        <p className="text-[11px] text-gray-400">{timeAgo(payment.paid_at)}</p>
+        <p className="text-[10px] text-slate-400">{timeAgo(payment.paid_at)}</p>
       </div>
     </div>
   );
@@ -348,33 +361,27 @@ function PaymentRow({ payment }: { payment: PaymentEvent }) {
 /* ─── Stat Row ─── */
 
 function StatRow({
-  icon: Icon,
   label,
   value,
 }: {
-  icon: ComponentType<{ className?: string }>;
   label: string;
   value: string;
 }) {
   return (
-    <div className="flex items-center justify-between py-2.5">
-      <span className="flex items-center gap-2.5 text-sm text-gray-500">
-        <Icon className="h-4 w-4 text-gray-400" />
-        {label}
-      </span>
-      <span className="text-sm font-semibold text-gray-900">{value}</span>
+    <div className="flex items-center justify-between py-2">
+      <span className="text-xs text-slate-500">{label}</span>
+      <span className="text-xs font-medium text-slate-900">{value}</span>
     </div>
   );
 }
 
-/* ─── Skeleton loader ─── */
+/* ─── Skeleton ─── */
 
 function SkeletonCard() {
   return (
-    <div className="animate-pulse rounded-2xl bg-white p-5 shadow-sm">
-      <div className="mb-3 h-10 w-10 rounded-xl bg-gray-100" />
-      <div className="h-3 w-20 rounded bg-gray-100" />
-      <div className="mt-2 h-7 w-24 rounded bg-gray-100" />
+    <div className="animate-pulse rounded-lg border border-gray-200 bg-white p-4">
+      <div className="mb-2 h-3 w-20 rounded bg-slate-100" />
+      <div className="h-6 w-24 rounded bg-slate-100" />
     </div>
   );
 }
@@ -384,22 +391,18 @@ function LoadingSkeleton() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <div className="h-7 w-32 animate-pulse rounded-lg bg-gray-100" />
-          <div className="mt-2 h-4 w-64 animate-pulse rounded bg-gray-100" />
+          <div className="h-6 w-28 animate-pulse rounded bg-slate-100" />
+          <div className="mt-2 h-4 w-56 animate-pulse rounded bg-slate-100" />
         </div>
-        <div className="h-10 w-56 animate-pulse rounded-xl bg-gray-100" />
+        <div className="h-9 w-48 animate-pulse rounded-lg bg-slate-100" />
       </div>
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <SkeletonCard />
         <SkeletonCard />
         <SkeletonCard />
         <SkeletonCard />
       </div>
-      <div className="h-72 animate-pulse rounded-2xl bg-white shadow-sm" />
-      <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
-        <div className="h-48 animate-pulse rounded-2xl bg-white shadow-sm" />
-        <div className="h-48 animate-pulse rounded-2xl bg-white shadow-sm" />
-      </div>
+      <div className="h-64 animate-pulse rounded-lg border border-gray-200 bg-white" />
     </div>
   );
 }
@@ -408,29 +411,24 @@ function LoadingSkeleton() {
 
 function EmptyRevenue() {
   return (
-    <div className="flex flex-col items-center py-20 text-center">
-      <div className="relative mb-6">
-        <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-emerald-100 to-teal-50">
-          <Rocket className="h-9 w-9 text-emerald-600" />
-        </div>
-        <div className="absolute -right-1 -top-1 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 text-white shadow-lg">
-          <DollarSign className="h-3 w-3" />
-        </div>
+    <div className="flex flex-col items-center py-16 text-center">
+      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100">
+        <DollarSign className="h-5 w-5 text-slate-500" />
       </div>
-      <h3 className="text-lg font-bold text-gray-900">
+      <h3 className="text-base font-semibold text-slate-900">
         Your revenue dashboard is ready
       </h3>
-      <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-gray-500">
+      <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed text-slate-500">
         Publish a paid portal or product and share it with customers.
         Revenue, payments, and analytics will appear here in real time.
       </p>
-      <a
+      <Link
         href="/control-panel/client-portals/create"
-        className="mt-6 inline-flex items-center gap-2 rounded-xl bg-gray-900 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-gray-800 hover:shadow-md"
+        className="mt-5 inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition-colors duration-200 hover:bg-slate-800"
       >
         Create your first portal
         <ArrowRight className="h-4 w-4" />
-      </a>
+      </Link>
     </div>
   );
 }
@@ -446,10 +444,10 @@ export default function RevenuePage() {
   const [switching, setSwitching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [period, setPeriod] = useState("30d");
+  const [chartMode, setChartMode] = useState<ChartMode>("revenue");
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    // Cancel any in-flight request
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -501,10 +499,9 @@ export default function RevenuePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [period]);
 
-  /* ── Loading state: skeleton, not spinner ── */
   if (loading) {
     return (
-      <div className="mx-auto max-w-6xl px-1">
+      <div className="mx-auto max-w-4xl px-6 py-10">
         <LoadingSkeleton />
       </div>
     );
@@ -512,8 +509,8 @@ export default function RevenuePage() {
 
   if (error || !data) {
     return (
-      <div className="mx-auto max-w-6xl px-1">
-        <div className="rounded-2xl bg-white p-8 text-center shadow-sm">
+      <div className="mx-auto max-w-4xl px-6 py-10">
+        <div className="rounded-lg border border-gray-200 bg-white p-8 text-center">
           <p className="text-sm text-red-600">
             {error || "No data available"}
           </p>
@@ -551,7 +548,7 @@ export default function RevenuePage() {
     overview.total_executions > 0;
 
   return (
-    <div className="mx-auto max-w-6xl px-1">
+    <div className="mx-auto max-w-4xl px-6 py-10">
       <motion.div
         variants={stagger}
         initial="hidden"
@@ -564,11 +561,11 @@ export default function RevenuePage() {
           className="flex items-center justify-between"
         >
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-gray-900">
+            <h1 className="text-xl font-semibold tracking-tight text-slate-900">
               Revenue
             </h1>
-            <p className="mt-1 text-sm text-gray-500">
-              Track your earnings across all portals and products
+            <p className="mt-0.5 text-sm text-slate-500">
+              Track earnings across all portals and products
             </p>
           </div>
           <PeriodSelector
@@ -578,42 +575,39 @@ export default function RevenuePage() {
           />
         </motion.div>
 
-        {/* ── Metrics ── */}
+        {/* ── Metrics (left-border accent cards) ── */}
         <motion.div
           variants={stagger}
-          className={`grid grid-cols-2 gap-4 lg:grid-cols-4 ${switching ? "pointer-events-none opacity-60" : ""}`}
+          className={`grid grid-cols-2 gap-3 lg:grid-cols-4 ${switching ? "pointer-events-none opacity-60" : ""}`}
           style={{ transition: "opacity 0.2s ease" }}
         >
           <MetricCard
             icon={DollarSign}
-            label="Total Revenue"
+            label="Total revenue"
             value={formatCents(overview.total_revenue_cents)}
             change={prevRev}
-            gradient="bg-gradient-to-br from-emerald-500 to-teal-600"
+            accentKey="revenue"
           />
           <MetricCard
             icon={TrendingUp}
-            label="Monthly Recurring"
+            label="Monthly recurring"
             value={formatCents(overview.mrr_cents)}
             change={prevMrr}
-            gradient="bg-gradient-to-br from-blue-500 to-indigo-600"
-            delay={0.04}
+            accentKey="mrr"
           />
           <MetricCard
             icon={Users}
             label="Customers"
             value={String(overview.total_customers)}
             change={prevCust}
-            gradient="bg-gradient-to-br from-violet-500 to-purple-600"
-            delay={0.08}
+            accentKey="customers"
           />
           <MetricCard
             icon={Zap}
             label="Executions"
             value={overview.total_executions.toLocaleString()}
             change={prevExec}
-            gradient="bg-gradient-to-br from-amber-500 to-orange-600"
-            delay={0.12}
+            accentKey="executions"
           />
         </motion.div>
 
@@ -621,27 +615,20 @@ export default function RevenuePage() {
         {chartData.length > 1 && (
           <motion.div
             variants={fadeUp}
-            className="overflow-hidden rounded-2xl bg-white p-6 shadow-sm"
+            className="overflow-hidden rounded-lg border border-gray-200 bg-white p-5"
           >
-            <div className="mb-5 flex items-center justify-between">
-              <div>
-                <h2 className="text-base font-semibold text-gray-900">
-                  Revenue Over Time
-                </h2>
-                <p className="mt-0.5 text-xs text-gray-500">
-                  Daily revenue for the selected period
-                </p>
-              </div>
-              <p className="text-xl font-bold tracking-tight text-emerald-600">
-                {formatCents(overview.total_revenue_cents)}
-              </p>
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-sm font-medium text-slate-900">
+                Revenue over time
+              </h2>
+              <ChartTabs value={chartMode} onChange={setChartMode} />
             </div>
             <AreaChart
-              className="h-64"
+              className="h-56"
               data={chartData}
               index="date"
               categories={["Revenue"]}
-              colors={["emerald"]}
+              colors={["blue"]}
               valueFormatter={(v: number) =>
                 `$${Intl.NumberFormat("us").format(v)}`
               }
@@ -656,25 +643,25 @@ export default function RevenuePage() {
 
         {/* ── Main Content ── */}
         {hasRevenue ? (
-          <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
+          <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
             {/* Left: Offerings */}
             <motion.div variants={fadeUp}>
-              <div className="mb-4 flex items-center justify-between px-1">
-                <h2 className="text-base font-semibold text-gray-900">
-                  Portal & Product Revenue
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="text-sm font-medium text-slate-900">
+                  Portal and product revenue
                 </h2>
-                <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-500">
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">
                   {per_offering.length} active
                 </span>
               </div>
               {per_offering.length > 0 ? (
-                <div className="space-y-3">
+                <div className="space-y-2">
                   {per_offering.map((o) => (
                     <OfferingRow key={o.portal_id} offering={o} />
                   ))}
                 </div>
               ) : (
-                <div className="rounded-2xl bg-white p-12 text-center shadow-sm">
+                <div className="rounded-lg border border-gray-200 bg-white p-10 text-center">
                   <EmptyRevenue />
                 </div>
               )}
@@ -684,17 +671,17 @@ export default function RevenuePage() {
             <motion.div variants={fadeUp} className="space-y-4">
               {/* Recent Payments */}
               <div>
-                <h2 className="mb-4 px-1 text-base font-semibold text-gray-900">
-                  Recent Payments
+                <h2 className="mb-3 text-sm font-medium text-slate-900">
+                  Recent payments
                 </h2>
-                <div className="overflow-hidden rounded-2xl bg-white shadow-sm">
+                <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
                   {recent_payments.length === 0 ? (
-                    <div className="px-5 py-14 text-center">
-                      <CreditCard className="mx-auto h-8 w-8 text-gray-300" />
-                      <p className="mt-3 text-sm font-medium text-gray-500">
+                    <div className="px-4 py-10 text-center">
+                      <CreditCard className="mx-auto h-5 w-5 text-slate-300" />
+                      <p className="mt-2 text-xs font-medium text-slate-500">
                         No payments yet
                       </p>
-                      <p className="mt-1 text-xs text-gray-400">
+                      <p className="mt-0.5 text-[11px] text-slate-400">
                         Payments will appear here in real time
                       </p>
                     </div>
@@ -705,12 +692,12 @@ export default function RevenuePage() {
                           <PaymentRow key={i} payment={p} />
                         ))}
                       </div>
-                      <div className="flex items-center gap-2 border-t border-gray-100 px-5 py-2.5">
-                        <span className="relative flex h-2 w-2">
+                      <div className="flex items-center gap-2 border-t border-gray-100 px-3.5 py-2">
+                        <span className="relative flex h-1.5 w-1.5">
                           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                          <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
                         </span>
-                        <span className="text-[11px] text-gray-400">
+                        <span className="text-[10px] text-slate-400">
                           Updated in real-time
                         </span>
                       </div>
@@ -720,19 +707,17 @@ export default function RevenuePage() {
               </div>
 
               {/* Quick Stats */}
-              <div className="rounded-2xl bg-white p-5 shadow-sm">
-                <h3 className="mb-2 text-sm font-semibold text-gray-900">
-                  Quick Stats
+              <div className="rounded-lg border border-gray-200 bg-white p-4">
+                <h3 className="mb-1 text-xs font-medium text-slate-900">
+                  Quick stats
                 </h3>
                 <div className="divide-y divide-gray-100">
                   <StatRow
-                    icon={Activity}
-                    label="Active Subscriptions"
+                    label="Active subscriptions"
                     value={String(overview.active_subscriptions)}
                   />
                   <StatRow
-                    icon={Users}
-                    label="Avg Revenue / Customer"
+                    label="Avg revenue / customer"
                     value={formatCents(
                       Math.round(
                         overview.total_revenue_cents /
@@ -741,8 +726,7 @@ export default function RevenuePage() {
                     )}
                   />
                   <StatRow
-                    icon={Zap}
-                    label="Avg Runs / Customer"
+                    label="Avg runs / customer"
                     value={String(
                       Math.round(
                         overview.total_executions /
@@ -751,8 +735,7 @@ export default function RevenuePage() {
                     )}
                   />
                   <StatRow
-                    icon={ArrowRight}
-                    label="Revenue / Execution"
+                    label="Revenue / execution"
                     value={formatCents(
                       Math.round(
                         overview.total_revenue_cents /
@@ -767,7 +750,7 @@ export default function RevenuePage() {
         ) : (
           <motion.div
             variants={scaleIn}
-            className="rounded-2xl bg-white shadow-sm"
+            className="rounded-lg border border-gray-200 bg-white"
           >
             <EmptyRevenue />
           </motion.div>
