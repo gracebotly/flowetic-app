@@ -16,3 +16,7 @@ DATABASE_URL=postgresql://postgres.lxtcafurqwpfhzdkkryr:YOUR_PASSWORD@aws-0-us-w
 ```
 DATABASE_URL=postgresql://postgres.lxtcafurqwpfhzdkkryr:YOUR_PASSWORD@aws-0-us-west-2.db.supabase.com:5432/postgres
 ```
+Three webhooks, three jobs:
+WebhookURLHandlesSecretBilling/api/billing/webhooksAgencies pay you (SaaS subscriptions)
+STRIPE_BILLING_WEBHOOK_SECRETConnect/api/stripe/webhooksClient pays agency (Connect commissions)
+STRIPE_WEBHOOK_SECRETConnect V2/api/stripe/webhooks/v2Connected account status syncSTRIPE_CONNECT_WEBHOOK_SECRET (new)
