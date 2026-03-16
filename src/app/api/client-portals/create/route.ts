@@ -292,6 +292,7 @@ export async function POST(request: Request) {
     entityType: "portal",
     entityId: offering.id,
     entityName: offering.name,
+    offeringId: offering.id,
     clientId: offering.client_id ?? null,
     message: `Created offering "${offering.name}"`,
     details: {

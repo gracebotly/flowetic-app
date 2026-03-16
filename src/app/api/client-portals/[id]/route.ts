@@ -245,6 +245,7 @@ export async function DELETE(
     status: "info",
     entityType: "portal",
     entityId: id,
+    offeringId: id,
     message: `Deleted client portal`,
   });
 
