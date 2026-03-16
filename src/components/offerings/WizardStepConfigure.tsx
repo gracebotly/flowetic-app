@@ -460,10 +460,19 @@ function formatPhone(value: string): string {
                         inputMode="decimal"
                         value={priceDisplay}
                         onChange={(e) => {
-                          const raw = e.target.value.replace(/[^0-9.]/g, "");
+                          let raw = e.target.value.replace(/[^0-9.]/g, "");
+                          // Only allow one decimal point
+                          const parts = raw.split(".");
+                          if (parts.length > 2) raw = parts[0] + "." + parts.slice(1).join("");
+                          // Cap at 2 decimal places
+                          if (parts.length === 2 && parts[1].length > 2) {
+                            raw = parts[0] + "." + parts[1].slice(0, 2);
+                          }
+                          // Cap at $9,999.99
+                          const num = parseFloat(raw) || 0;
+                          if (num > 9999.99) return;
                           setPriceDisplay(raw);
-                          const dollars = parseFloat(raw) || 0;
-                          onPricingChange(pricingType, Math.round(dollars * 100));
+                          onPricingChange(pricingType, Math.round(num * 100));
                         }}
                         onBlur={() => {
                           if (priceDisplay) {
@@ -479,14 +488,20 @@ function formatPhone(value: string): string {
 
                   {/* Slug input */}
                   <div className="mt-4">
-                    <label className="block text-xs font-medium text-gray-600">
-                      Product URL Slug
-                    </label>
+                    <div className="flex items-baseline justify-between">
+                      <label className="block text-xs font-medium text-gray-600">
+                        Product URL Slug
+                      </label>
+                      <span className={`text-[11px] ${slug.length > 50 ? "text-amber-600" : "text-gray-400"}`}>
+                        {slug.length}/60
+                      </span>
+                    </div>
                     <div className="mt-1 flex items-center rounded-lg border border-gray-200 bg-white text-sm">
                       <span className="flex-shrink-0 px-3 text-gray-400">/products/</span>
                       <input
                         type="text"
                         value={slug}
+                        maxLength={60}
                         onChange={(e) => {
                           setSlugManuallyEdited(true);
                           onChange(
@@ -495,6 +510,7 @@ function formatPhone(value: string): string {
                               .toLowerCase()
                               .replace(/[^a-z0-9-]/g, "-")
                               .replace(/-+/g, "-")
+                              .replace(/^-/, "")
                           );
                         }}
                         placeholder="smith-dental-voice"
