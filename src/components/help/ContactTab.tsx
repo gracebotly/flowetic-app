@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import {
   Send,
   CheckCircle,
-  Paperclip,
   X,
   Upload,
   FileImage,
@@ -25,7 +24,7 @@ const CATEGORIES: { value: Category; label: string }[] = [
 ]
 
 const MAX_FILES = 3
-const MAX_FILE_SIZE = 25 * 1024 * 1024 // 25MB
+const MAX_FILE_SIZE = 25 * 1024 * 1024
 const ALLOWED_TYPES = new Set([
   "image/png",
   "image/jpeg",
@@ -57,25 +56,23 @@ function formatFileSize(bytes: number): string {
 
 function FileTypeIcon({ type }: { type: string }) {
   if (type.startsWith("video/")) {
-    return <FileVideo className="h-4 w-4 text-purple-500" />
+    return <FileVideo className="h-4 w-4 text-slate-400" />
   }
-  return <FileImage className="h-4 w-4 text-blue-500" />
+  return <FileImage className="h-4 w-4 text-slate-400" />
 }
 
 export function ContactTab() {
   const [category, setCategory] = useState<Category>("general")
-  const [subject, setSubject] = useState("")
   const [description, setDescription] = useState("")
-  const [extraField, setExtraField] = useState("")
   const [email, setEmail] = useState("")
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
+  const [sendError, setSendError] = useState<string | null>(null)
   const [files, setFiles] = useState<UploadedFile[]>([])
   const [dragOver, setDragOver] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
-  // Pre-fill email from session
   useEffect(() => {
     ;(async () => {
       try {
@@ -88,30 +85,21 @@ export function ContactTab() {
     })()
   }, [])
 
-  const extraFieldLabel: Record<string, string> = {
-    bug: "Steps to Reproduce",
-    billing: "Transaction or Plan Details",
-    feature: "How would this help you?",
-  }
-
   const uploadFile = useCallback(async (file: File) => {
     setUploadError(null)
 
-    // Validate type
     if (!ALLOWED_TYPES.has(file.type)) {
-      setUploadError(`"${file.name}" is not a supported file type. Use PNG, JPEG, GIF, WebP, MP4, WebM, or MOV.`)
+      setUploadError(`"${file.name}" is not a supported file type.`)
       return
     }
 
-    // Validate size
     if (file.size > MAX_FILE_SIZE) {
-      setUploadError(`"${file.name}" is ${formatFileSize(file.size)}. Maximum file size is 25MB.`)
+      setUploadError(`"${file.name}" exceeds the 25MB limit.`)
       return
     }
 
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
-    // Create preview for images
     let previewUrl: string | undefined
     if (file.type.startsWith("image/")) {
       previewUrl = URL.createObjectURL(file)
@@ -131,7 +119,6 @@ export function ContactTab() {
 
     setFiles((prev) => [...prev, uploadEntry])
 
-    // Simulate progress (real progress not available with fetch)
     const progressInterval = setInterval(() => {
       setFiles((prev) =>
         prev.map((f) =>
@@ -152,7 +139,6 @@ export function ContactTab() {
       })
 
       const json = await res.json()
-
       clearInterval(progressInterval)
 
       if (!res.ok || !json.ok) {
@@ -179,12 +165,12 @@ export function ContactTab() {
             : f
         )
       )
-    } catch (err) {
+    } catch {
       clearInterval(progressInterval)
       setFiles((prev) =>
         prev.map((f) =>
           f.id === id
-            ? { ...f, status: "error", progress: 0, errorMessage: "Network error. Please try again." }
+            ? { ...f, status: "error", progress: 0, errorMessage: "Network error." }
             : f
         )
       )
@@ -199,7 +185,6 @@ export function ContactTab() {
         setUploadError(`Maximum ${MAX_FILES} files allowed.`)
         return
       }
-
       const toUpload = Array.from(selectedFiles).slice(0, remaining)
       for (const file of toUpload) {
         uploadFile(file)
@@ -216,7 +201,6 @@ export function ContactTab() {
     })
   }, [])
 
-  // Drag and drop handlers
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
@@ -246,106 +230,86 @@ export function ContactTab() {
   const activeFileCount = files.filter((f) => f.status !== "error").length
 
   async function handleSubmit() {
-    if (!subject.trim() || !description.trim()) return
+    if (!description.trim()) return
 
     setSending(true)
+    setSendError(null)
 
-    // Build attachment links section
-    const attachmentLines =
-      completedFiles.length > 0
-        ? [
-            "",
-            "--- Attachments ---",
-            ...completedFiles.map(
-              (f, i) =>
-                `${i + 1}. ${f.fileName} (${formatFileSize(f.fileSize)})${
-                  f.signedUrl ? `
-   View: ${f.signedUrl}` : `
-   Path: ${f.storagePath}`
-                }`
-            ),
-            "",
-            "Note: Attachment links expire in 7 days.",
-          ]
-        : []
+    try {
+      const res = await fetch("/api/support/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          category,
+          description: description.trim(),
+          attachments: completedFiles.map((f) => ({
+            fileName: f.fileName,
+            signedUrl: f.signedUrl,
+            storagePath: f.storagePath,
+          })),
+        }),
+      })
 
-    const body = [
-      `Category: ${CATEGORIES.find((c) => c.value === category)?.label}`,
-      `Email: ${email}`,
-      "",
-      `Subject: ${subject}`,
-      "",
-      `Description:`,
-      description,
-      extraField ? `
-${extraFieldLabel[category] || "Additional Info"}:
-${extraField}` : "",
-      ...attachmentLines,
-    ]
-      .filter(Boolean)
-      .join("\n")
+      const json = await res.json()
 
-    const mailtoUrl = `mailto:support@getflowetic.com?subject=${encodeURIComponent(
-      `[${CATEGORIES.find((c) => c.value === category)?.label}] ${subject}`
-    )}&body=${encodeURIComponent(body)}`
+      if (!res.ok || !json.ok) {
+        setSendError(json.error || "Failed to send. Please try again.")
+        setSending(false)
+        return
+      }
 
-    window.location.href = mailtoUrl
-
-    setTimeout(() => {
-      setSending(false)
       setSent(true)
-    }, 500)
+      setSending(false)
+    } catch {
+      setSendError("Network error. Please try again.")
+      setSending(false)
+    }
   }
 
+  // ── Success state: simple inline confirmation ──
   if (sent) {
     return (
-      <div className="max-w-lg rounded-xl border border-emerald-200 bg-emerald-50 p-8 text-center">
-        <CheckCircle className="mx-auto h-10 w-10 text-emerald-500" />
-        <h3 className="mt-3 text-sm font-semibold text-gray-900">Message prepared!</h3>
-        <p className="mt-1 text-sm text-gray-600">
-          Your email client should have opened with the message pre-filled.
-          {completedFiles.length > 0 && " Attachment links are included in the email body."}
-          {" "}If it didn&apos;t open, you can email us directly at{" "}
-          <a
-            href="mailto:support@getflowetic.com"
-            className="font-medium text-blue-600 hover:underline"
+      <div className="max-w-lg">
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-6 text-center">
+          <CheckCircle className="mx-auto h-8 w-8 text-emerald-500" />
+          <h3 className="mt-3 text-sm font-semibold text-slate-900">
+            Message sent
+          </h3>
+          <p className="mt-1 text-sm text-slate-600">
+            We received your message and will respond within 24 hours to{" "}
+            <span className="font-medium">{email}</span>.
+          </p>
+          <button
+            onClick={() => {
+              setSent(false)
+              setDescription("")
+              setCategory("general")
+              setFiles([])
+              setUploadError(null)
+              setSendError(null)
+            }}
+            className="mt-4 text-sm font-medium text-blue-600 transition-colors duration-200 hover:text-blue-700"
           >
-            support@getflowetic.com
-          </a>
-        </p>
-        <button
-          onClick={() => {
-            setSent(false)
-            setSubject("")
-            setDescription("")
-            setExtraField("")
-            setCategory("general")
-            setFiles([])
-            setUploadError(null)
-          }}
-          className="mt-4 text-sm font-medium text-blue-600 hover:text-blue-700"
-        >
-          Send another message
-        </button>
+            Send another message
+          </button>
+        </div>
       </div>
     )
   }
 
+  // ── Form ──
   return (
     <div className="max-w-lg">
       <div className="space-y-5">
         {/* Category */}
         <div>
-          <label className="block text-xs font-medium uppercase tracking-wider text-gray-400">
+          <label className="block text-xs font-medium uppercase tracking-wider text-slate-400">
             Category
           </label>
           <select
             value={category}
-            onChange={(e) => {
-              setCategory(e.target.value as Category)
-              setExtraField("")
-            }}
-            className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
+            onChange={(e) => setCategory(e.target.value as Category)}
+            className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-slate-900 transition-colors duration-200 focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
           >
             {CATEGORIES.map((cat) => (
               <option key={cat.value} value={cat.value}>
@@ -355,72 +319,35 @@ ${extraField}` : "",
           </select>
         </div>
 
-        {/* Subject */}
-        <div>
-          <label className="block text-xs font-medium uppercase tracking-wider text-gray-400">
-            Subject
-          </label>
-          <input
-            type="text"
-            value={subject}
-            onChange={(e) => setSubject(e.target.value)}
-            placeholder="Brief summary of your question or issue"
-            className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
-          />
-        </div>
-
         {/* Description */}
         <div>
-          <label className="block text-xs font-medium uppercase tracking-wider text-gray-400">
+          <label className="block text-xs font-medium uppercase tracking-wider text-slate-400">
             Description
           </label>
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            rows={4}
+            rows={5}
             placeholder="Tell us more about what you need help with..."
-            className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
+            className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-slate-900 transition-colors duration-200 focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
           />
         </div>
 
-        {/* Conditional extra field */}
-        {extraFieldLabel[category] && (
-          <div>
-            <label className="block text-xs font-medium uppercase tracking-wider text-gray-400">
-              {extraFieldLabel[category]}
-            </label>
-            <textarea
-              value={extraField}
-              onChange={(e) => setExtraField(e.target.value)}
-              rows={3}
-              placeholder={
-                category === "bug"
-                  ? "1. Go to...\n2. Click on...\n3. See error..."
-                  : category === "billing"
-                    ? "Plan name, transaction date, amount..."
-                    : "Describe the use case and expected impact..."
-              }
-              className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
-            />
-          </div>
-        )}
-
-        {/* File Upload Zone */}
+        {/* Attachments */}
         <div>
-          <label className="block text-xs font-medium uppercase tracking-wider text-gray-400">
+          <label className="block text-xs font-medium uppercase tracking-wider text-slate-400">
             Attachments
-            <span className="ml-1 normal-case tracking-normal font-normal text-gray-300">
+            <span className="ml-1 normal-case tracking-normal font-normal text-slate-300">
               (optional — screenshots or screen recordings)
             </span>
           </label>
 
-          {/* Drop zone */}
           <div
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
             onClick={() => activeFileCount < MAX_FILES && fileInputRef.current?.click()}
-            className={`mt-1 flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed px-4 py-6 transition-colors ${
+            className={`mt-1 flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed px-4 py-6 transition-colors duration-200 ${
               dragOver
                 ? "border-blue-400 bg-blue-50"
                 : activeFileCount >= MAX_FILES
@@ -428,8 +355,8 @@ ${extraField}` : "",
                   : "border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50"
             }`}
           >
-            <Upload className={`h-5 w-5 ${dragOver ? "text-blue-500" : "text-gray-400"}`} />
-            <p className="mt-2 text-sm text-gray-600">
+            <Upload className={`h-5 w-5 ${dragOver ? "text-blue-500" : "text-slate-400"}`} />
+            <p className="mt-2 text-sm text-slate-600">
               {activeFileCount >= MAX_FILES ? (
                 "Maximum files reached"
               ) : (
@@ -438,7 +365,7 @@ ${extraField}` : "",
                 </>
               )}
             </p>
-            <p className="mt-1 text-xs text-gray-400">
+            <p className="mt-1 text-xs text-slate-400">
               PNG, JPEG, GIF, WebP, MP4, WebM, MOV · Max 25MB per file · Up to 3 files
             </p>
           </div>
@@ -451,11 +378,10 @@ ${extraField}` : "",
             className="hidden"
             onChange={(e) => {
               if (e.target.files) handleFilesSelected(e.target.files)
-              e.target.value = "" // Reset so same file can be re-selected
+              e.target.value = ""
             }}
           />
 
-          {/* Upload error */}
           {uploadError && (
             <div className="mt-2 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2">
               <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-red-500" />
@@ -469,7 +395,6 @@ ${extraField}` : "",
             </div>
           )}
 
-          {/* File list */}
           {files.length > 0 && (
             <div className="mt-3 space-y-2">
               {files.map((f) => (
@@ -481,7 +406,6 @@ ${extraField}` : "",
                       : "border-gray-200 bg-white"
                   }`}
                 >
-                  {/* Preview or icon */}
                   {f.previewUrl ? (
                     <img
                       src={f.previewUrl}
@@ -489,16 +413,15 @@ ${extraField}` : "",
                       className="h-9 w-9 flex-shrink-0 rounded object-cover"
                     />
                   ) : (
-                    <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded bg-gray-100">
+                    <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded bg-slate-100">
                       <FileTypeIcon type={f.fileType} />
                     </div>
                   )}
 
-                  {/* Info */}
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-gray-900">{f.fileName}</p>
+                    <p className="truncate text-sm font-medium text-slate-900">{f.fileName}</p>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-gray-400">{formatFileSize(f.fileSize)}</span>
+                      <span className="text-xs text-slate-400">{formatFileSize(f.fileSize)}</span>
                       {f.status === "uploading" && (
                         <span className="text-xs text-blue-500">Uploading...</span>
                       )}
@@ -510,7 +433,6 @@ ${extraField}` : "",
                       )}
                     </div>
 
-                    {/* Progress bar */}
                     {f.status === "uploading" && (
                       <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-gray-200">
                         <div
@@ -521,13 +443,12 @@ ${extraField}` : "",
                     )}
                   </div>
 
-                  {/* Actions */}
                   {f.status === "uploading" ? (
                     <Loader2 className="h-4 w-4 flex-shrink-0 animate-spin text-blue-400" />
                   ) : (
                     <button
                       onClick={() => removeFile(f.id)}
-                      className="flex-shrink-0 rounded p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+                      className="flex-shrink-0 rounded p-1 text-slate-400 transition-colors duration-200 hover:bg-slate-100 hover:text-slate-600"
                       aria-label={`Remove ${f.fileName}`}
                     >
                       <X className="h-3.5 w-3.5" />
@@ -541,41 +462,52 @@ ${extraField}` : "",
 
         {/* Email (read-only) */}
         <div>
-          <label className="block text-xs font-medium uppercase tracking-wider text-gray-400">
-            Your Email
+          <label className="block text-xs font-medium uppercase tracking-wider text-slate-400">
+            Your email
           </label>
           <input
             type="email"
             value={email}
             readOnly
-            className="mt-1 w-full rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-sm text-gray-500"
+            className="mt-1 w-full rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-sm text-slate-500"
           />
-          <p className="mt-1 text-[11px] text-gray-400">Pre-filled from your account.</p>
+          <p className="mt-1 text-[11px] text-slate-400">Pre-filled from your account.</p>
         </div>
+
+        {/* Send error */}
+        {sendError && (
+          <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2">
+            <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-red-500" />
+            <p className="text-xs text-red-700">{sendError}</p>
+          </div>
+        )}
 
         {/* Submit */}
         <button
           onClick={handleSubmit}
-          disabled={!subject.trim() || !description.trim() || sending || anyUploading}
-          className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-50"
+          disabled={!description.trim() || sending || anyUploading}
+          className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition-colors duration-200 hover:bg-slate-800 disabled:opacity-50"
         >
           {anyUploading ? (
             <>
-              <Loader2 size={16} className="animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin" />
               Uploading files...
+            </>
+          ) : sending ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Sending...
             </>
           ) : (
             <>
-              <Send size={16} />
-              {sending ? "Opening email..." : "Send Message"}
+              <Send className="h-4 w-4" />
+              Send message
             </>
           )}
         </button>
 
-        <p className="text-xs text-gray-400">
-          This will open your email client with the message pre-filled.
-          {completedFiles.length > 0 && " Attachment links will be included in the email body (valid for 7 days)."}
-          {" "}We typically respond within 24 hours.
+        <p className="text-xs text-slate-400">
+          We typically respond within 24 hours.
         </p>
       </div>
     </div>
