@@ -1,6 +1,7 @@
 "use client";
 
 interface BrandingPreviewProps {
+  tenantName?: string;
   logoUrl: string | null;
   primaryColor: string;
   secondaryColor: string;
@@ -9,12 +10,16 @@ interface BrandingPreviewProps {
 }
 
 export function BrandingPreview({
+  tenantName,
   logoUrl,
   primaryColor,
   secondaryColor,
   welcomeMessage,
   brandFooter,
 }: BrandingPreviewProps) {
+  const displayName = tenantName || "Getflowetic";
+  const initial = displayName.charAt(0).toUpperCase();
+
   return (
     <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
       {/* Header bar */}
@@ -30,7 +35,7 @@ export function BrandingPreview({
           />
         ) : (
           <div className="flex h-7 w-7 items-center justify-center rounded bg-white/20 text-xs font-bold text-white">
-            A
+            {initial}
           </div>
         )}
         <span className="text-sm font-semibold text-white">
@@ -63,7 +68,7 @@ export function BrandingPreview({
       {/* Footer */}
       <div className="px-5 py-3 text-center">
         <p className="text-xs text-gray-400">
-          {brandFooter || "© Your Agency Name"}
+          {brandFooter || `Powered by ${displayName}`}
         </p>
       </div>
     </div>

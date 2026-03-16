@@ -148,7 +148,7 @@ export function PortalShell({
                   className="flex h-8 w-8 items-center justify-center rounded-lg text-white text-sm font-bold"
                   style={{ backgroundColor: primaryColor }}
                 >
-                  {tenantName ? tenantName.charAt(0).toUpperCase() : "●"}
+                  {tenantName ? tenantName.charAt(0).toUpperCase() : "G"}
                 </div>
               )}
               <div>
@@ -162,7 +162,7 @@ export function PortalShell({
                   className="text-xs"
                   style={{ color: tokens.textSecondary }}
                 >
-                  Powered by {tenantName}
+                  {tenantName || "Getflowetic"}
                 </p>
               </div>
             </div>
@@ -243,7 +243,7 @@ export function PortalShell({
           }}
         >
           <p className="text-xs" style={{ color: tokens.textMuted }}>
-            {footerText || `© ${new Date().getFullYear()} ${tenantName}. All rights reserved.`}
+            {footerText || `Powered by ${tenantName || "Getflowetic"}`}
           </p>
         </footer>
       </div>

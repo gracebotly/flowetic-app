@@ -7,6 +7,7 @@ import { ColorPicker } from "@/components/settings/ColorPicker";
 import { BrandingPreview } from "@/components/settings/BrandingPreview";
 
 type Branding = {
+  name: string;
   logo_url: string | null;
   primary_color: string;
   secondary_color: string;
@@ -174,7 +175,7 @@ export function BrandingTab() {
             type="text"
             value={brandFooter}
             onChange={(e) => setBrandFooter(e.target.value)}
-            placeholder="Powered by Your Agency Name"
+            placeholder="Powered by Getflowetic"
             className="mt-1 w-full max-w-lg rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
           />
         </div>
@@ -209,6 +210,7 @@ export function BrandingTab() {
         </label>
         <div className="mt-2">
           <BrandingPreview
+            tenantName={branding?.name || "Getflowetic"}
             logoUrl={logoUrl}
             primaryColor={primaryColor}
             secondaryColor={secondaryColor}
