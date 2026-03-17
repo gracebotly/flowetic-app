@@ -439,6 +439,15 @@ export default function AuthShell() {
       }
 
       if (body?.hasSession) {
+        // When Supabase auto-confirms the email, we get a session immediately
+        // but the auth callback (which creates the tenant) is never hit.
+        // Call ensure-tenant to create the tenant + admin membership now.
+        try {
+          await fetch("/api/auth/ensure-tenant", { method: "POST" });
+        } catch {
+          console.warn("[signup] ensure-tenant call failed");
+        }
+
         if (isPayNow) {
           router.push(
             `/control-panel/settings?tab=billing&intent=subscribe&plan=${selectedPlan}`
