@@ -369,18 +369,32 @@ export default function AuthShell() {
       return;
     }
 
-    const { error } = await supabase.auth.resetPasswordForEmail(fpEmail.trim(), {
-      redirectTo: `${window.location.origin}/auth/callback?intent=signin`,
-    });
+    try {
+      const res = await fetch("/api/auth/send-signin-link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: fpEmail.trim() }),
+      });
+      const data = await res.json();
 
-    if (error) {
-      setFpError(error.message);
+      if (!res.ok || !data.ok) {
+        // If typo detected, auto-fill the corrected email
+        if (data.code === "typo_detected" && data.suggested) {
+          setFpEmail(data.suggested);
+          setFpError(data.message);
+        } else {
+          setFpError(data.message || "Something went wrong. Please try again.");
+        }
+        setFpLoading(false);
+        return;
+      }
+
+      setFpSent(true);
       setFpLoading(false);
-      return;
+    } catch {
+      setFpError("Network error. Please try again.");
+      setFpLoading(false);
     }
-
-    setFpSent(true);
-    setFpLoading(false);
   };
 
   // ── Sign-up handler ──

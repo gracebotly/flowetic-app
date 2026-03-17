@@ -430,21 +430,17 @@ export async function POST(req: Request) {
       return errorResponse(400, "MISSING_API_KEY", "Vapi Private API Key is required.");
     }
 
-    const endpoints = [
-      "https://api.vapi.ai/assistant",     // current documented endpoint (singular, no prefix)
-      "https://api.vapi.ai/v1/assistants",
-      "https://api.vapi.ai/assistants",
-      "https://api.vapi.ai/api/v1/assistants",
-      "https://api.vapi.ai/api/assistants",
-      "https://api.vapi.ai/v1/assistant",
-    ];
+    // Use only the documented Vapi endpoint — probing multiple URLs causes 429 rate limits
+    const VAPI_ASSISTANTS_URL = "https://api.vapi.ai/assistant";
+    const MAX_RETRIES = 3;
+    const RETRY_DELAYS = [1000, 2000, 4000]; // ms — exponential backoff
 
     let lastStatus: number | null = null;
     let lastBody = "";
     let okText: string | null = null;
 
-    for (const url of endpoints) {
-      const res = await fetch(url, {
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      const res = await fetch(VAPI_ASSISTANTS_URL, {
         method: "GET",
         headers: {
           Authorization: `Bearer ${key}`,
@@ -460,12 +456,18 @@ export async function POST(req: Request) {
         break;
       }
 
-      // Only fallback on 404 (endpoint moved). For other statuses (401/403/etc) fail immediately.
-      if (res.status !== 404) break;
+      // Retry on 429 rate limit with backoff
+      if (res.status === 429 && attempt < MAX_RETRIES - 1) {
+        console.log(`[Vapi] Rate limited (429), retrying in ${RETRY_DELAYS[attempt]}ms (attempt ${attempt + 1}/${MAX_RETRIES})`);
+        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS[attempt]));
+        continue;
+      }
+
+      // For non-retryable errors, stop immediately
+      break;
     }
 
     if (!okText) {
-      // If endpoint moved (404), don't block connecting; allow credential save and let user manage indexing later.
       if (lastStatus === 404) {
         warnings.push({
           code: "VAPI_INVENTORY_UNAVAILABLE",
@@ -473,6 +475,19 @@ export async function POST(req: Request) {
             "Connected, but Vapi assistants inventory endpoint is unavailable (404). You can manage indexed assistants after connecting.",
         });
         inventoryEntities = [];
+      } else if (lastStatus === 429) {
+        return errorResponse(
+          400,
+          "VAPI_RATE_LIMITED",
+          "Vapi rate limited the request after multiple retries. Please wait 30 seconds and try again.",
+          {
+            platformType,
+            method,
+            providerStatus: 429,
+            providerBodySnippet: safeSnippet(lastBody),
+          },
+          "retry_later",
+        );
       } else {
         const msg = providerAuthMessage({
           platform: "vapi",
@@ -616,7 +631,9 @@ export async function POST(req: Request) {
     const key = String(secretJson?.apiKey || "").trim();
 
     try {
-      const callsRes = await fetch("https://api.vapi.ai/v1/calls?limit=100", {
+      // Small delay to avoid hitting Vapi rate limits after the assistants call
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      const callsRes = await fetch("https://api.vapi.ai/call?limit=100", {
         method: "GET",
         headers: {
           Authorization: `Bearer ${key}`,
