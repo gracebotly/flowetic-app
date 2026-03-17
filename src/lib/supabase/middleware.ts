@@ -6,6 +6,7 @@ const PUBLIC_PATHS = [
   "/login",
   "/signup",
   "/auth/callback",
+  "/auth/confirm",
   "/auth/auth-code-error",
   // Explicitly allow the auth API we need during signup
   "/api/auth/signup",
