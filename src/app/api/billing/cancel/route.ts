@@ -86,8 +86,12 @@ export async function POST(request: NextRequest) {
     );
 
     // Store when the subscription will actually end
-    const cancelAt = updatedSub.current_period_end
-      ? new Date(updatedSub.current_period_end * 1000).toISOString()
+    // Stripe SDK may wrap the response — access data safely
+    const subData = (updatedSub as unknown as { current_period_end?: number }).current_period_end
+      ?? (updatedSub as Record<string, unknown>)["current_period_end"] as number | undefined;
+
+    const cancelAt = subData
+      ? new Date(subData * 1000).toISOString()
       : null;
 
     await supabaseAdmin
