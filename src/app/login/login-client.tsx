@@ -441,8 +441,7 @@ export default function AuthShell() {
       if (body?.hasSession) {
         // When Supabase auto-confirms the email, we get a session immediately
         // but the auth callback (which creates the tenant) is never hit.
-        // Call ensure-tenant to create the tenant + admin membership now.
-        // Pass plan info so the tenant gets the correct plan and trial settings.
+        // Create tenant first, then route accordingly.
         try {
           await fetch("/api/auth/ensure-tenant", {
             method: "POST",
@@ -457,6 +456,23 @@ export default function AuthShell() {
         }
 
         if (isPayNow) {
+          // Redirect to Stripe Checkout directly — don't show the app first.
+          // User stays on this page with loading state until Stripe URL is ready.
+          try {
+            const stripeRes = await fetch("/api/billing/subscribe", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ plan: selectedPlan, skipTrial: true }),
+            });
+            const stripeData = await stripeRes.json();
+            if (stripeData.url) {
+              window.location.href = stripeData.url;
+              return;
+            }
+          } catch {
+            console.warn("[signup] stripe subscribe call failed");
+          }
+          // Fallback: if Stripe call fails, send to billing page
           router.push(
             `/control-panel/settings?tab=billing&intent=subscribe&plan=${selectedPlan}`
           );
