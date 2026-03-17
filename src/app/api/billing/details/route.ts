@@ -89,7 +89,7 @@ export async function GET() {
     if (tenant.stripe_subscription_id) {
       const sub = await stripe.subscriptions.retrieve(tenant.stripe_subscription_id, {
         expand: ["default_payment_method"],
-      });
+      }) as any;
 
       result.subscription = {
         status: sub.status,
