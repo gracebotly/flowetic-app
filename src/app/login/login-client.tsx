@@ -10,6 +10,57 @@ type SignupMode = "7day" | "agency-pay" | "scale-pay";
 const EMAIL_RE =
   /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9]([a-zA-Z0-9\-]*[a-zA-Z0-9])?(\.[a-zA-Z]{2,})+$/;
 
+/** Password strength: 0 = weak, 1 = ok, 2 = good */
+function getPasswordStrength(pw: string): {
+  score: 0 | 1 | 2;
+  label: string;
+  color: string;
+  width: string;
+} {
+  if (!pw || pw.length < 8)
+    return { score: 0, label: "Too short", color: "bg-red-400", width: "33%" };
+  let pts = 0;
+  if (pw.length >= 8) pts++;
+  if (pw.length >= 12) pts++;
+  if (/[A-Z]/.test(pw) || /[0-9]/.test(pw)) pts++;
+  if (/[^A-Za-z0-9]/.test(pw)) pts++;
+  if (pts <= 1) return { score: 0, label: "Weak", color: "bg-red-400", width: "33%" };
+  if (pts <= 2) return { score: 1, label: "OK", color: "bg-amber-400", width: "66%" };
+  return { score: 2, label: "Strong", color: "bg-green-500", width: "100%" };
+}
+
+/** Eye / eye-off SVG icons for show/hide password */
+const EyeIcon = ({ open }: { open: boolean }) => (
+  <svg
+    className="h-4 w-4 text-gray-400"
+    fill="none"
+    viewBox="0 0 24 24"
+    stroke="currentColor"
+    strokeWidth={1.5}
+  >
+    {open ? (
+      <>
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"
+        />
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+        />
+      </>
+    ) : (
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M3.98 8.223A10.477 10.477 0 001.934 12c1.292 4.338 5.31 7.5 10.066 7.5.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88"
+      />
+    )}
+  </svg>
+);
+
 const MODE_CONFIG: Record<
   SignupMode,
   {
@@ -800,32 +851,23 @@ export default function AuthShell() {
                 />
                 {/* Password strength meter */}
                 {suPassword.length > 0 && (
-                  <div className="space-y-1 pt-1">
-                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
+                  <div className="pt-1.5">
+                    <div className="h-1 w-full overflow-hidden rounded-full bg-gray-100">
                       <div
                         className={`h-full rounded-full transition-all duration-300 ${strength.color}`}
                         style={{ width: strength.width }}
                       />
                     </div>
                     <p
-                      className={`text-xs ${
+                      className={`mt-1 text-xs ${
                         strength.score === 0
                           ? "text-red-500"
                           : strength.score === 1
-                            ? "text-amber-600"
+                            ? "text-amber-500"
                             : "text-green-600"
                       }`}
                     >
                       {strength.label}
-                      {strength.score < 2 && (
-                        <span className="text-gray-400">
-                          {" "}
-                          — try adding{" "}
-                          {strength.score === 0
-                            ? "numbers, uppercase, or symbols"
-                            : "more length or special characters"}
-                        </span>
-                      )}
                     </p>
                   </div>
                 )}
