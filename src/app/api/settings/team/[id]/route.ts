@@ -1,7 +1,13 @@
 import { NextResponse } from "next/server";
+import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { getTenantAdmin } from "@/lib/settings/getTenantAdmin";
 
 export const runtime = "nodejs";
+
+const supabaseAdmin = createServiceClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 function json(status: number, data: Record<string, unknown>) {
   return NextResponse.json(data, { status });
@@ -25,13 +31,11 @@ export async function PATCH(
   }
 
   const newRole = body.role;
-  // Validate against existing CHECK constraint
   const validRoles = ["admin", "client", "viewer"];
   if (!newRole || !validRoles.includes(newRole)) {
     return json(400, { ok: false, code: "INVALID_ROLE" });
   }
 
-  // Cannot change your own role
   const { data: targetMember } = await auth.supabase
     .from("memberships")
     .select("id, user_id, role")
@@ -64,7 +68,7 @@ export async function PATCH(
 }
 
 // ── DELETE /api/settings/team/[id] ──────────────────────────
-// Removes a member from the tenant. Admin only.
+// Removes a member OR revokes a pending invite. Admin only.
 export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -73,7 +77,7 @@ export async function DELETE(
   const auth = await getTenantAdmin({ requireAdmin: true });
   if (!auth.ok) return json(auth.status, { ok: false, code: auth.code });
 
-  // Look up the target member
+  // First, try to find this as a membership
   const { data: targetMember } = await auth.supabase
     .from("memberships")
     .select("id, user_id, role")
@@ -81,32 +85,45 @@ export async function DELETE(
     .eq("tenant_id", auth.tenantId)
     .maybeSingle();
 
-  if (!targetMember) {
-    return json(404, { ok: false, code: "MEMBER_NOT_FOUND" });
-  }
+  if (targetMember) {
+    // It's a membership — remove it
+    if (targetMember.user_id === auth.userId) {
+      const { count } = await auth.supabase
+        .from("memberships")
+        .select("id", { count: "exact", head: true })
+        .eq("tenant_id", auth.tenantId)
+        .eq("role", "admin");
 
-  // Cannot remove yourself if you're the only admin
-  if (targetMember.user_id === auth.userId) {
-    const { count } = await auth.supabase
-      .from("memberships")
-      .select("id", { count: "exact", head: true })
-      .eq("tenant_id", auth.tenantId)
-      .eq("role", "admin");
-
-    if ((count ?? 0) <= 1) {
-      return json(400, { ok: false, code: "LAST_ADMIN" });
+      if ((count ?? 0) <= 1) {
+        return json(400, { ok: false, code: "LAST_ADMIN" });
+      }
     }
+
+    const { error } = await auth.supabase
+      .from("memberships")
+      .delete()
+      .eq("id", id)
+      .eq("tenant_id", auth.tenantId);
+
+    if (error) {
+      console.error("[DELETE /api/settings/team/[id]] Delete failed:", error);
+      return json(500, { ok: false, code: "DELETE_FAILED" });
+    }
+
+    return json(200, { ok: true });
   }
 
-  const { error } = await auth.supabase
-    .from("memberships")
-    .delete()
+  // Not a membership — try team_invites (revoke pending invite)
+  const { error: revokeErr } = await supabaseAdmin
+    .from("team_invites")
+    .update({ status: "revoked", updated_at: new Date().toISOString() })
     .eq("id", id)
-    .eq("tenant_id", auth.tenantId);
+    .eq("tenant_id", auth.tenantId)
+    .eq("status", "pending");
 
-  if (error) {
-    console.error("[DELETE /api/settings/team/[id]] Delete failed:", error);
-    return json(500, { ok: false, code: "DELETE_FAILED" });
+  if (revokeErr) {
+    console.error("[DELETE /api/settings/team/[id]] Revoke failed:", revokeErr);
+    return json(500, { ok: false, code: "REVOKE_FAILED" });
   }
 
   return json(200, { ok: true });

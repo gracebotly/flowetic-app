@@ -1,22 +1,27 @@
 import { NextResponse } from "next/server";
+import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { getTenantAdmin } from "@/lib/settings/getTenantAdmin";
 import { checkTeamLimit } from "@/lib/plans/checkLimits";
 
 export const runtime = "nodejs";
+
+const supabaseAdmin = createServiceClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 function json(status: number, data: Record<string, unknown>) {
   return NextResponse.json(data, { status });
 }
 
 // ── GET /api/settings/team ──────────────────────────────────
-// Lists all memberships for the tenant with user details.
-// Any authenticated member can read the team list.
+// Returns active members + pending invites for the tenant.
 export async function GET() {
   const auth = await getTenantAdmin();
   if (!auth.ok) return json(auth.status, { ok: false, code: auth.code });
 
-  // Get memberships with user info via join on public.users
-  const { data: members, error } = await auth.supabase
+  // 1) Active members from memberships
+  const { data: members, error: mErr } = await auth.supabase
     .from("memberships")
     .select(`
       id,
@@ -28,31 +33,59 @@ export async function GET() {
       users!memberships_user_id_fkey ( email, name )
     `)
     .eq("tenant_id", auth.tenantId)
+    .eq("invite_status", "active")
     .order("created_at", { ascending: true });
 
-  if (error) {
-    console.error("[GET /api/settings/team] Fetch failed:", error);
+  if (mErr) {
+    console.error("[GET /api/settings/team] Members fetch failed:", mErr);
     return json(500, { ok: false, code: "FETCH_FAILED" });
   }
 
-  // Flatten user data into each member record
   const teamMembers = (members ?? []).map((m: any) => ({
     id: m.id,
     user_id: m.user_id,
     email: m.users?.email ?? m.invited_email ?? "Unknown",
     name: m.users?.name ?? null,
     role: m.role,
-    invite_status: m.invite_status,
+    invite_status: "active",
     created_at: m.created_at,
     is_you: m.user_id === auth.userId,
   }));
 
-  return json(200, { ok: true, members: teamMembers });
+  // 2) Pending invites from team_invites
+  const { data: pendingInvites, error: iErr } = await auth.supabase
+    .from("team_invites")
+    .select("id, email, role, status, created_at, expires_at")
+    .eq("tenant_id", auth.tenantId)
+    .eq("status", "pending")
+    .order("created_at", { ascending: false });
+
+  if (iErr) {
+    console.error("[GET /api/settings/team] Invites fetch failed:", iErr);
+  }
+
+  const pendingMembers = (pendingInvites ?? []).map((inv: any) => ({
+    id: inv.id,
+    user_id: "",
+    email: inv.email,
+    name: null,
+    role: inv.role,
+    invite_status: "pending",
+    created_at: inv.created_at,
+    expires_at: inv.expires_at,
+    is_you: false,
+    is_invite: true,
+  }));
+
+  return json(200, {
+    ok: true,
+    members: [...teamMembers, ...pendingMembers],
+  });
 }
 
 // ── POST /api/settings/team ─────────────────────────────────
-// Invites a new team member. Admin only.
-// Creates a membership with invite_status='pending' and generates invite_token.
+// Invites a new team member via email. Admin only.
+// Creates a row in team_invites and sends invite email via Supabase Auth.
 export async function POST(req: Request) {
   const auth = await getTenantAdmin({ requireAdmin: true });
   if (!auth.ok) return json(auth.status, { ok: false, code: auth.code });
@@ -67,15 +100,24 @@ export async function POST(req: Request) {
   const email = body.email?.trim().toLowerCase();
   const role = body.role ?? "viewer";
 
+  if (!email || !email.includes("@")) {
+    return json(400, { ok: false, code: "INVALID_EMAIL" });
+  }
+
+  const validRoles = ["admin", "client", "viewer"];
+  if (!validRoles.includes(role)) {
+    return json(400, { ok: false, code: "INVALID_ROLE" });
+  }
+
   // ── Plan seat limit check ───────────────────────────────
   try {
     const teamLimit = await checkTeamLimit(auth.supabase, auth.tenantId);
     if (!teamLimit.allowed) {
       const message =
-        teamLimit.reason === 'trial_expired'
-          ? 'Your free trial has expired. Please subscribe to continue.'
-          : teamLimit.reason === 'plan_inactive'
-            ? 'Your subscription is not active. Please update your billing.'
+        teamLimit.reason === "trial_expired"
+          ? "Your free trial has expired. Please subscribe to continue."
+          : teamLimit.reason === "plan_inactive"
+            ? "Your subscription is not active. Please update your billing."
             : `Team seat limit reached (${teamLimit.current}/${teamLimit.limit}). Upgrade to Scale for unlimited team members.`;
       return json(403, {
         ok: false,
@@ -88,46 +130,22 @@ export async function POST(req: Request) {
     }
   } catch (err) {
     console.error("[POST /api/settings/team] Seat limit check failed:", err);
-    // Don't block invite if the RPC fails — log and continue
   }
 
-  if (!email || !email.includes("@")) {
-    return json(400, { ok: false, code: "INVALID_EMAIL" });
-  }
-
-  // Validate role against existing CHECK constraint: ['admin', 'client', 'viewer']
-  // Note: 'editor' role is NOT yet in the DB constraint — will be added in a later phase.
-  const validRoles = ["admin", "client", "viewer"];
-  if (!validRoles.includes(role)) {
-    return json(400, { ok: false, code: "INVALID_ROLE" });
-  }
-
-  // Check for duplicate invite (same email, same tenant, not revoked)
-  const { data: existingInvite } = await auth.supabase
-    .from("memberships")
-    .select("id, invite_status")
-    .eq("tenant_id", auth.tenantId)
-    .eq("invited_email", email)
-    .neq("invite_status", "revoked")
-    .maybeSingle();
-
-  if (existingInvite) {
-    return json(409, { ok: false, code: "ALREADY_INVITED" });
-  }
-
-  // Also check if a user with this email is already an active member
-  const { data: existingUser } = await auth.supabase
+  // Check if already a member of this tenant
+  const { data: existingUser } = await supabaseAdmin
     .from("users")
     .select("id")
     .eq("email", email)
     .maybeSingle();
 
   if (existingUser) {
-    const { data: existingMembership } = await auth.supabase
+    const { data: existingMembership } = await supabaseAdmin
       .from("memberships")
       .select("id")
       .eq("tenant_id", auth.tenantId)
       .eq("user_id", existingUser.id)
+      .eq("invite_status", "active")
       .maybeSingle();
 
     if (existingMembership) {
@@ -135,77 +153,101 @@ export async function POST(req: Request) {
     }
   }
 
-  // Generate invite token
-  const inviteToken = crypto.randomUUID();
-
-  // Create pending membership
-  // user_id is required (NOT NULL + FK), so we use a placeholder approach:
-  // We set user_id to the inviting admin's ID temporarily. When the invite is
-  // accepted, we update user_id to the actual user. The unique constraint on
-  // (tenant_id, user_id) means we need the real user's ID, so for pending
-  // invites where we don't have a user yet, we need a different approach.
-  //
-  // Alternative: Insert with the existing user's ID if they have an account,
-  // or skip the insert and just track the invite separately.
-  // Since user_id is NOT NULL with FK constraint, we check if the user exists first.
-
-  let membershipData: Record<string, unknown>;
-
-  if (existingUser) {
-    // User exists in our system but isn't a member of this tenant yet
-    membershipData = {
-      tenant_id: auth.tenantId,
-      user_id: existingUser.id,
-      role,
-      invited_email: email,
-      invite_token: inviteToken,
-      invite_status: "pending",
-    };
-  } else {
-    // User doesn't exist yet — we can't create a membership row because
-    // user_id is NOT NULL with FK to users. Store as a "pre-invite" that
-    // gets converted when they sign up and accept.
-    // For MVP: Return the invite link. The /invite/[token] accept page
-    // will create the membership after signup.
-    //
-    // We'll store the invite data in a lightweight way: create a temporary
-    // record only if the user exists. Otherwise, return a token-based link
-    // that the accept endpoint will handle.
-    return json(200, {
-      ok: true,
-      invite: {
-        email,
-        role,
-        token: inviteToken,
-        invite_link: `/invite/${inviteToken}`,
-        note: "User does not have an account yet. Share this link — they will be prompted to sign up first.",
-      },
-      // Store token mapping for the accept endpoint
-      // In a future phase, this should be a dedicated invites table.
-      // For now, we return the link and the accept endpoint validates.
-      _pending: { tenant_id: auth.tenantId, email, role, token: inviteToken },
-    });
-  }
-
-  const { data: membership, error } = await auth.supabase
-    .from("memberships")
-    .insert(membershipData)
-    .select("id, role, invited_email, invite_status, invite_token")
+  // Check for existing pending invite
+  const { data: existingInvite } = await supabaseAdmin
+    .from("team_invites")
+    .select("id")
+    .eq("tenant_id", auth.tenantId)
+    .eq("email", email)
+    .eq("status", "pending")
     .maybeSingle();
 
-  if (error) {
-    console.error("[POST /api/settings/team] Insert failed:", error);
-    return json(500, { ok: false, code: "INVITE_FAILED", message: error.message });
+  if (existingInvite) {
+    return json(409, { ok: false, code: "ALREADY_INVITED" });
+  }
+
+  // Create the invite
+  const { data: invite, error: insertErr } = await supabaseAdmin
+    .from("team_invites")
+    .insert({
+      tenant_id: auth.tenantId,
+      email,
+      role,
+      invited_by: auth.userId,
+      expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+    })
+    .select("id, token, email, role")
+    .single();
+
+  if (insertErr || !invite) {
+    console.error("[POST /api/settings/team] Insert failed:", insertErr);
+    return json(500, { ok: false, code: "INVITE_FAILED", message: insertErr?.message });
+  }
+
+  // Get tenant name for the email
+  const { data: tenant } = await supabaseAdmin
+    .from("tenants")
+    .select("name")
+    .eq("id", auth.tenantId)
+    .maybeSingle();
+
+  // Get inviter's email for the "from" context
+  const { data: inviter } = await supabaseAdmin
+    .from("users")
+    .select("email, name")
+    .eq("id", auth.userId)
+    .maybeSingle();
+
+  // Send invite email via Supabase Auth magic link
+  // This uses Supabase's built-in email system (SMTP configured in dashboard)
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://app.getflowetic.com";
+  const inviteLink = `${siteUrl}/invite/${invite.token}`;
+
+  // Try to send via Supabase inviteUserByEmail for users without accounts,
+  // or a magic link for existing users
+  if (!existingUser) {
+    // User doesn't exist yet — use Supabase admin.inviteUserByEmail
+    // This creates the auth user and sends them a signup email
+    const { error: inviteErr } = await supabaseAdmin.auth.admin.inviteUserByEmail(
+      email,
+      {
+        redirectTo: `${siteUrl}/invite/${invite.token}`,
+        data: {
+          invite_token: invite.token,
+          tenant_name: tenant?.name || "a workspace",
+          invited_by: inviter?.name || inviter?.email || "A team admin",
+        },
+      }
+    );
+
+    if (inviteErr) {
+      console.error("[POST /api/settings/team] Email send failed:", inviteErr);
+      // Don't fail the invite — the link still works manually
+    }
+  } else {
+    // User exists — send magic link that redirects to invite accept
+    const { error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
+      type: "magiclink",
+      email,
+      options: {
+        redirectTo: `${siteUrl}/invite/${invite.token}`,
+      },
+    });
+
+    if (linkErr) {
+      console.error("[POST /api/settings/team] Magic link failed:", linkErr);
+    }
   }
 
   return json(200, {
     ok: true,
     invite: {
-      id: membership?.id,
-      email,
-      role,
-      token: inviteToken,
-      invite_link: `/invite/${inviteToken}`,
+      id: invite.id,
+      email: invite.email,
+      role: invite.role,
+      invite_link: inviteLink,
+      tenant_name: tenant?.name || "Workspace",
+      inviter_name: inviter?.name || inviter?.email || "",
     },
   });
 }
