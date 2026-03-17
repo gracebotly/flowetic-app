@@ -104,6 +104,46 @@ export function BillingTab() {
     }
   }, []);
 
+  // Auto-redirect to Stripe Checkout when arriving from pay-now signup
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const intent = params.get("intent");
+    const plan = params.get("plan");
+
+    if (intent === "subscribe" && (plan === "agency" || plan === "scale")) {
+      // Clean URL immediately so refresh doesn't re-trigger
+      const url = new URL(window.location.href);
+      url.searchParams.delete("intent");
+      url.searchParams.delete("plan");
+      window.history.replaceState({}, "", url.toString());
+
+      // Auto-trigger Stripe Checkout with skipTrial since they chose to pay
+      const autoSubscribe = async () => {
+        setActionLoading("subscribe");
+        try {
+          const res = await fetch("/api/billing/subscribe", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ plan, skipTrial: true }),
+          });
+          const data = await res.json();
+          if (data.url) {
+            window.location.href = data.url;
+            return;
+          }
+          if (data.error) {
+            setError(data.error);
+          }
+        } catch {
+          setError("Failed to start subscription. Please try the subscribe button below.");
+        }
+        setActionLoading(null);
+      };
+
+      void autoSubscribe();
+    }
+  }, []);
+
   const handleSubscribe = async (plan: string) => {
     setActionLoading("subscribe");
     try {
