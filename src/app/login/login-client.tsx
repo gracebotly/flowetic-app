@@ -633,15 +633,30 @@ export default function AuthShell() {
                 </div>
               )}
 
-              <button
-                type="button"
-                onClick={() => signInWithGoogle("signin")}
-                disabled={googleLoading}
-                className="flex w-full items-center justify-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
-              >
-                <GoogleIcon />
-                {googleLoading ? "Redirecting..." : "Continue with Google"}
-              </button>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => signInWithGoogle("signin")}
+                  disabled={googleLoading}
+                  className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 transition-colors duration-200 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  <GoogleIcon />
+                  {googleLoading ? "Redirecting..." : "Google"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setForgotMode(true);
+                    setFpEmail(siEmail);
+                    setFpError(null);
+                    setFpSent(false);
+                  }}
+                  className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 transition-colors duration-200 hover:bg-gray-50"
+                >
+                  <Mail className="h-4 w-4 text-slate-500" />
+                  Email link
+                </button>
+              </div>
 
               <OAuthDivider />
 
@@ -722,10 +737,10 @@ export default function AuthShell() {
           
               <div>
                 <h1 className="text-lg font-semibold tracking-tight text-gray-900">
-                  Reset your password
+                  Sign in with email link
                 </h1>
                 <p className="mt-0.5 text-xs text-slate-500">
-                  We&apos;ll send you a password reset link.
+                  We&apos;ll send a one-time link to your inbox. No password needed.
                 </p>
               </div>
 
@@ -741,17 +756,17 @@ export default function AuthShell() {
                     <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-blue-50">
                       <Mail className="h-5 w-5 text-blue-600" />
                     </div>
-                    <p className="text-sm font-semibold text-slate-900">
-                      Recovery link sent
+                    <p className="text-sm font-medium text-green-800">
+                      Check your email
                     </p>
-                    <p className="mt-2 text-xs leading-relaxed text-slate-600">
-                      We sent a password reset link to{" "}
-                      <span className="font-medium text-slate-800">{fpEmail}</span>.
+                    <p className="mt-1 text-xs text-green-700">
+                      We sent a sign-in link to{" "}
+                      <span className="font-medium">{fpEmail}</span>.
+                      <br />
+                      Click the link and you&apos;ll be signed in instantly.
                     </p>
-                    <p className="mt-2 text-xs leading-relaxed text-slate-500">
-                      Don&apos;t see it? Check your{" "}
-                      <span className="font-medium text-slate-600">spam or promotions</span>{" "}
-                      folder.
+                    <p className="mt-2 text-xs text-green-600/70">
+                      Don&apos;t see it? Check your spam folder.
                     </p>
                   </div>
                   <button

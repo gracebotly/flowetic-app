@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { ControlPanelSidebar } from "@/components/layout/cp-sidebar";
 import { TrialBanner } from "@/components/layout/TrialBanner";
+import { EmailConfirmBanner } from "@/components/layout/EmailConfirmBanner";
 import { BlockedPage } from "@/components/billing/BlockedPage";
 import { SoftBlockBanner } from "@/components/billing/SoftBlockBanner";
 import { getPlanLimits } from "@/lib/plans/constants";
@@ -105,6 +106,7 @@ export default async function ControlPanelLayout({
         tenantColor={tenantColor}
       />
       <div className="flex flex-1 flex-col">
+        <EmailConfirmBanner />
         {/* Show soft block banner OR trial banner, not both */}
         {blockInfo.level === "soft_block" && blockInfo.reason ? (
           <SoftBlockBanner

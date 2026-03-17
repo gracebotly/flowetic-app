@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Plus, Layers, ArrowUpRight } from "lucide-react";
 import { SurfaceBadge } from "@/components/offerings/SurfaceBadge";
@@ -35,7 +36,9 @@ export default function OfferingsPage() {
   const [offerings, setOfferings] = useState<Offering[]>([]);
   const [loading, setLoading] = useState(true);
   const [usageData, setUsageData] = useState<{ current: number; limit: number } | null>(null);
+  const [emailBlocked, setEmailBlocked] = useState(false);
   const atLimit = usageData ? usageData.current >= usageData.limit : false;
+  const router = useRouter();
 
   useEffect(() => {
     async function load() {
@@ -100,13 +103,37 @@ export default function OfferingsPage() {
             Upgrade Plan
           </Link>
         ) : (
-          <Link
-            href="/control-panel/client-portals/create"
-            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-          >
-            <Plus className="h-4 w-4" />
-            New Portal
-          </Link>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={async () => {
+                const supabase = (await import("@/lib/supabase/client")).createClient();
+                const {
+                  data: { user },
+                } = await supabase.auth.getUser();
+                if (user && !user.email_confirmed_at) {
+                  setEmailBlocked(true);
+                  setTimeout(() => setEmailBlocked(false), 3000);
+                  return;
+                }
+                router.push("/control-panel/client-portals/create");
+              }}
+              className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors duration-200 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            >
+              <Plus className="h-4 w-4" />
+              New Portal
+            </button>
+            {emailBlocked && (
+              <div className="absolute right-0 top-full z-50 mt-2 w-64 rounded-lg border border-blue-200 bg-white p-3 shadow-lg">
+                <p className="text-xs text-slate-900">
+                  Verify your email before creating a portal.
+                </p>
+                <p className="mt-1 text-xs text-slate-600">
+                  Check your inbox for a confirmation link.
+                </p>
+              </div>
+            )}
+          </div>
         )}
       </div>
 
