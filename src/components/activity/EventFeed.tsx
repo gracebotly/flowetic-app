@@ -73,8 +73,8 @@ export function EventFeed({
           No activity yet
         </h3>
         <p className="mt-1 max-w-sm text-sm text-gray-500">
-          Events will appear here as you create clients, publish offerings, and
-          connect platforms.
+          Events will appear here as you connect platforms, add clients, create
+          client portals, and run workflows.
         </p>
       </div>
     );
