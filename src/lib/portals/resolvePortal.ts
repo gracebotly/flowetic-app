@@ -102,10 +102,23 @@ export async function resolvePortal(
     console.error('[resolvePortal] Events fetch error:', eventsError.message);
   }
 
-  // ── 4b. Filter events to this entity ────────────────────────
+  // ── 4b. Check if this is a multi-entity portal FIRST ─────────
+  // We need to know this before deciding whether to apply single-entity filtering.
+  // If portal_entities has rows, this is a multi-entity portal and step 4c
+  // will handle ALL filtering. We must NOT narrow events here or step 4c
+  // will receive an already-filtered set missing the other entities' events.
   let filteredEvents = events ?? [];
 
-  if (portal.entity_id) {
+  const { data: offeringEntities } = await supabaseAdmin
+    .from('portal_entities')
+    .select('source_id, entity_id')
+    .eq('portal_id', portal.id);
+
+  const isMultiEntity = offeringEntities && offeringEntities.length > 0;
+
+  // Only apply single-entity filter for portals WITHOUT portal_entities rows.
+  // Multi-entity portals are handled entirely by step 4c below.
+  if (!isMultiEntity && portal.entity_id) {
     const { data: entity } = await supabaseAdmin
       .from('source_entities')
       .select('external_id')
@@ -136,7 +149,7 @@ export async function resolvePortal(
   // ── 4b-synth. Synthesize events from aggregate_stats when no real events exist ──
   // This handles webhook-triggered Make scenarios where individual execution logs
   // are not available but the platform provides aggregate totals.
-  if (filteredEvents.length === 0 && portal.entity_id) {
+  if (!isMultiEntity && filteredEvents.length === 0 && portal.entity_id) {
     const { data: entityWithStats } = await supabaseAdmin
       .from('source_entities')
       .select('external_id, display_name, aggregate_stats')
@@ -185,16 +198,12 @@ export async function resolvePortal(
     }
   }
 
-  // ── 4c. Multi-entity portals (offering_entities) ───────────
+  // ── 4c. Multi-entity portals (portal_entities) ───────────
   // Handles both:
   //   a) Cross-source: entities from different platform connections
   //   b) Same-source: multiple entities (e.g. 3 Make scenarios) from the same connection
-  const { data: offeringEntities } = await supabaseAdmin
-    .from('portal_entities')
-    .select('source_id, entity_id')
-    .eq('portal_id', portal.id);
-
-  if (offeringEntities && offeringEntities.length > 0) {
+  // NOTE: offeringEntities was already fetched in step 4b above.
+  if (isMultiEntity && offeringEntities) {
     // Fetch external_ids for ALL entities in this portal
     const allEntityIds = offeringEntities.map((oe) => String(oe.entity_id));
     const { data: allEntityRecords } = await supabaseAdmin
