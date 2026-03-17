@@ -321,6 +321,7 @@ export default function ConnectionsPage() {
 
   // Connect modal state
   const [connectOpen, setConnectOpen] = useState(false);
+  const [emailBlocked, setEmailBlocked] = useState(false);
   const [step, setStep] = useState<"platform" | "method" | "credentials" | "entities" | "success">("platform");
   const [isPostConnectSelection, setIsPostConnectSelection] = useState(false);
   
@@ -950,7 +951,16 @@ export default function ConnectionsPage() {
     setConnectWarnings([]);
   }
 
-  function openConnect() {
+  async function openConnect() {
+    const supabase = (await import("@/lib/supabase/client")).createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user && !user.email_confirmed_at) {
+      setEmailBlocked(true);
+      setTimeout(() => setEmailBlocked(false), 3000);
+      return;
+    }
     resetModal();
     setConnectOpen(true);
   }
@@ -1442,13 +1452,25 @@ export default function ConnectionsPage() {
             <RefreshCw className={`h-4 w-4 ${syncing ? "animate-spin" : ""}`} />
             {syncing ? "Syncing…" : "Sync All"}
           </button>
-          <button
-            type="button"
-            onClick={openConnect}
-            className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600"
-          >
-            Connect Platform
-          </button>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={openConnect}
+              className="cursor-pointer rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors duration-200 hover:bg-blue-700"
+            >
+              Connect Platform
+            </button>
+            {emailBlocked && (
+              <div className="absolute right-0 top-full z-50 mt-2 w-64 rounded-lg border border-blue-200 bg-white p-3 shadow-lg">
+                <p className="text-xs text-slate-900">
+                  Verify your email before connecting a platform.
+                </p>
+                <p className="mt-1 text-xs text-slate-600">
+                  Check your inbox for a confirmation link.
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
