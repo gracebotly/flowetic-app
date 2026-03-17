@@ -6,6 +6,10 @@ import { useState } from "react";
 
 type SignupMode = "7day" | "agency-pay" | "scale-pay";
 
+/** Must match the regex in /api/auth/signup/route.ts */
+const EMAIL_RE =
+  /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9]([a-zA-Z0-9\-]*[a-zA-Z0-9])?(\.[a-zA-Z]{2,})+$/;
+
 const MODE_CONFIG: Record<
   SignupMode,
   {
@@ -166,7 +170,7 @@ export default function AuthShell() {
     e.preventDefault();
     setSiLoading(true);
     setSiError(null);
-    const { error } = await supabase.auth.signInWithPassword({
+    const { error, data } = await supabase.auth.signInWithPassword({
       email: siEmail,
       password: siPassword,
     });
@@ -175,6 +179,18 @@ export default function AuthShell() {
       setSiLoading(false);
       return;
     }
+
+    // Safety net: if user somehow has no tenant (e.g. email-confirm callback
+    // failed to create one), create it now via the ensure-tenant API.
+    if (data?.user) {
+      try {
+        await fetch("/api/auth/ensure-tenant", { method: "POST" });
+      } catch {
+        // Non-fatal — the page will still load, just might show "contact admin"
+        console.warn("[login] ensure-tenant call failed");
+      }
+    }
+
     router.push(next);
     router.refresh();
   };
@@ -206,6 +222,13 @@ export default function AuthShell() {
     setSuLoading(true);
     setSuError(null);
 
+    // Client-side email validation
+    if (!EMAIL_RE.test(suEmail.trim())) {
+      setSuError("Please enter a valid email address (e.g. you@company.com).");
+      setSuLoading(false);
+      return;
+    }
+
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
     if (!siteUrl || !siteUrl.startsWith("http")) {
       setSuError("Missing NEXT_PUBLIC_SITE_URL env var.");
@@ -226,6 +249,7 @@ export default function AuthShell() {
           name: suName,
           email: suEmail,
           password: suPassword,
+          trial: trialParam,
           redirectTo,
         }),
       });
