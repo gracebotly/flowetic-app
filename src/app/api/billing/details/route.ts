@@ -149,7 +149,7 @@ export async function GET() {
     const invoices = await stripe.invoices.list({
       customer: tenant.stripe_customer_id,
       limit: 12,
-    });
+    }) as any;
 
     result.invoices = invoices.data.map((inv) => ({
       id: inv.id,
