@@ -119,8 +119,8 @@ export async function POST(request: NextRequest) {
         };
 
         // Track cancel_at date
-        if (subscription.cancel_at_period_end && subscription.current_period_end) {
-          updateData.cancel_at = new Date(subscription.current_period_end * 1000).toISOString();
+        if (subscription.cancel_at_period_end && subscription.cancel_at) {
+          updateData.cancel_at = new Date(subscription.cancel_at * 1000).toISOString();
         } else {
           updateData.cancel_at = null;
         }

@@ -86,9 +86,9 @@ export async function POST(request: NextRequest) {
     );
 
     // Store when the subscription will actually end
-    const sub = updatedSub as unknown as { current_period_end?: number };
-    const cancelAt = sub.current_period_end
-      ? new Date(sub.current_period_end * 1000).toISOString()
+    // In Stripe v18, cancel_at is set automatically when cancel_at_period_end is true
+    const cancelAt = updatedSub.cancel_at
+      ? new Date(updatedSub.cancel_at * 1000).toISOString()
       : null;
 
     await supabaseAdmin
