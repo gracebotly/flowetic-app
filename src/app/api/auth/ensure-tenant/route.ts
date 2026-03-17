@@ -1,9 +1,5 @@
 // src/app/api/auth/ensure-tenant/route.ts
-//
-// Safety-net endpoint: if a signed-in user has no tenant/membership
-// (e.g. the email-confirm callback failed), create them now.
-//
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { TRIAL_DAYS_WITHOUT_CARD } from "@/lib/plans/constants";
@@ -15,7 +11,7 @@ const supabaseAdmin = createServiceClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-export async function POST() {
+export async function POST(request: NextRequest) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -36,6 +32,17 @@ export async function POST() {
     return NextResponse.json({ ok: true, reason: "already_exists" });
   }
 
+  // Parse optional body params
+  let plan = "agency";
+  let skipTrial = false;
+  try {
+    const body = await request.json();
+    if (body?.plan === "scale" || body?.plan === "agency") plan = body.plan;
+    if (body?.skipTrial === true) skipTrial = true;
+  } catch {
+    // No body or invalid JSON — use defaults
+  }
+
   // Create tenant + membership
   const workspaceName = user.email
     ? `${user.email.split("@")[0]}'s Workspace`
@@ -45,12 +52,14 @@ export async function POST() {
     .from("tenants")
     .insert({
       name: workspaceName,
-      plan: "agency",
+      plan,
       plan_status: "trialing",
       has_card_on_file: false,
-      trial_ends_at: new Date(
-        Date.now() + TRIAL_DAYS_WITHOUT_CARD * 24 * 60 * 60 * 1000
-      ).toISOString(),
+      trial_ends_at: skipTrial
+        ? null
+        : new Date(
+            Date.now() + TRIAL_DAYS_WITHOUT_CARD * 24 * 60 * 60 * 1000
+          ).toISOString(),
     })
     .select()
     .single();
@@ -77,6 +86,6 @@ export async function POST() {
     );
   }
 
-  console.log(`[ensure-tenant] Created tenant ${tenant.id} for user ${user.id}`);
+  console.log(`[ensure-tenant] Created tenant ${tenant.id} (plan=${plan}, skipTrial=${skipTrial}) for user ${user.id}`);
   return NextResponse.json({ ok: true, reason: "created", tenantId: tenant.id });
 }
