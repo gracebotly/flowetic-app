@@ -106,12 +106,24 @@ export async function POST(request: NextRequest) {
           paused: "past_due",
         };
 
-        const planStatus = statusMap[subscription.status] ?? "trialing";
+        let planStatus = statusMap[subscription.status] ?? "trialing";
+
+        // If subscription is active but scheduled to cancel, mark as "cancelling"
+        if (subscription.status === "active" && subscription.cancel_at_period_end) {
+          planStatus = "cancelling";
+        }
 
         const updateData: Record<string, unknown> = {
           plan_status: planStatus,
           plan_updated_at: new Date().toISOString(),
         };
+
+        // Track cancel_at date
+        if (subscription.cancel_at_period_end && subscription.cancel_at) {
+          updateData.cancel_at = new Date(subscription.cancel_at * 1000).toISOString();
+        } else {
+          updateData.cancel_at = null;
+        }
 
         // If subscription becomes active (trial ended, payment succeeded)
         if (subscription.status === "active") {

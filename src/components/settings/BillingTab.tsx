@@ -37,6 +37,7 @@ type BillingStatus = {
   has_subscription: boolean;
   price_cents: number | null;
   platform_fee_percent: number;
+  cancel_at: string | null;
 };
 
 function daysUntil(dateStr: string): number {
@@ -188,6 +189,27 @@ export function BillingTab() {
     setActionLoading(null);
   };
 
+  const handleResubscribe = async () => {
+    setActionLoading("resubscribe");
+    try {
+      const res = await fetch("/api/billing/resubscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      const data = await res.json();
+      if (data.ok) {
+        window.location.reload();
+        return;
+      }
+      if (data.error) {
+        setError(data.error);
+      }
+    } catch {
+      setError("Failed to resubscribe.");
+    }
+    setActionLoading(null);
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center py-16">
@@ -241,6 +263,10 @@ export function BillingTab() {
     badgeText = `${planLabel} — Past due`;
     badgeDotClass = "bg-red-500";
     badgeBgClass = "bg-red-50 text-red-700";
+  } else if (planStatus === "cancelling") {
+    badgeText = `${planLabel} — Cancelling`;
+    badgeDotClass = "bg-amber-500";
+    badgeBgClass = "bg-amber-50 text-amber-700";
   } else if (planStatus === "cancelled") {
     badgeText = `${planLabel} — Cancelled`;
     badgeDotClass = "bg-slate-400";
@@ -251,11 +277,13 @@ export function BillingTab() {
   const planBorderColor =
     trialExpired || planStatus === "past_due"
       ? "border-l-red-500"
-      : planStatus === "trialing"
+      : planStatus === "cancelling"
         ? "border-l-amber-500"
-        : planStatus === "active"
-          ? "border-l-slate-900"
-          : "border-l-slate-300";
+        : planStatus === "trialing"
+          ? "border-l-amber-500"
+          : planStatus === "active"
+            ? "border-l-slate-900"
+            : "border-l-slate-300";
 
   return (
     <div className="space-y-3">
@@ -331,6 +359,28 @@ export function BillingTab() {
                   : usage.usage.members.limit
               }
             />
+          </div>
+        )}
+
+        {/* Cancelling banner */}
+        {planStatus === "cancelling" && billing?.cancel_at && (
+          <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+            <p className="text-sm font-medium text-amber-800">
+              Your plan ends on {formatDate(billing.cancel_at)}
+            </p>
+            <p className="mt-0.5 text-xs text-amber-700">
+              You have full access until then. Changed your mind?
+            </p>
+            <button
+              onClick={handleResubscribe}
+              disabled={actionLoading === "resubscribe"}
+              className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3.5 py-1.5 text-xs font-medium text-white transition-colors hover:bg-amber-700 disabled:opacity-50"
+            >
+              {actionLoading === "resubscribe" ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : null}
+              Keep my plan
+            </button>
           </div>
         )}
 
@@ -411,13 +461,13 @@ export function BillingTab() {
 
           {(planStatus === "active" ||
             (planStatus === "trialing" && hasCard)) && (
-            <button
-              onClick={() => setShowCancelModal(true)}
-              className="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium text-slate-400 transition-colors duration-200 hover:text-red-600"
-            >
-              Cancel plan
-            </button>
-          )}
+              <button
+                onClick={() => setShowCancelModal(true)}
+                className="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium text-slate-400 transition-colors duration-200 hover:text-red-600"
+              >
+                Cancel plan
+              </button>
+            )}
         </div>
       </div>
 

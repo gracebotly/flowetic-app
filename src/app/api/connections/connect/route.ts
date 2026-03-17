@@ -564,7 +564,17 @@ export async function POST(req: Request) {
     }
 
     const agents = Array.isArray(parsed?.agents) ? parsed.agents : Array.isArray(parsed) ? parsed : [];
-    inventoryEntities = agents
+    // Deduplicate by agent_id, keeping the highest version (same logic as /list route)
+    const agentMap = new Map<string, any>();
+    for (const a of agents) {
+      const id = String(a?.agent_id ?? a?.id ?? "");
+      if (!id) continue;
+      const existing = agentMap.get(id);
+      if (!existing || (typeof a?.version === "number" && a.version > (existing.version ?? -1))) {
+        agentMap.set(id, a);
+      }
+    }
+    inventoryEntities = Array.from(agentMap.values())
       .map((a: any) => ({
         entityKind: "agent",
         externalId: String(a?.agent_id ?? a?.id ?? ""),

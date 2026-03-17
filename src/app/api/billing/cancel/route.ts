@@ -78,24 +78,33 @@ export async function POST(request: NextRequest) {
       stripe_subscription_id: tenant.stripe_subscription_id,
     });
 
-    // Cancel subscription in Stripe immediately
-    await stripe.subscriptions.cancel(tenant.stripe_subscription_id);
+    // Cancel at period end — NOT immediately
+    // User keeps full access until billing cycle ends
+    const updatedSub = await stripe.subscriptions.update(
+      tenant.stripe_subscription_id,
+      { cancel_at_period_end: true }
+    );
 
-    // Update tenant — plan_updated_at is the 30-day countdown start
+    // Store when the subscription will actually end
+    // In Stripe v18, cancel_at is set automatically when cancel_at_period_end is true
+    const cancelAt = updatedSub.cancel_at
+      ? new Date(updatedSub.cancel_at * 1000).toISOString()
+      : null;
+
     await supabaseAdmin
       .from("tenants")
       .update({
-        plan_status: "cancelled",
-        stripe_subscription_id: null,
+        plan_status: "cancelling",
+        cancel_at: cancelAt,
         plan_updated_at: new Date().toISOString(),
       })
       .eq("id", tenantId);
 
     console.log(
-      `[billing/cancel] Cancelled for tenant ${tenantId}, reason: ${reason}`
+      `[billing/cancel] Scheduled cancellation for tenant ${tenantId}, ends at ${cancelAt}`
     );
 
-    return json(200, { ok: true, cancelled: true });
+    return json(200, { ok: true, cancel_at: cancelAt });
   } catch (error) {
     console.error("[billing/cancel] Error:", error);
     const message =

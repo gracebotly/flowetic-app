@@ -1333,7 +1333,21 @@ export default function ConnectionsPage() {
       return;
     }
     
-    // SUCCESS: Refresh data in correct order
+    // SUCCESS: Trigger event import for platforms that need it.
+    // n8n already imports events during loadN8nInventory() in the connect flow.
+    // Vapi, Retell, and Make skip the import route during connect — they return
+    // inventoryEntities inline from the connect response and go straight to
+    // entity selection. So we must call importInventory() here to populate the
+    // events table with normalized call/execution data.
+    if (createdSourceId && selectedPlatform && selectedPlatform !== "n8n") {
+      try {
+        await importInventory(String(selectedPlatform), createdSourceId);
+      } catch (e) {
+        // Non-fatal: entities are saved, events will populate on next Sync All.
+        console.warn("[saveEntitiesSelection] Event import failed (non-fatal):", e);
+      }
+    }
+
     setSaving(false);
     
     // Refresh indexed entities first (backend just wrote them)

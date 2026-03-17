@@ -27,7 +27,7 @@ export async function GET() {
   const { data: tenant } = await supabase
     .from("tenants")
     .select(
-      "plan, plan_status, trial_ends_at, has_card_on_file, stripe_subscription_id, stripe_customer_id"
+      "plan, plan_status, trial_ends_at, has_card_on_file, stripe_subscription_id, stripe_customer_id, cancel_at"
     )
     .eq("id", membership.tenant_id)
     .single();
@@ -53,5 +53,6 @@ export async function GET() {
     has_subscription: !!tenant.stripe_subscription_id,
     price_cents: limits.price_cents,
     platform_fee_percent: limits.platform_fee_percent,
+    cancel_at: tenant.cancel_at,
   });
 }
