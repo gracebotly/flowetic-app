@@ -3,6 +3,14 @@
 import { createClient } from "@/lib/supabase/client";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  Mail,
+  Eye,
+  EyeOff,
+  ChevronLeft,
+  ArrowLeft,
+} from "lucide-react";
 
 type SignupMode = "7day" | "agency-pay" | "scale-pay";
 
@@ -29,36 +37,16 @@ function getPasswordStrength(pw: string): {
   return { score: 2, label: "Strong", color: "bg-green-500", width: "100%" };
 }
 
-/** Eye / eye-off SVG icons for show/hide password */
-const EyeIcon = ({ open }: { open: boolean }) => (
-  <svg
-    className="h-4 w-4 text-gray-400"
-    fill="none"
-    viewBox="0 0 24 24"
-    stroke="currentColor"
-    strokeWidth={1.5}
+/** Fade-in wrapper for state transitions */
+const FadeIn = ({ children, className = "" }: { children: React.ReactNode; className?: string }) => (
+  <motion.div
+    initial={{ opacity: 0, y: 6 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ duration: 0.25, ease: "easeOut" }}
+    className={className}
   >
-    {open ? (
-      <>
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"
-        />
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-        />
-      </>
-    ) : (
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M3.98 8.223A10.477 10.477 0 001.934 12c1.292 4.338 5.31 7.5 10.066 7.5.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88"
-      />
-    )}
-  </svg>
+    {children}
+  </motion.div>
 );
 
 const MODE_CONFIG: Record<
@@ -172,7 +160,7 @@ const OAuthDivider = () => (
       <div className="w-full border-t border-gray-100" />
     </div>
     <div className="relative flex justify-center text-xs">
-      <span className="bg-white px-2 text-gray-400">or</span>
+      <span className="bg-white px-2 text-slate-500">or</span>
     </div>
   </div>
 );
@@ -220,10 +208,14 @@ function PasswordField({
           type="button"
           tabIndex={-1}
           onClick={() => setShow(!show)}
-          className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-0.5 hover:bg-gray-100"
+          className="absolute right-2.5 top-1/2 -translate-y-1/2 cursor-pointer rounded p-0.5 transition-colors duration-200 hover:bg-gray-100"
           aria-label={show ? "Hide password" : "Show password"}
         >
-          <EyeIcon open={show} />
+          {show ? (
+            <EyeOff className="h-4 w-4 text-slate-400" />
+          ) : (
+            <Eye className="h-4 w-4 text-slate-400" />
+          )}
         </button>
       </div>
       {error && (
@@ -496,39 +488,47 @@ export default function AuthShell() {
   if (suSuccess) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
-        <div className="w-full max-w-md rounded-xl border border-gray-200 bg-white p-8 text-center shadow-sm">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-blue-50">
-            <svg
-              className="h-6 w-6 text-blue-600"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-              />
-            </svg>
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35, ease: "easeOut" }}
+          className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white px-8 py-10 text-center shadow-sm"
+        >
+          <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-blue-50">
+            <Mail className="h-6 w-6 text-blue-600" />
           </div>
-          <h1 className="text-xl font-semibold text-gray-900">
-            Check your email
+
+          <h1 className="text-lg font-semibold tracking-tight text-slate-900">
+            Confirm your email
           </h1>
-          <p className="mt-2 text-sm text-gray-500">
-            We sent a confirmation link to{" "}
-            <span className="font-medium text-gray-700">{suEmail}</span>.
+          <p className="mt-2 text-sm leading-relaxed text-slate-600">
+            We sent a confirmation link to
           </p>
-          <p className="mt-1 text-sm text-gray-400">
-            Open the link to finish signing in.
-          </p>
-          <button
-            onClick={() => setTab("signin")}
-            className="mt-6 text-sm font-medium text-blue-600 hover:text-blue-700"
-          >
-            Back to sign in
-          </button>
-        </div>
+          <p className="text-sm font-medium text-slate-900">{suEmail}</p>
+
+          <div className="mx-auto my-5 h-px w-16 bg-gray-200" />
+
+          <div className="space-y-2 text-xs leading-relaxed text-slate-500">
+            <p>Open the email and click the link to activate your account.</p>
+            <p>
+              Don&apos;t see it? Check your{" "}
+              <span className="font-medium text-slate-600">spam or promotions</span>{" "}
+              folder.
+            </p>
+          </div>
+
+          <div className="mt-6">
+            <button
+              onClick={() => {
+                setSuSuccess(false);
+                setTab("signin");
+              }}
+              className="cursor-pointer text-xs font-medium text-blue-600 transition-colors duration-200 hover:text-blue-700"
+            >
+              Go to sign in
+            </button>
+          </div>
+        </motion.div>
       </div>
     );
   }
@@ -577,6 +577,15 @@ export default function AuthShell() {
         {/* ── Form panel ── */}
         <div className="flex flex-1 flex-col justify-center bg-white px-8 py-10">
 
+          {/* Back to site */}
+          <a
+            href="https://getflowetic.com"
+            className="mb-4 inline-flex items-center gap-1 self-start cursor-pointer text-xs text-slate-400 transition-colors duration-200 hover:text-slate-600"
+          >
+            <ChevronLeft className="h-3 w-3" />
+            Back to site
+          </a>
+
           {/* Tabs */}
           <div className="mb-6 flex border-b border-gray-100">
             {(["signin", "signup"] as const).map((t) => (
@@ -591,7 +600,7 @@ export default function AuthShell() {
                 className={`-mb-px mr-5 pb-3 text-sm font-medium transition-colors ${
                   tab === t
                     ? "border-b-2 border-blue-600 text-blue-600"
-                    : "text-gray-400 hover:text-gray-600"
+                    : "text-slate-400 hover:text-slate-600"
                 }`}
               >
                 {t === "signin" ? "Sign in" : "Create account"}
@@ -600,13 +609,14 @@ export default function AuthShell() {
           </div>
 
           {/* ── Sign in ── */}
-          {tab === "signin" && !forgotMode && (
-            <div className="space-y-4">
-              <div>
+          <AnimatePresence mode="wait">
+            {tab === "signin" && !forgotMode && (
+              <FadeIn key="signin-pane" className="space-y-4">
+            <div>
                 <h1 className="text-lg font-semibold tracking-tight text-gray-900">
                   Welcome back
                 </h1>
-                <p className="mt-0.5 text-xs text-gray-400">
+                <p className="mt-0.5 text-xs text-slate-500">
                   Sign in to your account
                 </p>
               </div>
@@ -692,7 +702,7 @@ export default function AuthShell() {
                 </button>
               </form>
 
-              <p className="text-center text-xs text-gray-400">
+              <p className="text-center text-xs text-slate-500">
                 No account?{" "}
                 <button
                   type="button"
@@ -702,18 +712,20 @@ export default function AuthShell() {
                   Create one
                 </button>
               </p>
-            </div>
-          )}
+              </FadeIn>
+            )}
+
+            {tab === "signin" && forgotMode && (
+              <FadeIn key="forgot-pane" className="space-y-4">
 
           {/* ── Forgot password (inline magic link) ── */}
-          {tab === "signin" && forgotMode && (
-            <div className="space-y-4">
+          
               <div>
                 <h1 className="text-lg font-semibold tracking-tight text-gray-900">
                   Reset your password
                 </h1>
-                <p className="mt-0.5 text-xs text-gray-400">
-                  We'll email you a link to sign back in instantly.
+                <p className="mt-0.5 text-xs text-slate-500">
+                  We&apos;ll send you a password reset link.
                 </p>
               </div>
 
@@ -724,31 +736,22 @@ export default function AuthShell() {
               )}
 
               {fpSent ? (
-                <div className="space-y-4">
-                  <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-4 text-center">
-                    <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-green-100">
-                      <svg
-                        className="h-5 w-5 text-green-600"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        strokeWidth={2}
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-                        />
-                      </svg>
+                <FadeIn className="space-y-5">
+                  <div className="rounded-xl border border-gray-200 bg-white px-5 py-6 text-center shadow-sm">
+                    <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-blue-50">
+                      <Mail className="h-5 w-5 text-blue-600" />
                     </div>
-                    <p className="text-sm font-medium text-green-800">
-                      Check your email
+                    <p className="text-sm font-semibold text-slate-900">
+                      Recovery link sent
                     </p>
-                    <p className="mt-1 text-xs text-green-700">
-                      We sent a sign-in link to{" "}
-                      <span className="font-medium">{fpEmail}</span>.
-                      <br />
-                      Click it and you're in — no new password needed.
+                    <p className="mt-2 text-xs leading-relaxed text-slate-600">
+                      We sent a password reset link to{" "}
+                      <span className="font-medium text-slate-800">{fpEmail}</span>.
+                    </p>
+                    <p className="mt-2 text-xs leading-relaxed text-slate-500">
+                      Don&apos;t see it? Check your{" "}
+                      <span className="font-medium text-slate-600">spam or promotions</span>{" "}
+                      folder.
                     </p>
                   </div>
                   <button
@@ -757,11 +760,12 @@ export default function AuthShell() {
                       setForgotMode(false);
                       setFpSent(false);
                     }}
-                    className="w-full text-center text-xs font-medium text-blue-600 hover:text-blue-700"
+                    className="flex w-full cursor-pointer items-center justify-center gap-1 text-xs font-medium text-slate-400 transition-colors duration-200 hover:text-slate-600"
                   >
-                    ← Back to sign in
+                    <ArrowLeft className="h-3 w-3" />
+                    Back to sign in
                   </button>
-                </div>
+                </FadeIn>
               ) : (
                 <form onSubmit={handleForgotPassword} className="space-y-3">
                   <div className="space-y-1">
@@ -788,14 +792,16 @@ export default function AuthShell() {
                   <button
                     type="button"
                     onClick={() => setForgotMode(false)}
-                    className="w-full text-center text-xs font-medium text-gray-400 hover:text-gray-600"
+                    className="flex w-full cursor-pointer items-center justify-center gap-1 text-xs font-medium text-slate-400 transition-colors duration-200 hover:text-slate-600"
                   >
-                    ← Back to sign in
+                    <ArrowLeft className="h-3 w-3" />
+                    Back to sign in
                   </button>
                 </form>
               )}
-            </div>
-          )}
+              </FadeIn>
+            )}
+          </AnimatePresence>
 
           {/* ── Sign up ── */}
           {tab === "signup" && (
@@ -804,7 +810,7 @@ export default function AuthShell() {
                 <h1 className="text-lg font-semibold tracking-tight text-gray-900">
                   {cfg.title}
                 </h1>
-                <p className="mt-0.5 text-xs text-gray-400">{cfg.sub}</p>
+                <p className="mt-0.5 text-xs text-slate-500">{cfg.sub}</p>
               </div>
 
               {suError && (
@@ -915,12 +921,12 @@ export default function AuthShell() {
               </button>
 
               {cfg.btnSub && (
-                <p className="text-center text-xs text-gray-400">{cfg.btnSub}</p>
+                <p className="text-center text-xs text-slate-500">{cfg.btnSub}</p>
               )}
 
               <div className="flex items-center gap-2 py-1">
                 <div className="h-px flex-1 bg-gray-100" />
-                <span className="text-xs text-gray-400">
+                <span className="text-xs text-slate-500">
                   or choose a different plan
                 </span>
                 <div className="h-px flex-1 bg-gray-100" />
@@ -956,7 +962,7 @@ export default function AuthShell() {
                 />
               </div>
 
-              <p className="text-center text-xs text-gray-400">
+              <p className="text-center text-xs text-slate-500">
                 Already have an account?{" "}
                 <button
                   type="button"
