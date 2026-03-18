@@ -40,7 +40,7 @@ export function AccessTab({ assignedOfferings }: AccessTabProps) {
       return `${baseUrl}/client/${token}`;
     }
     if (o.access_type === "stripe_gate" && o.slug) {
-      return `${baseUrl}/products/${o.slug}`;
+      return `${baseUrl}/p/${o.slug}`;
     }
     return null;
   };

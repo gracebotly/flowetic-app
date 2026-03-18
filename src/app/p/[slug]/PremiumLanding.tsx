@@ -47,11 +47,11 @@ export function PremiumLanding({ product, branding, stats }: PremiumLandingProps
   const isAnalytics = product.surfaceType === 'analytics';
 
   // Route CTA based on surface_type:
-  // - analytics portals → /products/[slug]/subscribe (PricingGate → dashboard)
-  // - runner/both portals → /products/[slug]/run (FormWizard)
+  // - analytics portals → /p/[slug]/subscribe (PricingGate → dashboard)
+  // - runner/both portals → /p/[slug]/run (FormWizard)
   const ctaHref = isAnalytics
-    ? `/products/${product.slug}/subscribe`
-    : `/products/${product.slug}/run`;
+    ? `/p/${product.slug}/subscribe`
+    : `/p/${product.slug}/run`;
 
   const ctaLabel = isAnalytics
     ? isFree

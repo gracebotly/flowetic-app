@@ -315,7 +315,7 @@ export default function OfferingDetailPage() {
     ? offering.access_type === "magic_link" && offering.token
       ? `${baseUrl}/client/${offering.token}`
       : offering.slug
-        ? `${baseUrl}/products/${offering.slug}`
+        ? `${baseUrl}/p/${offering.slug}`
         : null
     : null;
 
@@ -789,7 +789,7 @@ export default function OfferingDetailPage() {
                 {editingSlug ? (
                   <div className="mt-1.5">
                     <div className="flex items-center rounded-lg border border-blue-300 bg-white text-sm ring-2 ring-blue-100">
-                      <span className="flex-shrink-0 px-3 text-gray-400">/products/</span>
+                      <span className="flex-shrink-0 px-3 text-gray-400">/p/</span>
                       <input
                         type="text"
                         value={slugDraft}
@@ -837,12 +837,12 @@ export default function OfferingDetailPage() {
                   <>
                     <div className="mt-1.5 rounded-lg border border-gray-100 bg-gray-50 px-4 py-3">
                       <p className="break-all font-mono text-sm text-gray-700">
-                        {baseUrl}/products/{offering.slug}
+                        {baseUrl}/p/{offering.slug}
                       </p>
                     </div>
                     <div className="mt-3 flex gap-2">
                       <button
-                        onClick={() => copyToClipboard(`${baseUrl}/products/${offering.slug}`)}
+                        onClick={() => copyToClipboard(`${baseUrl}/p/${offering.slug}`)}
                         className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50"
                       >
                         {copied ? (
@@ -853,7 +853,7 @@ export default function OfferingDetailPage() {
                         {copied ? "Copied!" : "Copy URL"}
                       </button>
                       <a
-                        href={`${baseUrl}/products/${offering.slug}`}
+                        href={`${baseUrl}/p/${offering.slug}`}
                         target="_blank"
                         rel="noreferrer"
                         className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 transition hover:bg-blue-100"

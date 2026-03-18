@@ -506,7 +506,7 @@ function formatPhone(value: string): string {
                         </span>
                       </div>
                       <div className="mt-1 flex items-center rounded-lg border border-gray-200 bg-white text-sm">
-                        <span className="flex-shrink-0 px-3 text-slate-600">/products/</span>
+                        <span className="flex-shrink-0 px-3 text-slate-600">/p/</span>
                         <input
                           type="text"
                           value={slug}

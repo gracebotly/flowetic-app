@@ -144,7 +144,7 @@ function FormWizardInner({
         fireConfetti(primary);
         // Navigate to results after brief delay
         setTimeout(() => {
-          router.push(`/products/${productSlug}/results/${data.executionId}`);
+          router.push(`/p/${productSlug}/results/${data.executionId}`);
         }, 1200);
       } else {
         setIsSubmitting(false);

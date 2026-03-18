@@ -129,7 +129,7 @@ function ResultsContent({
           {error ?? 'An unexpected error occurred. Please try again.'}
         </p>
         <a
-          href={`/products/${productSlug}/run`}
+          href={`/p/${productSlug}/run`}
           className="mt-4 rounded-xl px-6 py-3 font-medium text-white transition-all hover:scale-[1.02]"
           style={{ backgroundColor: colors.primary }}
         >
@@ -471,7 +471,7 @@ function ResultsContent({
           style={{ borderColor: colors.border }}
         >
           <a
-            href={`/products/${productSlug}/run`}
+            href={`/p/${productSlug}/run`}
             className="rounded-xl px-6 py-3 font-medium text-white transition-all hover:scale-[1.02] active:scale-[0.98]"
             style={{ backgroundColor: colors.primary }}
           >

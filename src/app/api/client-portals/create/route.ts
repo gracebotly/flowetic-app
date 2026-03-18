@@ -315,6 +315,6 @@ export async function POST(request: Request) {
     ok: true,
     offering,
     ...(token ? { magicLink: `/client/${token}` } : {}),
-    ...(finalSlug ? { productUrl: `/products/${finalSlug}` } : {}),
+    ...(finalSlug ? { productUrl: `/p/${finalSlug}` } : {}),
   });
 }

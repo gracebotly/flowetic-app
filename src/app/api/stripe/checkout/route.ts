@@ -115,7 +115,7 @@ export async function POST(request: NextRequest) {
 
     const successBase = resolvedToken
       ? `${baseUrl}/client/${resolvedToken}`
-      : `${baseUrl}/products/${offering.slug}/run`;
+      : `${baseUrl}/p/${offering.slug}/run`;
 
     // 5. Create Checkout Session based on pricing_type
     let session;
@@ -139,7 +139,7 @@ export async function POST(request: NextRequest) {
             ),
           },
           success_url: `${successBase}?session_id={CHECKOUT_SESSION_ID}`,
-          cancel_url: `${baseUrl}/products/${offering.slug}?cancelled=true`,
+          cancel_url: `${baseUrl}/p/${offering.slug}?cancelled=true`,
           metadata: {
             portal_id: offering.id,
             customer_email: customerEmail,
@@ -164,7 +164,7 @@ export async function POST(request: NextRequest) {
             metadata: { portal_id: offering.id },
           },
           success_url: `${successBase}?subscribed=true`,
-          cancel_url: `${baseUrl}/products/${offering.slug}?cancelled=true`,
+          cancel_url: `${baseUrl}/p/${offering.slug}?cancelled=true`,
           metadata: {
             portal_id: offering.id,
             customer_email: customerEmail,
@@ -191,7 +191,7 @@ export async function POST(request: NextRequest) {
             metadata: { portal_id: offering.id },
           },
           success_url: `${successBase}?subscribed=true`,
-          cancel_url: `${baseUrl}/products/${offering.slug}?cancelled=true`,
+          cancel_url: `${baseUrl}/p/${offering.slug}?cancelled=true`,
           metadata: {
             portal_id: offering.id,
             customer_email: customerEmail,
