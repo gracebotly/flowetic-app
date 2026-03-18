@@ -31,6 +31,7 @@ export interface EntityItem {
   source_name: string;
   last_seen_at: string | null;
   healthStatus?: 'healthy' | 'degraded' | 'critical' | 'no-data';
+  hasEvents?: boolean;
 }
 
 export interface SelectedEntity {
@@ -172,6 +173,11 @@ function EntityRow({
         <span className="text-xs text-gray-400">
           {formatLastSeen(entity.last_seen_at)}
         </span>
+        {entity.hasEvents === false && entity.healthStatus !== 'no-data' && entity.healthStatus !== 'critical' && (
+          <span className="block text-xs text-amber-500">
+            Limited detail
+          </span>
+        )}
       </div>
     </div>
   );

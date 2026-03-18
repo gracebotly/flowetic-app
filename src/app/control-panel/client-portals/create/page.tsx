@@ -264,6 +264,8 @@ export default function CreateOfferingPage() {
                 lastSeenAt?: string | null;
                 healthStatus?: 'healthy' | 'degraded' | 'critical' | 'no-data' | 'aggregate-only';
                 health_status?: 'healthy' | 'degraded' | 'critical' | 'no-data' | 'aggregate-only';
+                hasEvents?: boolean;
+                has_events?: boolean;
               }) => ({
                 id: e.entityUuid ?? e.id ?? "",
                 source_id: e.source_id ?? e.sourceId ?? "",
@@ -274,6 +276,7 @@ export default function CreateOfferingPage() {
                 source_name: e.source_name ?? e.sourceName ?? e.platform ?? "Unknown",
                 last_seen_at: e.last_seen_at ?? e.lastSeenAt ?? null,
                 healthStatus: e.healthStatus ?? e.health_status ?? undefined,
+                hasEvents: e.hasEvents ?? e.has_events ?? undefined,
               })
             )
           );
