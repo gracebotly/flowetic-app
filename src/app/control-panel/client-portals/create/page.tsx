@@ -72,6 +72,53 @@ const STEPS = [
   { number: 4, label: "Share" },
 ];
 
+const DRAFT_KEY = "gf_wizard_draft";
+
+type DraftPayload = {
+  wizard: WizardState;
+  currentStep: number;
+  userEditedName: boolean;
+  savedAt: number;
+};
+
+function saveDraft(wizard: WizardState, currentStep: number, userEditedName: boolean) {
+  try {
+    const payload: DraftPayload = { wizard, currentStep, userEditedName, savedAt: Date.now() };
+    sessionStorage.setItem(DRAFT_KEY, JSON.stringify(payload));
+  } catch {
+    // sessionStorage full or unavailable — silent fail
+  }
+}
+
+function loadDraft(): DraftPayload | null {
+  try {
+    const raw = sessionStorage.getItem(DRAFT_KEY);
+    if (!raw) return null;
+    const parsed: DraftPayload = JSON.parse(raw);
+    // Expire drafts older than 2 hours
+    if (Date.now() - parsed.savedAt > 2 * 60 * 60 * 1000) {
+      sessionStorage.removeItem(DRAFT_KEY);
+      return null;
+    }
+    // Don't restore if already on step 4 (success)
+    if (parsed.currentStep >= 4) {
+      sessionStorage.removeItem(DRAFT_KEY);
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function clearDraft() {
+  try {
+    sessionStorage.removeItem(DRAFT_KEY);
+  } catch {
+    // silent
+  }
+}
+
 // ── Component ───────────────────────────────────────────────
 
 export default function CreateOfferingPage() {
@@ -86,6 +133,32 @@ export default function CreateOfferingPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [userEditedName, setUserEditedName] = useState(false);
+  const [draftAvailable, setDraftAvailable] = useState<DraftPayload | null>(null);
+  const [draftChecked, setDraftChecked] = useState(false);
+
+  // Check for draft on mount (before anything else renders)
+  useEffect(() => {
+    const draft = loadDraft();
+    if (draft && draft.currentStep > 1) {
+      setDraftAvailable(draft);
+    }
+    setDraftChecked(true);
+  }, []);
+
+  // Resume draft handler
+  const handleResumeDraft = useCallback(() => {
+    if (!draftAvailable) return;
+    setWizard(draftAvailable.wizard);
+    setCurrentStep(draftAvailable.currentStep);
+    setUserEditedName(draftAvailable.userEditedName);
+    setDraftAvailable(null);
+  }, [draftAvailable]);
+
+  // Dismiss draft handler
+  const handleDismissDraft = useCallback(() => {
+    clearDraft();
+    setDraftAvailable(null);
+  }, []);
 
   // Data
   const [sources, setSources] = useState<SourceOption[]>([]);
@@ -189,8 +262,8 @@ export default function CreateOfferingPage() {
                 sourceName?: string;
                 last_seen_at?: string | null;
                 lastSeenAt?: string | null;
-                healthStatus?: 'healthy' | 'degraded' | 'critical' | 'no-data';
-                health_status?: 'healthy' | 'degraded' | 'critical' | 'no-data';
+                healthStatus?: 'healthy' | 'degraded' | 'critical' | 'no-data' | 'aggregate-only';
+                health_status?: 'healthy' | 'degraded' | 'critical' | 'no-data' | 'aggregate-only';
               }) => ({
                 id: e.entityUuid ?? e.id ?? "",
                 source_id: e.source_id ?? e.sourceId ?? "",
@@ -218,6 +291,20 @@ export default function CreateOfferingPage() {
     }
     load();
   }, []);
+
+  // ── Auto-save draft to sessionStorage ─────────────────────
+  useEffect(() => {
+    if (!draftChecked) return;
+    // Don't save if we're on step 4 (success) or step 1 with no selections
+    if (currentStep >= 4) return;
+    if (currentStep === 1 && wizard.selectedEntities.length === 0) return;
+
+    const timer = setTimeout(() => {
+      saveDraft(wizard, currentStep, userEditedName);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [draftChecked, wizard, currentStep, userEditedName]);
 
   // ── Auto-fill platform when source changes ────────────────
   useEffect(() => {
@@ -314,6 +401,7 @@ export default function CreateOfferingPage() {
         magicLink: json.magicLink ?? null,
         productUrl: json.productUrl ?? null,
       });
+      clearDraft();
       setCurrentStep(4);
     } catch (err: unknown) {
       setSubmitError(err instanceof Error ? err.message : "Network error");
@@ -356,7 +444,7 @@ export default function CreateOfferingPage() {
     setSubmitError(null);
   };
 
-    // ── Render ────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────
   return (
     <>
       {/* Plan limit gate */}
@@ -411,6 +499,36 @@ export default function CreateOfferingPage() {
         Deliver a branded dashboard or sellable product to your client in under 60
         seconds.
       </p>
+
+      {/* Draft resume banner */}
+      {draftChecked && draftAvailable && (
+        <div className="mt-4 flex items-center justify-between rounded-lg border border-blue-200 bg-blue-50/60 px-4 py-3">
+          <div className="flex items-center gap-2">
+            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-100">
+              <ArrowLeft className="h-3 w-3 text-blue-600" />
+            </div>
+            <p className="text-sm text-slate-700">
+              You have an unfinished portal draft.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleDismissDraft}
+              className="cursor-pointer rounded-md px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors duration-200 hover:bg-gray-100"
+            >
+              Start fresh
+            </button>
+            <button
+              type="button"
+              onClick={handleResumeDraft}
+              className="cursor-pointer rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors duration-200 hover:bg-blue-700"
+            >
+              Resume
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Progress Stepper — EXACT SAME premium styling */}
       <div className="mt-8 flex items-center gap-1">
@@ -543,6 +661,7 @@ export default function CreateOfferingPage() {
                     update({ pricingType, priceCents })
                   }
                   stripeConnected={stripeConnected}
+                  onStripeConnected={() => setStripeConnected(true)}
                   platform={wizard.selectedPlatform}
                   surfaceType={wizard.surfaceType}
                   submitError={submitError}
