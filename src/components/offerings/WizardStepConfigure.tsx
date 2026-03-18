@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Link2, CreditCard, UserPlus, ChevronDown, Search } from "lucide-react";
+import { Link2, CreditCard, UserPlus, ChevronDown, Search, Repeat, CalendarCheck, BarChart3 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { OfferingCard } from "./OfferingCard";
 
 type AccessType = "magic_link" | "stripe_gate";
@@ -37,37 +38,55 @@ type Props = {
   submitError: string | null;
 };
 
-const ACCESS_OPTIONS: Array<{
-  value: AccessType;
+type MonetizationOption = {
+  value: PricingType;
   title: string;
   description: string;
   icon: typeof Link2;
   color: string;
-}> = [
+  accessType: AccessType;
+};
+
+const MONETIZATION_OPTIONS: MonetizationOption[] = [
   {
-    value: "magic_link",
+    value: "free",
     title: "Free Link",
     description:
       "Generate a unique link — anyone with the link can access. No login, no payment. Best for client retention and proving ROI.",
     icon: Link2,
     color: "sky",
+    accessType: "magic_link",
   },
   {
-    value: "stripe_gate",
-    title: "Paid Access",
+    value: "per_run",
+    title: "Per Run",
     description:
-      "Client pays before they can access. Supports per-run, monthly, and usage-based pricing. Revenue goes to your Stripe account.",
-    icon: CreditCard,
+      "Charge each time the workflow executes. Revenue goes to your Stripe account.",
+    icon: Repeat,
     color: "amber",
+    accessType: "stripe_gate",
+  },
+  {
+    value: "monthly",
+    title: "Monthly",
+    description:
+      "Flat monthly subscription fee. Predictable recurring revenue via Stripe.",
+    icon: CalendarCheck,
+    color: "emerald",
+    accessType: "stripe_gate",
+  },
+  {
+    value: "usage_based",
+    title: "Usage Based",
+    description:
+      "Variable pricing based on usage volume. Flexible billing through Stripe.",
+    icon: BarChart3,
+    color: "violet",
+    accessType: "stripe_gate",
   },
 ];
 
-const PRICING_MODELS: Array<{ value: PricingType; label: string; hint: string }> = [
-  { value: "free", label: "Free", hint: "No charge — for demos or included clients" },
-  { value: "per_run", label: "Per Run", hint: "Charge each time the workflow executes" },
-  { value: "monthly", label: "Monthly", hint: "Flat monthly subscription fee" },
-  { value: "usage_based", label: "Usage Based", hint: "Variable pricing by usage" },
-];
+const FREE_ONLY_OPTION = MONETIZATION_OPTIONS[0];
 
 const SURFACE_LABELS: Record<string, string> = {
   analytics: "Analytics Dashboard",
@@ -398,156 +417,156 @@ function formatPhone(value: string): string {
         )}
       </div>
 
-      {/* ── Access Type ──────────────────────────────────── */}
+      {/* ── Monetization ─────────────────────────────────── */}
       <div className="mt-8">
         <h3 className="text-sm font-semibold text-slate-900">Access</h3>
         <p className="mt-1 text-xs text-slate-600">
           {stripeConnected
-            ? "Free link or paid — you can change this later."
+            ? "Choose how clients access this portal — you can change this later."
             : "Share via a free link. Connect Stripe in Settings to unlock paid access."}
         </p>
-        <div className="mt-3 grid gap-3">
-          <OfferingCard
-            title={ACCESS_OPTIONS[0].title}
-            description={ACCESS_OPTIONS[0].description}
-            icon={ACCESS_OPTIONS[0].icon}
-            color={ACCESS_OPTIONS[0].color}
-            selected={accessType === "magic_link"}
-            onClick={() => onAccessChange("magic_link")}
-          />
 
-          {stripeConnected && (
-            <OfferingCard
-              title={ACCESS_OPTIONS[1].title}
-              description={ACCESS_OPTIONS[1].description}
-              icon={ACCESS_OPTIONS[1].icon}
-              color={ACCESS_OPTIONS[1].color}
-              selected={accessType === "stripe_gate"}
-              onClick={() => onAccessChange("stripe_gate")}
-            />
-          )}
-        </div>
-
-        {!stripeConnected && (
-          <div className="mt-3 flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
-            <CreditCard className="h-4 w-4 shrink-0 text-slate-400" />
-            <p className="text-xs text-slate-600">
-              Want to charge for this portal?{" "}
-              <a
-                href="/control-panel/settings?tab=billing"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-medium text-blue-600 underline decoration-blue-200 underline-offset-2 transition-colors duration-200 hover:text-blue-700"
-              >
-                Connect Stripe in Settings
-              </a>{" "}
-              first, then come back to enable paid access.
-            </p>
-          </div>
-        )}
-
-        {/* Pricing config — only when paid AND Stripe connected */}
-        {accessType === "stripe_gate" && stripeConnected && (
-          <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-5">
-            <h3 className="text-sm font-semibold text-slate-900">Pricing Model</h3>
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              {PRICING_MODELS.map((model) => (
-                <button
-                  key={model.value}
-                  type="button"
-                  onClick={() => onPricingChange(model.value, priceCents)}
-                  className={`cursor-pointer rounded-lg border px-3 py-2.5 text-left transition-colors duration-200 ${
-                    pricingType === model.value
-                      ? "border-blue-500 bg-blue-50 ring-1 ring-blue-200"
-                      : "border-gray-200 bg-white hover:border-gray-300"
-                  }`}
-                >
-                  <span className="block text-sm font-medium text-slate-900">
-                    {model.label}
-                  </span>
-                  <span className="mt-0.5 block text-[11px] text-slate-600">
-                    {model.hint}
-                  </span>
-                </button>
+        {stripeConnected ? (
+          <>
+            {/* Flat monetization list */}
+            <div className="mt-3 grid gap-3">
+              {MONETIZATION_OPTIONS.map((opt) => (
+                <OfferingCard
+                  key={opt.value}
+                  title={opt.title}
+                  description={opt.description}
+                  icon={opt.icon}
+                  color={opt.color}
+                  selected={
+                    pricingType === opt.value &&
+                    accessType === opt.accessType
+                  }
+                  onClick={() => {
+                    onAccessChange(opt.accessType);
+                    onPricingChange(opt.value, opt.value === "free" ? 0 : priceCents);
+                  }}
+                />
               ))}
             </div>
 
-            {pricingType !== "free" && (
-              <>
-                <div className="mt-4">
-                  <label className="block text-xs font-medium text-slate-600">
-                    Price (USD)
-                  </label>
-                  <div className="relative mt-1">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-600">
-                      $
-                    </span>
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      value={priceDisplay}
-                      onChange={(e) => {
-                        let raw = e.target.value.replace(/[^0-9.]/g, "");
-                        const parts = raw.split(".");
-                        if (parts.length > 2) raw = parts[0] + "." + parts.slice(1).join("");
-                        if (parts.length === 2 && parts[1].length > 2) {
-                          raw = parts[0] + "." + parts[1].slice(0, 2);
-                        }
-                        const num = parseFloat(raw) || 0;
-                        if (num > 9999.99) return;
-                        setPriceDisplay(raw);
-                        onPricingChange(pricingType, Math.round(num * 100));
-                      }}
-                      onBlur={() => {
-                        if (priceDisplay) {
-                          const dollars = parseFloat(priceDisplay) || 0;
-                          setPriceDisplay(dollars > 0 ? dollars.toFixed(2) : "");
-                        }
-                      }}
-                      placeholder="0.00"
-                      className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-8 pr-4 text-sm text-slate-900 outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
-                    />
-                  </div>
-                </div>
+            {/* Price + slug — animated reveal for paid options */}
+            <AnimatePresence>
+              {accessType === "stripe_gate" && pricingType !== "free" && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="overflow-hidden"
+                >
+                  <div className="mt-4 rounded-xl border border-gray-200 bg-white p-5">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600">
+                        Price (USD)
+                      </label>
+                      <div className="relative mt-1">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-600">
+                          $
+                        </span>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={priceDisplay}
+                          onChange={(e) => {
+                            let raw = e.target.value.replace(/[^0-9.]/g, "");
+                            const parts = raw.split(".");
+                            if (parts.length > 2) raw = parts[0] + "." + parts.slice(1).join("");
+                            if (parts.length === 2 && parts[1].length > 2) {
+                              raw = parts[0] + "." + parts[1].slice(0, 2);
+                            }
+                            const num = parseFloat(raw) || 0;
+                            if (num > 9999.99) return;
+                            setPriceDisplay(raw);
+                            onPricingChange(pricingType, Math.round(num * 100));
+                          }}
+                          onBlur={() => {
+                            if (priceDisplay) {
+                              const dollars = parseFloat(priceDisplay) || 0;
+                              setPriceDisplay(dollars > 0 ? dollars.toFixed(2) : "");
+                            }
+                          }}
+                          placeholder="0.00"
+                          className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-8 pr-4 text-sm text-slate-900 outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
+                        />
+                      </div>
+                    </div>
 
-                {/* Slug input */}
-                <div className="mt-4">
-                  <div className="flex items-baseline justify-between">
-                    <label className="block text-xs font-medium text-slate-600">
-                      Product URL Slug
-                    </label>
-                    <span className={`text-[11px] ${slug.length > 50 ? "text-amber-600" : "text-slate-600"}`}>
-                      {slug.length}/60
-                    </span>
+                    {/* Slug input */}
+                    <div className="mt-4">
+                      <div className="flex items-baseline justify-between">
+                        <label className="block text-xs font-medium text-slate-600">
+                          Product URL Slug
+                        </label>
+                        <span className={`text-[11px] ${slug.length > 50 ? "text-amber-600" : "text-slate-600"}`}>
+                          {slug.length}/60
+                        </span>
+                      </div>
+                      <div className="mt-1 flex items-center rounded-lg border border-gray-200 bg-white text-sm">
+                        <span className="flex-shrink-0 px-3 text-slate-600">/products/</span>
+                        <input
+                          type="text"
+                          value={slug}
+                          maxLength={60}
+                          onChange={(e) => {
+                            setSlugManuallyEdited(true);
+                            onChange(
+                              "slug",
+                              e.target.value
+                                .toLowerCase()
+                                .replace(/[^a-z0-9-]/g, "-")
+                                .replace(/-+/g, "-")
+                                .replace(/^-/, "")
+                            );
+                          }}
+                          placeholder="smith-dental-voice"
+                          className="w-full border-0 bg-transparent py-2 pr-3 text-sm text-slate-900 outline-none"
+                        />
+                      </div>
+                    </div>
                   </div>
-                  <div className="mt-1 flex items-center rounded-lg border border-gray-200 bg-white text-sm">
-                    <span className="flex-shrink-0 px-3 text-slate-600">/products/</span>
-                    <input
-                      type="text"
-                      value={slug}
-                      maxLength={60}
-                      onChange={(e) => {
-                        setSlugManuallyEdited(true);
-                        onChange(
-                          "slug",
-                          e.target.value
-                            .toLowerCase()
-                            .replace(/[^a-z0-9-]/g, "-")
-                            .replace(/-+/g, "-")
-                            .replace(/^-/, "")
-                        );
-                      }}
-                      placeholder="smith-dental-voice"
-                      className="w-full border-0 bg-transparent py-2 pr-3 text-sm text-slate-900 outline-none"
-                    />
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </>
+        ) : (
+          <>
+            {/* Stripe NOT connected — Free Link only */}
+            <div className="mt-3 grid gap-3">
+              <OfferingCard
+                title={FREE_ONLY_OPTION.title}
+                description={FREE_ONLY_OPTION.description}
+                icon={FREE_ONLY_OPTION.icon}
+                color={FREE_ONLY_OPTION.color}
+                selected={true}
+                onClick={() => {
+                  onAccessChange("magic_link");
+                  onPricingChange("free", 0);
+                }}
+              />
+            </div>
+
+            <div className="mt-3 flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-3">
+              <CreditCard className="h-4 w-4 shrink-0 text-slate-600" />
+              <p className="text-xs text-slate-600">
+                Want to charge for this portal?{" "}
+                <a
+                  href="/control-panel/settings?tab=billing"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium text-blue-600 underline decoration-blue-200 underline-offset-2 transition-colors duration-200 hover:text-blue-700"
+                >
+                  Connect Stripe in Settings
+                </a>{" "}
+                first, then come back to enable paid access.
+              </p>
+            </div>
+          </>
         )}
       </div>
-
       {/* Error */}
       {submitError && (
         <div className="mt-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

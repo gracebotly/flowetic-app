@@ -393,10 +393,7 @@ export default function CreateOfferingPage() {
         entityIds: entities.map((e) => ({ id: e.id, sourceId: e.sourceId })),
         surfaceType: wizard.surfaceType,
         accessType: stripeConnected ? wizard.accessType : "magic_link",
-        pricingType:
-          stripeConnected && wizard.accessType === "stripe_gate"
-            ? wizard.pricingType
-            : "free",
+        pricingType: stripeConnected ? wizard.pricingType : "free",
         priceCents:
           stripeConnected && wizard.accessType === "stripe_gate"
             ? wizard.priceCents
