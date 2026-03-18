@@ -6,8 +6,8 @@ export const runtime = "nodejs";
 type EntityKind = "workflow" | "scenario" | "flow" | "agent" | "assistant" | "squad";
 
 type IndexedEntity = {
-  id: string; // `${source_id}:${external_id}`
-  entityUuid: string; // Real source_entities.id primary key
+  id: string;
+  entityUuid: string;
   name: string;
   platform: string;
   kind: EntityKind;
@@ -18,6 +18,7 @@ type IndexedEntity = {
   createdAtTs: number;
   lastUpdatedTs: number;
   healthStatus: 'healthy' | 'degraded' | 'critical' | 'no-data';
+  hasEvents: boolean;
 };
 
 export async function GET() {
@@ -185,6 +186,8 @@ export async function GET() {
       }
     }
 
+    const eventKey = `${sourceId}:${String(e.external_id)}`;
+
     return {
       id: `${sourceId}:${String(e.external_id)}`,
       entityUuid: String(e.id),
@@ -198,6 +201,7 @@ export async function GET() {
       createdAtTs: Number.isFinite(createdAtTs) ? createdAtTs : Date.now(),
       lastUpdatedTs,
       healthStatus,
+      hasEvents: entityHasEvents.get(eventKey) === true,
     };
   });
 
