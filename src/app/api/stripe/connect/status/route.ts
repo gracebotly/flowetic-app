@@ -1,11 +1,11 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { stripe } from "@/lib/stripe/client";
 
 export const runtime = "nodejs";
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const supabase = await createClient();
 
@@ -90,6 +90,7 @@ export async function GET(request: NextRequest) {
             charges_enabled: chargesEnabled,
             payouts_enabled: payoutsEnabled,
             onboarding_complete: onboardingComplete,
+            details_submitted: account.details_submitted ?? false,
             stripe_account_id: tenant.stripe_account_id,
             connected_at:
               chargesEnabled && !tenant.stripe_connected_at
@@ -107,11 +108,14 @@ export async function GET(request: NextRequest) {
     }
 
     // Return current DB state (either already up to date, or Stripe API failed)
+    // For the fallback path, infer details_submitted from onboarding_complete
+    // (if onboarding_complete is true, details were definitely submitted)
     return NextResponse.json({
       connected: !!tenant.stripe_account_id,
       charges_enabled: tenant.stripe_charges_enabled,
       payouts_enabled: tenant.stripe_payouts_enabled ?? false,
       onboarding_complete: tenant.stripe_onboarding_complete,
+      details_submitted: tenant.stripe_onboarding_complete ?? false,
       stripe_account_id: tenant.stripe_account_id,
       connected_at: tenant.stripe_connected_at,
     });
