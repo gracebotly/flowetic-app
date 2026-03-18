@@ -2,8 +2,28 @@ import { NextResponse } from "next/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { getTenantAdmin } from "@/lib/settings/getTenantAdmin";
 import { checkTeamLimit } from "@/lib/plans/checkLimits";
+import { validateEmail } from "@/lib/validation/email";
 
 export const runtime = "nodejs";
+
+type TeamMemberRow = {
+  id: string;
+  user_id: string;
+  role: string;
+  invite_status: string;
+  invited_email: string | null;
+  created_at: string;
+  users: Array<{ email: string | null; name: string | null }> | null;
+};
+
+type PendingInviteRow = {
+  id: string;
+  email: string;
+  role: string;
+  status: string;
+  created_at: string;
+  expires_at: string;
+};
 
 const supabaseAdmin = createServiceClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -15,12 +35,11 @@ function json(status: number, data: Record<string, unknown>) {
 }
 
 // ── GET /api/settings/team ──────────────────────────────────
-// Returns active members + pending invites for the tenant.
 export async function GET() {
   const auth = await getTenantAdmin();
   if (!auth.ok) return json(auth.status, { ok: false, code: auth.code });
 
-  // 1) Active members from memberships
+  // Active members from memberships
   const { data: members, error: mErr } = await auth.supabase
     .from("memberships")
     .select(`
@@ -41,18 +60,18 @@ export async function GET() {
     return json(500, { ok: false, code: "FETCH_FAILED" });
   }
 
-  const teamMembers = (members ?? []).map((m: any) => ({
+  const teamMembers = (members ?? []).map((m: TeamMemberRow) => ({
     id: m.id,
     user_id: m.user_id,
-    email: m.users?.email ?? m.invited_email ?? "Unknown",
-    name: m.users?.name ?? null,
+    email: m.users?.[0]?.email ?? m.invited_email ?? "Unknown",
+    name: m.users?.[0]?.name ?? null,
     role: m.role,
     invite_status: "active",
     created_at: m.created_at,
     is_you: m.user_id === auth.userId,
   }));
 
-  // 2) Pending invites from team_invites
+  // Pending invites from team_invites
   const { data: pendingInvites, error: iErr } = await auth.supabase
     .from("team_invites")
     .select("id, email, role, status, created_at, expires_at")
@@ -64,7 +83,7 @@ export async function GET() {
     console.error("[GET /api/settings/team] Invites fetch failed:", iErr);
   }
 
-  const pendingMembers = (pendingInvites ?? []).map((inv: any) => ({
+  const pendingMembers = (pendingInvites ?? []).map((inv: PendingInviteRow) => ({
     id: inv.id,
     user_id: "",
     email: inv.email,
@@ -84,8 +103,6 @@ export async function GET() {
 }
 
 // ── POST /api/settings/team ─────────────────────────────────
-// Invites a new team member via email. Admin only.
-// Creates a row in team_invites and sends invite email via Supabase Auth.
 export async function POST(req: Request) {
   const auth = await getTenantAdmin({ requireAdmin: true });
   if (!auth.ok) return json(auth.status, { ok: false, code: auth.code });
@@ -97,19 +114,47 @@ export async function POST(req: Request) {
     return json(400, { ok: false, code: "INVALID_JSON" });
   }
 
-  const email = body.email?.trim().toLowerCase();
   const role = body.role ?? "viewer";
 
-  if (!email || !email.includes("@")) {
-    return json(400, { ok: false, code: "INVALID_EMAIL" });
+  // ── Email validation with typo detection ──────────────────
+  const emailResult = validateEmail(body.email ?? "");
+
+  if (!emailResult.valid) {
+    if (emailResult.code === "TYPO_DETECTED") {
+      return json(400, {
+        ok: false,
+        code: "TYPO_DETECTED",
+        message: emailResult.message,
+        suggestion: emailResult.suggestion,
+      });
+    }
+    return json(400, { ok: false, code: "INVALID_EMAIL", message: emailResult.message });
   }
 
+  const email = emailResult.email;
+
+  // ── Self-invite guard ─────────────────────────────────────
+  const { data: selfUser } = await supabaseAdmin
+    .from("users")
+    .select("email")
+    .eq("id", auth.userId)
+    .maybeSingle();
+
+  if (selfUser?.email?.toLowerCase() === email) {
+    return json(400, {
+      ok: false,
+      code: "CANNOT_INVITE_SELF",
+      message: "You cannot invite yourself.",
+    });
+  }
+
+  // ── Role validation ───────────────────────────────────────
   const validRoles = ["admin", "client", "viewer"];
   if (!validRoles.includes(role)) {
     return json(400, { ok: false, code: "INVALID_ROLE" });
   }
 
-  // ── Plan seat limit check ───────────────────────────────
+  // ── Plan seat limit check ─────────────────────────────────
   try {
     const teamLimit = await checkTeamLimit(auth.supabase, auth.tenantId);
     if (!teamLimit.allowed) {
@@ -132,7 +177,7 @@ export async function POST(req: Request) {
     console.error("[POST /api/settings/team] Seat limit check failed:", err);
   }
 
-  // Check if already a member of this tenant
+  // ── Already a member? ─────────────────────────────────────
   const { data: existingUser } = await supabaseAdmin
     .from("users")
     .select("id")
@@ -153,7 +198,7 @@ export async function POST(req: Request) {
     }
   }
 
-  // Check for existing pending invite
+  // ── Already invited? ──────────────────────────────────────
   const { data: existingInvite } = await supabaseAdmin
     .from("team_invites")
     .select("id")
@@ -166,7 +211,7 @@ export async function POST(req: Request) {
     return json(409, { ok: false, code: "ALREADY_INVITED" });
   }
 
-  // Create the invite
+  // ── Create the invite ─────────────────────────────────────
   const { data: invite, error: insertErr } = await supabaseAdmin
     .from("team_invites")
     .insert({
@@ -184,30 +229,24 @@ export async function POST(req: Request) {
     return json(500, { ok: false, code: "INVITE_FAILED", message: insertErr?.message });
   }
 
-  // Get tenant name for the email
+  // Get tenant and inviter info for email context
   const { data: tenant } = await supabaseAdmin
     .from("tenants")
     .select("name")
     .eq("id", auth.tenantId)
     .maybeSingle();
 
-  // Get inviter's email for the "from" context
   const { data: inviter } = await supabaseAdmin
     .from("users")
     .select("email, name")
     .eq("id", auth.userId)
     .maybeSingle();
 
-  // Send invite email via Supabase Auth magic link
-  // This uses Supabase's built-in email system (SMTP configured in dashboard)
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://app.getflowetic.com";
   const inviteLink = `${siteUrl}/invite/${invite.token}`;
 
-  // Try to send via Supabase inviteUserByEmail for users without accounts,
-  // or a magic link for existing users
+  // Send invite email
   if (!existingUser) {
-    // User doesn't exist yet — use Supabase admin.inviteUserByEmail
-    // This creates the auth user and sends them a signup email
     const { error: inviteErr } = await supabaseAdmin.auth.admin.inviteUserByEmail(
       email,
       {
@@ -219,21 +258,15 @@ export async function POST(req: Request) {
         },
       }
     );
-
     if (inviteErr) {
       console.error("[POST /api/settings/team] Email send failed:", inviteErr);
-      // Don't fail the invite — the link still works manually
     }
   } else {
-    // User exists — send magic link that redirects to invite accept
     const { error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
       type: "magiclink",
       email,
-      options: {
-        redirectTo: `${siteUrl}/invite/${invite.token}`,
-      },
+      options: { redirectTo: `${siteUrl}/invite/${invite.token}` },
     });
-
     if (linkErr) {
       console.error("[POST /api/settings/team] Magic link failed:", linkErr);
     }
