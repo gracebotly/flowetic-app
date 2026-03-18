@@ -1192,7 +1192,7 @@ function normalizeDesignSystem(raw: any): ProposalDesignSystem {
       effects: raw.style?.effects,
     },
     colors: {
-      primary: raw.colors?.primary || '#3B82F6',
+      primary: raw.colors?.primary || '#059669',
       secondary: raw.colors?.secondary || '#6366F1',
       accent: raw.colors?.accent || '#8B5CF6',
       success: raw.colors?.success || '#10B981',

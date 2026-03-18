@@ -25,7 +25,7 @@ export default async function ControlPanelLayout({
   let plan = "Agency";
   let tenantName = "";
   let tenantLogoUrl: string | null = null;
-  let tenantColor = "#3B82F6";
+  let tenantColor = "#059669";
   let blockInfo = getBlockStatus({
     plan_status: "active",
     trial_ends_at: null,
@@ -52,7 +52,7 @@ export default async function ControlPanelLayout({
       if (tenant) {
         tenantName = tenant.name || "";
         tenantLogoUrl = tenant.logo_url || null;
-        tenantColor = tenant.primary_color || "#3B82F6";
+        tenantColor = tenant.primary_color || "#059669";
 
         const limits = getPlanLimits(tenant.plan);
         const trialExpired =

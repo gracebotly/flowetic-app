@@ -204,7 +204,7 @@ function shiftHueHex(hex: string, degrees: number): string {
 export function mapColorCSVToTokens(colorRow: Record<string, string>): ColorTokens {
   // CSV headers from colors.csv: "Primary (Hex)", "Secondary (Hex)", "CTA (Hex)", "Background (Hex)", "Text (Hex)"
   // Also handle lowercase keys from getColorRecommendations output and other tools
-  const primary = colorRow['Primary (Hex)'] || colorRow.primary || colorRow['Primary'] || '#3B82F6';
+  const primary = colorRow['Primary (Hex)'] || colorRow.primary || colorRow['Primary'] || '#059669';
 
   let secondary = colorRow['Secondary (Hex)'] || colorRow.secondary || colorRow['Secondary'] || '';
   let accent = colorRow['CTA (Hex)'] || colorRow.accent || colorRow['Accent'] || '';
