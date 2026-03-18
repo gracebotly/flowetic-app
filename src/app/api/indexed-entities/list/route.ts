@@ -17,7 +17,7 @@ type IndexedEntity = {
   createdAt: string;
   createdAtTs: number;
   lastUpdatedTs: number;
-  healthStatus: 'healthy' | 'degraded' | 'critical' | 'no-data' | 'aggregate-only';
+  healthStatus: 'healthy' | 'degraded' | 'critical' | 'no-data';
 };
 
 export async function GET() {
@@ -63,18 +63,23 @@ export async function GET() {
     sourceById.set(String(s.id), { type: String(s.type), created_at: String(s.created_at) });
   }
 
-  // ── Auto-derive last_seen_at from events for entities missing it ──
-  // Build a map of source_id:external_id → latest event timestamp
-  const entitiesMissingLastSeen = (entities ?? []).filter((e: any) => !e.last_seen_at);
-  const lastSeenFromEvents = new Map<string, string>();
+  // ── Auto-derive last_seen_at AND event existence from events table ──
+  // Build maps for:
+  //   1. source_id:external_id → latest event timestamp (for entities missing last_seen_at)
+  //   2. source_id:external_id → true (entity has at least one event — for health derivation)
+  const entitiesMissingLastSeen = (entities ?? []).filter((e: { last_seen_at: string | null }) => !e.last_seen_at);
+  const entitiesMissingStats = (entities ?? []).filter((e: { aggregate_stats: Record<string, unknown> | null }) => !e.aggregate_stats);
+  const needsEventLookup = entitiesMissingLastSeen.length > 0 || entitiesMissingStats.length > 0;
 
-  if (entitiesMissingLastSeen.length > 0) {
+  const lastSeenFromEvents = new Map<string, string>();
+  const entityHasEvents = new Map<string, boolean>();
+
+  if (needsEventLookup) {
     try {
-      // For each source, get the latest event timestamps grouped by workflow_id label
       for (const sid of sourceIds) {
         const { data: latestEvents } = await supabase
           .from("events")
-          .select("labels, timestamp")
+          .select("state, labels, timestamp")
           .eq("tenant_id", membership.tenant_id)
           .eq("source_id", sid)
           .order("timestamp", { ascending: false })
@@ -82,11 +87,25 @@ export async function GET() {
 
         if (latestEvents) {
           for (const ev of latestEvents) {
-            const wfId = (ev.labels as any)?.workflow_id;
-            const key = `${sid}:${wfId}`;
-            if (wfId && !lastSeenFromEvents.has(key)) {
+            // Primary: state.workflow_id (canonical for all platforms)
+            const state = ev.state as Record<string, unknown> | null;
+            const stateWfId = state ? String(state.workflow_id ?? state.assistant_id ?? state.agent_id ?? "") : "";
+            // Fallback: labels.workflow_id
+            const labels = ev.labels as Record<string, string> | null;
+            const labelWfId = labels?.workflow_id ?? labels?.assistant_id ?? labels?.agent_id ?? "";
+
+            const entityExtId = stateWfId || labelWfId;
+            if (!entityExtId || entityExtId === "undefined" || entityExtId === "null") continue;
+
+            const key = `${sid}:${entityExtId}`;
+
+            // Track last seen
+            if (!lastSeenFromEvents.has(key)) {
               lastSeenFromEvents.set(key, String(ev.timestamp));
             }
+
+            // Track existence
+            entityHasEvents.set(key, true);
           }
         }
       }
@@ -95,7 +114,15 @@ export async function GET() {
     }
   }
 
-  const rows: IndexedEntity[] = (entities ?? []).map((e: any) => {
+  const rows: IndexedEntity[] = (entities ?? []).map((e: {
+    id: string;
+    source_id: string;
+    entity_kind: string | null;
+    external_id: string | null;
+    display_name: string | null;
+    last_seen_at: string | null;
+    aggregate_stats: Record<string, unknown> | null;
+  }) => {
     const sourceId = String(e.source_id);
     const meta = sourceById.get(sourceId);
 
@@ -118,25 +145,42 @@ export async function GET() {
       ? createdAtTs
       : Date.now();
 
-    let healthStatus: 'healthy' | 'degraded' | 'critical' | 'no-data' | 'aggregate-only' = 'no-data';
+    let healthStatus: 'healthy' | 'degraded' | 'critical' | 'no-data' = 'no-data';
     const stats = e.aggregate_stats as Record<string, unknown> | null;
     if (stats) {
       const totalCalls = Number(stats.total_calls ?? stats.total_executions ?? 0);
       const totalOps = Number(stats.total_operations ?? 0);
       const totalErrors = Number(stats.total_errors ?? 0);
       const successRate = Number(stats.success_rate ?? 0);
-      const isInstant = Boolean(stats.is_instant_trigger);
 
-      if (totalCalls > 0 && successRate > 0) {
-        healthStatus = successRate < 70 ? 'degraded' : 'healthy';
-      } else if (totalCalls > 0 && stats.success_rate !== undefined && successRate === 0) {
-        healthStatus = 'critical';
-      } else if (totalCalls > 0) {
-        const derived = Math.round(((totalCalls - totalErrors) / totalCalls) * 100);
-        healthStatus = derived === 0 ? 'critical' : derived < 70 ? 'degraded' : 'healthy';
-      } else if (totalOps > 0 && isInstant) {
-        healthStatus = 'aggregate-only';
+      if (totalCalls > 0) {
+        if (successRate > 0) {
+          healthStatus = successRate < 70 ? 'degraded' : 'healthy';
+        } else if (stats.success_rate !== undefined && successRate === 0) {
+          healthStatus = 'critical';
+        } else {
+          const derived = totalCalls > 0
+            ? Math.round(((totalCalls - totalErrors) / totalCalls) * 100)
+            : 0;
+          healthStatus = derived === 0 ? 'critical' : derived < 70 ? 'degraded' : 'healthy';
+        }
       } else if (totalOps > 0) {
+        // Make: has operations = it ran
+        if (totalErrors > 0) {
+          const base = totalCalls > 0 ? totalCalls : totalOps;
+          const derived = Math.round(((base - totalErrors) / base) * 100);
+          healthStatus = derived === 0 ? 'critical' : derived < 70 ? 'degraded' : 'healthy';
+        } else {
+          healthStatus = 'healthy';
+        }
+      }
+    }
+
+    // Fallback: n8n and Vapi don't write aggregate_stats, but they do write events.
+    // If aggregate_stats is null but the entity has events → healthy.
+    if (healthStatus === 'no-data' && !stats) {
+      const eventKey = `${sourceId}:${String(e.external_id)}`;
+      if (entityHasEvents.get(eventKey)) {
         healthStatus = 'healthy';
       }
     }
