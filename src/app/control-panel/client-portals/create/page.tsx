@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ArrowLeft, Check, AlertTriangle } from "lucide-react";
@@ -95,8 +95,8 @@ function loadDraft(): DraftPayload | null {
     const raw = sessionStorage.getItem(DRAFT_KEY);
     if (!raw) return null;
     const parsed: DraftPayload = JSON.parse(raw);
-    // Expire drafts older than 30 minutes
-    if (Date.now() - parsed.savedAt > 30 * 60 * 1000) {
+    // Expire drafts older than 2 hours
+    if (Date.now() - parsed.savedAt > 2 * 60 * 60 * 1000) {
       sessionStorage.removeItem(DRAFT_KEY);
       return null;
     }
@@ -139,8 +139,13 @@ export default function CreateOfferingPage() {
   // Check for draft on mount (before anything else renders)
   useEffect(() => {
     const draft = loadDraft();
-    if (draft && draft.currentStep > 1) {
-      setDraftAvailable(draft);
+    if (draft) {
+      const hasProgress =
+        draft.currentStep > 1 ||
+        (draft.currentStep === 1 && draft.wizard.selectedEntities.length > 0);
+      if (hasProgress) {
+        setDraftAvailable(draft);
+      }
     }
     setDraftChecked(true);
   }, []);
@@ -295,10 +300,15 @@ export default function CreateOfferingPage() {
     load();
   }, []);
 
-  // ── Auto-save draft to sessionStorage ─────────────────────
+  // ── Ref to track latest draft-worthy state for unmount save ──
+  const draftRef = useRef({ wizard, currentStep, userEditedName, draftChecked });
+  useEffect(() => {
+    draftRef.current = { wizard, currentStep, userEditedName, draftChecked };
+  }, [wizard, currentStep, userEditedName, draftChecked]);
+
+  // ── Auto-save draft to sessionStorage (debounced while editing) ──
   useEffect(() => {
     if (!draftChecked) return;
-    // Don't save if we're on step 4 (success) or step 1 with no selections
     if (currentStep >= 4) return;
     if (currentStep === 1 && wizard.selectedEntities.length === 0) return;
 
@@ -308,6 +318,22 @@ export default function CreateOfferingPage() {
 
     return () => clearTimeout(timer);
   }, [draftChecked, wizard, currentStep, userEditedName]);
+
+  // ── Save draft immediately on unmount (navigation away) ───────
+  useEffect(() => {
+    return () => {
+      const {
+        wizard: w,
+        currentStep: step,
+        userEditedName: edited,
+        draftChecked: checked,
+      } = draftRef.current;
+      if (!checked) return;
+      if (step >= 4) return;
+      if (step === 1 && w.selectedEntities.length === 0) return;
+      saveDraft(w, step, edited);
+    };
+  }, []);
 
   // ── Auto-fill platform when source changes ────────────────
   useEffect(() => {

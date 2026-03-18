@@ -149,12 +149,77 @@ export default function PortalPreview({
 
         const maybeObject = (eventsData && typeof eventsData === "object") ? (eventsData as { events?: unknown; data?: unknown }) : null;
         const realEvents = maybeObject?.events ?? maybeObject?.data ?? eventsData;
+        const finalEvents: PreviewEvent[] = Array.isArray(realEvents) ? realEvents as PreviewEvent[] : [];
 
-        if (Array.isArray(realEvents) && realEvents.length > 0) {
-          setEvents(realEvents as PreviewEvent[]);
-        } else {
-          setEvents([]);
+        // ── Aggregate synthesis for entities with zero events ──────
+        // Webhook/instant Make scenarios have no individual execution logs.
+        // When an entity has zero events but has aggregate_stats, synthesize
+        // a summary event so the preview renders KPIs. This mirrors the
+        // exact same logic in resolvePortal.ts (step 4b-synth).
+        if (entityExternalIds) {
+          const selectedIds = entityExternalIds.split(",").map((s) => s.trim()).filter(Boolean);
+          const idsWithEvents = new Set<string>();
+          for (const ev of finalEvents) {
+            const state = (ev.state as Record<string, unknown>) ?? {};
+            const wfId = String(state.workflow_id ?? "");
+            if (wfId) idsWithEvents.add(wfId);
+          }
+
+          const idsMissing = selectedIds.filter((id) => !idsWithEvents.has(id));
+
+          if (idsMissing.length > 0) {
+            try {
+              const statsRes = await fetch(`/api/indexed-entities/aggregate-stats?external_ids=${encodeURIComponent(idsMissing.join(","))}&source_id=${sourceId}`);
+              if (statsRes.ok) {
+                const statsJson = await statsRes.json();
+                const entitiesWithStats: Array<{ external_id: string; display_name: string; aggregate_stats: Record<string, unknown> | null }> = statsJson.entities ?? [];
+
+                for (const ent of entitiesWithStats) {
+                  const stats = ent.aggregate_stats;
+                  if (!stats) continue;
+                  const totalExecs = Number(stats.total_executions ?? stats.total_operations ?? 0);
+                  if (totalExecs <= 0) continue;
+                  const totalErrors = Number(stats.total_errors ?? 0);
+                  const totalOps = Number(stats.total_operations ?? 0);
+                  const totalCenticredits = Number(stats.total_centicredits ?? 0);
+                  const totalTransfer = Number(stats.data_transfer_bytes ?? 0);
+
+                  finalEvents.push({
+                    id: `synth-preview-${ent.external_id}`,
+                    type: "scenario_execution_summary",
+                    name: `make:${ent.display_name}:aggregate`,
+                    value: totalExecs - totalErrors,
+                    state: {
+                      workflow_id: ent.external_id,
+                      workflow_name: ent.display_name,
+                      status: "success",
+                      platform: "make",
+                      is_aggregate: true,
+                      aggregate_total: totalExecs,
+                      aggregate_errors: totalErrors,
+                      aggregate_success: totalExecs - totalErrors,
+                      operations_used: totalOps,
+                      centicredits: totalCenticredits,
+                      data_transfer_bytes: totalTransfer,
+                      duration_ms: 0,
+                    },
+                    labels: {
+                      scenario_id: ent.external_id,
+                      platformType: "make",
+                      workflow_id: ent.external_id,
+                    },
+                    timestamp: (stats.updated_at as string) ?? new Date().toISOString(),
+                    platform_event_id: null,
+                  } as PreviewEvent);
+                }
+              }
+            } catch {
+              // Non-fatal — preview just won't show aggregate data
+            }
+          }
         }
+
+        setEvents(finalEvents);
       } catch {
         setEvents([]);
       } finally {

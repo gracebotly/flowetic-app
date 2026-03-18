@@ -274,7 +274,7 @@ export default function AuthShell() {
   const urlError = searchParams.get("error");
   const urlErrorMessage =
     urlError === "not_registered"
-      ? "No account found for that Google address. Please sign up first."
+      ? "No account found for that email. Please sign up first."
       : urlError === "auth_failed"
         ? 'Sign-in was interrupted. Please click "Continue with Google" to try again.'
         : null;
