@@ -27,7 +27,6 @@ import {
   ChevronRight,
   Download,
   BarChart3,
-  DollarSign,
 } from 'lucide-react';
 import { usePortalTheme } from '@/components/portals/PortalShell';
 import { ThemedCard, KPICard, StatusBadge, fadeUp, hexToRgba } from '@/components/portals/shared/portalPrimitives';
@@ -77,7 +76,7 @@ const FIELD_LABELS: Record<string, string> = {
 
 function formatFieldValue(key: string, value: unknown): string {
   if (key === 'data_transfer_bytes' && typeof value === 'number') return formatDataTransfer(value);
-  if (key === 'centicredits' && typeof value === 'number') return `${value} (≈$${(value / 100).toFixed(2)})`;
+  if (key === 'centicredits' && typeof value === 'number') return `${(value / 100).toFixed(0)} credits`;
   if (typeof value === 'boolean') return value ? 'Yes' : 'No';
   if (typeof value === 'object') return JSON.stringify(value);
   return String(value);
@@ -505,12 +504,12 @@ export function WorkflowOperationsSkeleton({ data, branding }: WorkflowOperation
               <ThemedCard>
                 <Flex justifyContent="between" alignItems="start">
                   <div className="flex-1">
-                    <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: tokens.textSecondary }}>Estimated Cost</p>
-                    <p className="mt-2 text-2xl font-bold tracking-tight" style={{ color: tokens.textPrimary }}>${data.estimatedCost.toFixed(2)}</p>
-                    <p className="mt-1 text-xs" style={{ color: tokens.textMuted }}>From Make centicredits</p>
+                    <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: tokens.textSecondary }}>Credits Used</p>
+                    <p className="mt-2 text-2xl font-bold tracking-tight" style={{ color: tokens.textPrimary }}>{Math.round(data.estimatedCost).toLocaleString()}</p>
+                    <p className="mt-1 text-xs" style={{ color: tokens.textMuted }}>Make credits consumed</p>
                   </div>
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ backgroundColor: `${STATUS.warning}20` }}>
-                    <DollarSign className="h-5 w-5" style={{ color: STATUS.warning }} />
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ backgroundColor: `${STATUS.info}20` }}>
+                    <Zap className="h-5 w-5" style={{ color: STATUS.info }} />
                   </div>
                 </Flex>
               </ThemedCard>

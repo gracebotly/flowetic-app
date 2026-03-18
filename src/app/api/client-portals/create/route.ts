@@ -8,7 +8,6 @@ const VALID_SKELETONS = [
   'voice-performance',
   'multi-agent-voice',
   'workflow-operations',
-  'roi-summary',
 ];
 
 const VALID_SURFACE_TYPES = ['analytics', 'runner', 'both'];
