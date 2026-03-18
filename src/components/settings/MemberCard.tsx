@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Copy, Check, Trash2, Loader2, Clock } from "lucide-react";
+import { Trash2, Loader2, Clock, Shield, User, Eye } from "lucide-react";
 
 type TeamMember = {
   id: string;
@@ -11,10 +11,11 @@ type TeamMember = {
   role: string;
   invite_status: string;
   created_at: string;
+  expires_at?: string;
   is_you: boolean;
+  is_invite?: boolean;
 };
 
-// Matches the DB CHECK constraint: ['admin', 'client', 'viewer']
 const VALID_ROLES = ["admin", "client", "viewer"] as const;
 
 const ROLE_LABELS: Record<string, string> = {
@@ -23,18 +24,33 @@ const ROLE_LABELS: Record<string, string> = {
   viewer: "Viewer",
 };
 
+const ROLE_ICONS: Record<string, typeof Shield> = {
+  admin: Shield,
+  client: User,
+  viewer: Eye,
+};
+
 interface MemberCardProps {
   member: TeamMember;
-  onRoleChange: (memberId: string, newRole: string) => Promise<{ ok: boolean; code?: string }>;
-  onRemove: (memberId: string) => Promise<{ ok: boolean; code?: string }>;
+  onRoleChange: (
+    memberId: string,
+    newRole: string
+  ) => Promise<{ ok: boolean; code?: string }>;
+  onRemove: (
+    memberId: string
+  ) => Promise<{ ok: boolean; code?: string }>;
   isPending?: boolean;
 }
 
-export function MemberCard({ member, onRoleChange, onRemove, isPending }: MemberCardProps) {
+export function MemberCard({
+  member,
+  onRoleChange,
+  onRemove,
+  isPending,
+}: MemberCardProps) {
   const [changingRole, setChangingRole] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
 
   const handleRoleChange = async (newRole: string) => {
     if (newRole === member.role) return;
@@ -52,7 +68,10 @@ export function MemberCard({ member, onRoleChange, onRemove, isPending }: Member
   };
 
   const handleRemove = async () => {
-    if (!confirm(`Remove ${member.email} from this workspace?`)) return;
+    const confirmMsg = isPending
+      ? `Revoke invite for ${member.email}?`
+      : `Remove ${member.email} from this workspace?`;
+    if (!confirm(confirmMsg)) return;
     setRemoving(true);
     setError(null);
     const result = await onRemove(member.id);
@@ -66,49 +85,88 @@ export function MemberCard({ member, onRoleChange, onRemove, isPending }: Member
     }
   };
 
-  const copyInviteLink = () => {
-    const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
-    // Pending members have an invite_token — reconstruct the link
-    // The invite_token is not in the GET response, but we can construct from the member id
-    // Actually, the GET response doesn't include invite_token for security.
-    // We copy a placeholder link that the admin previously received.
-    // For MVP: show "Link was shown when invite was created" or copy nothing.
-    // Better: we know the route is /invite/[token], but token isn't exposed in GET.
-    // Resolution: Copy won't work for pending invites from GET alone.
-    // The admin should have saved the link from the POST response.
-    navigator.clipboard.writeText(`${baseUrl}/control-panel/settings?tab=team`);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  };
-
   const joinedDate = new Date(member.created_at).toLocaleDateString("en-US", {
     year: "numeric",
     month: "short",
     day: "numeric",
   });
 
+  // Expiry for pending invites
+  const expiresLabel = member.expires_at
+    ? (() => {
+        const days = Math.ceil(
+          (new Date(member.expires_at).getTime() - Date.now()) /
+            (1000 * 60 * 60 * 24)
+        );
+        if (days <= 0) return "Expired";
+        if (days === 1) return "Expires tomorrow";
+        return `Expires in ${days} days`;
+      })()
+    : null;
+
+  const RoleIcon = ROLE_ICONS[member.role] || User;
+
   return (
     <div className="rounded-xl border border-gray-200 bg-white px-5 py-4">
       <div className="flex items-center justify-between gap-4">
-        {/* Left: email + meta */}
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            {isPending && <Clock className="h-3.5 w-3.5 flex-shrink-0 text-amber-500" />}
-            <p className="truncate text-sm font-medium text-gray-900">
-              {member.email}
-            </p>
-            {member.is_you && (
-              <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-600">
-                You
-              </span>
+        {/* Left: avatar + email + meta */}
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          {/* Avatar */}
+          <div
+            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
+              isPending
+                ? "bg-amber-50"
+                : member.is_you
+                  ? "bg-blue-50"
+                  : "bg-gray-100"
+            }`}
+          >
+            {isPending ? (
+              <Clock className="h-4 w-4 text-amber-600" />
+            ) : (
+              <RoleIcon
+                className={`h-4 w-4 ${
+                  member.is_you ? "text-blue-600" : "text-slate-600"
+                }`}
+              />
             )}
           </div>
-          <p className="mt-0.5 text-xs text-gray-500">
-            {isPending ? `Invited as ${ROLE_LABELS[member.role] || member.role}` : `Role: ${ROLE_LABELS[member.role] || member.role}`}
-            {" · "}
-            {isPending ? `Sent ${joinedDate}` : `Joined ${joinedDate}`}
-            {member.name && ` · ${member.name}`}
-          </p>
+
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <p className="truncate text-sm font-medium text-slate-900">
+                {member.name || member.email}
+              </p>
+              {member.is_you && (
+                <span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-600">
+                  You
+                </span>
+              )}
+              {isPending && (
+                <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+                  Pending
+                </span>
+              )}
+            </div>
+            <p className="mt-0.5 text-xs text-slate-600">
+              {member.name ? member.email : ""}
+              {member.name ? " · " : ""}
+              {ROLE_LABELS[member.role] || member.role}
+              {" · "}
+              {isPending ? `Invited ${joinedDate}` : `Joined ${joinedDate}`}
+              {isPending && expiresLabel && (
+                <span
+                  className={`ml-1 ${
+                    expiresLabel === "Expired"
+                      ? "text-red-600"
+                      : "text-slate-600"
+                  }`}
+                >
+                  · {expiresLabel}
+                </span>
+              )}
+            </p>
+          </div>
         </div>
 
         {/* Right: actions */}
@@ -119,7 +177,7 @@ export function MemberCard({ member, onRoleChange, onRemove, isPending }: Member
               value={member.role}
               onChange={(e) => handleRoleChange(e.target.value)}
               disabled={changingRole}
-              className="rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-sm text-gray-700 shadow-sm focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
+              className="cursor-pointer rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-sm text-slate-900 shadow-sm transition-colors duration-200 focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
             >
               {VALID_ROLES.map((r) => (
                 <option key={r} value={r}>
@@ -129,23 +187,12 @@ export function MemberCard({ member, onRoleChange, onRemove, isPending }: Member
             </select>
           )}
 
-          {/* Copy invite link (pending only) */}
-          {isPending && (
-            <button
-              onClick={copyInviteLink}
-              className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-sm text-gray-600 transition hover:bg-gray-50"
-            >
-              {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
-              {copied ? "Copied" : "Copy Link"}
-            </button>
-          )}
-
-          {/* Remove button — not shown for yourself */}
+          {/* Remove/Revoke button — not shown for yourself */}
           {!member.is_you && (
             <button
               onClick={handleRemove}
               disabled={removing}
-              className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-white px-2.5 py-1.5 text-sm text-red-600 transition hover:bg-red-50"
+              className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-red-200 bg-white px-2.5 py-1.5 text-sm text-red-600 transition-colors duration-200 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {removing ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -158,7 +205,7 @@ export function MemberCard({ member, onRoleChange, onRemove, isPending }: Member
         </div>
       </div>
 
-      {/* Error message */}
+      {/* Error */}
       {error && (
         <p className="mt-2 text-sm text-red-600">{error}</p>
       )}

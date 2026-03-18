@@ -1,7 +1,13 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createClient as createServiceClient } from "@supabase/supabase-js";
 
 export const runtime = "nodejs";
+
+const supabaseAdmin = createServiceClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 function json(status: number, data: Record<string, unknown>) {
   return NextResponse.json(data, { status });
@@ -9,59 +15,69 @@ function json(status: number, data: Record<string, unknown>) {
 
 // ── GET /api/invite/[token] ─────────────────────────────────
 // Validates an invite token. Returns tenant info if valid.
-// Requires authenticated user.
+// Does NOT require auth — we need to show invite details before login.
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ token: string }> }
 ) {
   const { token } = await params;
-  const supabase = await createClient();
 
-  // Check auth
+  // Look up invite in team_invites table (service role to bypass RLS)
+  const { data: invite, error } = await supabaseAdmin
+    .from("team_invites")
+    .select("id, tenant_id, email, role, status, expires_at")
+    .eq("token", token)
+    .maybeSingle();
+
+  if (error || !invite) {
+    return json(404, { ok: false, code: "INVITE_NOT_FOUND" });
+  }
+
+  if (invite.status === "accepted") {
+    return json(400, { ok: false, code: "ALREADY_ACCEPTED" });
+  }
+
+  if (invite.status === "revoked") {
+    return json(400, { ok: false, code: "INVITE_REVOKED" });
+  }
+
+  if (invite.status === "expired" || new Date(invite.expires_at) < new Date()) {
+    // Auto-expire if past date
+    if (invite.status !== "expired") {
+      await supabaseAdmin
+        .from("team_invites")
+        .update({ status: "expired", updated_at: new Date().toISOString() })
+        .eq("id", invite.id);
+    }
+    return json(400, { ok: false, code: "INVITE_EXPIRED" });
+  }
+
+  // Get tenant name
+  const { data: tenant } = await supabaseAdmin
+    .from("tenants")
+    .select("name")
+    .eq("id", invite.tenant_id)
+    .maybeSingle();
+
+  // Check if the current user is authenticated
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) {
-    return json(401, { ok: false, code: "AUTH_REQUIRED" });
-  }
-
-  // Find the membership with this invite token
-  const { data: membership, error } = await supabase
-    .from("memberships")
-    .select("id, tenant_id, role, invite_status, invited_email")
-    .eq("invite_token", token)
-    .maybeSingle();
-
-  if (error || !membership) {
-    return json(404, { ok: false, code: "INVITE_NOT_FOUND" });
-  }
-
-  if (membership.invite_status === "active") {
-    return json(400, { ok: false, code: "ALREADY_ACTIVE" });
-  }
-
-  if (membership.invite_status === "revoked") {
-    return json(400, { ok: false, code: "INVITE_REVOKED" });
-  }
-
-  // Get tenant name for display
-  const { data: tenant } = await supabase
-    .from("tenants")
-    .select("name")
-    .eq("id", membership.tenant_id)
-    .maybeSingle();
-
   return json(200, {
     ok: true,
-    tenant_name: tenant?.name || "Unknown workspace",
-    role: membership.role,
-    email: membership.invited_email,
+    tenant_name: tenant?.name || "a workspace",
+    role: invite.role,
+    email: invite.email,
+    is_authenticated: !!user,
+    user_email: user?.email || null,
   });
 }
 
 // ── POST /api/invite/[token] ────────────────────────────────
-// Accepts an invite. Updates the membership to active and sets user_id.
+// Accepts an invite. Requires authenticated user.
+// Creates the real membership row and marks invite as accepted.
 export async function POST(
   _req: Request,
   { params }: { params: Promise<{ token: string }> }
@@ -78,57 +94,100 @@ export async function POST(
     return json(401, { ok: false, code: "AUTH_REQUIRED" });
   }
 
-  // Find the pending membership
-  const { data: membership, error } = await supabase
-    .from("memberships")
-    .select("id, tenant_id, user_id, role, invite_status")
-    .eq("invite_token", token)
-    .eq("invite_status", "pending")
+  // Look up the pending invite
+  const { data: invite, error } = await supabaseAdmin
+    .from("team_invites")
+    .select("id, tenant_id, email, role, status, expires_at")
+    .eq("token", token)
+    .eq("status", "pending")
     .maybeSingle();
 
-  if (error || !membership) {
+  if (error || !invite) {
     return json(404, { ok: false, code: "INVITE_NOT_FOUND" });
   }
 
-  // Check if user is already a member of this tenant
-  const { data: existingMembership } = await supabase
+  // Check expiry
+  if (new Date(invite.expires_at) < new Date()) {
+    await supabaseAdmin
+      .from("team_invites")
+      .update({ status: "expired", updated_at: new Date().toISOString() })
+      .eq("id", invite.id);
+    return json(400, { ok: false, code: "INVITE_EXPIRED" });
+  }
+
+  // Check if user is already a member
+  const { data: existingMembership } = await supabaseAdmin
     .from("memberships")
     .select("id")
-    .eq("tenant_id", membership.tenant_id)
+    .eq("tenant_id", invite.tenant_id)
     .eq("user_id", user.id)
     .eq("invite_status", "active")
     .maybeSingle();
 
   if (existingMembership) {
+    // Mark invite as accepted anyway
+    await supabaseAdmin
+      .from("team_invites")
+      .update({
+        status: "accepted",
+        accepted_by: user.id,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", invite.id);
+
     return json(409, { ok: false, code: "ALREADY_MEMBER" });
   }
 
-  // Activate: update user_id to the accepting user + set status to active + clear token
-  const { error: updateError } = await supabase
-    .from("memberships")
-    .update({
-      user_id: user.id,
-      invite_status: "active",
-      invite_token: null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", membership.id);
+  // Ensure user exists in public.users (trigger should handle this, but be safe)
+  const { data: publicUser } = await supabaseAdmin
+    .from("users")
+    .select("id")
+    .eq("id", user.id)
+    .maybeSingle();
 
-  if (updateError) {
-    console.error("[POST /api/invite/[token]] Accept failed:", updateError);
-    return json(500, { ok: false, code: "ACCEPT_FAILED", message: updateError.message });
+  if (!publicUser) {
+    // Create the public user row
+    await supabaseAdmin.from("users").insert({
+      id: user.id,
+      email: user.email!,
+      name: user.user_metadata?.name || user.email?.split("@")[0] || "",
+    });
   }
 
-  // Get tenant name for response
-  const { data: tenant } = await supabase
+  // Create the membership
+  const { error: memberErr } = await supabaseAdmin.from("memberships").insert({
+    tenant_id: invite.tenant_id,
+    user_id: user.id,
+    role: invite.role,
+    invite_status: "active",
+    invited_email: invite.email,
+  });
+
+  if (memberErr) {
+    console.error("[POST /api/invite/[token]] Membership create failed:", memberErr);
+    return json(500, { ok: false, code: "ACCEPT_FAILED", message: memberErr.message });
+  }
+
+  // Mark invite as accepted
+  await supabaseAdmin
+    .from("team_invites")
+    .update({
+      status: "accepted",
+      accepted_by: user.id,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", invite.id);
+
+  // Get tenant name
+  const { data: tenant } = await supabaseAdmin
     .from("tenants")
     .select("name")
-    .eq("id", membership.tenant_id)
+    .eq("id", invite.tenant_id)
     .maybeSingle();
 
   return json(200, {
     ok: true,
     tenant_name: tenant?.name || "Workspace",
-    role: membership.role,
+    role: invite.role,
   });
 }
