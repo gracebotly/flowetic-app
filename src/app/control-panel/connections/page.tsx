@@ -1625,8 +1625,8 @@ export default function ConnectionsPage() {
             <div
               className="fixed z-50 w-40 rounded-lg border bg-white shadow-lg"
               style={{
-                top: `${menuPos!.top}px`,
-                left: `${menuPos!.left}px`,
+                top: `${menuPos?.top ?? 0}px`,
+                left: `${menuPos?.left ?? 0}px`,
               }}
               onClick={(e) => e.stopPropagation()}
             >
@@ -1660,26 +1660,33 @@ export default function ConnectionsPage() {
                   setOpenEntityMenuId(null);
                   setMenuPos(null);
 
-                  const res = await fetch("/api/indexed-entities/unindex", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ sourceId: openEntity.sourceId, externalId: openEntity.externalId }),
-                  });
-                  const json = await res.json().catch(() => ({}));
+                  try {
+                    const res = await fetch("/api/indexed-entities/unindex", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ sourceId: openEntity.sourceId, externalId: openEntity.externalId }),
+                    });
+                    const json = await res.json().catch(() => ({}));
 
-                  setDeleteConfirmId(null);
-                  setMenuPos(null);
+                    setDeleteConfirmId(null);
+                    setMenuPos(null);
 
-                  if (!res.ok || !json?.ok) {
-                    if (json?.code === "ENTITY_IN_USE") {
-                      setIndexedErr(json.message);
-                    } else {
-                      setIndexedErr(json?.message || "Failed to remove from index.");
+                    if (!res.ok || !json?.ok) {
+                      if (json?.code === "ENTITY_IN_USE") {
+                        setIndexedErr(json.message);
+                      } else {
+                        setIndexedErr(json?.message || "Failed to remove from index.");
+                      }
+                      return;
                     }
-                    return;
-                  }
 
-                  refreshIndexedEntities();
+                    refreshIndexedEntities();
+                  } catch (e) {
+                    console.error("[connections] unindex entity failed:", e);
+                    setDeleteConfirmId(null);
+                    setMenuPos(null);
+                    setIndexedErr("Something went wrong. Please try again.");
+                  }
                 }}
                 className={
                   "flex w-full items-start gap-2 px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50 " +
@@ -1838,8 +1845,8 @@ export default function ConnectionsPage() {
             <div
               className="fixed z-50 w-40 rounded-lg border bg-white shadow-lg"
               style={{
-                top: `${menuPos!.top}px`,
-                left: `${menuPos!.left}px`,
+                top: `${menuPos?.top ?? 0}px`,
+                left: `${menuPos?.left ?? 0}px`,
               }}
               onClick={(e) => e.stopPropagation()}
             >
@@ -1862,7 +1869,11 @@ export default function ConnectionsPage() {
                 onClick={async () => {
                   setOpenCredentialMenuId(null);
                   setMenuPos(null);
-                  await syncSingleSource(openCred.id);
+                  try {
+                    await syncSingleSource(openCred.id);
+                  } catch (e) {
+                    console.error("[connections] sync events failed:", e);
+                  }
                 }}
                 className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
               >
@@ -1881,9 +1892,14 @@ export default function ConnectionsPage() {
                   onClick={async () => {
                     setOpenCredentialMenuId(null);
                     setMenuPos(null);
-
-                    // Use the generalized inventory management function
-                    openManageIndexed(String(openCred.platformType), String(openCred.id));
+                    try {
+                      // Use the generalized inventory management function
+                      await openManageIndexed(String(openCred.platformType), String(openCred.id));
+                    } catch (e) {
+                      console.error("[connections] manage indexed failed:", e);
+                      setErrMsg("Failed to load inventory. Please try again.");
+                      setManageIndexedLoading(false);
+                    }
                   }}
                   className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
                 >
@@ -2502,7 +2518,13 @@ export default function ConnectionsPage() {
           <button
             type="button"
             onClick={async () => {
-              await saveEntitiesSelection();
+              try {
+                await saveEntitiesSelection();
+              } catch (e) {
+                console.error("[connections] save entities failed:", e);
+                setErrMsg("Something went wrong while saving. Please try again.");
+                setSaving(false);
+              }
             }}
             disabled={saving || inventoryLoading || selectedExternalIds.size === 0}
             className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600 disabled:opacity-50"
@@ -2900,7 +2922,13 @@ export default function ConnectionsPage() {
                   onClick={async () => {
                     const id = credentialDeleteId;
                     if (!id) return;
-                    await deleteCredentialById(id);
+                    try {
+                      await deleteCredentialById(id);
+                    } catch (e) {
+                      console.error("[connections] delete credential failed:", e);
+                      setErrMsg("Something went wrong while deleting. Please try again.");
+                      setSaving(false);
+                    }
                   }}
                   className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
                 >

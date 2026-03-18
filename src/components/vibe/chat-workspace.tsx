@@ -2052,10 +2052,14 @@ return (
                               if (uiStatus === 'streaming') return;
                               setSelectedStyleBundleId(bundle.id);
                               setToolUi(null);
-                              // FIX: Pass explicit override for stale closure
-                              await sendAi(`__ACTION__:select_style_bundle:${bundle.id}`, {
-                                selectedStyleBundleId: bundle.id,
-                              });
+                              try {
+                                // FIX: Pass explicit override for stale closure
+                                await sendAi(`__ACTION__:select_style_bundle:${bundle.id}`, {
+                                  selectedStyleBundleId: bundle.id,
+                                });
+                              } catch (e) {
+                                console.error("[chat-workspace] style bundle selection failed:", e);
+                              }
                             }}
                             className={`text-left rounded-lg border border-gray-200 p-4 transition-all ${
                               uiStatus === 'streaming'
