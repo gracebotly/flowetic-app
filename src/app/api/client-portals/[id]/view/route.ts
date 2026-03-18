@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/service';
+import { withApiHandler } from "@/lib/api/withApiHandler";
 
-export async function POST(
+export const POST = withApiHandler(async function POST(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -9,4 +10,4 @@ export async function POST(
   const supabase = createServiceClient();
   await supabase.rpc('increment_view_count', { p_offering_id: id });
   return NextResponse.json({ ok: true });
-}
+});

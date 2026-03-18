@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
+import { withApiHandler } from "@/lib/api/withApiHandler";
 
 export const runtime = "nodejs";
 
@@ -14,7 +15,7 @@ function json(status: number, data: Record<string, unknown>) {
 }
 
 // ── GET /api/invite/[token] ─────────────────────────────────
-export async function GET(
+export const GET = withApiHandler(async function GET(
   _req: Request,
   { params }: { params: Promise<{ token: string }> }
 ) {
@@ -69,10 +70,10 @@ export async function GET(
     user_email: user?.email || null,
     email_match: emailMatch,
   });
-}
+});
 
 // ── POST /api/invite/[token] ────────────────────────────────
-export async function POST(
+export const POST = withApiHandler(async function POST(
   _req: Request,
   { params }: { params: Promise<{ token: string }> }
 ) {
@@ -185,4 +186,4 @@ export async function POST(
     tenant_name: tenant?.name || "Workspace",
     role: invite.role,
   });
-}
+});

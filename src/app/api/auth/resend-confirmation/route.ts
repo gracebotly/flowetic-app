@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { withApiHandler } from "@/lib/api/withApiHandler";
 
 export const runtime = "nodejs";
 
-export async function POST() {
+export const POST = withApiHandler(async function POST() {
   const supabase = await createClient();
   const {
     data: { user },
@@ -34,4 +35,4 @@ export async function POST() {
   }
 
   return NextResponse.json({ ok: true, reason: "sent" });
-}
+});

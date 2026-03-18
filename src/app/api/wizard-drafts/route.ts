@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { withApiHandler } from "@/lib/api/withApiHandler";
 
 const DRAFT_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
 
-export async function GET() {
+export const GET = withApiHandler(async function GET() {
   const supabase = await createClient();
   const {
     data: { user },
@@ -38,9 +39,8 @@ export async function GET() {
   }
 
   return NextResponse.json({ ok: true, draft });
-}
-
-export async function POST(request: Request) {
+});
+export const POST = withApiHandler(async function POST(request: Request) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -88,9 +88,8 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json({ ok: true, draft });
-}
-
-export async function DELETE() {
+});
+export const DELETE = withApiHandler(async function DELETE() {
   const supabase = await createClient();
   const {
     data: { user },
@@ -111,4 +110,4 @@ export async function DELETE() {
     .eq("tenant_id", membership.tenant_id);
 
   return NextResponse.json({ ok: true });
-}
+});

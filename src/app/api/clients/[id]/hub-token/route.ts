@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { withApiHandler } from "@/lib/api/withApiHandler";
 
-export async function POST(
+export const POST = withApiHandler(async function POST(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -39,4 +40,4 @@ export async function POST(
     .eq('tenant_id', membership.tenant_id);
 
   return NextResponse.json({ ok: true, hubToken });
-}
+});

@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getPlanLimits } from "@/lib/plans/constants";
+import { withApiHandler } from "@/lib/api/withApiHandler";
 
 export const runtime = "nodejs";
 
-export async function GET() {
+export const GET = withApiHandler(async function GET() {
   const supabase = await createClient();
 
   const {
@@ -55,4 +56,4 @@ export async function GET() {
     platform_fee_percent: limits.platform_fee_percent,
     cancel_at: tenant.cancel_at,
   });
-}
+});

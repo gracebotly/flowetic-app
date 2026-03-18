@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getTenantAdmin } from "@/lib/settings/getTenantAdmin";
+import { withApiHandler } from "@/lib/api/withApiHandler";
 
 export const runtime = "nodejs";
 
@@ -9,7 +10,7 @@ function json(status: number, data: Record<string, unknown>) {
 
 // ── POST /api/settings/branding/logo ────────────────────────
 // Uploads logo to Supabase Storage, updates tenants.logo_url. Admin only.
-export async function POST(req: Request) {
+export const POST = withApiHandler(async function POST(req: Request) {
   const auth = await getTenantAdmin({ requireAdmin: true });
   if (!auth.ok) return json(auth.status, { ok: false, code: auth.code });
 
@@ -76,11 +77,11 @@ export async function POST(req: Request) {
   }
 
   return json(200, { ok: true, logo_url: logoUrl });
-}
+});
 
 // ── DELETE /api/settings/branding/logo ──────────────────────
 // Removes logo from storage and nulls tenants.logo_url. Admin only.
-export async function DELETE() {
+export const DELETE = withApiHandler(async function DELETE() {
   const auth = await getTenantAdmin({ requireAdmin: true });
   if (!auth.ok) return json(auth.status, { ok: false, code: auth.code });
 
@@ -106,4 +107,4 @@ export async function DELETE() {
   }
 
   return json(200, { ok: true });
-}
+});
