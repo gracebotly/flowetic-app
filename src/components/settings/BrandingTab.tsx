@@ -20,8 +20,8 @@ export function BrandingTab() {
   const [loading, setLoading] = useState(true);
 
   // Edit state
-  const [primaryColor, setPrimaryColor] = useState("#3B82F6");
-  const [secondaryColor, setSecondaryColor] = useState("#1E40AF");
+  const [primaryColor, setPrimaryColor] = useState("#059669");
+  const [secondaryColor, setSecondaryColor] = useState("#065F46");
   const [welcomeMessage, setWelcomeMessage] = useState("");
   const [brandFooter, setBrandFooter] = useState("");
   const [logoUrl, setLogoUrl] = useState<string | null>(null);

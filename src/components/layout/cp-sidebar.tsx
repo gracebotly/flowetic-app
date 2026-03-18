@@ -64,7 +64,7 @@ export function ControlPanelSidebar({
           const b = json.branding
           const incomplete =
             !b.logo_url ||
-            b.primary_color === "#3B82F6" ||
+            b.primary_color === "#059669" ||
             !b.brand_footer ||
             b.brand_footer === "Powered by Getflowetic"
           setSettingsBadge(incomplete)

@@ -43,11 +43,11 @@ export const MESSAGE_TEMPLATES: Record<
   string,
   (e: { entity_name?: string | null; details?: Record<string, unknown> | null }) => string
 > = {
-  "portal.created": (e) => `Created offering "${e.entity_name ?? "Untitled"}"`,
-  "portal.updated": (e) => `Updated offering "${e.entity_name ?? "Untitled"}"`,
-  "portal.archived": (e) => `Archived offering "${e.entity_name ?? "Untitled"}"`,
-  "portal.published": (e) => `Published "${e.entity_name ?? "Untitled"}"`,
-  "portal.paused": (e) => `Paused offering "${e.entity_name ?? "Untitled"}"`,
+  "portal.created": (e) => `Created portal "${e.entity_name ?? "Untitled"}"`,
+  "portal.updated": (e) => `Updated portal "${e.entity_name ?? "Untitled"}"`,
+  "portal.archived": (e) => `Archived portal "${e.entity_name ?? "Untitled"}"`,
+  "portal.published": (e) => `Published portal "${e.entity_name ?? "Untitled"}"`,
+  "portal.paused": (e) => `Paused portal "${e.entity_name ?? "Untitled"}"`,
   "client.created": (e) => `Added client "${e.entity_name ?? "Unknown"}"`,
   "client.updated": (e) => `Updated client "${e.entity_name ?? "Unknown"}"`,
   "client.archived": (e) => `Archived client "${e.entity_name ?? "Unknown"}"`,

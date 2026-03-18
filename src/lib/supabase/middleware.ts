@@ -12,7 +12,8 @@ const PUBLIC_PATHS = [
   "/api/auth/signup",
   // Client-facing public routes (no auth required)
   "/client",      // /client/[token] portal + /client/hub/[hubToken]
-  "/products",    // /products/[slug] landing, run, results
+  "/products",    // legacy /products/* redirects
+  "/p",           // /p/[slug] landing, run, results
   "/invite",      // /invite/[token] team invite
 ];
 

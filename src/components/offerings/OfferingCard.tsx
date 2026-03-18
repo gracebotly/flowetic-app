@@ -33,7 +33,7 @@ export function OfferingCard({
     <button
       type="button"
       onClick={onClick}
-      className={`flex w-full items-start gap-4 rounded-xl border-2 px-5 py-4 text-left transition ${
+      className={`flex w-full cursor-pointer items-start gap-4 rounded-xl border-2 px-5 py-4 text-left transition-colors duration-200 ${
         selected
           ? `${colors.bg} ${colors.ring} ring-2`
           : "border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50"
@@ -44,17 +44,17 @@ export function OfferingCard({
           selected ? colors.bg : "bg-gray-100"
         }`}
       >
-        <Icon className={`h-5 w-5 ${selected ? colors.icon : "text-gray-400"}`} />
+        <Icon className={`h-5 w-5 ${selected ? colors.icon : "text-slate-600"}`} />
       </div>
       <div className="flex-1">
-        <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
-        <p className="mt-1 text-xs leading-relaxed text-gray-500">
+        <h3 className="text-sm font-semibold text-slate-900">{title}</h3>
+        <p className="mt-1 text-xs leading-relaxed text-slate-600">
           {description}
         </p>
       </div>
       {/* Selection indicator */}
       <div
-        className={`mt-1 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border-2 transition ${
+        className={`mt-1 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border-2 transition-colors duration-200 ${
           selected ? `${colors.ring} bg-current` : "border-gray-300 bg-white"
         }`}
       >

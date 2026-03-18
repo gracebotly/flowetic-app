@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { Plus, Layers, ArrowUpRight } from "lucide-react";
+import { Plus, Layers, ArrowUpRight, Trash2, PenLine } from "lucide-react";
 import { SurfaceBadge } from "@/components/offerings/SurfaceBadge";
 import { AccessBadge } from "@/components/offerings/AccessBadge";
 
@@ -18,6 +18,15 @@ type Offering = {
   status: string;
   created_at: string;
   last_viewed_at: string | null;
+};
+
+type WizardDraft = {
+  id: string;
+  draft_name: string;
+  platform_type: string | null;
+  surface_type: string;
+  current_step: number;
+  updated_at: string;
 };
 
 function timeAgo(dateStr: string): string {
@@ -36,6 +45,8 @@ export default function OfferingsPage() {
   const [offerings, setOfferings] = useState<Offering[]>([]);
   const [loading, setLoading] = useState(true);
   const [usageData, setUsageData] = useState<{ current: number; limit: number } | null>(null);
+  const [wizardDraft, setWizardDraft] = useState<WizardDraft | null>(null);
+  const [discardingDraft, setDiscardingDraft] = useState(false);
   const [emailBlocked, setEmailBlocked] = useState(false);
   const atLimit = usageData ? usageData.current >= usageData.limit : false;
   const router = useRouter();
@@ -69,6 +80,23 @@ export default function OfferingsPage() {
       setLoading(false);
     }
     load();
+
+    // Load wizard draft
+    fetch("/api/wizard-drafts")
+      .then((r) => r.json())
+      .then((json) => {
+        if (json.ok && json.draft) {
+          setWizardDraft({
+            id: json.draft.id,
+            draft_name: json.draft.draft_name,
+            platform_type: json.draft.platform_type,
+            surface_type: json.draft.surface_type,
+            current_step: json.draft.current_step,
+            updated_at: json.draft.updated_at,
+          });
+        }
+      })
+      .catch(() => {});
   }, []);
   useEffect(() => {
     fetch("/api/settings/usage")
@@ -175,7 +203,7 @@ export default function OfferingsPage() {
       )}
 
       {/* Empty State */}
-      {!loading && offerings.length === 0 && (
+      {!loading && offerings.length === 0 && !wizardDraft && (
         <div className="mt-16 flex flex-col items-center text-center">
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-50">
             <Layers className="h-8 w-8 text-blue-500" />
@@ -195,7 +223,7 @@ export default function OfferingsPage() {
       )}
 
       {/* Offerings Table */}
-      {!loading && offerings.length > 0 && (
+      {!loading && (offerings.length > 0 || wizardDraft) && (
         <div className="mt-6 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
           <table className="w-full text-left text-sm">
             <thead>
@@ -216,6 +244,65 @@ export default function OfferingsPage() {
               </tr>
             </thead>
             <tbody>
+              {/* Wizard draft row */}
+              {wizardDraft && (
+                <tr className="border-b border-gray-50 bg-gray-50/30">
+                  <td className="px-4 py-3">
+                    <button
+                      type="button"
+                      onClick={() => router.push("/control-panel/client-portals/create?resume=supabase")}
+                      className="cursor-pointer font-medium text-slate-900 transition-colors duration-200 hover:text-blue-600"
+                    >
+                      {wizardDraft.draft_name || "Untitled draft"}
+                    </button>
+                    {wizardDraft.platform_type && (
+                      <span className="mt-0.5 inline-block text-xs capitalize text-slate-600">
+                        {wizardDraft.platform_type}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <SurfaceBadge surfaceType={wizardDraft.surface_type} />
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600">
+                      <span className="h-1.5 w-1.5 rounded-full bg-gray-400" />
+                      Draft — Step {wizardDraft.current_step}/4
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-xs text-slate-600">
+                    {timeAgo(wizardDraft.updated_at)}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => router.push("/control-panel/client-portals/create?resume=supabase")}
+                        className="inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-blue-600 transition-colors duration-200 hover:text-blue-700"
+                      >
+                        <PenLine className="h-3 w-3" />
+                        Resume
+                      </button>
+                      <button
+                        type="button"
+                        disabled={discardingDraft}
+                        onClick={async () => {
+                          setDiscardingDraft(true);
+                          try {
+                            await fetch("/api/wizard-drafts", { method: "DELETE" });
+                            setWizardDraft(null);
+                          } catch {}
+                          setDiscardingDraft(false);
+                        }}
+                        className="inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-slate-600 transition-colors duration-200 hover:text-red-600 disabled:opacity-40"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                        Discard
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              )}
               {offerings.map((o) => (
                 <tr
                   key={o.id}

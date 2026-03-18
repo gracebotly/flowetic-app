@@ -18,7 +18,7 @@ export function AccountCardPanel({
   email,
   plan = "Agency",
   tenantName,
-  tenantColor = "#3B82F6",
+  tenantColor = "#059669",
   tenantLogoUrl,
 }: AccountCardProps) {
   const router = useRouter()
