@@ -47,7 +47,33 @@ export async function GET(request: Request) {
     const isNewUser = !mErr && (!memberships || memberships.length === 0);
 
     if (isNewUser && intent !== "signup") {
-      // User tried to sign in with Google but has no account — sign them out and reject
+      // Check if the ensure-tenant safety net can help
+      // (e.g. user confirmed email but callback failed to create tenant)
+      try {
+        const ensureRes = await fetch(
+          new URL("/api/auth/ensure-tenant", request.url).toString(),
+          {
+            method: "POST",
+            headers: {
+              cookie: request.headers.get("cookie") ?? "",
+            },
+          }
+        );
+        const ensureData = await ensureRes.json();
+
+        if (ensureData.ok && ensureData.reason === "created") {
+          // Tenant was created — let them through
+          const destination =
+            trialParam === "0"
+              ? "/control-panel/settings?tab=billing&intent=subscribe"
+              : next;
+          return NextResponse.redirect(new URL(destination, request.url));
+        }
+      } catch {
+        // ensure-tenant failed — fall through to rejection
+      }
+
+      // Still no membership — sign out and reject
       await supabase.auth.signOut();
       return NextResponse.redirect(
         new URL("/login?error=not_registered", request.url)
