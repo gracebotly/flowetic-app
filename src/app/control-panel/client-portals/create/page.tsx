@@ -95,8 +95,8 @@ function loadDraft(): DraftPayload | null {
     const raw = sessionStorage.getItem(DRAFT_KEY);
     if (!raw) return null;
     const parsed: DraftPayload = JSON.parse(raw);
-    // Expire drafts older than 2 hours
-    if (Date.now() - parsed.savedAt > 2 * 60 * 60 * 1000) {
+    // Expire drafts older than 30 minutes
+    if (Date.now() - parsed.savedAt > 30 * 60 * 1000) {
       sessionStorage.removeItem(DRAFT_KEY);
       return null;
     }
@@ -664,7 +664,6 @@ export default function CreateOfferingPage() {
                     update({ pricingType, priceCents })
                   }
                   stripeConnected={stripeConnected}
-                  onStripeConnected={() => setStripeConnected(true)}
                   platform={wizard.selectedPlatform}
                   surfaceType={wizard.surfaceType}
                   submitError={submitError}
