@@ -30,7 +30,7 @@ export interface EntityItem {
   platform_type: string;
   source_name: string;
   last_seen_at: string | null;
-  healthStatus?: 'healthy' | 'degraded' | 'critical' | 'no-data';
+  healthStatus?: 'healthy' | 'degraded' | 'critical' | 'no-data' | 'aggregate-only';
 }
 
 export interface SelectedEntity {
@@ -165,6 +165,12 @@ function EntityRow({
           <span className="capitalize">{entity.entity_kind}</span>
           <span className="text-gray-300">·</span>
           <span>{getPlatformLabel(entity.platform_type)}</span>
+          {entity.healthStatus === 'aggregate-only' && (
+            <>
+              <span className="text-gray-300">·</span>
+              <span className="text-amber-600">Totals only</span>
+            </>
+          )}
         </div>
       </div>
 
@@ -250,9 +256,11 @@ export default function AgentPicker({
   const getDisabledReason = useCallback(
     (entity: EntityItem): string => {
       if (selectedIds.has(entity.id)) return "";
-      // Block entities with critical health status (all executions failing)
+      if (entity.healthStatus === 'no-data') {
+        return "No activity data yet. Run this agent or workflow first, then create a portal.";
+      }
       if (entity.healthStatus === 'critical') {
-        return "This agent has critical issues. Check the Connections tab for details.";
+        return "All executions are failing. Fix issues in the Connections tab before creating a portal.";
       }
       const entityCat = getCategory(entity.platform_type);
       // Block voice+workflow cross-category mixing

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { createClient } from "@/lib/supabase/client";
 import {
   X,
   Mail,
@@ -12,18 +13,14 @@ import {
   AlertCircle,
 } from "lucide-react";
 
+/** Must match server-side: src/lib/validation/email.ts */
+const EMAIL_RE =
+  /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9]([a-zA-Z0-9\-]*[a-zA-Z0-9])?(\.[a-zA-Z]{2,})+$/;
+
 const VALID_ROLES = [
   { value: "viewer", label: "Viewer", description: "Read-only access" },
-  {
-    value: "client",
-    label: "Client",
-    description: "Can create and edit client portals",
-  },
-  {
-    value: "admin",
-    label: "Admin",
-    description: "Full access including team and billing",
-  },
+  { value: "client", label: "Client", description: "Can create and edit client portals" },
+  { value: "admin", label: "Admin", description: "Full access including team and billing" },
 ];
 
 interface InviteModalProps {
@@ -36,6 +33,11 @@ export function InviteModal({ onClose, onInvited }: InviteModalProps) {
   const [role, setRole] = useState("viewer");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [emailFieldError, setEmailFieldError] = useState<string | null>(null);
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
+
+  // Typo suggestion from server
+  const [typoSuggestion, setTypoSuggestion] = useState<string | null>(null);
 
   const [inviteResult, setInviteResult] = useState<{
     email: string;
@@ -45,15 +47,36 @@ export function InviteModal({ onClose, onInvited }: InviteModalProps) {
   } | null>(null);
   const [copied, setCopied] = useState(false);
 
+  useEffect(() => {
+    const supabase = createClient();
+    void supabase.auth.getUser().then(({ data }) => {
+      setCurrentUserEmail(data.user?.email?.toLowerCase() ?? null);
+    });
+  }, []);
+
+  const validateEmailField = (value: string): string | null => {
+    if (!value.trim()) return null;
+    if (!EMAIL_RE.test(value.trim())) return "Please enter a valid email address.";
+    return null;
+  };
+
   const handleSubmit = async () => {
     const trimmed = email.trim().toLowerCase();
-    if (!trimmed || !trimmed.includes("@") || !trimmed.includes(".")) {
-      setError("Please enter a valid email address.");
+
+    // Client-side format check
+    if (!trimmed || !EMAIL_RE.test(trimmed)) {
+      setEmailFieldError("Please enter a valid email address (e.g. name@company.com).");
+      return;
+    }
+
+    if (currentUserEmail && trimmed === currentUserEmail) {
+      setError("You cannot invite yourself.");
       return;
     }
 
     setSending(true);
     setError(null);
+    setTypoSuggestion(null);
 
     try {
       const res = await fetch("/api/settings/team", {
@@ -71,14 +94,22 @@ export function InviteModal({ onClose, onInvited }: InviteModalProps) {
           invite_link: data.invite.invite_link,
         });
       } else {
+        // Handle typo suggestion from server
+        if (data.code === "TYPO_DETECTED" && data.suggestion) {
+          setTypoSuggestion(data.suggestion);
+          setError(data.message);
+          setSending(false);
+          return;
+        }
+
         const errorMessages: Record<string, string> = {
           ALREADY_INVITED: "This person already has a pending invite.",
           ALREADY_MEMBER: "This person is already a team member.",
-          INVALID_EMAIL: "Please enter a valid email address.",
+          INVALID_EMAIL: data.message || "Please enter a valid email address.",
           INVALID_ROLE: "Invalid role selected.",
           ADMIN_REQUIRED: "Only admins can invite team members.",
-          SEAT_LIMIT_REACHED:
-            data.message || "Team seat limit reached. Upgrade your plan.",
+          CANNOT_INVITE_SELF: "You cannot invite yourself.",
+          SEAT_LIMIT_REACHED: data.message || "Team seat limit reached. Upgrade your plan.",
         };
         setError(errorMessages[data.code] || data.message || "Failed to send invite.");
       }
@@ -87,6 +118,15 @@ export function InviteModal({ onClose, onInvited }: InviteModalProps) {
     }
 
     setSending(false);
+  };
+
+  const handleAcceptSuggestion = () => {
+    if (typoSuggestion) {
+      setEmail(typoSuggestion);
+      setTypoSuggestion(null);
+      setError(null);
+      setEmailFieldError(null);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -101,10 +141,6 @@ export function InviteModal({ onClose, onInvited }: InviteModalProps) {
     navigator.clipboard.writeText(inviteResult.invite_link);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  };
-
-  const handleDone = () => {
-    onInvited();
   };
 
   return (
@@ -135,7 +171,6 @@ export function InviteModal({ onClose, onInvited }: InviteModalProps) {
 
         <AnimatePresence mode="wait">
           {inviteResult ? (
-            /* ── Success state ──────────────────────────────────── */
             <motion.div
               key="success"
               initial={{ opacity: 0, y: 6 }}
@@ -154,13 +189,10 @@ export function InviteModal({ onClose, onInvited }: InviteModalProps) {
                 <p className="mt-1 text-xs text-slate-600">
                   They&apos;ll receive an email with a link to join{" "}
                   {inviteResult.tenant_name} as{" "}
-                  {VALID_ROLES.find((r) => r.value === inviteResult.role)?.label ||
-                    inviteResult.role}
-                  .
+                  {VALID_ROLES.find((r) => r.value === inviteResult.role)?.label || inviteResult.role}.
                 </p>
               </div>
 
-              {/* Fallback: copy link */}
               <div className="mt-5 rounded-xl border border-gray-200 bg-gray-50 p-3">
                 <p className="mb-2 text-xs font-medium text-slate-600">
                   Or share the invite link directly:
@@ -173,18 +205,13 @@ export function InviteModal({ onClose, onInvited }: InviteModalProps) {
                     onClick={copyLink}
                     className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 transition-colors duration-200 hover:bg-gray-50"
                   >
-                    {copied ? (
-                      <Check className="h-3.5 w-3.5 text-emerald-500" />
-                    ) : (
-                      <Copy className="h-3.5 w-3.5" />
-                    )}
+                    {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
                     {copied ? "Copied" : "Copy"}
                   </button>
                 </div>
               </div>
             </motion.div>
           ) : (
-            /* ── Form state ─────────────────────────────────────── */
             <motion.div
               key="form"
               initial={{ opacity: 0, y: 6 }}
@@ -192,7 +219,7 @@ export function InviteModal({ onClose, onInvited }: InviteModalProps) {
               transition={{ duration: 0.25 }}
               className="space-y-4 px-6 py-5"
             >
-              {/* Email */}
+              {/* Email field */}
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-slate-600">
                   Email address
@@ -205,16 +232,46 @@ export function InviteModal({ onClose, onInvited }: InviteModalProps) {
                     onChange={(e) => {
                       setEmail(e.target.value);
                       if (error) setError(null);
+                      if (emailFieldError) setEmailFieldError(null);
+                      if (typoSuggestion) setTypoSuggestion(null);
                     }}
+                    onBlur={() => setEmailFieldError(validateEmailField(email))}
                     onKeyDown={handleKeyDown}
                     placeholder="teammate@agency.com"
                     autoFocus
-                    className="w-full rounded-lg border border-gray-200 bg-white py-2.5 pl-10 pr-3 text-sm text-slate-900 shadow-sm outline-none transition-colors duration-200 placeholder:text-slate-600 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                    className={`w-full rounded-lg border bg-white py-2.5 pl-10 pr-3 text-sm text-slate-900 shadow-sm outline-none transition-colors duration-200 placeholder:text-slate-600 focus:ring-2 focus:ring-blue-100 ${
+                      emailFieldError || (error && !typoSuggestion)
+                        ? "border-red-300 focus:border-red-400"
+                        : "border-gray-200 focus:border-blue-400"
+                    }`}
                   />
                 </div>
+                {emailFieldError && (
+                  <p className="mt-1 text-xs text-red-600">{emailFieldError}</p>
+                )}
               </div>
 
-              {/* Role */}
+              {/* Typo suggestion */}
+              {typoSuggestion && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3"
+                >
+                  <p className="text-sm text-amber-800">
+                    Did you mean{" "}
+                    <button
+                      onClick={handleAcceptSuggestion}
+                      className="cursor-pointer font-semibold text-amber-900 underline decoration-amber-400 underline-offset-2 transition-colors duration-200 hover:text-amber-700"
+                    >
+                      {typoSuggestion}
+                    </button>
+                    ?
+                  </p>
+                </motion.div>
+              )}
+
+              {/* Role selection */}
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-slate-600">
                   Role
@@ -249,20 +306,16 @@ export function InviteModal({ onClose, onInvited }: InviteModalProps) {
                         className="sr-only"
                       />
                       <div>
-                        <p className="text-sm font-medium text-slate-900">
-                          {r.label}
-                        </p>
-                        <p className="text-xs text-slate-600">
-                          {r.description}
-                        </p>
+                        <p className="text-sm font-medium text-slate-900">{r.label}</p>
+                        <p className="text-xs text-slate-600">{r.description}</p>
                       </div>
                     </label>
                   ))}
                 </div>
               </div>
 
-              {/* Error */}
-              {error && (
+              {/* General error (not typo) */}
+              {error && !typoSuggestion && (
                 <motion.div
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: "auto" }}
@@ -280,7 +333,7 @@ export function InviteModal({ onClose, onInvited }: InviteModalProps) {
         <div className="flex justify-end gap-2 border-t border-gray-100 px-6 py-4">
           {inviteResult ? (
             <button
-              onClick={handleDone}
+              onClick={onInvited}
               className="cursor-pointer rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors duration-200 hover:bg-blue-700"
             >
               Done
