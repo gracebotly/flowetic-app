@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Link2, CreditCard, UserPlus, ChevronDown, Search, Loader2, ExternalLink, CheckCircle2 } from "lucide-react";
+import { Link2, CreditCard, UserPlus, ChevronDown, Search } from "lucide-react";
 import { OfferingCard } from "./OfferingCard";
 
 type AccessType = "magic_link" | "stripe_gate";
@@ -30,7 +30,6 @@ type Props = {
   onPricingChange: (pricingType: PricingType, priceCents: number) => void;
   // Stripe status (fetched by parent)
   stripeConnected: boolean;
-  onStripeConnected?: () => void;
   // Context badges
   platform: string | null;
   surfaceType: string;
@@ -89,70 +88,11 @@ export function WizardStepConfigure({
   onAccessChange,
   onPricingChange,
   stripeConnected,
-  onStripeConnected,
   platform,
   surfaceType,
   submitError,
 }: Props) {
   void prefilledClientId;
-
-  // ── Stripe Connect in-wizard state ────────────────────────
-  const [stripeConnecting, setStripeConnecting] = useState(false);
-  const [stripeWaiting, setStripeWaiting] = useState(false);
-  const [stripeError, setStripeError] = useState<string | null>(null);
-  const [stripeJustConnected, setStripeJustConnected] = useState(false);
-
-  // Open Stripe onboarding in a new tab
-  const handleStripeConnect = useCallback(async () => {
-    setStripeConnecting(true);
-    setStripeError(null);
-    try {
-      const res = await fetch("/api/stripe/connect", { method: "POST" });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to start Stripe onboarding");
-      }
-      const { url } = await res.json();
-      window.open(url, "_blank", "noopener,noreferrer");
-      setStripeWaiting(true);
-    } catch (err) {
-      setStripeError(err instanceof Error ? err.message : "Connection failed");
-    } finally {
-      setStripeConnecting(false);
-    }
-  }, []);
-
-  // Poll Stripe status (called on tab focus or manual click)
-  const checkStripeStatus = useCallback(async () => {
-    try {
-      const res = await fetch("/api/stripe/connect/status");
-      if (!res.ok) return;
-      const data = await res.json();
-      if (data.charges_enabled) {
-        setStripeWaiting(false);
-        setStripeJustConnected(true);
-        onStripeConnected?.();
-        // Clear the success flash after 2 seconds
-        setTimeout(() => setStripeJustConnected(false), 2000);
-      }
-    } catch {
-      // silent — user can retry manually
-    }
-  }, [onStripeConnected]);
-
-  // Auto-poll on tab visibility change (user returns from Stripe tab)
-  useEffect(() => {
-    if (!stripeWaiting) return;
-
-    const handleVisibility = () => {
-      if (document.visibilityState === "visible") {
-        void checkStripeStatus();
-      }
-    };
-
-    document.addEventListener("visibilitychange", handleVisibility);
-    return () => document.removeEventListener("visibilitychange", handleVisibility);
-  }, [stripeWaiting, checkStripeStatus]);
 
   // ── Client picker state ─────────────────────────────────
   const [clients, setClients] = useState<ClientOption[]>([]);
@@ -458,86 +398,50 @@ function formatPhone(value: string): string {
         )}
       </div>
 
-      {/* ── Access Type (Free / Paid) — ALWAYS visible ──── */}
+      {/* ── Access Type ──────────────────────────────────── */}
       <div className="mt-8">
         <h3 className="text-sm font-semibold text-slate-900">Access</h3>
         <p className="mt-1 text-xs text-slate-600">
-          Free link or paid — you can change this later.
+          {stripeConnected
+            ? "Free link or paid — you can change this later."
+            : "Share via a free link. Connect Stripe in Settings to unlock paid access."}
         </p>
         <div className="mt-3 grid gap-3">
-          {ACCESS_OPTIONS.map((option) => (
+          <OfferingCard
+            title={ACCESS_OPTIONS[0].title}
+            description={ACCESS_OPTIONS[0].description}
+            icon={ACCESS_OPTIONS[0].icon}
+            color={ACCESS_OPTIONS[0].color}
+            selected={accessType === "magic_link"}
+            onClick={() => onAccessChange("magic_link")}
+          />
+
+          {stripeConnected && (
             <OfferingCard
-              key={option.value}
-              title={option.title}
-              description={option.description}
-              icon={option.icon}
-              color={option.color}
-              selected={accessType === option.value}
-              onClick={() => onAccessChange(option.value)}
+              title={ACCESS_OPTIONS[1].title}
+              description={ACCESS_OPTIONS[1].description}
+              icon={ACCESS_OPTIONS[1].icon}
+              color={ACCESS_OPTIONS[1].color}
+              selected={accessType === "stripe_gate"}
+              onClick={() => onAccessChange("stripe_gate")}
             />
-          ))}
+          )}
         </div>
 
-        {/* Stripe not connected + paid selected → inline connect prompt */}
-        {accessType === "stripe_gate" && !stripeConnected && !stripeJustConnected && (
-          <div className="mt-4 rounded-xl border border-gray-200 bg-white px-5 py-4">
-            <div className="flex items-start gap-3">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100">
-                <CreditCard className="h-4 w-4 text-slate-600" />
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-semibold text-slate-900">
-                  Connect Stripe to accept payments
-                </p>
-                <p className="mt-1 text-xs leading-relaxed text-slate-600">
-                  Paid access requires a connected Stripe account. Your clients
-                  pay you directly — Getflowetic is invisible in the billing.
-                </p>
-
-                {stripeError && (
-                  <p className="mt-2 text-xs text-red-600">{stripeError}</p>
-                )}
-
-                {!stripeWaiting ? (
-                  <button
-                    type="button"
-                    onClick={handleStripeConnect}
-                    disabled={stripeConnecting}
-                    className="mt-3 inline-flex cursor-pointer items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition-colors duration-200 hover:bg-slate-800 disabled:opacity-50"
-                  >
-                    {stripeConnecting ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <ExternalLink className="h-4 w-4" />
-                    )}
-                    {stripeConnecting ? "Opening Stripe…" : "Connect Stripe in new tab"}
-                  </button>
-                ) : (
-                  <div className="mt-3">
-                    <div className="flex items-center gap-2 text-sm text-slate-600">
-                      <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
-                      <span>Waiting for Stripe connection…</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={checkStripeStatus}
-                      className="mt-2 cursor-pointer text-xs font-medium text-blue-600 underline decoration-blue-300 underline-offset-2 transition-colors duration-200 hover:text-blue-700"
-                    >
-                      Check connection status
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Stripe just connected — brief success flash */}
-        {accessType === "stripe_gate" && stripeJustConnected && (
-          <div className="mt-4 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-3">
-            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-            <p className="text-sm font-medium text-emerald-800">
-              Stripe connected — you can now configure pricing below.
+        {!stripeConnected && (
+          <div className="mt-3 flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+            <CreditCard className="h-4 w-4 shrink-0 text-slate-400" />
+            <p className="text-xs text-slate-600">
+              Want to charge for this portal?{" "}
+              <a
+                href="/control-panel/settings?tab=billing"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-blue-600 underline decoration-blue-200 underline-offset-2 transition-colors duration-200 hover:text-blue-700"
+              >
+                Connect Stripe in Settings
+              </a>{" "}
+              first, then come back to enable paid access.
             </p>
           </div>
         )}
