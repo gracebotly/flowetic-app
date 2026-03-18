@@ -264,6 +264,8 @@ export default function CreateOfferingPage() {
                 lastSeenAt?: string | null;
                 healthStatus?: 'healthy' | 'degraded' | 'critical' | 'no-data' | 'aggregate-only';
                 health_status?: 'healthy' | 'degraded' | 'critical' | 'no-data' | 'aggregate-only';
+                hasEvents?: boolean;
+                has_events?: boolean;
               }) => ({
                 id: e.entityUuid ?? e.id ?? "",
                 source_id: e.source_id ?? e.sourceId ?? "",
