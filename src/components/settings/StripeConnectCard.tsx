@@ -13,6 +13,7 @@ type ConnectStatus = {
   charges_enabled: boolean;
   payouts_enabled: boolean;
   onboarding_complete: boolean;
+  details_submitted: boolean;
   stripe_account_id: string | null;
   connected_at: string | null;
 };
@@ -22,6 +23,7 @@ export function StripeConnectCard() {
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [polling, setPolling] = useState(false);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -52,6 +54,27 @@ export function StripeConnectCard() {
       window.history.replaceState({}, "", url.toString());
     }
   }, [fetchStatus]);
+
+  // Auto-poll when details are submitted but charges not yet enabled
+  useEffect(() => {
+    if (
+      status?.connected &&
+      status?.details_submitted &&
+      !status?.charges_enabled
+    ) {
+      setPolling(true);
+      const interval = setInterval(() => {
+        void fetchStatus();
+      }, 5000); // Poll every 5 seconds
+
+      return () => {
+        clearInterval(interval);
+        setPolling(false);
+      };
+    } else {
+      setPolling(false);
+    }
+  }, [status?.connected, status?.details_submitted, status?.charges_enabled, fetchStatus]);
 
   const handleConnect = async () => {
     setConnecting(true);
@@ -116,7 +139,31 @@ export function StripeConnectCard() {
     );
   }
 
-  /* ── State 2: Onboarding incomplete ── */
+  /* ── State 2a: Details submitted, waiting for Stripe activation ── */
+  if (status.details_submitted && !status.charges_enabled) {
+    return (
+      <div className="rounded-lg border border-gray-200 border-l-[3px] border-l-blue-500 bg-white p-5">
+        <div className="flex items-center gap-2 text-sm font-medium text-slate-900">
+          <CreditCard className="h-4 w-4" />
+          Stripe Connect
+          <span className="ml-1 inline-flex items-center gap-1.5 rounded bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">
+            <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+            Activating
+          </span>
+        </div>
+        <p className="mt-1.5 text-xs text-slate-600 leading-relaxed">
+          Your application has been submitted. Stripe is reviewing and activating
+          your account — this usually takes a few moments.
+        </p>
+        <div className="mt-3 flex items-center gap-2 text-xs text-slate-500">
+          {polling && <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500" />}
+          <span>{polling ? "Checking status…" : "Waiting for Stripe"}</span>
+        </div>
+      </div>
+    );
+  }
+
+  /* ── State 2b: Onboarding incomplete (never submitted or needs more info) ── */
   if (!status.onboarding_complete || !status.charges_enabled) {
     return (
       <div className="rounded-lg border border-gray-200 border-l-[3px] border-l-amber-500 bg-white p-5">
