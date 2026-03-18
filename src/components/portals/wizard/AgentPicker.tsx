@@ -30,7 +30,7 @@ export interface EntityItem {
   platform_type: string;
   source_name: string;
   last_seen_at: string | null;
-  healthStatus?: 'healthy' | 'degraded' | 'critical' | 'no-data' | 'aggregate-only';
+  healthStatus?: 'healthy' | 'degraded' | 'critical' | 'no-data';
 }
 
 export interface SelectedEntity {
@@ -165,12 +165,6 @@ function EntityRow({
           <span className="capitalize">{entity.entity_kind}</span>
           <span className="text-gray-300">·</span>
           <span>{getPlatformLabel(entity.platform_type)}</span>
-          {entity.healthStatus === 'aggregate-only' && (
-            <>
-              <span className="text-gray-300">·</span>
-              <span className="text-amber-600">Totals only</span>
-            </>
-          )}
         </div>
       </div>
 
