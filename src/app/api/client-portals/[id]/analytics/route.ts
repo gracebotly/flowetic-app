@@ -53,7 +53,7 @@ export async function GET(
       .eq("tenant_id", tenantId)
       .single();
 
-    if (!offering) return json(404, { error: "Offering not found" });
+    if (!offering) return json(404, { error: "Portal not found" });
 
     const { data: customers } = await supabaseAdmin
       .from("portal_customers")

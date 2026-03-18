@@ -47,11 +47,11 @@ export async function POST(request: NextRequest) {
       .maybeSingle();
 
     if (offErr || !offering) {
-      return json(404, { error: 'Offering not found or not active' });
+      return json(404, { error: 'Portal not found or not active' });
     }
 
     if (offering.pricing_type === 'free') {
-      return json(400, { error: 'Free offerings do not require checkout' });
+      return json(400, { error: 'Free portals do not require checkout' });
     }
 
     // 2. Load tenant + validate Stripe is connected
@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
     if (offering.pricing_type === 'per_run') {
       if (!offering.stripe_price_id) {
         return json(400, {
-          error: 'Offering has not been synced to Stripe. Republish the offering.',
+          error: 'Portal has not been synced to Stripe. Republish the portal.',
         });
       }
 
@@ -150,7 +150,7 @@ export async function POST(request: NextRequest) {
     } else if (offering.pricing_type === 'monthly') {
       if (!offering.stripe_price_id) {
         return json(400, {
-          error: 'Offering has not been synced to Stripe. Republish the offering.',
+          error: 'Portal has not been synced to Stripe. Republish the portal.',
         });
       }
 

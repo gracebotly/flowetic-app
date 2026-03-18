@@ -123,7 +123,7 @@ export async function PATCH(
     .maybeSingle();
 
   if (error || !offering) {
-    console.error('[PATCH /api/offerings] Update failed:', error);
+    console.error('[PATCH /api/client-portals] Update failed:', error);
     return json(500, { ok: false, code: 'UPDATE_FAILED' });
   }
 
@@ -141,7 +141,7 @@ export async function PATCH(
     entityId: id,
     entityName: offering.name as string,
     offeringId: id,
-    message: `Updated offering "${offering.name}"`,
+    message: `Updated portal "${offering.name}"`,
     details: { updated_fields: Object.keys(updates).filter((k) => k !== "updated_at") },
   });
 
@@ -184,7 +184,7 @@ export async function PATCH(
       }
     } catch (syncErr) {
       // Non-blocking: log but don't fail the update
-      console.error('[PATCH /api/offerings] Stripe sync error:', syncErr);
+      console.error('[PATCH /api/client-portals] Stripe sync error:', syncErr);
     }
   }
 
@@ -218,7 +218,7 @@ export async function DELETE(
     .eq('tenant_id', tenantId);
 
   if (error) {
-    console.error('[DELETE /api/offerings] Delete failed:', error);
+    console.error('[DELETE /api/client-portals] Delete failed:', error);
     return json(500, { ok: false, code: 'DELETE_FAILED' });
   }
 
@@ -231,7 +231,7 @@ export async function DELETE(
 
   if (junctionErr) {
     // Non-fatal — log but don't fail the delete
-    console.warn('[DELETE /api/offerings] Junction cleanup failed:', junctionErr.message);
+    console.warn('[DELETE /api/client-portals] Junction cleanup failed:', junctionErr.message);
   }
 
   // Log activity event

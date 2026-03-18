@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
     const { offeringId, customerEmail, returnUrl } = body;
 
     if (!offeringId || !customerEmail) {
-      return json(400, { error: "offeringId and customerEmail are required" });
+      return json(400, { error: "portalId and customerEmail are required" });
     }
 
     const supabaseAdmin = createClient(
@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
       .eq("id", offeringId)
       .single();
 
-    if (!offering) return json(404, { error: "Offering not found" });
+    if (!offering) return json(404, { error: "Portal not found" });
 
     const { data: tenant } = await supabaseAdmin
       .from("tenants")

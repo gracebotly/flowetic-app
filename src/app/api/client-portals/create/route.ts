@@ -29,6 +29,16 @@ function generateShortToken(portalName: string): string {
   return slug ? `${slug}-${rand}` : rand;
 }
 
+/** Clean slug from portal name — full words, no random chars */
+function generateCleanSlug(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '')
+    .slice(0, 60);
+}
+
 export async function POST(request: Request) {
   const supabase = await createClient();
 
@@ -108,7 +118,7 @@ export async function POST(request: Request) {
   // ── Validate required fields ──────────────────────────────
   if (!name || typeof name !== 'string' || name.trim().length < 3) {
     return NextResponse.json(
-      { error: 'Offering name required (min 3 chars)' },
+      { error: 'Portal name required (min 3 chars)' },
       { status: 400 }
     );
   }
@@ -173,7 +183,7 @@ export async function POST(request: Request) {
     finalAccess === 'stripe_gate' && slug
       ? slug
       : finalAccess === 'stripe_gate'
-        ? name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+        ? generateCleanSlug(name)
         : null;
 
   const finalStatus = status === 'draft' ? 'draft' : 'active';
@@ -207,9 +217,9 @@ export async function POST(request: Request) {
     .single();
 
   if (insertError) {
-    console.error('[POST /api/offerings/create] Insert failed:', insertError);
+    console.error('[POST /api/client-portals/create] Insert failed:', insertError);
     return NextResponse.json(
-      { error: 'Failed to create offering' },
+      { error: 'Failed to create portal' },
       { status: 500 }
     );
   }
@@ -226,7 +236,7 @@ export async function POST(request: Request) {
       .insert(entityRows);
 
     if (oeError) {
-      console.error('[create] offering_entities insert failed:', oeError.message);
+      console.error('[create] portal_entities insert failed:', oeError.message);
     }
   }
   // ── Sync to Stripe if paid portal ─────────────────────────
@@ -293,7 +303,7 @@ export async function POST(request: Request) {
     entityName: offering.name,
     offeringId: offering.id,
     clientId: offering.client_id ?? null,
-    message: `Created offering "${offering.name}"`,
+    message: `Created portal "${offering.name}"`,
     details: {
       surface_type: offering.surface_type,
       access_type: offering.access_type,
