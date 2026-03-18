@@ -264,7 +264,15 @@ export async function POST(req: Request) {
     // Build aggregate stats from Make scenario list API
     // These are available even for webhook-triggered scenarios that don't expose individual execution logs
     const aggregateStats: Record<string, unknown> = {};
-    if (typeof scenario.executions === 'number') aggregateStats.total_executions = scenario.executions;
+    // Make returns `executions` from teamId-based list but not always from organizationId-based list.
+    // Fall back to operations count as a reasonable proxy for total executions.
+    const execCount = typeof scenario.executions === 'number' ? scenario.executions : undefined;
+    const opsCount = typeof scenario.operations === 'number' ? scenario.operations : undefined;
+    if (execCount !== undefined) {
+      aggregateStats.total_executions = execCount;
+    } else if (opsCount !== undefined && opsCount > 0) {
+      aggregateStats.total_executions = opsCount;
+    }
     if (typeof scenario.operations === 'number') aggregateStats.total_operations = scenario.operations;
     if (typeof scenario.errors === 'number') aggregateStats.total_errors = scenario.errors;
     if (typeof scenario.centicredits === 'number') aggregateStats.total_centicredits = scenario.centicredits;

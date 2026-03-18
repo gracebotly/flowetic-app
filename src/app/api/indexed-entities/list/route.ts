@@ -17,7 +17,7 @@ type IndexedEntity = {
   createdAt: string;
   createdAtTs: number;
   lastUpdatedTs: number;
-  healthStatus: 'healthy' | 'degraded' | 'critical' | 'no-data';
+  healthStatus: 'healthy' | 'degraded' | 'critical' | 'no-data' | 'aggregate-only';
 };
 
 export async function GET() {
@@ -119,19 +119,32 @@ export async function GET() {
       : Date.now();
 
     // Derive health status from aggregate_stats
-    let healthStatus: 'healthy' | 'degraded' | 'critical' | 'no-data' = 'no-data';
+    // Voice (Vapi/Retell): total_calls + success_rate
+    // Workflow (n8n): total_executions + success_rate
+    // Make: total_operations (always present), total_executions/total_errors (when available)
+    let healthStatus: 'healthy' | 'degraded' | 'critical' | 'no-data' | 'aggregate-only' = 'no-data';
     const stats = e.aggregate_stats as Record<string, unknown> | null;
     if (stats) {
       const totalCalls = Number(stats.total_calls ?? stats.total_executions ?? 0);
+      const totalOps = Number(stats.total_operations ?? 0);
+      const totalErrors = Number(stats.total_errors ?? 0);
       const successRate = Number(stats.success_rate ?? 0);
-      if (totalCalls > 0) {
-        if (successRate === 0) {
-          healthStatus = 'critical';
-        } else if (successRate < 70) {
-          healthStatus = 'degraded';
-        } else {
-          healthStatus = 'healthy';
-        }
+      const isInstant = Boolean(stats.is_instant_trigger);
+
+      if (totalCalls > 0 && successRate > 0) {
+        healthStatus = successRate < 70 ? 'degraded' : 'healthy';
+      } else if (totalCalls > 0 && stats.success_rate !== undefined && successRate === 0) {
+        healthStatus = 'critical';
+      } else if (totalCalls > 0) {
+        // success_rate not reported — derive from errors
+        const derived = Math.round(((totalCalls - totalErrors) / totalCalls) * 100);
+        healthStatus = derived === 0 ? 'critical' : derived < 70 ? 'degraded' : 'healthy';
+      } else if (totalOps > 0 && isInstant) {
+        // Make instant trigger: has operations but no per-execution logs
+        // Portal will show aggregate KPIs, not execution rows
+        healthStatus = 'aggregate-only';
+      } else if (totalOps > 0) {
+        healthStatus = 'healthy';
       }
     }
 

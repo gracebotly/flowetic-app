@@ -30,7 +30,7 @@ export interface EntityItem {
   platform_type: string;
   source_name: string;
   last_seen_at: string | null;
-  healthStatus?: 'healthy' | 'degraded' | 'critical' | 'no-data';
+  healthStatus?: 'healthy' | 'degraded' | 'critical' | 'no-data' | 'aggregate-only';
 }
 
 export interface SelectedEntity {
@@ -159,6 +159,15 @@ function EntityRow({
           <span className="truncate text-sm font-semibold text-gray-900">
             {cleanDisplayName(entity.display_name)}
           </span>
+          {entity.healthStatus === 'aggregate-only' && (
+            <span
+              className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700"
+              title="Webhook scenario — dashboard shows totals only, not individual execution rows"
+            >
+              <AlertTriangle className="h-3 w-3" />
+              Summary only
+            </span>
+          )}
         </div>
         <div className="mt-0.5 flex items-center gap-2 text-xs text-gray-500">
           <KindIcon className="h-3 w-3 flex-shrink-0" />
@@ -250,10 +259,15 @@ export default function AgentPicker({
   const getDisabledReason = useCallback(
     (entity: EntityItem): string => {
       if (selectedIds.has(entity.id)) return "";
-      // Block entities with critical health status (all executions failing)
-      if (entity.healthStatus === 'critical') {
-        return "This agent has critical issues. Check the Connections tab for details.";
+      // Block entities with no activity data at all
+      if (entity.healthStatus === 'no-data') {
+        return "No activity data yet. Run this agent or workflow first, then create a portal.";
       }
+      // Block entities with 100% failure rate
+      if (entity.healthStatus === 'critical') {
+        return "All executions are failing. Fix issues in the Connections tab before creating a portal.";
+      }
+      // Note: 'aggregate-only' is NOT blocked — it's selectable with a warning in EntityRow
       const entityCat = getCategory(entity.platform_type);
       // Block voice+workflow cross-category mixing
       if (selectedCategory !== null && entityCat !== selectedCategory) {

@@ -189,8 +189,8 @@ export default function CreateOfferingPage() {
                 sourceName?: string;
                 last_seen_at?: string | null;
                 lastSeenAt?: string | null;
-                healthStatus?: 'healthy' | 'degraded' | 'critical' | 'no-data';
-                health_status?: 'healthy' | 'degraded' | 'critical' | 'no-data';
+                healthStatus?: 'healthy' | 'degraded' | 'critical' | 'no-data' | 'aggregate-only';
+                health_status?: 'healthy' | 'degraded' | 'critical' | 'no-data' | 'aggregate-only';
               }) => ({
                 id: e.entityUuid ?? e.id ?? "",
                 source_id: e.source_id ?? e.sourceId ?? "",
@@ -521,6 +521,21 @@ export default function CreateOfferingPage() {
                   surfaceType="analytics"
                   customTitle={wizard.name}
                 />
+                {/* Aggregate-only warning for webhook/instant Make scenarios */}
+                {wizard.selectedEntities.some((sel) => {
+                  const ent = entities.find((e) => e.id === sel.id);
+                  return ent?.healthStatus === 'aggregate-only';
+                }) && (
+                  <div className="mt-4 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                    <div className="text-sm text-amber-800">
+                      <p className="font-medium">Webhook-triggered scenario included</p>
+                      <p className="mt-1 text-amber-700">
+                        One or more selected scenarios use instant/webhook triggers. Your client&apos;s dashboard will show total executions, operations, and success rates — but not individual execution history rows. This is a Make API limitation, not a Getflowetic issue.
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
             {currentStep === 3 && (

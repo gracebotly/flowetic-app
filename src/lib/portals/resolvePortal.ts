@@ -157,8 +157,9 @@ export async function resolvePortal(
       .single();
 
     const stats = entityWithStats?.aggregate_stats as Record<string, unknown> | null;
-    if (stats && typeof stats.total_executions === 'number' && (stats.total_executions as number) > 0) {
-      const totalExecs = stats.total_executions as number;
+    const rawExecs = Number(stats?.total_executions ?? stats?.total_operations ?? 0);
+    if (stats && rawExecs > 0) {
+      const totalExecs = rawExecs;
       const totalErrors = (stats.total_errors as number) ?? 0;
       const totalOps = (stats.total_operations as number) ?? 0;
       const totalCenticredits = (stats.total_centicredits as number) ?? 0;
