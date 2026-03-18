@@ -72,51 +72,47 @@ const STEPS = [
   { number: 4, label: "Share" },
 ];
 
-const DRAFT_KEY = "gf_wizard_draft";
-
-type DraftPayload = {
-  wizard: WizardState;
-  currentStep: number;
-  userEditedName: boolean;
-  savedAt: number;
-};
-
-function saveDraft(wizard: WizardState, currentStep: number, userEditedName: boolean) {
+async function saveDraftToServer(
+  wizard: WizardState,
+  currentStep: number,
+  userEditedName: boolean
+) {
   try {
-    const payload: DraftPayload = { wizard, currentStep, userEditedName, savedAt: Date.now() };
-    sessionStorage.setItem(DRAFT_KEY, JSON.stringify(payload));
+    await fetch("/api/wizard-drafts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ wizardState: wizard, currentStep, userEditedName }),
+    });
   } catch {
-    // sessionStorage full or unavailable — silent fail
+    // Network failure — silent, will retry on next debounce
   }
 }
 
-function loadDraft(): DraftPayload | null {
+async function loadDraftFromServer(): Promise<{
+  wizard: WizardState;
+  currentStep: number;
+  userEditedName: boolean;
+} | null> {
   try {
-    const raw = sessionStorage.getItem(DRAFT_KEY);
-    if (!raw) return null;
-    const parsed: DraftPayload = JSON.parse(raw);
-    // Expire drafts older than 2 hours
-    if (Date.now() - parsed.savedAt > 2 * 60 * 60 * 1000) {
-      sessionStorage.removeItem(DRAFT_KEY);
-      return null;
-    }
-    // Don't restore if already on step 4 (success)
-    if (parsed.currentStep >= 4) {
-      sessionStorage.removeItem(DRAFT_KEY);
-      return null;
-    }
-    return parsed;
+    const res = await fetch("/api/wizard-drafts");
+    const json = await res.json();
+    if (!json.ok || !json.draft) return null;
+    const d = json.draft;
+    if (d.current_step >= 4) return null;
+    return {
+      wizard: d.wizard_state as WizardState,
+      currentStep: d.current_step,
+      userEditedName: d.user_edited_name,
+    };
   } catch {
     return null;
   }
 }
 
-function clearDraft() {
+async function clearDraftFromServer() {
   try {
-    sessionStorage.removeItem(DRAFT_KEY);
-  } catch {
-    // silent
-  }
+    await fetch("/api/wizard-drafts", { method: "DELETE" });
+  } catch {}
 }
 
 // ── Component ───────────────────────────────────────────────
@@ -133,21 +129,36 @@ export default function CreateOfferingPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [userEditedName, setUserEditedName] = useState(false);
-  const [draftAvailable, setDraftAvailable] = useState<DraftPayload | null>(null);
+  const [draftAvailable, setDraftAvailable] = useState<{
+    wizard: WizardState;
+    currentStep: number;
+    userEditedName: boolean;
+  } | null>(null);
   const [draftChecked, setDraftChecked] = useState(false);
 
-  // Check for draft on mount (before anything else renders)
+  // Check for Supabase draft on mount
   useEffect(() => {
-    const draft = loadDraft();
-    if (draft) {
-      const hasProgress =
-        draft.currentStep > 1 ||
-        (draft.currentStep === 1 && draft.wizard.selectedEntities.length > 0);
-      if (hasProgress) {
-        setDraftAvailable(draft);
+    const resumeParam = new URLSearchParams(window.location.search).get("resume");
+
+    (async () => {
+      const draft = await loadDraftFromServer();
+      if (draft) {
+        const hasProgress =
+          draft.currentStep > 1 ||
+          (draft.currentStep === 1 && draft.wizard.selectedEntities.length > 0);
+        if (hasProgress) {
+          if (resumeParam === "supabase") {
+            // Auto-resume when coming from the portals list "Resume" button
+            setWizard(draft.wizard);
+            setCurrentStep(draft.currentStep);
+            setUserEditedName(draft.userEditedName);
+          } else {
+            setDraftAvailable(draft);
+          }
+        }
       }
-    }
-    setDraftChecked(true);
+      setDraftChecked(true);
+    })();
   }, []);
 
   // Resume draft handler
@@ -161,7 +172,7 @@ export default function CreateOfferingPage() {
 
   // Dismiss draft handler
   const handleDismissDraft = useCallback(() => {
-    clearDraft();
+    clearDraftFromServer();
     setDraftAvailable(null);
   }, []);
 
@@ -306,20 +317,20 @@ export default function CreateOfferingPage() {
     draftRef.current = { wizard, currentStep, userEditedName, draftChecked };
   }, [wizard, currentStep, userEditedName, draftChecked]);
 
-  // ── Auto-save draft to sessionStorage (debounced while editing) ──
+  // ── Auto-save draft to Supabase (debounced) ──
   useEffect(() => {
     if (!draftChecked) return;
     if (currentStep >= 4) return;
     if (currentStep === 1 && wizard.selectedEntities.length === 0) return;
 
     const timer = setTimeout(() => {
-      saveDraft(wizard, currentStep, userEditedName);
-    }, 300);
+      saveDraftToServer(wizard, currentStep, userEditedName);
+    }, 1500);
 
     return () => clearTimeout(timer);
   }, [draftChecked, wizard, currentStep, userEditedName]);
 
-  // ── Save draft immediately on unmount (navigation away) ───────
+  // ── Save draft on unmount (navigation away) ──
   useEffect(() => {
     return () => {
       const {
@@ -331,7 +342,7 @@ export default function CreateOfferingPage() {
       if (!checked) return;
       if (step >= 4) return;
       if (step === 1 && w.selectedEntities.length === 0) return;
-      saveDraft(w, step, edited);
+      saveDraftToServer(w, step, edited);
     };
   }, []);
 
@@ -427,7 +438,7 @@ export default function CreateOfferingPage() {
         magicLink: json.magicLink ?? null,
         productUrl: json.productUrl ?? null,
       });
-      clearDraft();
+      clearDraftFromServer();
       setCurrentStep(4);
     } catch (err: unknown) {
       setSubmitError(err instanceof Error ? err.message : "Network error");
