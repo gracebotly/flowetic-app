@@ -1,6 +1,7 @@
 // src/app/api/auth/signup/route.ts
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { withApiHandler } from "@/lib/api/withApiHandler";
 
 export const runtime = "nodejs";
 
@@ -16,8 +17,7 @@ function siteUrl(req: Request) {
   if (env && env.startsWith("http")) return env;
   return new URL(req.url).origin;
 }
-
-export async function POST(req: Request) {
+export const POST = withApiHandler(async function POST(req: Request) {
   const supabase = await createClient();
   const body = await req.json().catch(() => ({} as Record<string, unknown>));
 
@@ -86,4 +86,4 @@ export async function POST(req: Request) {
   }
 
   return NextResponse.json({ ok: true, hasSession: Boolean(data?.session) });
-}
+});

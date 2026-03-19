@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { resolveColor, resolveIcon } from "@/lib/activity/eventTemplates";
+import { withApiHandler } from "@/lib/api/withApiHandler";
 
 export const runtime = "nodejs";
 
@@ -28,7 +29,7 @@ async function getTenantId(supabase: Awaited<ReturnType<typeof createClient>>) {
  * GET /api/activity
  * Query params: category, status, client_id, portal_id, from, to, search, cursor, limit
  */
-export async function GET(req: Request) {
+export const GET = withApiHandler(async function GET(req: Request) {
   const supabase = await createClient();
   const tenantId = await getTenantId(supabase);
   if (!tenantId) return json(401, { ok: false, code: "AUTH_REQUIRED" });
@@ -78,4 +79,4 @@ export async function GET(req: Request) {
     events: enriched,
     has_more: (events ?? []).length === limit,
   });
-}
+});

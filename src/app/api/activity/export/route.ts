@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { withApiHandler } from "@/lib/api/withApiHandler";
 
 export const runtime = "nodejs";
 
@@ -23,7 +24,7 @@ async function getTenantId(supabase: Awaited<ReturnType<typeof createClient>>) {
  * GET /api/activity/export
  * Same filters as /api/activity, returns CSV download.
  */
-export async function GET(req: Request) {
+export const GET = withApiHandler(async function GET(req: Request) {
   const supabase = await createClient();
   const tenantId = await getTenantId(supabase);
   if (!tenantId) {
@@ -85,4 +86,4 @@ export async function GET(req: Request) {
       "Content-Disposition": `attachment; filename="activity-export-${new Date().toISOString().slice(0, 10)}.csv"`,
     },
   });
-}
+});

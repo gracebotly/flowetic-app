@@ -440,7 +440,7 @@ export function WorkflowOperationsSkeleton({ data, branding }: WorkflowOperation
                   {successRate}% success rate · {headline.periodLabel}
                   {hasMultipleWorkflows && (
                     <span className="rounded-full px-2 py-0.5 text-xs font-semibold" style={{ backgroundColor: hexToRgba(branding.primary_color, 0.12), color: branding.primary_color }}>
-                      {perWorkflowData!.length} {entityLabel.plural}
+                      {perWorkflowData?.length ?? 0} {entityLabel.plural}
                     </span>
                   )}
                 </p>

@@ -135,16 +135,21 @@ export default function OfferingsPage() {
             <button
               type="button"
               onClick={async () => {
-                const supabase = (await import("@/lib/supabase/client")).createClient();
-                const {
-                  data: { user },
-                } = await supabase.auth.getUser();
-                if (user && !user.email_confirmed_at) {
-                  setEmailBlocked(true);
-                  setTimeout(() => setEmailBlocked(false), 3000);
-                  return;
+                try {
+                  const supabase = (await import("@/lib/supabase/client")).createClient();
+                  const {
+                    data: { user },
+                  } = await supabase.auth.getUser();
+                  if (user && !user.email_confirmed_at) {
+                    setEmailBlocked(true);
+                    setTimeout(() => setEmailBlocked(false), 3000);
+                    return;
+                  }
+                  router.push("/control-panel/client-portals/create");
+                } catch (e) {
+                  console.error("[client-portals] new portal check failed:", e);
+                  router.push("/control-panel/client-portals/create");
                 }
-                router.push("/control-panel/client-portals/create");
               }}
               className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors duration-200 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
             >

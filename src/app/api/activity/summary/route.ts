@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { withApiHandler } from "@/lib/api/withApiHandler";
 
 export const runtime = "nodejs";
 
@@ -27,7 +28,7 @@ async function getTenantId(supabase: Awaited<ReturnType<typeof createClient>>) {
  * GET /api/activity/summary
  * Returns: active_clients, events_today, success_rate, revenue_today, sparkline (7-day)
  */
-export async function GET() {
+export const GET = withApiHandler(async function GET() {
   const supabase = await createClient();
   const tenantId = await getTenantId(supabase);
   if (!tenantId) return json(401, { ok: false, code: "AUTH_REQUIRED" });
@@ -97,4 +98,4 @@ export async function GET() {
     revenue_today: revenueToday,
     sparkline,
   });
-}
+});

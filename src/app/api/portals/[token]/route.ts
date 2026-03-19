@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { resolvePortal } from '@/lib/portals/resolvePortal';
+import { withApiHandler } from "@/lib/api/withApiHandler";
 
-export async function GET(
+export const GET = withApiHandler(async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ token: string }> }
 ) {
@@ -28,4 +29,4 @@ export async function GET(
       'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60',
     },
   });
-}
+});

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
+import { withApiHandler } from "@/lib/api/withApiHandler";
 
 export const runtime = "nodejs";
 
@@ -46,8 +47,7 @@ function siteUrl(req: Request) {
   if (env && env.startsWith("http")) return env;
   return new URL(req.url).origin;
 }
-
-export async function POST(req: Request) {
+export const POST = withApiHandler(async function POST(req: Request) {
   const body: { email?: unknown } = await req.json().catch(() => ({}));
   const email = (body.email ?? "").toString().trim().toLowerCase();
 
@@ -165,4 +165,4 @@ export async function POST(req: Request) {
   }
 
   return NextResponse.json({ ok: true });
-}
+});

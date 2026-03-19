@@ -8,13 +8,14 @@
 
 import { NextResponse } from "next/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
+import { withApiHandler } from "@/lib/api/withApiHandler";
 
 export const runtime = "nodejs";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-export async function GET(
+export const GET = withApiHandler(async function GET(
   _req: Request,
   { params }: { params: Promise<{ executionId: string }> },
 ) {
@@ -48,4 +49,4 @@ export async function GET(
       started_at: execution.started_at,
     },
   });
-}
+});

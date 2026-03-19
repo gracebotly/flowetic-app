@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { logActivity } from "@/lib/activity/logActivity";
+import { withApiHandler } from "@/lib/api/withApiHandler";
 
 export const runtime = "nodejs";
 
-export async function POST(req: Request) {
+export const POST = withApiHandler(async function POST(req: Request) {
   const supabase = await createClient();
 
   const {
@@ -241,4 +242,4 @@ export async function POST(req: Request) {
   });
 
   return NextResponse.json({ ok: true });
-}
+});
