@@ -139,6 +139,58 @@ export async function POST(request: NextRequest) {
         console.log(
           `[stripe/webhooks] checkout.session.completed → offering ${offeringId}, mode=${session.mode}`
         );
+
+        // ── Send branded welcome email with dashboard link ──
+        // Fire-and-forget: email failure must never break the webhook response.
+        if (session.mode === "subscription") {
+          try {
+            const { sendWelcomeEmail } = await import(
+              "@/lib/email/sendWelcomeEmail"
+            );
+
+            // Resolve portal token + tenant branding for the email
+            const { data: portalForEmail } = await supabaseAdmin
+              .from("client_portals")
+              .select("name, token, slug")
+              .eq("id", offeringId)
+              .maybeSingle();
+
+            const { data: tenantForEmail } = await supabaseAdmin
+              .from("tenants")
+              .select("name, logo_url, primary_color")
+              .eq("id", resolvedTenantId!)
+              .maybeSingle();
+
+            if (portalForEmail?.token && tenantForEmail) {
+              const baseUrl =
+                process.env.NEXT_PUBLIC_APP_URL || "https://app.getflowetic.com";
+
+              // Also look up customer name from portal_customers
+              const { data: custRow } = await supabaseAdmin
+                .from("portal_customers")
+                .select("name")
+                .eq("portal_id", offeringId)
+                .eq("email", customerEmail)
+                .maybeSingle();
+
+              void sendWelcomeEmail({
+                to: customerEmail,
+                customerName: custRow?.name ?? null,
+                portalName: portalForEmail.name,
+                dashboardUrl: `${baseUrl}/client/${portalForEmail.token}`,
+                agencyName: tenantForEmail.name,
+                agencyLogoUrl: tenantForEmail.logo_url,
+                primaryColor: tenantForEmail.primary_color || "#374151",
+              });
+            }
+          } catch (emailErr) {
+            console.warn(
+              "[stripe/webhooks] Welcome email setup failed (non-fatal):",
+              emailErr
+            );
+          }
+        }
+
         break;
       }
 
