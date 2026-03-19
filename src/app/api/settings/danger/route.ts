@@ -1,14 +1,24 @@
 import { NextResponse } from "next/server";
+import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { getTenantAdmin } from "@/lib/settings/getTenantAdmin";
 
 export const runtime = "nodejs";
+
+const supabaseAdmin = createServiceClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 function json(status: number, data: Record<string, unknown>) {
   return NextResponse.json(data, { status });
 }
 
+// How many days before permanent purge
+const GRACE_PERIOD_DAYS = 30;
+
 // ── POST /api/settings/danger ───────────────────────────────
 // action: 'export' — downloads all tenant data as JSON.
+// action: 'restore' — cancels a pending soft-delete (reactivates workspace).
 // Admin only.
 export async function POST(req: Request) {
   const auth = await getTenantAdmin({ requireAdmin: true });
@@ -19,6 +29,25 @@ export async function POST(req: Request) {
     body = (await req.json()) as { action?: string };
   } catch {
     return json(400, { ok: false, code: "INVALID_JSON" });
+  }
+
+  if (body.action === "restore") {
+    // Reactivate a soft-deleted workspace within the grace period
+    const { error: restoreError } = await supabaseAdmin
+      .from("tenants")
+      .update({
+        deleted_at: null,
+        scheduled_purge_at: null,
+        deleted_by: null,
+      })
+      .eq("id", auth.tenantId);
+
+    if (restoreError) {
+      console.error("[POST /api/settings/danger] Restore failed:", restoreError);
+      return json(500, { ok: false, code: "RESTORE_FAILED" });
+    }
+
+    return json(200, { ok: true, message: "Workspace restored." });
   }
 
   if (body.action !== "export") {
@@ -58,8 +87,8 @@ export async function POST(req: Request) {
 }
 
 // ── DELETE /api/settings/danger ──────────────────────────────
-// Permanently deletes the workspace. Admin only.
-// Requires body: { confirm: "DELETE MY WORKSPACE" }
+// Soft-deletes the workspace with a 30-day grace period.
+// Admin only. Requires body: { confirm: "DELETE MY WORKSPACE" }
 export async function DELETE(req: Request) {
   const auth = await getTenantAdmin({ requireAdmin: true });
   if (!auth.ok) return json(auth.status, { ok: false, code: auth.code });
@@ -75,46 +104,30 @@ export async function DELETE(req: Request) {
     return json(400, { ok: false, code: "CONFIRMATION_REQUIRED" });
   }
 
-  // Delete in order to respect FK constraints.
-  // memberships has ON DELETE CASCADE from tenants, but we delete explicitly
-  // for clarity and to handle tables that might not have CASCADE.
+  const now = new Date();
+  const purgeAt = new Date(now.getTime() + GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000);
 
-  const deletions = [
-    auth.supabase.from("events").delete().eq("tenant_id", auth.tenantId),
-    auth.supabase.from("client_portals").delete().eq("tenant_id", auth.tenantId),
-    auth.supabase.from("clients").delete().eq("tenant_id", auth.tenantId),
-    auth.supabase.from("sources").delete().eq("tenant_id", auth.tenantId),
-    auth.supabase.from("memberships").delete().eq("tenant_id", auth.tenantId),
-  ];
-
-  const results = await Promise.all(deletions);
-  const failedDeletion = results.find((r) => r.error);
-  if (failedDeletion?.error) {
-    console.error("[DELETE /api/settings/danger] Cleanup failed:", failedDeletion.error);
-    return json(500, { ok: false, code: "CLEANUP_FAILED" });
-  }
-
-  // Delete tenant last (after all references removed)
-  const { error: tenantError } = await auth.supabase
+  // Soft-delete: mark tenant as deleted with scheduled purge date
+  const { error: softDeleteError } = await supabaseAdmin
     .from("tenants")
-    .delete()
+    .update({
+      deleted_at: now.toISOString(),
+      scheduled_purge_at: purgeAt.toISOString(),
+      deleted_by: auth.userId,
+    })
     .eq("id", auth.tenantId);
 
-  if (tenantError) {
-    console.error("[DELETE /api/settings/danger] Tenant delete failed:", tenantError);
-    return json(500, { ok: false, code: "TENANT_DELETE_FAILED" });
+  if (softDeleteError) {
+    console.error("[DELETE /api/settings/danger] Soft-delete failed:", softDeleteError);
+    return json(500, { ok: false, code: "DELETE_FAILED" });
   }
 
-  // Clean up logo storage
-  const { data: logoFiles } = await auth.supabase.storage
-    .from("logos")
-    .list(auth.tenantId);
+  // Sign out the current user session
+  await auth.supabase.auth.signOut();
 
-  if (logoFiles && logoFiles.length > 0) {
-    await auth.supabase.storage
-      .from("logos")
-      .remove(logoFiles.map((f) => `${auth.tenantId}/${f.name}`));
-  }
-
-  return json(200, { ok: true, message: "Workspace permanently deleted." });
+  return json(200, {
+    ok: true,
+    message: `Workspace scheduled for permanent deletion on ${purgeAt.toISOString().split("T")[0]}.`,
+    scheduled_purge_at: purgeAt.toISOString(),
+  });
 }

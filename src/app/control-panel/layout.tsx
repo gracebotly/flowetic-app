@@ -62,6 +62,13 @@ export default async function ControlPanelLayout({
 
         if (trialExpired && !tenant.has_card_on_file) {
           plan = `${limits.label} (Trial Expired)`;
+        } else if (
+          tenant.plan_status === "trialing" &&
+          !tenant.trial_ends_at &&
+          !tenant.has_card_on_file
+        ) {
+          // Pay-now user who never completed checkout
+          plan = `${limits.label} (Payment Required)`;
         } else if (tenant.plan_status === "trialing") {
           plan = `${limits.label} (Trial)`;
         } else if (tenant.plan_status === "past_due") {

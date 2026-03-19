@@ -62,7 +62,13 @@ export function TrialBanner() {
   let ctaLabel = "";
   const ctaHref = "/control-panel/settings?tab=billing";
 
-  if (trial_expired) {
+  if (plan_status === "trialing" && !trial_ends_at && !has_card_on_file) {
+    // Pay-now user who never completed checkout — show subscribe banner
+    bgClass = "bg-red-50 border-red-200";
+    iconColor = "text-red-600";
+    message = "Complete your subscription to start using Getflowetic.";
+    ctaLabel = "Subscribe";
+  } else if (trial_expired) {
     bgClass = "bg-red-50 border-red-200";
     iconColor = "text-red-600";
     message = "Your free trial has expired. Subscribe to keep using Getflowetic.";

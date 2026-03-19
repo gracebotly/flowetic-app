@@ -19,6 +19,9 @@ export async function GET(request: Request) {
   // trial=0           → pay-now, redirect straight to billing
   // Google OAuth users always land here with no trial param → defaults to 7
   const trialParam = searchParams.get("trial") ?? "7";
+  const planParam = searchParams.get("plan") ?? "agency";
+  // Validate plan — only "agency" and "scale" are valid
+  const plan = planParam === "scale" ? "scale" : "agency";
 
   if (!code) {
     return NextResponse.redirect(new URL("/auth/auth-code-error", request.url));
@@ -46,34 +49,26 @@ export async function GET(request: Request) {
 
     const isNewUser = !mErr && (!memberships || memberships.length === 0);
 
-    if (isNewUser && intent !== "signup") {
-      // Check if the ensure-tenant safety net can help
-      // (e.g. user confirmed email but callback failed to create tenant)
-      try {
-        const ensureRes = await fetch(
-          new URL("/api/auth/ensure-tenant", request.url).toString(),
-          {
-            method: "POST",
-            headers: {
-              cookie: request.headers.get("cookie") ?? "",
-            },
-          }
+    // ── Existing user: check if their workspace is soft-deleted ──
+    if (!isNewUser && memberships && memberships.length > 0) {
+      const { data: tenant } = await supabaseAdmin
+        .from("tenants")
+        .select("deleted_at, scheduled_purge_at")
+        .eq("id", memberships[0].tenant_id)
+        .single();
+
+      if (tenant?.deleted_at) {
+        // Workspace is soft-deleted — sign out and reject
+        await supabase.auth.signOut();
+        return NextResponse.redirect(
+          new URL("/login?error=workspace_deleted", request.url)
         );
-        const ensureData = await ensureRes.json();
-
-        if (ensureData.ok && ensureData.reason === "created") {
-          // Tenant was created — let them through
-          const destination =
-            trialParam === "0"
-              ? "/control-panel/settings?tab=billing&intent=subscribe"
-              : next;
-          return NextResponse.redirect(new URL(destination, request.url));
-        }
-      } catch {
-        // ensure-tenant failed — fall through to rejection
       }
+    }
 
-      // Still no membership — sign out and reject
+    if (isNewUser && intent !== "signup") {
+      // No membership and not signing up — this is an orphan user.
+      // Do NOT call ensure-tenant. Sign out and reject.
       await supabase.auth.signOut();
       return NextResponse.redirect(
         new URL("/login?error=not_registered", request.url)
@@ -85,14 +80,17 @@ export async function GET(request: Request) {
         ? `${user.email.split("@")[0]}'s Workspace`
         : "My Workspace";
 
-      // trial=0 → pay-now (no trial period), everyone else gets 7 days
-      const trialDays = trialParam === "0" ? 0 : TRIAL_DAYS_WITHOUT_CARD;
+      // trial=0 → pay-now, charge immediately
+      // Scale plan → always pay-now, never gets a free trial
+      // Agency plan with trial=7 → 7-day free trial
+      const trialDays =
+        trialParam === "0" || plan === "scale" ? 0 : TRIAL_DAYS_WITHOUT_CARD;
 
       const { data: tenant, error: tErr } = await supabaseAdmin
         .from("tenants")
         .insert({
           name: workspaceName,
-          plan: "agency",
+          plan,
           plan_status: "trialing",
           has_card_on_file: false,
           trial_ends_at:
@@ -118,7 +116,7 @@ export async function GET(request: Request) {
   // Pay-now: send to billing immediately
   const destination =
     trialParam === "0"
-      ? "/control-panel/settings?tab=billing&intent=subscribe"
+      ? `/control-panel/settings?tab=billing&intent=subscribe&plan=${plan}`
       : next;
 
   return NextResponse.redirect(new URL(destination, request.url));

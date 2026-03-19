@@ -302,6 +302,11 @@ export function BillingTab() {
     badgeText = "Trial expired";
     badgeDotClass = "bg-red-500";
     badgeBgClass = "bg-red-50 text-red-700";
+  } else if (planStatus === "trialing" && !trialEndsAt && !hasCard) {
+    // Pay-now user who never completed checkout — no trial was given
+    badgeText = "Payment required";
+    badgeDotClass = "bg-red-500";
+    badgeBgClass = "bg-red-50 text-red-700";
   } else if (planStatus === "trialing") {
     const days = trialEndsAt ? daysUntil(trialEndsAt) : 0;
     badgeText = `Trial · ${days}d left`;

@@ -39,8 +39,7 @@ export function DeleteWorkspaceModal({
       } else {
         const messages: Record<string, string> = {
           CONFIRMATION_REQUIRED: "Please type the confirmation text exactly.",
-          CLEANUP_FAILED: "Failed to delete some data. Please try again.",
-          TENANT_DELETE_FAILED: "Failed to delete workspace. Please try again.",
+          DELETE_FAILED: "Failed to delete workspace. Please try again.",
         };
         setError(messages[json.code] || json.code || "Delete failed.");
       }
@@ -80,11 +79,11 @@ export function DeleteWorkspaceModal({
         <div className="space-y-4 px-6 py-5">
           <div className="rounded-lg border border-red-200 bg-red-50 p-4">
             <p className="text-sm font-medium text-red-800">
-              This action is permanent and cannot be undone.
+              Your workspace will be deactivated immediately.
             </p>
             <p className="mt-1 text-sm text-red-700">
-              All offerings, clients, connections, team members, and activity
-              data will be permanently removed.
+              All client portals, clients, connections, team members, and activity
+              data will be permanently removed after a 30-day grace period.
             </p>
           </div>
 
