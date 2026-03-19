@@ -101,11 +101,13 @@ export async function POST(request: NextRequest) {
 
     // 7. Determine trial days
     // skipTrial=true → pay-now flow, charge immediately, no trial period injected
+    // Scale plan → never gets a trial (pay upfront only)
     // otherwise → 14-day trial if still within trialing window
     const skipTrial = body.skipTrial === true;
 
     const isCurrentlyTrialing =
       !skipTrial &&
+      plan !== "scale" &&
       tenant.plan_status === "trialing" &&
       (!tenant.trial_ends_at || new Date(tenant.trial_ends_at) > new Date());
 

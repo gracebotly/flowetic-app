@@ -20,6 +20,7 @@ export async function GET(request: Request) {
   // Google OAuth users always land here with no trial param → defaults to 7
   const trialParam = searchParams.get("trial") ?? "7";
   const planParam = searchParams.get("plan") ?? "agency";
+  // Validate plan — only "agency" and "scale" are valid
   const plan = planParam === "scale" ? "scale" : "agency";
 
   if (!code) {
@@ -79,8 +80,11 @@ export async function GET(request: Request) {
         ? `${user.email.split("@")[0]}'s Workspace`
         : "My Workspace";
 
-      // trial=0 → pay-now (no trial period), everyone else gets 7 days
-      const trialDays = trialParam === "0" ? 0 : TRIAL_DAYS_WITHOUT_CARD;
+      // trial=0 → pay-now, charge immediately
+      // Scale plan → always pay-now, never gets a free trial
+      // Agency plan with trial=7 → 7-day free trial
+      const trialDays =
+        trialParam === "0" || plan === "scale" ? 0 : TRIAL_DAYS_WITHOUT_CARD;
 
       const { data: tenant, error: tErr } = await supabaseAdmin
         .from("tenants")

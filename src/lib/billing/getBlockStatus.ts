@@ -19,8 +19,20 @@ export function getBlockStatus(tenant: {
   const now = Date.now();
   const msPerDay = 24 * 60 * 60 * 1000;
 
-  // 1. Trial expired without ever paying → HARD BLOCK (freeloader)
-  //    This catches both: never added card, AND added card but never got charged
+  // 1a. Pay-now user who never completed Stripe checkout → HARD BLOCK
+  //     These users chose "buy now" (trial_ends_at is null because trial=0)
+  //     but never finished paying. Applies to both Agency and Scale buy-now.
+  if (
+    tenant.plan_status === "trialing" &&
+    !tenant.trial_ends_at &&
+    !tenant.has_card_on_file &&
+    !tenant.has_ever_paid
+  ) {
+    return { level: "hard_block", reason: "trial_expired", daysRemaining: null };
+  }
+
+  // 1b. Trial expired without ever paying → HARD BLOCK (freeloader)
+  //     This catches both: never added card, AND added card but never got charged
   if (
     tenant.plan_status === "trialing" &&
     tenant.trial_ends_at &&
