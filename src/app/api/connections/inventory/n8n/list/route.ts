@@ -1,4 +1,3 @@
-
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { withApiHandler } from "@/lib/api/withApiHandler";
@@ -38,7 +37,7 @@ export const GET = withApiHandler(async function GET(req: Request) {
 
   return NextResponse.json({
     ok: true,
-    entities: (rows ?? []).map((r: any) => ({
+    inventoryEntities: (rows ?? []).map((r: any) => ({
       externalId: String(r.external_id),
       displayName: String(r.display_name ?? ""),
       entityKind: String(r.entity_kind),

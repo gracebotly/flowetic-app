@@ -67,9 +67,7 @@ export async function GET(request: Request) {
 
     if (isNewUser && type === "email") {
       // This is a new signup confirmation — create tenant + membership
-      const workspaceName = user.email
-        ? `${user.email.split("@")[0]}'s Workspace`
-        : "My Workspace";
+      const workspaceName = "My Workspace";
 
       const { data: tenant, error: tErr } = await supabaseAdmin
         .from("tenants")

@@ -601,7 +601,7 @@ export default function ConnectionsPage() {
       return;
     }
 
-    const rows = ((listJson.entities as any[]) ?? []) as Array<{
+    const rows = ((listJson.inventoryEntities as any[]) ?? []) as Array<{
       externalId: string;
       displayName: string;
       entityKind: string;

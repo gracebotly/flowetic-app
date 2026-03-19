@@ -73,9 +73,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Create tenant + membership (only for signup intent)
-  const workspaceName = user.email
-    ? `${user.email.split("@")[0]}'s Workspace`
-    : "My Workspace";
+  const workspaceName = "My Workspace";
 
   const { data: tenant, error: tErr } = await supabaseAdmin
     .from("tenants")

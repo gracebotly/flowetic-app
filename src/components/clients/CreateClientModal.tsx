@@ -2,10 +2,20 @@
 
 import { useState } from "react";
 import { X } from "lucide-react";
+import { validateEmail } from "@/lib/validation/email";
 
 interface CreateClientModalProps {
   onClose: () => void;
   onCreated: () => void;
+}
+
+/** Strips all non-digit characters and checks digit count is between 7–15 */
+function validatePhone(raw: string): string | null {
+  if (!raw.trim()) return null; // phone is optional — empty is fine
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length < 7) return "Phone number is too short.";
+  if (digits.length > 15) return "Phone number is too long.";
+  return null;
 }
 
 export function CreateClientModal({ onClose, onCreated }: CreateClientModalProps) {
@@ -18,9 +28,69 @@ export function CreateClientModal({ onClose, onCreated }: CreateClientModalProps
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Inline field errors (shown on blur)
+  const [emailFieldError, setEmailFieldError] = useState<string | null>(null);
+  const [phoneFieldError, setPhoneFieldError] = useState<string | null>(null);
+
+  // Typo suggestion for email (e.g. "Did you mean gmail.com?")
+  const [emailTypoSuggestion, setEmailTypoSuggestion] = useState<string | null>(null);
+
+  const handleEmailBlur = () => {
+    if (!email.trim()) {
+      setEmailFieldError(null);
+      setEmailTypoSuggestion(null);
+      return;
+    }
+    const result = validateEmail(email);
+    if (!result.valid) {
+      if (result.code === "TYPO_DETECTED") {
+        setEmailTypoSuggestion(result.suggestion);
+        setEmailFieldError(null);
+      } else {
+        setEmailFieldError(result.message);
+        setEmailTypoSuggestion(null);
+      }
+    } else {
+      setEmailFieldError(null);
+      setEmailTypoSuggestion(null);
+    }
+  };
+
+  const handlePhoneBlur = () => {
+    setPhoneFieldError(validatePhone(phone));
+  };
+
+  const handleAcceptEmailSuggestion = () => {
+    if (emailTypoSuggestion) {
+      setEmail(emailTypoSuggestion);
+      setEmailTypoSuggestion(null);
+      setEmailFieldError(null);
+    }
+  };
+
   const handleSubmit = async () => {
     if (!name.trim() || name.trim().length < 2) {
       setError("Name must be at least 2 characters.");
+      return;
+    }
+
+    // Validate email if provided
+    if (email.trim()) {
+      const emailResult = validateEmail(email);
+      if (!emailResult.valid) {
+        if (emailResult.code === "TYPO_DETECTED") {
+          setEmailTypoSuggestion(emailResult.suggestion);
+        } else {
+          setEmailFieldError(emailResult.message);
+        }
+        return;
+      }
+    }
+
+    // Validate phone if provided
+    const phoneError = validatePhone(phone);
+    if (phoneError) {
+      setPhoneFieldError(phoneError);
       return;
     }
 
@@ -64,7 +134,7 @@ export function CreateClientModal({ onClose, onCreated }: CreateClientModalProps
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b px-6 py-4">
-          <h2 className="text-lg font-semibold text-gray-900">Add New Client</h2>
+          <h2 className="text-lg font-semibold text-gray-900">New Client Account</h2>
           <button
             onClick={onClose}
             className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-600"
@@ -83,7 +153,7 @@ export function CreateClientModal({ onClose, onCreated }: CreateClientModalProps
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g., John Smith"
+              placeholder="e.g., Dr. Rivera or Apex Roofing"
               className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
               autoFocus
             />
@@ -98,7 +168,7 @@ export function CreateClientModal({ onClose, onCreated }: CreateClientModalProps
               type="text"
               value={company}
               onChange={(e) => setCompany(e.target.value)}
-              placeholder="e.g., Acme Dental LLC"
+              placeholder="e.g., Rivera Family Dental"
               className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
             />
           </div>
@@ -111,10 +181,35 @@ export function CreateClientModal({ onClose, onCreated }: CreateClientModalProps
             <input
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="john@acmedental.com"
-              className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
+              onChange={(e) => {
+                setEmail(e.target.value);
+                if (emailFieldError) setEmailFieldError(null);
+                if (emailTypoSuggestion) setEmailTypoSuggestion(null);
+              }}
+              onBlur={handleEmailBlur}
+              placeholder="hello@riverafamilydental.com"
+              className={`mt-1 w-full rounded-lg border bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-100 ${
+                emailFieldError
+                  ? "border-red-300 focus:border-red-400"
+                  : "border-gray-200 focus:border-blue-300"
+              }`}
             />
+            {emailFieldError && (
+              <p className="mt-1 text-xs text-red-600">{emailFieldError}</p>
+            )}
+            {emailTypoSuggestion && (
+              <p className="mt-1 text-xs text-amber-700">
+                Did you mean{" "}
+                <button
+                  type="button"
+                  onClick={handleAcceptEmailSuggestion}
+                  className="font-semibold underline decoration-amber-400 underline-offset-2 hover:text-amber-600"
+                >
+                  {emailTypoSuggestion}
+                </button>
+                ?
+              </p>
+            )}
           </div>
 
           {/* Phone */}
@@ -125,10 +220,21 @@ export function CreateClientModal({ onClose, onCreated }: CreateClientModalProps
             <input
               type="tel"
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="+1 (555) 123-4567"
-              className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
+              onChange={(e) => {
+                setPhone(e.target.value);
+                if (phoneFieldError) setPhoneFieldError(null);
+              }}
+              onBlur={handlePhoneBlur}
+              placeholder="+1 (813) 555-0192"
+              className={`mt-1 w-full rounded-lg border bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-100 ${
+                phoneFieldError
+                  ? "border-red-300 focus:border-red-400"
+                  : "border-gray-200 focus:border-blue-300"
+              }`}
             />
+            {phoneFieldError && (
+              <p className="mt-1 text-xs text-red-600">{phoneFieldError}</p>
+            )}
           </div>
 
           {/* Tags */}
@@ -140,7 +246,7 @@ export function CreateClientModal({ onClose, onCreated }: CreateClientModalProps
               type="text"
               value={tagsInput}
               onChange={(e) => setTagsInput(e.target.value)}
-              placeholder="vip, dental, trial"
+              placeholder="priority, onboarding, ai-voice"
               className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
             />
           </div>
@@ -154,7 +260,7 @@ export function CreateClientModal({ onClose, onCreated }: CreateClientModalProps
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={2}
-              placeholder="Internal notes about this client..."
+              placeholder="What's the workflow context? (e.g., missed calls, scheduling)"
               className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
             />
           </div>
@@ -178,7 +284,7 @@ export function CreateClientModal({ onClose, onCreated }: CreateClientModalProps
             disabled={saving || !name.trim()}
             className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"
           >
-            {saving ? "Creating..." : "Create Client"}
+            {saving ? "Creating..." : "Create Account"}
           </button>
         </div>
       </div>

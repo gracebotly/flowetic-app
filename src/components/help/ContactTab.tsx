@@ -130,27 +130,88 @@ export function ContactTab() {
     }, 200)
 
     try {
-      const formData = new FormData()
-      formData.append("file", file)
+      const VERCEL_BODY_LIMIT = 4 * 1024 * 1024 // 4MB (safe margin under 4.5MB)
 
-      const res = await fetch("/api/support/upload", {
-        method: "POST",
-        body: formData,
-      })
+      let resultJson: any
 
-      const json = await res.json()
-      clearInterval(progressInterval)
+      if (file.size > VERCEL_BODY_LIMIT) {
+        // Large file: get a signed upload URL and upload directly to Supabase
+        const params = new URLSearchParams({
+          fileName: file.name,
+          fileType: file.type,
+          fileSize: String(file.size),
+        })
+        const urlRes = await fetch(`/api/support/upload?${params.toString()}`)
+        const urlJson = await urlRes.json()
 
-      if (!res.ok || !json.ok) {
-        setFiles((prev) =>
-          prev.map((f) =>
-            f.id === id
-              ? { ...f, status: "error", progress: 0, errorMessage: json.message || "Upload failed" }
-              : f
+        if (!urlRes.ok || !urlJson.ok) {
+          clearInterval(progressInterval)
+          setFiles((prev) =>
+            prev.map((f) =>
+              f.id === id
+                ? { ...f, status: "error", progress: 0, errorMessage: urlJson.message || "Upload preparation failed." }
+                : f
+            )
           )
-        )
-        return
+          return
+        }
+
+        // Upload directly to Supabase Storage using the signed URL
+        const uploadRes = await fetch(urlJson.signedUrl, {
+          method: "PUT",
+          headers: { "Content-Type": file.type },
+          body: file,
+        })
+
+        if (!uploadRes.ok) {
+          clearInterval(progressInterval)
+          setFiles((prev) =>
+            prev.map((f) =>
+              f.id === id
+                ? { ...f, status: "error", progress: 0, errorMessage: "Direct upload failed. Please try a smaller file or try again." }
+                : f
+            )
+          )
+          return
+        }
+
+        // Get a signed download URL for the attachment
+        const supabase = createClient()
+        const { data: signedData } = await supabase.storage
+          .from("support-attachments")
+          .createSignedUrl(urlJson.storagePath, 60 * 60 * 24 * 7)
+
+        resultJson = {
+          ok: true,
+          signedUrl: signedData?.signedUrl || null,
+          storagePath: urlJson.storagePath,
+        }
+      } else {
+        // Small file: upload through the serverless function
+        const formData = new FormData()
+        formData.append("file", file)
+
+        const res = await fetch("/api/support/upload", {
+          method: "POST",
+          body: formData,
+        })
+
+        resultJson = await res.json().catch(() => ({}))
+
+        if (!res.ok || !resultJson.ok) {
+          clearInterval(progressInterval)
+          setFiles((prev) =>
+            prev.map((f) =>
+              f.id === id
+                ? { ...f, status: "error", progress: 0, errorMessage: resultJson.message || "Upload failed." }
+                : f
+            )
+          )
+          return
+        }
       }
+
+      clearInterval(progressInterval)
 
       setFiles((prev) =>
         prev.map((f) =>
@@ -159,18 +220,21 @@ export function ContactTab() {
                 ...f,
                 status: "done",
                 progress: 100,
-                signedUrl: json.signedUrl,
-                storagePath: json.storagePath,
+                signedUrl: resultJson.signedUrl,
+                storagePath: resultJson.storagePath,
               }
             : f
         )
       )
-    } catch {
+    } catch (err: unknown) {
       clearInterval(progressInterval)
+      const message = err instanceof Error && err.message.includes("413")
+        ? "File is too large for upload. Maximum is 25MB."
+        : "Upload failed. Please check your connection and try again."
       setFiles((prev) =>
         prev.map((f) =>
           f.id === id
-            ? { ...f, status: "error", progress: 0, errorMessage: "Network error." }
+            ? { ...f, status: "error", progress: 0, errorMessage: message }
             : f
         )
       )
