@@ -11,6 +11,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { HealthBar } from "@/components/clients/HealthBar";
+import { validateEmail } from "@/lib/validation/email";
 
 interface Client {
   id: string;
@@ -60,11 +61,19 @@ function computeBreakdown(client: Client, assignedCount: number, totalCount: num
     const daysSince = Math.max(0, (Date.now() - new Date(client.last_seen_at).getTime()) / 86400000);
     recency = Math.max(0, Math.round(100 - (daysSince / 30) * 100));
   }
-
   const engagement = recency > 0 ? Math.min(100, recency + 10) : 0;
   const coverage = totalCount > 0 ? Math.round((assignedCount / totalCount) * 100) : 0;
   const status = client.status === "active" ? 100 : 0;
   return { recency, engagement, coverage, status };
+}
+
+/** Strips non-digits and checks 7–15 digit range. Empty = valid (field is optional). */
+function validatePhone(raw: string): string | null {
+  if (!raw.trim()) return null;
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length < 7) return "Phone number is too short.";
+  if (digits.length > 15) return "Phone number is too long.";
+  return null;
 }
 
 export function OverviewTab({ client, assignedOfferingsCount, totalOfferings, onUpdated }: OverviewTabProps) {
@@ -79,6 +88,11 @@ export function OverviewTab({ client, assignedOfferingsCount, totalOfferings, on
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  // Inline field errors (shown on blur)
+  const [emailFieldError, setEmailFieldError] = useState<string | null>(null);
+  const [emailTypoSuggestion, setEmailTypoSuggestion] = useState<string | null>(null);
+  const [phoneFieldError, setPhoneFieldError] = useState<string | null>(null);
+
   const [archiveConfirm, setArchiveConfirm] = useState(false);
   const [archiving, setArchiving] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
@@ -92,7 +106,60 @@ export function OverviewTab({ client, assignedOfferingsCount, totalOfferings, on
     editTags !== client.tags.join(", ") ||
     editStatus !== client.status;
 
+  const handleEmailBlur = () => {
+    if (!editEmail.trim()) {
+      setEmailFieldError(null);
+      setEmailTypoSuggestion(null);
+      return;
+    }
+    const result = validateEmail(editEmail);
+    if (!result.valid) {
+      if (result.code === "TYPO_DETECTED") {
+        setEmailTypoSuggestion(result.suggestion);
+        setEmailFieldError(null);
+      } else {
+        setEmailFieldError(result.message);
+        setEmailTypoSuggestion(null);
+      }
+    } else {
+      setEmailFieldError(null);
+      setEmailTypoSuggestion(null);
+    }
+  };
+
+  const handleAcceptEmailSuggestion = () => {
+    if (emailTypoSuggestion) {
+      setEditEmail(emailTypoSuggestion);
+      setEmailTypoSuggestion(null);
+      setEmailFieldError(null);
+    }
+  };
+
+  const handlePhoneBlur = () => {
+    setPhoneFieldError(validatePhone(editPhone));
+  };
+
   const handleSave = async () => {
+    // Validate email if provided
+    if (editEmail.trim()) {
+      const emailResult = validateEmail(editEmail);
+      if (!emailResult.valid) {
+        if (emailResult.code === "TYPO_DETECTED") {
+          setEmailTypoSuggestion(emailResult.suggestion);
+        } else {
+          setEmailFieldError(emailResult.message);
+        }
+        return;
+      }
+    }
+
+    // Validate phone if provided
+    const phoneErr = validatePhone(editPhone);
+    if (phoneErr) {
+      setPhoneFieldError(phoneErr);
+      return;
+    }
+
     setSaving(true);
     setSaveError(null);
     const tags = editTags
@@ -117,7 +184,7 @@ export function OverviewTab({ client, assignedOfferingsCount, totalOfferings, on
       setTimeout(() => setSaveSuccess(false), 2000);
       onUpdated();
     } else {
-      setSaveError("Failed to save changes.");
+      setSaveError("Failed to save changes. Please try again.");
     }
     setSaving(false);
   };
@@ -135,10 +202,13 @@ export function OverviewTab({ client, assignedOfferingsCount, totalOfferings, on
   };
 
   const breakdown = computeBreakdown(client, assignedOfferingsCount, totalOfferings);
+  const isNewClient = !client.last_seen_at && assignedOfferingsCount === 0;
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
       <div className="space-y-4">
+
+        {/* Name */}
         <div>
           <label className="block text-xs font-medium uppercase tracking-wider text-gray-400">Name</label>
           <input
@@ -149,17 +219,19 @@ export function OverviewTab({ client, assignedOfferingsCount, totalOfferings, on
           />
         </div>
 
+        {/* Company */}
         <div>
           <label className="block text-xs font-medium uppercase tracking-wider text-gray-400">Company</label>
           <input
             type="text"
             value={editCompany}
             onChange={(e) => setEditCompany(e.target.value)}
-            placeholder="Company name..."
+            placeholder="Practice or business name"
             className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
           />
         </div>
 
+        {/* Email */}
         <div>
           <label className="block text-xs font-medium uppercase tracking-wider text-gray-400">Email</label>
           <div className="relative mt-1">
@@ -167,9 +239,18 @@ export function OverviewTab({ client, assignedOfferingsCount, totalOfferings, on
             <input
               type="email"
               value={editEmail}
-              onChange={(e) => setEditEmail(e.target.value)}
-              placeholder="contact@example.com"
-              className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-10 text-sm text-gray-900 shadow-sm focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
+              onChange={(e) => {
+                setEditEmail(e.target.value);
+                if (emailFieldError) setEmailFieldError(null);
+                if (emailTypoSuggestion) setEmailTypoSuggestion(null);
+              }}
+              onBlur={handleEmailBlur}
+              placeholder="Work email"
+              className={`w-full rounded-lg border bg-white py-2 pl-9 pr-10 text-sm text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-100 ${
+                emailFieldError
+                  ? "border-red-300 focus:border-red-400"
+                  : "border-gray-200 focus:border-blue-300"
+              }`}
             />
             {client.contact_email && (
               <button
@@ -185,8 +266,25 @@ export function OverviewTab({ client, assignedOfferingsCount, totalOfferings, on
               </button>
             )}
           </div>
+          {emailFieldError && (
+            <p className="mt-1 text-xs text-red-600">{emailFieldError}</p>
+          )}
+          {emailTypoSuggestion && (
+            <p className="mt-1 text-xs text-amber-700">
+              Did you mean{" "}
+              <button
+                type="button"
+                onClick={handleAcceptEmailSuggestion}
+                className="font-semibold underline decoration-amber-400 underline-offset-2 hover:text-amber-600"
+              >
+                {emailTypoSuggestion}
+              </button>
+              ?
+            </p>
+          )}
         </div>
 
+        {/* Phone */}
         <div>
           <label className="block text-xs font-medium uppercase tracking-wider text-gray-400">Phone</label>
           <div className="relative mt-1">
@@ -194,9 +292,17 @@ export function OverviewTab({ client, assignedOfferingsCount, totalOfferings, on
             <input
               type="tel"
               value={editPhone}
-              onChange={(e) => setEditPhone(e.target.value)}
-              placeholder="+1 (555) 123-4567"
-              className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-10 text-sm text-gray-900 shadow-sm focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
+              onChange={(e) => {
+                setEditPhone(e.target.value);
+                if (phoneFieldError) setPhoneFieldError(null);
+              }}
+              onBlur={handlePhoneBlur}
+              placeholder="Phone number"
+              className={`w-full rounded-lg border bg-white py-2 pl-9 pr-10 text-sm text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-100 ${
+                phoneFieldError
+                  ? "border-red-300 focus:border-red-400"
+                  : "border-gray-200 focus:border-blue-300"
+              }`}
             />
             {client.contact_phone && (
               <button
@@ -212,30 +318,36 @@ export function OverviewTab({ client, assignedOfferingsCount, totalOfferings, on
               </button>
             )}
           </div>
+          {phoneFieldError && (
+            <p className="mt-1 text-xs text-red-600">{phoneFieldError}</p>
+          )}
         </div>
 
+        {/* Tags */}
         <div>
           <label className="block text-xs font-medium uppercase tracking-wider text-gray-400">Tags</label>
           <input
             type="text"
             value={editTags}
             onChange={(e) => setEditTags(e.target.value)}
-            placeholder="vip, dental, trial (comma separated)"
+            placeholder="priority, onboarding, ai-voice"
             className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
           />
         </div>
 
+        {/* Notes */}
         <div>
           <label className="block text-xs font-medium uppercase tracking-wider text-gray-400">Notes</label>
           <textarea
             value={editNotes}
             onChange={(e) => setEditNotes(e.target.value)}
             rows={3}
-            placeholder="Internal notes about this client..."
+            placeholder="What's the workflow context? (e.g., missed calls, scheduling)"
             className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
           />
         </div>
 
+        {/* Status */}
         <div>
           <label className="block text-xs font-medium uppercase tracking-wider text-gray-400">Status</label>
           <div className="mt-2 flex gap-2">
@@ -257,6 +369,7 @@ export function OverviewTab({ client, assignedOfferingsCount, totalOfferings, on
           </div>
         </div>
 
+        {/* Save button */}
         {hasChanges && (
           <button
             onClick={handleSave}
@@ -273,8 +386,15 @@ export function OverviewTab({ client, assignedOfferingsCount, totalOfferings, on
             {saving ? "Saving..." : saveSuccess ? "Saved!" : "Save Changes"}
           </button>
         )}
-        {saveError && <p className="text-sm text-red-600">{saveError}</p>}
 
+        {/* Save error — proper container, not bare text */}
+        {saveError && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {saveError}
+          </div>
+        )}
+
+        {/* Archive */}
         <div className="mt-4 border-t border-gray-100 pt-4">
           {!archiveConfirm ? (
             <button
@@ -306,6 +426,7 @@ export function OverviewTab({ client, assignedOfferingsCount, totalOfferings, on
         </div>
       </div>
 
+      {/* Right column — stats + health */}
       <div className="space-y-4">
         <div className="rounded-xl border border-gray-200 bg-white p-5">
           <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400">Quick Stats</h3>
@@ -333,24 +454,35 @@ export function OverviewTab({ client, assignedOfferingsCount, totalOfferings, on
 
         <div className="rounded-xl border border-gray-200 bg-white p-5">
           <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400">Health Breakdown</h3>
-          <div className="mt-3 space-y-3">
-            {[
-              { label: "Recency", score: breakdown.recency, weight: "40%" },
-              { label: "Engagement", score: breakdown.engagement, weight: "30%" },
-              { label: "Coverage", score: breakdown.coverage, weight: "20%" },
-              { label: "Status", score: breakdown.status, weight: "10%" },
-            ].map((item) => (
-              <div key={item.label}>
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-gray-600">{item.label}</span>
-                  <span className="text-gray-400">{item.weight}</span>
+
+          {/* Empty state — shown for new clients with no activity yet */}
+          {isNewClient ? (
+            <div className="mt-3 rounded-lg border border-gray-100 bg-gray-50 px-4 py-4 text-center">
+              <p className="text-sm font-medium text-gray-500">No activity yet</p>
+              <p className="mt-1 text-xs text-gray-400">
+                Health scores update once this client has portals assigned and starts interacting.
+              </p>
+            </div>
+          ) : (
+            <div className="mt-3 space-y-3">
+              {[
+                { label: "Recency", score: breakdown.recency, weight: "40%" },
+                { label: "Engagement", score: breakdown.engagement, weight: "30%" },
+                { label: "Coverage", score: breakdown.coverage, weight: "20%" },
+                { label: "Status", score: breakdown.status, weight: "10%" },
+              ].map((item) => (
+                <div key={item.label}>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-gray-600">{item.label}</span>
+                    <span className="text-gray-400">{item.weight}</span>
+                  </div>
+                  <div className="mt-1">
+                    <HealthBar score={item.score} />
+                  </div>
                 </div>
-                <div className="mt-1">
-                  <HealthBar score={item.score} />
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
