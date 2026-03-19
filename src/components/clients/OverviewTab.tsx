@@ -9,6 +9,7 @@ import {
   Copy,
   Trash2,
   AlertTriangle,
+  ArchiveRestore,
 } from "lucide-react";
 import { HealthBar } from "@/components/clients/HealthBar";
 import { validateEmail } from "@/lib/validation/email";
@@ -24,6 +25,7 @@ interface Client {
   status: "active" | "paused";
   health_score: number | null;
   last_seen_at: string | null;
+  archived_at?: string | null;
   created_at: string;
 }
 
@@ -95,6 +97,7 @@ export function OverviewTab({ client, assignedOfferingsCount, totalOfferings, on
 
   const [archiveConfirm, setArchiveConfirm] = useState(false);
   const [archiving, setArchiving] = useState(false);
+  const [restoring, setRestoring] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
   const hasChanges =
@@ -193,6 +196,17 @@ export function OverviewTab({ client, assignedOfferingsCount, totalOfferings, on
     setArchiving(true);
     await fetch(`/api/clients/${client.id}`, { method: "DELETE" });
     window.location.href = "/control-panel/clients";
+  };
+
+  const handleRestore = async () => {
+    setRestoring(true);
+    await fetch(`/api/clients/${client.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ archived_at: null, status: "active" }),
+    });
+    setRestoring(false);
+    onUpdated();
   };
 
   const copyToClipboard = (text: string, field: string) => {
@@ -396,7 +410,16 @@ export function OverviewTab({ client, assignedOfferingsCount, totalOfferings, on
 
         {/* Archive */}
         <div className="mt-4 border-t border-gray-100 pt-4">
-          {!archiveConfirm ? (
+          {client.archived_at ? (
+            <button
+              onClick={handleRestore}
+              disabled={restoring}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-1.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+            >
+              <ArchiveRestore className="h-4 w-4" />
+              {restoring ? "Restoring..." : "Restore Client"}
+            </button>
+          ) : !archiveConfirm ? (
             <button
               onClick={() => setArchiveConfirm(true)}
               className="inline-flex items-center gap-1.5 text-sm text-red-500 hover:text-red-600"
@@ -407,7 +430,12 @@ export function OverviewTab({ client, assignedOfferingsCount, totalOfferings, on
           ) : (
             <div className="flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 text-red-500" />
-              <span className="text-sm text-red-600">Archive? Portals will be unassigned.</span>
+              <span className="text-sm text-red-600">
+                Archive this client?
+                {assignedOfferingsCount > 0
+                  ? ` ${assignedOfferingsCount} portal${assignedOfferingsCount !== 1 ? "s" : ""} will be unassigned.`
+                  : " No portals are assigned."}
+              </span>
               <button
                 onClick={handleArchive}
                 disabled={archiving}
