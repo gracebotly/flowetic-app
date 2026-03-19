@@ -8,6 +8,9 @@ import { extractPayloadFields } from '@/mastra/normalizers/extractPayloadFields'
 
 export const runtime = "nodejs";
 
+/** Maximum concurrent n8n API calls per batch */
+const CONCURRENCY_LIMIT = 5;
+
 function normalizeBaseUrl(instanceUrl?: string | null) {
   if (!instanceUrl) return null;
   try {
@@ -25,6 +28,188 @@ function extractWorkflows(raw: any): any[] {
   if (Array.isArray(raw.workflows)) return raw.workflows;
   if (raw.data && Array.isArray(raw.data.data)) return raw.data.data;
   return [];
+}
+
+/**
+ * Process a single n8n workflow: fetch details, executions, generate skill_md,
+ * index to workspace, and return the entity row + event rows.
+ */
+async function processWorkflow(
+  wf: any,
+  ctx: {
+    baseUrl: string;
+    headers: Record<string, string>;
+    sourceId: string;
+    tenantId: string;
+    now: string;
+    existingMap: Map<string, { enabled_for_analytics: boolean; enabled_for_actions: boolean }>;
+  },
+): Promise<{ row: any; events: any[] }> {
+  const { baseUrl, headers, sourceId, tenantId, now, existingMap } = ctx;
+  const wfId = String(wf.id);
+  const existing = existingMap.get(wfId);
+  const events: any[] = [];
+
+  // Fetch detailed workflow (includes nodes)
+  let detailedWorkflow = wf;
+  try {
+    const detailRes = await fetch(`${baseUrl}/api/v1/workflows/${wfId}`, { method: "GET", headers });
+    if (detailRes.ok) {
+      detailedWorkflow = await detailRes.json();
+    }
+  } catch (e) {
+    console.error(`[n8n import] Failed to fetch workflow ${wfId} details:`, e);
+  }
+
+  // Fetch recent executions for this workflow
+  let executionStats = { total: 0, success: 0, failed: 0, lastRun: undefined as string | undefined };
+  let recentExecutions: Array<{ id: string; status: string; startedAt: string; duration?: number; error?: string }> = [];
+
+  try {
+    const execRes = await fetch(`${baseUrl}/api/v1/executions?workflowId=${wfId}&limit=20&includeData=true`, { method: "GET", headers });
+    if (execRes.ok) {
+      const execData = await execRes.json();
+      const executions = execData.data || execData || [];
+
+      executionStats.total = executions.length;
+      executionStats.success = executions.filter((e: any) => e.status === 'success').length;
+      executionStats.failed = executions.filter((e: any) => e.status === 'error' || e.status === 'crashed').length;
+
+      if (executions.length > 0) {
+        executionStats.lastRun = executions[0].startedAt || executions[0].createdAt;
+      }
+
+      recentExecutions = executions.slice(0, 5).map((e: any) => ({
+        id: String(e.id),
+        status: e.status === 'error' || e.status === 'crashed' ? 'error' : 'success',
+        startedAt: e.startedAt || e.createdAt,
+        duration: e.stoppedAt && e.startedAt
+          ? new Date(e.stoppedAt).getTime() - new Date(e.startedAt).getTime()
+          : undefined,
+        error: e.data?.resultData?.error?.message,
+      }));
+
+      // Store sample events
+      for (const exec of executions.slice(0, 10)) {
+        const isError = exec.status === 'error' || exec.status === 'crashed';
+        const startedAt = exec.startedAt || exec.createdAt || now;
+        const endedAt = exec.stoppedAt || '';
+        const durationMs = (startedAt && endedAt)
+          ? Math.max(0, new Date(endedAt).getTime() - new Date(startedAt).getTime())
+          : undefined;
+
+        // Extract rich payload fields from execution runData
+        let payloadFields: Record<string, unknown> = {};
+        let runData = exec.data?.resultData?.runData;
+
+        if (!runData) {
+          try {
+            const detailRes = await fetch(
+              `${baseUrl}/api/v1/executions/${exec.id}?includeData=true`,
+              { method: "GET", headers },
+            );
+            if (detailRes.ok) {
+              const detailData = await detailRes.json().catch(() => ({}));
+              runData = detailData?.data?.resultData?.runData;
+            }
+          } catch (e) {
+            console.warn(`[n8n import] Detail fetch failed for exec ${exec.id}:`, e);
+          }
+        }
+
+        if (runData) {
+          const extraction = extractPayloadFields(
+            runData,
+            exec.data?.resultData?.lastNodeExecuted,
+          );
+          if (extraction.fieldCount > 0) {
+            payloadFields = extraction.fields;
+            console.log(`[n8n import] Extracted ${extraction.fieldCount} fields from node "${extraction.nodeSource}" for exec ${exec.id}`);
+          }
+        }
+
+        events.push({
+          tenant_id: tenantId,
+          source_id: sourceId,
+          platform_event_id: String(exec.id),
+          type: 'workflow_execution',
+          name: `n8n:${wf.name || wfId}:execution`,
+          value: isError ? 0 : 1,
+          state: {
+            workflow_id: wfId,
+            workflow_name: wf.name || wfId,
+            execution_id: String(exec.id),
+            status: isError ? 'error' : 'success',
+            started_at: startedAt,
+            ended_at: endedAt,
+            duration_ms: durationMs,
+            error_message: isError ? (exec.data?.resultData?.error?.message || '') : undefined,
+            platform: 'n8n',
+            ...payloadFields,
+          },
+          labels: {
+            platform: 'n8n',
+            platformType: 'n8n',
+            workflow_id: wfId,
+            workflow_name: wf.name,
+            execution_id: String(exec.id),
+            status: isError ? 'error' : 'success',
+          },
+          timestamp: startedAt,
+          created_at: now,
+        });
+      }
+    }
+  } catch (e) {
+    console.error(`[n8n import] Failed to fetch executions for workflow ${wfId}:`, e);
+  }
+
+  // Generate skill_md
+  const workflowData: WorkflowData = {
+    platform: 'n8n',
+    id: wfId,
+    name: String(detailedWorkflow.name ?? `Workflow ${wfId}`),
+    description: detailedWorkflow.description,
+    nodes: detailedWorkflow.nodes || [],
+    status: detailedWorkflow.active ? 'active' : 'inactive',
+    isActive: detailedWorkflow.active,
+    createdAt: detailedWorkflow.createdAt,
+    updatedAt: detailedWorkflow.updatedAt,
+    executionStats,
+    recentExecutions,
+  };
+
+  const skillMd = generateSkillMd(workflowData);
+
+  // Index to workspace
+  try {
+    await indexWorkflowToWorkspace(workspace, {
+      sourceId,
+      externalId: wfId,
+      displayName: workflowData.name,
+      entityKind: 'workflow',
+      content: JSON.stringify(detailedWorkflow.nodes || detailedWorkflow),
+    });
+  } catch (e) {
+    console.error(`[n8n import] Failed to index workflow ${wfId} to workspace:`, e);
+  }
+
+  return {
+    row: {
+      tenant_id: tenantId,
+      source_id: sourceId,
+      entity_kind: "workflow",
+      external_id: wfId,
+      display_name: workflowData.name,
+      skill_md: skillMd,
+      enabled_for_analytics: existing?.enabled_for_analytics ?? false,
+      enabled_for_actions: existing?.enabled_for_actions ?? false,
+      last_seen_at: now,
+      created_at: now,
+      updated_at: now,
+    },
+    events,
+  };
 }
 
 export async function POST(req: Request) {
@@ -148,177 +333,25 @@ export async function POST(req: Request) {
     });
   }
 
-  // 2. For each workflow, fetch detailed info + executions + generate skill_md
+  // 2. Process workflows in concurrent batches of CONCURRENCY_LIMIT
   const rows: any[] = [];
   const eventRows: any[] = [];
+  const ctx = { baseUrl, headers, sourceId, tenantId: membership.tenant_id, now, existingMap };
 
-  for (const wf of dedupedWorkflows) {
-    const wfId = String(wf.id);
-    const existing = existingMap.get(wfId);
+  for (let i = 0; i < dedupedWorkflows.length; i += CONCURRENCY_LIMIT) {
+    const batch = dedupedWorkflows.slice(i, i + CONCURRENCY_LIMIT);
+    const results = await Promise.allSettled(
+      batch.map((wf) => processWorkflow(wf, ctx)),
+    );
 
-    // Fetch detailed workflow (includes nodes)
-    let detailedWorkflow = wf;
-    try {
-      const detailRes = await fetch(`${baseUrl}/api/v1/workflows/${wfId}`, { method: "GET", headers });
-      if (detailRes.ok) {
-        detailedWorkflow = await detailRes.json();
+    for (const result of results) {
+      if (result.status === 'fulfilled') {
+        rows.push(result.value.row);
+        eventRows.push(...result.value.events);
+      } else {
+        console.error('[n8n import] Workflow processing failed:', result.reason);
       }
-    } catch (e) {
-      console.error(`[n8n import] Failed to fetch workflow ${wfId} details:`, e);
     }
-
-    // Fetch recent executions for this workflow
-    let executionStats = { total: 0, success: 0, failed: 0, lastRun: undefined as string | undefined };
-    let recentExecutions: Array<{ id: string; status: string; startedAt: string; duration?: number; error?: string }> = [];
-
-    try {
-      const execRes = await fetch(`${baseUrl}/api/v1/executions?workflowId=${wfId}&limit=20&includeData=true`, { method: "GET", headers });
-      if (execRes.ok) {
-        const execData = await execRes.json();
-        const executions = execData.data || execData || [];
-
-        executionStats.total = executions.length;
-        // FIX: stoppedAt exists on ALL completed n8n executions. Use exec.status only.
-        executionStats.success = executions.filter((e: any) => e.status === 'success').length;
-        executionStats.failed = executions.filter((e: any) => e.status === 'error' || e.status === 'crashed').length;
-
-        if (executions.length > 0) {
-          executionStats.lastRun = executions[0].startedAt || executions[0].createdAt;
-        }
-
-        recentExecutions = executions.slice(0, 5).map((e: any) => ({
-          id: String(e.id),
-          status: e.status === 'error' || e.status === 'crashed' ? 'error' : 'success',
-          startedAt: e.startedAt || e.createdAt,
-          duration: e.stoppedAt && e.startedAt
-            ? new Date(e.stoppedAt).getTime() - new Date(e.startedAt).getTime()
-            : undefined,
-          error: e.data?.resultData?.error?.message,
-        }));
-
-        // Store sample events — MUST include `state` JSONB for events_flat view,
-        // and `platform_event_id` for upsert deduplication.
-        for (const exec of executions.slice(0, 10)) {
-          const isError = exec.status === 'error' || exec.status === 'crashed';
-          const startedAt = exec.startedAt || exec.createdAt || now;
-          const endedAt = exec.stoppedAt || '';
-          const durationMs = (startedAt && endedAt)
-            ? Math.max(0, new Date(endedAt).getTime() - new Date(startedAt).getTime())
-            : undefined;
-
-          // Extract rich payload fields from execution runData (business data).
-          // The list endpoint often omits runData even with includeData=true.
-          // Fallback: fetch individual execution detail for full data.
-          let payloadFields: Record<string, unknown> = {};
-          let runData = exec.data?.resultData?.runData;
-
-          if (!runData) {
-            // Fallback: fetch individual execution for full runData
-            try {
-              const detailRes = await fetch(
-                `${baseUrl}/api/v1/executions/${exec.id}?includeData=true`,
-                { method: "GET", headers },
-              );
-              if (detailRes.ok) {
-                const detailData = await detailRes.json().catch(() => ({}));
-                runData = detailData?.data?.resultData?.runData;
-              }
-            } catch (e) {
-              // Non-fatal — proceed without enriched data
-              console.warn(`[n8n import] Detail fetch failed for exec ${exec.id}:`, e);
-            }
-          }
-
-          if (runData) {
-            const extraction = extractPayloadFields(
-              runData,
-              exec.data?.resultData?.lastNodeExecuted,
-            );
-            if (extraction.fieldCount > 0) {
-              payloadFields = extraction.fields;
-              console.log(`[n8n import] Extracted ${extraction.fieldCount} fields from node "${extraction.nodeSource}" for exec ${exec.id}`);
-            }
-          }
-
-          eventRows.push({
-            tenant_id: membership.tenant_id,
-            source_id: sourceId,
-            platform_event_id: String(exec.id),
-            type: 'workflow_execution',
-            name: `n8n:${wf.name || wfId}:execution`,
-            value: isError ? 0 : 1,
-            state: {
-              workflow_id: wfId,
-              workflow_name: wf.name || wfId,
-              execution_id: String(exec.id),
-              status: isError ? 'error' : 'success',
-              started_at: startedAt,
-              ended_at: endedAt,
-              duration_ms: durationMs,
-              error_message: isError ? (exec.data?.resultData?.error?.message || '') : undefined,
-              platform: 'n8n',
-              ...payloadFields,
-            },
-            labels: {
-              platform: 'n8n',
-              platformType: 'n8n',
-              workflow_id: wfId,
-              workflow_name: wf.name,
-              execution_id: String(exec.id),
-              status: isError ? 'error' : 'success',
-            },
-            timestamp: startedAt,
-            created_at: now,
-          });
-        }
-      }
-    } catch (e) {
-      console.error(`[n8n import] Failed to fetch executions for workflow ${wfId}:`, e);
-    }
-
-    // Generate skill_md
-    const workflowData: WorkflowData = {
-      platform: 'n8n',
-      id: wfId,
-      name: String(detailedWorkflow.name ?? `Workflow ${wfId}`),
-      description: detailedWorkflow.description,
-      nodes: detailedWorkflow.nodes || [],
-      status: detailedWorkflow.active ? 'active' : 'inactive',
-      isActive: detailedWorkflow.active,
-      createdAt: detailedWorkflow.createdAt,
-      updatedAt: detailedWorkflow.updatedAt,
-      executionStats,
-      recentExecutions,
-    };
-
-    const skillMd = generateSkillMd(workflowData);
-
-    // Index to workspace
-    try {
-      await indexWorkflowToWorkspace(workspace, {
-        sourceId,
-        externalId: wfId,
-        displayName: workflowData.name,
-        entityKind: 'workflow',
-        content: JSON.stringify(detailedWorkflow.nodes || detailedWorkflow),
-      });
-    } catch (e) {
-      console.error(`[n8n import] Failed to index workflow ${wfId} to workspace:`, e);
-    }
-
-    rows.push({
-      tenant_id: membership.tenant_id,
-      source_id: sourceId,
-      entity_kind: "workflow",
-      external_id: wfId,
-      display_name: workflowData.name,
-      skill_md: skillMd, // ✅ NOW POPULATED
-      enabled_for_analytics: existing?.enabled_for_analytics ?? false,
-      enabled_for_actions: existing?.enabled_for_actions ?? false,
-      last_seen_at: now,
-      created_at: now,
-      updated_at: now,
-    });
   }
 
   // Upsert source_entities with skill_md
