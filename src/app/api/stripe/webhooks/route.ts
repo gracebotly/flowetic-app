@@ -36,14 +36,14 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  // 2. Idempotency guard — skip if already processed
+  // 2. Idempotency guard — skip only if successfully processed
   const { data: existing } = await supabaseAdmin
     .from("stripe_webhook_events")
-    .select("id")
+    .select("id, processed")
     .eq("id", event.id)
     .maybeSingle();
 
-  if (existing) {
+  if (existing?.processed) {
     return new Response("Already processed", { status: 200 });
   }
 

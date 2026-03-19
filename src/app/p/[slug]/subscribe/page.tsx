@@ -1,4 +1,5 @@
 import { createClient as createServiceClient } from '@supabase/supabase-js';
+import { cookies } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
 import { PricingGate } from '@/components/products/PricingGate';
 
@@ -12,7 +13,10 @@ interface PageProps {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }
 
-export default async function SubscribePage({ params, searchParams }: PageProps) {
+export default async function SubscribePage({
+  params,
+  searchParams,
+}: PageProps) {
   const { slug } = await params;
   const query = await searchParams;
   const supabase = createServiceClient(supabaseUrl, serviceKey);
@@ -35,30 +39,37 @@ export default async function SubscribePage({ params, searchParams }: PageProps)
     .eq('id', product.tenant_id)
     .single();
 
-  // For free analytics portals with a token, redirect straight to dashboard
+  // ── Free portals: redirect straight to dashboard ──
   if (product.pricing_type === 'free' && product.token) {
     redirect(`/client/${product.token}`);
   }
 
-  // If arriving from Stripe success redirect with ?subscribed=true, go to dashboard
+  // ── Post-Stripe redirect: ?subscribed=true means they just paid ──
   if (query.subscribed === 'true' && product.token) {
     redirect(`/client/${product.token}`);
   }
 
-  // Check if a specific email already has an active subscription
-  let existingSubStatus: string | null = null;
-  const emailParam = typeof query.email === 'string' ? query.email : null;
+  // ── Identify returning subscriber ──
+  // Check 3 sources for email: query param, cookie, or null
+  const cookieStore = await cookies();
+  const emailFromQuery =
+    typeof query.email === 'string' ? query.email : null;
+  const emailFromCookie = cookieStore.get(`gf_sub_${product.id}`)?.value ?? null;
+  const subscriberEmail = emailFromQuery || emailFromCookie;
 
-  if (emailParam && product.pricing_type === 'monthly') {
+  let existingSubStatus: string | null = null;
+
+  if (subscriberEmail && product.pricing_type !== 'free') {
     const { data: customer } = await supabase
       .from('portal_customers')
       .select('subscription_status')
       .eq('portal_id', product.id)
-      .eq('email', emailParam)
+      .eq('email', subscriberEmail)
       .maybeSingle();
 
     existingSubStatus = customer?.subscription_status ?? null;
 
+    // Active subscriber → send them to their dashboard, not the paywall
     if (existingSubStatus === 'active' && product.token) {
       redirect(`/client/${product.token}`);
     }
@@ -97,7 +108,7 @@ export default async function SubscribePage({ params, searchParams }: PageProps)
           subscriptionStatus={existingSubStatus}
           dashboardToken={product.token}
         >
-          {/* This children block is for runner products — not used for analytics */}
+          {/* Fallback children — only rendered if PricingGate lets through */}
           <div />
         </PricingGate>
       </main>
