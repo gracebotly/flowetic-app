@@ -132,7 +132,7 @@ export function ContactTab() {
     try {
       const VERCEL_BODY_LIMIT = 4 * 1024 * 1024 // 4MB (safe margin under 4.5MB)
 
-      let resultJson: { ok: boolean; signedUrl: string | null; storagePath: string }
+      let resultJson: any
 
       if (file.size > VERCEL_BODY_LIMIT) {
         // Large file: get a signed upload URL and upload directly to Supabase
