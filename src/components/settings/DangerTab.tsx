@@ -50,7 +50,7 @@ export function DangerTab() {
 
   // ── After workspace deleted → sign out + redirect ─────────
   const handleDeleted = () => {
-    // Workspace is gone — redirect to login
+    // Workspace is soft-deleted — redirect to login
     window.location.href = "/login";
   };
 
@@ -67,7 +67,7 @@ export function DangerTab() {
       <div className="rounded-xl border border-gray-200 bg-white p-6">
         <h3 className="text-base font-semibold text-gray-900">Export Data</h3>
         <p className="mt-1 text-sm text-gray-500">
-          Download all your workspace data as JSON. Includes clients, offerings,
+          Download all your workspace data as JSON. Includes clients, client portals,
           connections, and activity events from the last 90 days.
         </p>
 
@@ -100,9 +100,9 @@ export function DangerTab() {
           Delete Workspace
         </h3>
         <p className="mt-1 text-sm text-gray-500">
-          Permanently delete your workspace and all associated data. This action
-          cannot be undone. All offerings, clients, connections, and team members
-          will be removed.
+          Your workspace will be deactivated immediately and permanently deleted
+          after 30 days. All client portals, clients, connections, and team members
+          will be removed. You can contact support to restore within the grace period.
         </p>
 
         <button

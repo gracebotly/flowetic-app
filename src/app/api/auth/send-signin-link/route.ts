@@ -47,6 +47,7 @@ function siteUrl(req: Request) {
   if (env && env.startsWith("http")) return env;
   return new URL(req.url).origin;
 }
+
 export const POST = withApiHandler(async function POST(req: Request) {
   const body: { email?: unknown } = await req.json().catch(() => ({}));
   const email = (body.email ?? "").toString().trim().toLowerCase();
@@ -73,31 +74,12 @@ export const POST = withApiHandler(async function POST(req: Request) {
     );
   }
 
-  // Check if user exists in auth.users — use admin listUsers with email filter
-  const { data: userList, error: listError } = await supabaseAdmin.auth.admin.listUsers({
-    page: 1,
-    perPage: 1,
-  });
-  void userList;
-  void listError;
-
-  // More reliable: query auth.users directly
-  const { data: authUser, error: authError } = await supabaseAdmin
+  // ── Step 1: Check if auth user exists via the check_email_registered RPC ──
+  const { data: authExists, error: rpcError } = await supabaseAdmin
     .rpc("check_email_registered", { p_email: email })
     .single();
 
-  // Fallback: check via users_view
-  const { data: userCheck } = await supabaseAdmin
-    .from("users_view")
-    .select("id")
-    .eq("email", email)
-    .limit(1);
-
-  const userExists =
-    (!authError && authUser === true) ||
-    (userCheck && userCheck.length > 0);
-
-  if (!userExists) {
+  if (rpcError || authExists !== true) {
     return NextResponse.json(
       {
         ok: false,
@@ -108,36 +90,68 @@ export const POST = withApiHandler(async function POST(req: Request) {
     );
   }
 
-  // Also check they have a membership (i.e. they're a real customer, not a ghost user)
-  // Look up their user ID first
-  const { data: userData } = await supabaseAdmin
-    .from("users_view")
-    .select("id")
-    .eq("email", email)
-    .limit(1);
+  // ── Step 2: Check they have an active membership (not orphaned) ──
+  // Look up user ID from auth.users via admin API
+  const { data: authUserList } = await supabaseAdmin.auth.admin.listUsers({
+    page: 1,
+    perPage: 1000,
+  });
 
-  if (userData && userData.length > 0) {
-    const { data: memberships } = await supabaseAdmin
-      .from("memberships")
-      .select("tenant_id")
-      .eq("user_id", userData[0].id)
-      .limit(1);
+  const matchedUser = authUserList?.users?.find(
+    (u) => u.email?.toLowerCase() === email
+  );
 
-    if (!memberships || memberships.length === 0) {
-      return NextResponse.json(
-        {
-          ok: false,
-          code: "not_found",
-          message: "No account found with this email. Please sign up first.",
-        },
-        { status: 404 }
-      );
-    }
+  if (!matchedUser) {
+    return NextResponse.json(
+      {
+        ok: false,
+        code: "not_found",
+        message: "No account found with this email. Please sign up first.",
+      },
+      { status: 404 }
+    );
   }
 
-  // Use signInWithOtp instead of resetPasswordForEmail
-  // - shouldCreateUser: false prevents auto-creating new users
-  // - This sends the Magic Link email template, not Reset Password
+  // ── Step 3: Check membership exists ──
+  const { data: memberships } = await supabaseAdmin
+    .from("memberships")
+    .select("tenant_id")
+    .eq("user_id", matchedUser.id)
+    .limit(1);
+
+  if (!memberships || memberships.length === 0) {
+    return NextResponse.json(
+      {
+        ok: false,
+        code: "not_found",
+        message: "No account found with this email. Please sign up first.",
+      },
+      { status: 404 }
+    );
+  }
+
+  // ── Step 4: Check tenant is not soft-deleted ──
+  const { data: tenant } = await supabaseAdmin
+    .from("tenants")
+    .select("deleted_at, scheduled_purge_at")
+    .eq("id", memberships[0].tenant_id)
+    .single();
+
+  if (tenant?.deleted_at) {
+    const purgeDate = tenant.scheduled_purge_at
+      ? new Date(tenant.scheduled_purge_at).toLocaleDateString()
+      : "soon";
+    return NextResponse.json(
+      {
+        ok: false,
+        code: "workspace_deleted",
+        message: `This workspace was deleted and is scheduled for permanent removal on ${purgeDate}. Contact support if you need to restore it.`,
+      },
+      { status: 403 }
+    );
+  }
+
+  // ── Step 5: Send the magic link ──
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithOtp({
     email,
@@ -150,7 +164,6 @@ export const POST = withApiHandler(async function POST(req: Request) {
   if (error) {
     console.error("[send-signin-link]", error.message);
 
-    // Supabase returns this when shouldCreateUser is false and user doesn't exist
     if (error.message.toLowerCase().includes("signups not allowed")) {
       return NextResponse.json(
         { ok: false, code: "not_found", message: "No account found with this email. Please sign up first." },

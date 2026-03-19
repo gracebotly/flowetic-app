@@ -275,9 +275,11 @@ export default function AuthShell() {
   const urlErrorMessage =
     urlError === "not_registered"
       ? "No account found for that email. Please sign up first."
-      : urlError === "auth_failed"
-        ? 'Sign-in was interrupted. Please click "Continue with Google" to try again.'
-        : null;
+      : urlError === "workspace_deleted"
+        ? "This workspace has been deleted. Contact support if you need to restore it."
+        : urlError === "auth_failed"
+          ? 'Sign-in was interrupted. Please click "Continue with Google" to try again.'
+          : null;
 
   const cfg = MODE_CONFIG[mode];
   const isPayNow = mode === "agency-pay" || mode === "scale-pay";

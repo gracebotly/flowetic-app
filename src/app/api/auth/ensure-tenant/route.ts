@@ -29,21 +29,50 @@ export async function POST(request: NextRequest) {
     .limit(1);
 
   if (memberships && memberships.length > 0) {
+    // Check if their tenant is soft-deleted
+    const { data: tenant } = await supabaseAdmin
+      .from("tenants")
+      .select("deleted_at")
+      .eq("id", memberships[0].tenant_id)
+      .single();
+
+    if (tenant?.deleted_at) {
+      // User has a membership but their workspace is soft-deleted.
+      // Do NOT create a new tenant — reject them.
+      return NextResponse.json(
+        { ok: false, reason: "workspace_deleted" },
+        { status: 403 }
+      );
+    }
+
     return NextResponse.json({ ok: true, reason: "already_exists" });
   }
 
   // Parse optional body params
   let plan = "agency";
   let skipTrial = false;
+  let intent = "signup";
   try {
     const body = await request.json();
     if (body?.plan === "scale" || body?.plan === "agency") plan = body.plan;
     if (body?.skipTrial === true) skipTrial = true;
+    if (body?.intent === "signin") intent = "signin";
   } catch {
     // No body or invalid JSON — use defaults
   }
 
-  // Create tenant + membership
+  // CRITICAL: Do NOT auto-create tenants for sign-in intent.
+  // If a user is signing in and has no membership, they are an orphan
+  // (e.g. their workspace was hard-deleted before soft-delete was added).
+  // Reject them instead of silently re-provisioning.
+  if (intent === "signin") {
+    return NextResponse.json(
+      { ok: false, reason: "no_workspace" },
+      { status: 403 }
+    );
+  }
+
+  // Create tenant + membership (only for signup intent)
   const workspaceName = user.email
     ? `${user.email.split("@")[0]}'s Workspace`
     : "My Workspace";
