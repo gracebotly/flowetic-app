@@ -18,6 +18,17 @@ function json(status: number, data: Record<string, unknown>) {
 }
 
 export async function POST(request: NextRequest) {
+  // ── Rate limit: 5 checkout attempts per IP per minute ──
+  const { checkRateLimit, getClientIp } = await import('@/lib/api/rateLimit');
+  const ip = getClientIp(request);
+  const limit = await checkRateLimit(`checkout:${ip}`, 60, 5);
+  if (!limit.allowed) {
+    return json(429, {
+      error: 'Too many checkout attempts. Please wait a moment and try again.',
+      retryAfterMs: limit.reset_ms,
+    });
+  }
+
   try {
     const body = await request.json();
     const {
@@ -138,7 +149,7 @@ export async function POST(request: NextRequest) {
               feePercent
             ),
           },
-          success_url: `${successBase}?session_id={CHECKOUT_SESSION_ID}`,
+          success_url: `${successBase}?session_id={CHECKOUT_SESSION_ID}&email=${encodeURIComponent(customerEmail)}`,
           cancel_url: `${baseUrl}/p/${offering.slug}?cancelled=true`,
           metadata: {
             portal_id: offering.id,
@@ -163,7 +174,7 @@ export async function POST(request: NextRequest) {
             application_fee_percent: feePercent,
             metadata: { portal_id: offering.id },
           },
-          success_url: `${successBase}?subscribed=true`,
+          success_url: `${successBase}?subscribed=true&email=${encodeURIComponent(customerEmail)}`,
           cancel_url: `${baseUrl}/p/${offering.slug}?cancelled=true`,
           metadata: {
             portal_id: offering.id,
@@ -190,7 +201,7 @@ export async function POST(request: NextRequest) {
             application_fee_percent: feePercent,
             metadata: { portal_id: offering.id },
           },
-          success_url: `${successBase}?subscribed=true`,
+          success_url: `${successBase}?subscribed=true&email=${encodeURIComponent(customerEmail)}`,
           cancel_url: `${baseUrl}/p/${offering.slug}?cancelled=true`,
           metadata: {
             portal_id: offering.id,

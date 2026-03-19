@@ -30,6 +30,7 @@ export default async function ClientPortalPage({ params }: PageProps) {
   return (
     <PortalClient
       portal={{
+        id: portal.id,
         name: portal.name,
         skeleton_id: portal.skeleton_id,
         surface_type: portal.surface_type,

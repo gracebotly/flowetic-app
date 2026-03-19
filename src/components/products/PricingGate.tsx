@@ -31,6 +31,17 @@ export function PricingGate({
   }
 
   if (pricingType === 'monthly' && subscriptionStatus === 'active') {
+    // If we have a dashboard token, redirect to it — don't render empty children
+    if (dashboardToken) {
+      if (typeof window !== 'undefined') {
+        window.location.href = `/client/${dashboardToken}`;
+      }
+      return (
+        <div className="py-12 text-center text-sm text-slate-500">
+          Redirecting to your dashboard…
+        </div>
+      );
+    }
     return <>{children}</>;
   }
 
@@ -61,6 +72,10 @@ export function PricingGate({
       }
 
       const { url } = await res.json();
+      // Store email in cookie so returning subscribers are recognized
+      if (email) {
+        document.cookie = `gf_sub_${offeringId}=${encodeURIComponent(email)}; path=/; max-age=${60 * 60 * 24 * 365}; SameSite=Lax`;
+      }
       window.location.href = url;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');

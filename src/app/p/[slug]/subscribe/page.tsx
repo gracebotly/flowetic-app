@@ -1,5 +1,6 @@
 import { createClient as createServiceClient } from '@supabase/supabase-js';
-import { notFound } from 'next/navigation';
+import { cookies } from 'next/headers';
+import { notFound, redirect } from 'next/navigation';
 import { PricingGate } from '@/components/products/PricingGate';
 
 export const dynamic = 'force-dynamic';
@@ -9,10 +10,15 @@ const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 interface PageProps {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }
 
-export default async function SubscribePage({ params }: PageProps) {
+export default async function SubscribePage({
+  params,
+  searchParams,
+}: PageProps) {
   const { slug } = await params;
+  const query = await searchParams;
   const supabase = createServiceClient(supabaseUrl, serviceKey);
 
   const { data: product } = await supabase
@@ -33,10 +39,51 @@ export default async function SubscribePage({ params }: PageProps) {
     .eq('id', product.tenant_id)
     .single();
 
-  // For free analytics portals with a token, redirect straight to dashboard
+  // ── Free portals: redirect straight to dashboard ──
   if (product.pricing_type === 'free' && product.token) {
-    const { redirect } = await import('next/navigation');
     redirect(`/client/${product.token}`);
+  }
+
+  // ── Post-Stripe redirect: ?subscribed=true means they just paid ──
+  if (query.subscribed === 'true' && product.token) {
+    redirect(`/client/${product.token}`);
+  }
+
+  // ── Check session cookie for returning subscribers ──
+  const cookieStore = await cookies();
+  const sessionCookie = cookieStore.get(`portal_session_${product.id}`);
+  const emailCookie = cookieStore.get(`portal_email_${product.id}`);
+
+  if (sessionCookie?.value && emailCookie?.value && product.pricing_type === 'monthly') {
+    const { data: cookieCustomer } = await supabase
+      .from('portal_customers')
+      .select('subscription_status')
+      .eq('portal_id', product.id)
+      .eq('email', emailCookie.value)
+      .maybeSingle();
+
+    if (cookieCustomer?.subscription_status === 'active' && product.token) {
+      redirect(`/client/${product.token}`);
+    }
+  }
+
+  // Check if a specific email already has an active subscription (URL param)
+  let existingSubStatus: string | null = null;
+  const emailParam = typeof query.email === 'string' ? query.email : null;
+
+  if (emailParam && product.pricing_type === 'monthly') {
+    const { data: customer } = await supabase
+      .from('portal_customers')
+      .select('subscription_status')
+      .eq('portal_id', product.id)
+      .eq('email', emailParam)
+      .maybeSingle();
+
+    existingSubStatus = customer?.subscription_status ?? null;
+
+    if (existingSubStatus === 'active' && product.token) {
+      redirect(`/client/${product.token}`);
+    }
   }
 
   return (
@@ -69,9 +116,10 @@ export default async function SubscribePage({ params }: PageProps) {
           pricingType={product.pricing_type ?? 'free'}
           priceCents={product.price_cents ?? 0}
           slug={product.slug}
+          subscriptionStatus={existingSubStatus}
           dashboardToken={product.token}
         >
-          {/* This children block is for runner products — not used for analytics */}
+          {/* Fallback children — only rendered if PricingGate lets through */}
           <div />
         </PricingGate>
       </main>

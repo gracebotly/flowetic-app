@@ -108,8 +108,8 @@ export async function POST(request: NextRequest) {
 
         let planStatus = statusMap[subscription.status] ?? "trialing";
 
-        // If subscription is active but scheduled to cancel, mark as "cancelling"
-        if (subscription.status === "active" && subscription.cancel_at_period_end) {
+        // If subscription is scheduled to cancel (works for both active AND trialing)
+        if (subscription.cancel_at_period_end) {
           planStatus = "cancelling";
         }
 
