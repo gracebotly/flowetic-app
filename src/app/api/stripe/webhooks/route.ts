@@ -102,7 +102,7 @@ export async function POST(request: NextRequest) {
       // ── Phase 5B: Checkout & subscription events ──────────
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
-        const offeringId = session.metadata?.offering_id;
+        const offeringId = session.metadata?.portal_id ?? session.metadata?.offering_id;
         const customerEmail =
           session.metadata?.customer_email ??
           session.customer_details?.email;
