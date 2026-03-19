@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Copy, Check, Loader2 } from "lucide-react";
 
 // Common US/EU timezones
@@ -46,6 +47,7 @@ export function WorkspaceTab() {
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const router = useRouter();
 
   // ── Load workspace ────────────────────────────────────────
   useEffect(() => {
@@ -69,7 +71,14 @@ export function WorkspaceTab() {
     setSaveSuccess(false);
 
     const updates: Record<string, string> = {};
-    if (editName.trim() !== workspace.name) updates.name = editName.trim();
+    if (editName.trim() !== workspace.name) {
+      if (editName.trim().length < 2) {
+        setSaveError("Workspace name must be at least 2 characters.");
+        setSaving(false);
+        return;
+      }
+      updates.name = editName.trim();
+    }
     if (editTimezone !== workspace.timezone) updates.timezone = editTimezone;
 
     if (Object.keys(updates).length === 0) {
@@ -90,6 +99,9 @@ export function WorkspaceTab() {
       setEditTimezone(json.workspace.timezone);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 2000);
+      // Force server layout to re-render with updated tenant name
+      // This updates the sidebar icon, bottom trigger, and account popover
+      router.refresh();
     } else {
       setSaveError(json.code || "Save failed");
     }
@@ -148,12 +160,25 @@ export function WorkspaceTab() {
         <label className="block text-xs font-medium uppercase tracking-wider text-gray-400">
           Workspace Name
         </label>
-        <input
-          type="text"
-          value={editName}
-          onChange={(e) => setEditName(e.target.value)}
-          className="mt-1 w-full max-w-md rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
-        />
+        <div className="relative mt-1 max-w-md">
+          <input
+            type="text"
+            value={editName}
+            onChange={(e) => {
+              if (e.target.value.length <= 40) setEditName(e.target.value);
+            }}
+            maxLength={40}
+            minLength={2}
+            placeholder="My Workspace"
+            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 pr-16 text-sm text-gray-900 shadow-sm focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
+          />
+          <span className={`absolute right-3 top-1/2 -translate-y-1/2 text-xs tabular-nums ${editName.length >= 36 ? "text-amber-500" : "text-gray-300"}`}>
+            {editName.length}/40
+          </span>
+        </div>
+        {editName.trim().length > 0 && editName.trim().length < 2 && (
+          <p className="mt-1 text-xs text-red-500">Must be at least 2 characters</p>
+        )}
       </div>
 
       {/* Workspace ID */}

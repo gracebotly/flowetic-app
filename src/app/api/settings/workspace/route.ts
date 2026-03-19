@@ -52,6 +52,17 @@ export async function PATCH(req: Request) {
     return json(400, { ok: false, code: "NO_UPDATES" });
   }
 
+  // Validate workspace name length
+  if (updates.name) {
+    const name = updates.name as string;
+    if (name.length < 2) {
+      return json(400, { ok: false, code: "NAME_TOO_SHORT", message: "Workspace name must be at least 2 characters." });
+    }
+    if (name.length > 40) {
+      return json(400, { ok: false, code: "NAME_TOO_LONG", message: "Workspace name must be 40 characters or fewer." });
+    }
+  }
+
   // Validate timezone if provided
   if (updates.timezone) {
     try {

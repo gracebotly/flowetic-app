@@ -170,7 +170,7 @@ export function ControlPanelSidebar({
               <div className="mx-auto flex h-8 w-8 items-center justify-center rounded-full bg-gray-600">
                 <User size={14} className="text-gray-300" />
               </div>
-              {!collapsed && <div className="mt-1 truncate text-[10px] text-gray-400">{tenantName || "Account"}</div>}
+              {!collapsed && <div className="mt-1 truncate text-[11px] font-medium leading-tight text-gray-400">{tenantName || "Account"}</div>}
             </Popover.Trigger>
             <Popover.Portal>
               <Popover.Content side="right" align="end" sideOffset={12} className="z-50 outline-none">
