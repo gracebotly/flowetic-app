@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { TRIAL_DAYS_WITHOUT_CARD } from "@/lib/plans/constants";
+import { stripe } from "@/lib/stripe/client";
 
 // Service role client — bypasses RLS for tenant + membership creation
 const supabaseAdmin = createServiceClient(
@@ -9,19 +10,20 @@ const supabaseAdmin = createServiceClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+const PRICE_MAP: Record<string, string | undefined> = {
+  agency: process.env.STRIPE_PRICE_AGENCY,
+  scale: process.env.STRIPE_PRICE_SCALE,
+};
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
 
   const code = searchParams.get("code");
   const next = searchParams.get("next") ?? "/control-panel/connections";
-
-  // trial=7 (default) → 7-day free trial, no card required
-  // trial=0           → pay-now, redirect straight to billing
-  // Google OAuth users always land here with no trial param → defaults to 7
   const trialParam = searchParams.get("trial") ?? "7";
   const planParam = searchParams.get("plan") ?? "agency";
-  // Validate plan — only "agency" and "scale" are valid
   const plan = planParam === "scale" ? "scale" : "agency";
+  const intent = searchParams.get("intent") ?? "signin";
 
   if (!code) {
     return NextResponse.redirect(new URL("/auth/auth-code-error", request.url));
@@ -38,8 +40,6 @@ export async function GET(request: Request) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const intent = searchParams.get("intent") ?? "signin";
-
   if (user) {
     const { data: memberships, error: mErr } = await supabaseAdmin
       .from("memberships")
@@ -53,22 +53,45 @@ export async function GET(request: Request) {
     if (!isNewUser && memberships && memberships.length > 0) {
       const { data: tenant } = await supabaseAdmin
         .from("tenants")
-        .select("deleted_at, scheduled_purge_at")
+        .select("deleted_at, plan_status, has_card_on_file, stripe_customer_id, has_ever_paid, trial_ends_at")
         .eq("id", memberships[0].tenant_id)
         .single();
 
       if (tenant?.deleted_at) {
-        // Workspace is soft-deleted — sign out and reject
         await supabase.auth.signOut();
         return NextResponse.redirect(
           new URL("/login?error=workspace_deleted", request.url)
         );
       }
+
+      // Existing user who hasn't paid yet (e.g. retrying Google OAuth signup
+      // after bailing on Stripe) — send them to billing, not an error page
+      if (
+        tenant?.plan_status === "trialing" &&
+        !tenant?.trial_ends_at &&
+        !tenant?.has_card_on_file &&
+        !tenant?.has_ever_paid
+      ) {
+        // Try to create Stripe checkout session directly
+        const stripeUrl = await createStripeCheckout(
+          user,
+          memberships[0].tenant_id,
+          tenant?.stripe_customer_id ?? null,
+          plan,
+          request
+        );
+        if (stripeUrl) {
+          return NextResponse.redirect(new URL(stripeUrl));
+        }
+        // Fallback to billing page
+        return NextResponse.redirect(
+          new URL(`/control-panel/settings?tab=billing&intent=subscribe&plan=${plan}`, request.url)
+        );
+      }
     }
 
     if (isNewUser && intent !== "signup") {
-      // No membership and not signing up — this is an orphan user.
-      // Do NOT call ensure-tenant. Sign out and reject.
+      // No membership and not signing up — orphan user. Reject.
       await supabase.auth.signOut();
       return NextResponse.redirect(
         new URL("/login?error=not_registered", request.url)
@@ -80,9 +103,7 @@ export async function GET(request: Request) {
         ? `${user.email.split("@")[0]}'s Workspace`
         : "My Workspace";
 
-      // trial=0 → pay-now, charge immediately
       // Scale plan → always pay-now, never gets a free trial
-      // Agency plan with trial=7 → 7-day free trial
       const trialDays =
         trialParam === "0" || plan === "scale" ? 0 : TRIAL_DAYS_WITHOUT_CARD;
 
@@ -109,15 +130,77 @@ export async function GET(request: Request) {
           user_id: user.id,
           role: "admin",
         });
+
+        // Pay-now flow: create Stripe checkout and redirect directly
+        if (trialDays === 0) {
+          const stripeUrl = await createStripeCheckout(
+            user,
+            tenant.id,
+            null,
+            plan,
+            request
+          );
+          if (stripeUrl) {
+            return NextResponse.redirect(new URL(stripeUrl));
+          }
+          // Fallback: redirect to billing page if Stripe call fails
+          return NextResponse.redirect(
+            new URL(`/control-panel/settings?tab=billing&intent=subscribe&plan=${plan}`, request.url)
+          );
+        }
       }
     }
   }
 
-  // Pay-now: send to billing immediately
-  const destination =
-    trialParam === "0"
-      ? `/control-panel/settings?tab=billing&intent=subscribe&plan=${plan}`
-      : next;
+  // Free trial users or existing active users: go to the app
+  return NextResponse.redirect(new URL(next, request.url));
+}
 
-  return NextResponse.redirect(new URL(destination, request.url));
+/**
+ * Creates a Stripe Checkout session and returns the checkout URL.
+ * Used for pay-now Google OAuth signups to skip the billing page hop.
+ */
+async function createStripeCheckout(
+  user: { id: string; email?: string },
+  tenantId: string,
+  existingCustomerId: string | null,
+  plan: string,
+  request: Request
+): Promise<string | null> {
+  try {
+    const priceId = PRICE_MAP[plan];
+    if (!priceId) return null;
+
+    // Create or reuse Stripe Customer
+    let customerId = existingCustomerId;
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email: user.email ?? undefined,
+        metadata: { tenant_id: tenantId },
+      });
+      customerId = customer.id;
+
+      await supabaseAdmin
+        .from("tenants")
+        .update({ stripe_customer_id: customerId })
+        .eq("id", tenantId);
+    }
+
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
+
+    const session = await stripe.checkout.sessions.create({
+      mode: "subscription",
+      customer: customerId,
+      line_items: [{ price: priceId, quantity: 1 }],
+      success_url: `${baseUrl}/control-panel/settings?tab=billing&billing=success`,
+      cancel_url: `${baseUrl}/control-panel/settings?tab=billing&billing=cancelled`,
+      metadata: { tenant_id: tenantId, plan },
+      subscription_data: { metadata: { tenant_id: tenantId, plan } },
+    });
+
+    return session.url ?? null;
+  } catch (err) {
+    console.error("[auth/callback] Stripe checkout creation failed:", err);
+    return null;
+  }
 }
