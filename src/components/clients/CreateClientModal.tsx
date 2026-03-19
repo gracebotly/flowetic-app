@@ -64,7 +64,7 @@ export function CreateClientModal({ onClose, onCreated }: CreateClientModalProps
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b px-6 py-4">
-          <h2 className="text-lg font-semibold text-gray-900">Add New Client</h2>
+          <h2 className="text-lg font-semibold text-gray-900">New Client Account</h2>
           <button
             onClick={onClose}
             className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-600"
@@ -83,7 +83,7 @@ export function CreateClientModal({ onClose, onCreated }: CreateClientModalProps
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g., John Smith"
+              placeholder="e.g., Dr. Rivera or Apex Roofing"
               className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
               autoFocus
             />
@@ -98,7 +98,7 @@ export function CreateClientModal({ onClose, onCreated }: CreateClientModalProps
               type="text"
               value={company}
               onChange={(e) => setCompany(e.target.value)}
-              placeholder="e.g., Acme Dental LLC"
+              placeholder="e.g., Rivera Family Dental"
               className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
             />
           </div>
@@ -112,7 +112,7 @@ export function CreateClientModal({ onClose, onCreated }: CreateClientModalProps
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="john@acmedental.com"
+              placeholder="hello@riverafamilydental.com"
               className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
             />
           </div>
@@ -140,7 +140,7 @@ export function CreateClientModal({ onClose, onCreated }: CreateClientModalProps
               type="text"
               value={tagsInput}
               onChange={(e) => setTagsInput(e.target.value)}
-              placeholder="vip, dental, trial"
+              placeholder="priority, onboarding, ai-voice"
               className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
             />
           </div>
@@ -154,7 +154,7 @@ export function CreateClientModal({ onClose, onCreated }: CreateClientModalProps
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={2}
-              placeholder="Internal notes about this client..."
+              placeholder="What's the workflow context? (e.g., missed calls, scheduling)"
               className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
             />
           </div>
@@ -178,7 +178,7 @@ export function CreateClientModal({ onClose, onCreated }: CreateClientModalProps
             disabled={saving || !name.trim()}
             className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"
           >
-            {saving ? "Creating..." : "Create Client"}
+            {saving ? "Creating..." : "Create Account"}
           </button>
         </div>
       </div>
