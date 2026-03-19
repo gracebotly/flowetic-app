@@ -19,6 +19,8 @@ export async function GET(request: Request) {
   // trial=0           → pay-now, redirect straight to billing
   // Google OAuth users always land here with no trial param → defaults to 7
   const trialParam = searchParams.get("trial") ?? "7";
+  const planParam = searchParams.get("plan") ?? "agency";
+  const plan = planParam === "scale" ? "scale" : "agency";
 
   if (!code) {
     return NextResponse.redirect(new URL("/auth/auth-code-error", request.url));
@@ -84,7 +86,7 @@ export async function GET(request: Request) {
         .from("tenants")
         .insert({
           name: workspaceName,
-          plan: "agency",
+          plan,
           plan_status: "trialing",
           has_card_on_file: false,
           trial_ends_at:
@@ -110,7 +112,7 @@ export async function GET(request: Request) {
   // Pay-now: send to billing immediately
   const destination =
     trialParam === "0"
-      ? "/control-panel/settings?tab=billing&intent=subscribe"
+      ? `/control-panel/settings?tab=billing&intent=subscribe&plan=${plan}`
       : next;
 
   return NextResponse.redirect(new URL(destination, request.url));

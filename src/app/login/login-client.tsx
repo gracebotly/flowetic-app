@@ -344,6 +344,7 @@ export default function AuthShell() {
     if (intent === "signup") {
       const trialParam = isPayNow ? "0" : "7";
       params.set("trial", trialParam);
+      params.set("plan", selectedPlan);
     }
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
