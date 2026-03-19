@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Link2, CreditCard, UserPlus, ChevronDown, Search, Repeat, CalendarCheck, BarChart3 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { OfferingCard } from "./OfferingCard";
+import { validateEmail } from "@/lib/validation/email";
 
 type AccessType = "magic_link" | "stripe_gate";
 type PricingType = "free" | "per_run" | "monthly" | "usage_based";
@@ -123,12 +124,24 @@ export function WizardStepConfigure({
   const [newClientName, setNewClientName] = useState("");
   const [newClientEmail, setNewClientEmail] = useState("");
   const [newClientPhone, setNewClientPhone] = useState("");
+  const [newClientEmailError, setNewClientEmailError] = useState<string | null>(null);
+  const [newClientEmailTypo, setNewClientEmailTypo] = useState<string | null>(null);
+  const [newClientPhoneError, setNewClientPhoneError] = useState<string | null>(null);
+  const [newClientCreateError, setNewClientCreateError] = useState<string | null>(null);
 
 function formatPhone(value: string): string {
   const digits = value.replace(/\D/g, "").slice(0, 10);
   if (digits.length <= 3) return digits;
   if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
   return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+}
+
+function validatePhone(raw: string): string | null {
+  if (!raw.trim()) return null;
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length < 7) return "Phone number is too short.";
+  if (digits.length > 15) return "Phone number is too long.";
+  return null;
 }
   const [creatingClient, setCreatingClient] = useState(false);
   const [priceDisplay, setPriceDisplay] = useState(
@@ -172,7 +185,29 @@ function formatPhone(value: string): string {
   // Inline create client
   const handleCreateClient = useCallback(async () => {
     if (!newClientName.trim() || newClientName.trim().length < 2) return;
+
+    // Validate email if provided
+    if (newClientEmail.trim()) {
+      const emailResult = validateEmail(newClientEmail);
+      if (!emailResult.valid) {
+        if (emailResult.code === "TYPO_DETECTED") {
+          setNewClientEmailTypo(emailResult.suggestion);
+        } else {
+          setNewClientEmailError(emailResult.message);
+        }
+        return;
+      }
+    }
+
+    // Validate phone if provided
+    const phoneErr = validatePhone(newClientPhone);
+    if (phoneErr) {
+      setNewClientPhoneError(phoneErr);
+      return;
+    }
+
     setCreatingClient(true);
+    setNewClientCreateError(null);
     try {
       const res = await fetch("/api/clients", {
         method: "POST",
@@ -197,9 +232,14 @@ function formatPhone(value: string): string {
         setNewClientName("");
         setNewClientEmail("");
         setNewClientPhone("");
+        setNewClientEmailError(null);
+        setNewClientEmailTypo(null);
+        setNewClientPhoneError(null);
+      } else {
+        setNewClientCreateError("Failed to create client. Please try again.");
       }
     } catch {
-      // Handle silently
+      setNewClientCreateError("Network error. Please try again.");
     } finally {
       setCreatingClient(false);
     }
@@ -371,6 +411,7 @@ function formatPhone(value: string): string {
           <div className="mt-1.5 rounded-xl border border-blue-200 bg-blue-50/50 p-4">
             <h4 className="text-sm font-semibold text-gray-900">New Client</h4>
             <div className="mt-3 space-y-3">
+              {/* Name */}
               <input
                 type="text"
                 value={newClientName}
@@ -379,23 +420,92 @@ function formatPhone(value: string): string {
                 className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
                 autoFocus
               />
-              <input
-                type="email"
-                value={newClientEmail}
-                onChange={(e) => setNewClientEmail(e.target.value)}
-                placeholder="email@example.com"
-                pattern="[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}$"
-                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100 invalid:border-red-300"
-              />
-              <input
-                type="tel"
-                value={newClientPhone}
-                onChange={(e) => setNewClientPhone(formatPhone(e.target.value))}
-                placeholder="(555) 000-0000"
-                maxLength={14}
-                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
-              />
+
+              {/* Email */}
+              <div>
+                <input
+                  type="email"
+                  value={newClientEmail}
+                  onChange={(e) => {
+                    setNewClientEmail(e.target.value);
+                    if (newClientEmailError) setNewClientEmailError(null);
+                    if (newClientEmailTypo) setNewClientEmailTypo(null);
+                  }}
+                  onBlur={() => {
+                    if (!newClientEmail.trim()) return;
+                    const result = validateEmail(newClientEmail);
+                    if (!result.valid) {
+                      if (result.code === "TYPO_DETECTED") {
+                        setNewClientEmailTypo(result.suggestion);
+                        setNewClientEmailError(null);
+                      } else {
+                        setNewClientEmailError(result.message);
+                        setNewClientEmailTypo(null);
+                      }
+                    } else {
+                      setNewClientEmailError(null);
+                      setNewClientEmailTypo(null);
+                    }
+                  }}
+                  placeholder="email@example.com"
+                  className={`w-full rounded-lg border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-100 ${
+                    newClientEmailError
+                      ? "border-red-300 focus:border-red-400"
+                      : "border-gray-200 focus:border-blue-300"
+                  }`}
+                />
+                {newClientEmailError && (
+                  <p className="mt-1 text-xs text-red-600">{newClientEmailError}</p>
+                )}
+                {newClientEmailTypo && (
+                  <p className="mt-1 text-xs text-amber-700">
+                    Did you mean{" "}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNewClientEmail(newClientEmailTypo);
+                        setNewClientEmailTypo(null);
+                      }}
+                      className="font-semibold underline decoration-amber-400 underline-offset-2 hover:text-amber-600"
+                    >
+                      {newClientEmailTypo}
+                    </button>
+                    ?
+                  </p>
+                )}
+              </div>
+
+              {/* Phone */}
+              <div>
+                <input
+                  type="tel"
+                  value={newClientPhone}
+                  onChange={(e) => {
+                    setNewClientPhone(formatPhone(e.target.value));
+                    if (newClientPhoneError) setNewClientPhoneError(null);
+                  }}
+                  onBlur={() => setNewClientPhoneError(validatePhone(newClientPhone))}
+                  placeholder="(555) 000-0000"
+                  maxLength={14}
+                  className={`w-full rounded-lg border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-100 ${
+                    newClientPhoneError
+                      ? "border-red-300 focus:border-red-400"
+                      : "border-gray-200 focus:border-blue-300"
+                  }`}
+                />
+                {newClientPhoneError && (
+                  <p className="mt-1 text-xs text-red-600">{newClientPhoneError}</p>
+                )}
+              </div>
             </div>
+
+            {/* Create error */}
+            {newClientCreateError && (
+              <div className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                {newClientCreateError}
+              </div>
+            )}
+
             <div className="mt-3 flex items-center gap-2">
               <button
                 type="button"
@@ -407,7 +517,13 @@ function formatPhone(value: string): string {
               </button>
               <button
                 type="button"
-                onClick={() => setShowNewClientForm(false)}
+                onClick={() => {
+                  setShowNewClientForm(false);
+                  setNewClientEmailError(null);
+                  setNewClientEmailTypo(null);
+                  setNewClientPhoneError(null);
+                  setNewClientCreateError(null);
+                }}
                 className="rounded-lg border border-gray-200 bg-white px-4 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50"
               >
                 Cancel

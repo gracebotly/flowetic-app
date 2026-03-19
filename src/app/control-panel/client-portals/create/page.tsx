@@ -462,22 +462,10 @@ export default function CreateOfferingPage() {
 
   // ── Batch flow: Create Another (Same Config) ─────────────
   const handleCreateAnother = () => {
+    clearDraftFromServer();
     setUserEditedName(false);
-    setWizard((prev) => ({
-      ...INITIAL_STATE,
-      // Preserve agent + type + pricing config
-      selectedSourceId: prev.selectedSourceId,
-      selectedEntityUuid: prev.selectedEntityUuid,
-      selectedPlatform: prev.selectedPlatform,
-      selectedEntities: prev.selectedEntities,
-      surfaceType: prev.surfaceType,
-      accessType: prev.accessType,
-      pricingType: prev.pricingType,
-      priceCents: prev.priceCents,
-      slug: "",
-      inputSchema: prev.inputSchema,
-    }));
-    setCurrentStep(3); // Jump to Name & Price — agent already chosen
+    setWizard({ ...INITIAL_STATE, clientId: prefilledClientId });
+    setCurrentStep(1);
     setSubmitError(null);
   };
 

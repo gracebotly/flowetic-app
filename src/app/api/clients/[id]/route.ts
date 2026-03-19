@@ -127,17 +127,18 @@ export async function PATCH(
 
   // Log activity event
   const userId = await getUserId(supabase);
+  const isRestore = "archived_at" in updates && updates.archived_at === null;
   logActivity(supabase, {
     tenantId,
     actorId: userId,
     actorType: "user",
     category: "client",
-    action: "updated",
-    status: "success",
+    action: isRestore ? "restored" : "updated",
+    status: isRestore ? "info" : "success",
     entityType: "client",
     entityId: id,
     entityName: client.name as string,
-    message: `Updated client "${client.name}"`,
+    message: isRestore ? `Restored client "${client.name}"` : `Updated client "${client.name}"`,
     details: { updated_fields: Object.keys(updates).filter((k) => k !== "updated_at") },
   });
 
