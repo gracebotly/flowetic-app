@@ -21,6 +21,17 @@ function json(status: number, data: Record<string, unknown>) {
 }
 
 export async function POST(request: NextRequest) {
+  // ── Rate limit: 5 subscribe attempts per IP per minute ──
+  const { checkRateLimit, getClientIp } = await import('@/lib/api/rateLimit');
+  const ip = getClientIp(request);
+  const limit = await checkRateLimit(`billing-subscribe:${ip}`, 60, 5);
+  if (!limit.allowed) {
+    return json(429, {
+      error: 'Too many attempts. Please wait a moment and try again.',
+      retryAfterMs: limit.reset_ms,
+    });
+  }
+
   try {
     // 1. Authenticate
     const supabase = await createClient();

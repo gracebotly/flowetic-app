@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Activity as ActivityIcon, LayoutDashboard } from 'lucide-react';
 import { PortalShell, type PortalTab } from '@/components/portals/PortalShell';
+import { PortalSessionSetter } from '@/components/portals/PortalSessionSetter';
 import { VoicePerformanceSkeleton } from '@/components/portals/skeletons/VoicePerformanceSkeleton';
 import { WorkflowOperationsSkeleton } from '@/components/portals/skeletons/WorkflowOperationsSkeleton';
 import { ROISummarySkeleton } from '@/components/portals/skeletons/ROISummarySkeleton';
@@ -12,6 +13,7 @@ import type { PortalEvent, SkeletonData } from '@/lib/portals/transformData';
 
 interface PortalClientProps {
   portal: {
+    id: string;
     name: string;
     skeleton_id: string;
     surface_type: string;
@@ -71,6 +73,7 @@ export function PortalClient({ portal, tenant, brand, data, events }: PortalClie
       activeTab={activeTab}
       onTabChange={setActiveTab}
     >
+      <PortalSessionSetter portalId={portal.id} />
       {activeTab === 'dashboard' && (
         <>
           {portal.skeleton_id === 'voice-performance' && <VoicePerformanceSkeleton data={data} branding={branding} />}

@@ -49,27 +49,38 @@ export default async function SubscribePage({
     redirect(`/client/${product.token}`);
   }
 
-  // ── Identify returning subscriber ──
-  // Check 3 sources for email: query param, cookie, or null
+  // ── Check session cookie for returning subscribers ──
   const cookieStore = await cookies();
-  const emailFromQuery =
-    typeof query.email === 'string' ? query.email : null;
-  const emailFromCookie = cookieStore.get(`gf_sub_${product.id}`)?.value ?? null;
-  const subscriberEmail = emailFromQuery || emailFromCookie;
+  const sessionCookie = cookieStore.get(`portal_session_${product.id}`);
+  const emailCookie = cookieStore.get(`portal_email_${product.id}`);
 
+  if (sessionCookie?.value && emailCookie?.value && product.pricing_type === 'monthly') {
+    const { data: cookieCustomer } = await supabase
+      .from('portal_customers')
+      .select('subscription_status')
+      .eq('portal_id', product.id)
+      .eq('email', emailCookie.value)
+      .maybeSingle();
+
+    if (cookieCustomer?.subscription_status === 'active' && product.token) {
+      redirect(`/client/${product.token}`);
+    }
+  }
+
+  // Check if a specific email already has an active subscription (URL param)
   let existingSubStatus: string | null = null;
+  const emailParam = typeof query.email === 'string' ? query.email : null;
 
-  if (subscriberEmail && product.pricing_type !== 'free') {
+  if (emailParam && product.pricing_type === 'monthly') {
     const { data: customer } = await supabase
       .from('portal_customers')
       .select('subscription_status')
       .eq('portal_id', product.id)
-      .eq('email', subscriberEmail)
+      .eq('email', emailParam)
       .maybeSingle();
 
     existingSubStatus = customer?.subscription_status ?? null;
 
-    // Active subscriber → send them to their dashboard, not the paywall
     if (existingSubStatus === 'active' && product.token) {
       redirect(`/client/${product.token}`);
     }
