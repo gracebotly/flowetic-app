@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import Stripe from "stripe";
 import { stripe } from "@/lib/stripe/client";
 import { createClient } from "@supabase/supabase-js";
 
@@ -26,7 +27,7 @@ const supabaseAdmin = createClient(
  *   - invoice.paid / invoice.payment_failed
  */
 export async function POST(request: NextRequest) {
-  let thinEvent: { id: string; type: string; related_object?: { id: string } };
+  let thinEvent: Stripe.ThinEvent;
 
   // 1. Parse + verify the thin event using the V2 webhook secret
   try {
