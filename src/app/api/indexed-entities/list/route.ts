@@ -64,18 +64,13 @@ export async function GET() {
     sourceById.set(String(s.id), { type: String(s.type), created_at: String(s.created_at) });
   }
 
-  // ── Auto-derive last_seen_at AND event existence from events table ──
-  // Build maps for:
-  //   1. source_id:external_id → latest event timestamp (for entities missing last_seen_at)
-  //   2. source_id:external_id → true (entity has at least one event — for health derivation)
-  const entitiesMissingLastSeen = (entities ?? []).filter((e: { last_seen_at: string | null }) => !e.last_seen_at);
-  const entitiesMissingStats = (entities ?? []).filter((e: { aggregate_stats: Record<string, unknown> | null }) => !e.aggregate_stats);
-  const needsEventLookup = entitiesMissingLastSeen.length > 0 || entitiesMissingStats.length > 0;
-
+  // ── Derive last_seen_at AND event existence from events table ──
+  // Always runs: hasEvents is returned to the frontend for every entity
+  // to show "Limited detail" only on instant/webhook scenarios with no execution logs.
   const lastSeenFromEvents = new Map<string, string>();
   const entityHasEvents = new Map<string, boolean>();
 
-  if (needsEventLookup) {
+  {
     try {
       for (const sid of sourceIds) {
         const { data: latestEvents } = await supabase
