@@ -9,7 +9,7 @@ import { getBlockStatus } from "@/lib/billing/getBlockStatus";
 import { headers } from "next/headers";
 
 // Pages accessible even when hard-blocked
-const ALWAYS_ALLOWED = ["/control-panel/settings", "/control-panel/help"];
+const ALWAYS_ALLOWED = ["/control-panel/help"];
 
 export default async function ControlPanelLayout({
   children,
@@ -90,7 +90,8 @@ export default async function ControlPanelLayout({
     headersList.get("x-next-pathname") ||
     headersList.get("x-invoke-path") ||
     "";
-  const isAllowedPage = ALWAYS_ALLOWED.some((p) => pathname.startsWith(p));
+  const isAllowedPage =
+    !!pathname && ALWAYS_ALLOWED.some((p) => pathname.startsWith(p));
 
   // Determine what to render in <main>
   let mainContent: React.ReactNode;

@@ -59,7 +59,8 @@ export function BlockedPage({ reason }: { reason: BlockReason }) {
         return;
       }
     } catch {
-      window.location.href = "/control-panel/settings?tab=billing";
+      setLoading(false);
+      return;
     }
     setLoading(false);
   };
@@ -97,12 +98,14 @@ export function BlockedPage({ reason }: { reason: BlockReason }) {
             Contact support
           </a>
           {" · "}
-          <a
-            href="/control-panel/settings?tab=billing"
-            className="font-medium text-slate-500 underline decoration-slate-300 hover:text-slate-700"
+          <button
+            type="button"
+            onClick={handleAction}
+            disabled={loading}
+            className="font-medium text-slate-500 underline decoration-slate-300 hover:text-slate-700 disabled:opacity-50"
           >
             Billing settings
-          </a>
+          </button>
         </p>
       </div>
     </div>
