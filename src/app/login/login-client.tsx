@@ -558,13 +558,12 @@ export default function AuthShell() {
         <div className="relative hidden w-[42%] flex-col justify-start gap-8 overflow-hidden bg-[#0F1117] p-9 md:flex">
           <div className="pointer-events-none absolute -right-20 -top-20 h-60 w-60 rounded-full bg-blue-600/10" />
 
-          <div className="relative z-10 flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-sm font-semibold text-white">
-              G
-            </div>
-            <span className="text-sm font-medium tracking-tight text-white">
-              Getflowetic
-            </span>
+          <div className="relative z-10">
+            <img
+              src="/assets/logo-white.svg"
+              alt="Getflowetic"
+              className="h-7 w-auto"
+            />
           </div>
 
           <div className="relative z-10">

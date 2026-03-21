@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" height="32" viewBox="0 0 300 32">
+  <g transform="translate(0,0) scale(0.0625)" fill="#ffffff">
+    <path d="M156 112 L216 112 L256 256 L216 400 L156 400 Z"/>
+    <path d="M296 112 L356 112 L356 400 L296 400 L256 256 Z"/>
+  </g>
+  <text x="42" y="23" font-family="Inter, sans-serif" font-weight="600" font-size="20" fill="#ffffff">
+    Getflowetic
+  </text>
+</svg>
