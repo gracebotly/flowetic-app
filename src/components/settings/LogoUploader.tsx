@@ -9,19 +9,32 @@ interface LogoUploaderProps {
   onRemoved: () => void;
 }
 
-export function LogoUploader({ currentUrl, onUploaded, onRemoved }: LogoUploaderProps) {
+export function LogoUploader({
+  currentUrl,
+  onUploaded,
+  onRemoved,
+}: LogoUploaderProps) {
   const [uploading, setUploading] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [localUrl, setLocalUrl] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Use localUrl if we just uploaded, otherwise fall back to prop
+  const displayUrl = localUrl ?? currentUrl;
 
   const upload = useCallback(
     async (file: File) => {
       setError(null);
 
       // Client-side validation
-      const allowedTypes = ["image/png", "image/jpeg", "image/svg+xml", "image/webp"];
+      const allowedTypes = [
+        "image/png",
+        "image/jpeg",
+        "image/svg+xml",
+        "image/webp",
+      ];
       if (!allowedTypes.includes(file.type)) {
         setError("File must be PNG, JPG, SVG, or WebP.");
         return;
@@ -42,21 +55,25 @@ export function LogoUploader({ currentUrl, onUploaded, onRemoved }: LogoUploader
       const json = await res.json();
 
       if (json.ok && json.logo_url) {
+        setLocalUrl(json.logo_url);
         onUploaded(json.logo_url);
       } else {
         setError(json.code || "Upload failed.");
       }
       setUploading(false);
     },
-    [onUploaded]
+    [onUploaded],
   );
 
   const handleRemove = async () => {
     setRemoving(true);
     setError(null);
-    const res = await fetch("/api/settings/branding/logo", { method: "DELETE" });
+    const res = await fetch("/api/settings/branding/logo", {
+      method: "DELETE",
+    });
     const json = await res.json();
     if (json.ok) {
+      setLocalUrl(null);
       onRemoved();
     } else {
       setError("Failed to remove logo.");
@@ -79,12 +96,12 @@ export function LogoUploader({ currentUrl, onUploaded, onRemoved }: LogoUploader
   };
 
   // ── Has a logo ────────────────────────────────────────────
-  if (currentUrl) {
+  if (displayUrl) {
     return (
       <div className="flex items-center gap-4">
         <div className="flex h-16 w-40 items-center justify-center overflow-hidden rounded-xl border border-gray-200 bg-white">
           <img
-            src={currentUrl}
+            src={displayUrl}
             alt="Agency logo"
             className="max-h-full max-w-full object-contain"
           />
@@ -95,7 +112,11 @@ export function LogoUploader({ currentUrl, onUploaded, onRemoved }: LogoUploader
             disabled={uploading}
             className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
           >
-            {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+            {uploading ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Upload className="h-3.5 w-3.5" />
+            )}
             Replace
           </button>
           <button
@@ -103,7 +124,11 @@ export function LogoUploader({ currentUrl, onUploaded, onRemoved }: LogoUploader
             disabled={removing}
             className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-sm font-medium text-red-600 transition hover:bg-red-50"
           >
-            {removing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+            {removing ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Trash2 className="h-3.5 w-3.5" />
+            )}
             Remove
           </button>
         </div>
@@ -142,10 +167,17 @@ export function LogoUploader({ currentUrl, onUploaded, onRemoved }: LogoUploader
           <ImageIcon className="h-8 w-8 text-gray-400" />
         )}
         <p className="text-sm text-gray-600">
-          {uploading ? "Uploading..." : "Drag & drop your logo, or click to browse"}
+          {uploading
+            ? "Uploading..."
+            : "Drag & drop your logo, or click to browse"}
         </p>
-        <p className="text-xs text-gray-400">PNG, JPG, SVG, or WebP. Max 2MB.</p>
-        <p className="text-xs text-gray-400">Best results: horizontal logo, at least 200px wide. Displays at 32px tall in the portal header.</p>
+        <p className="text-xs text-gray-400">
+          PNG, JPG, SVG, or WebP. Max 2MB.
+        </p>
+        <p className="text-xs text-gray-400">
+          Best results: horizontal logo, at least 200px wide. Displays at 32px
+          tall in the portal header.
+        </p>
       </div>
       <input
         ref={inputRef}

@@ -22,7 +22,12 @@ export const POST = withApiHandler(async function POST(req: Request) {
   }
 
   // Validate MIME type
-  const allowedTypes = ["image/png", "image/jpeg", "image/svg+xml", "image/webp"];
+  const allowedTypes = [
+    "image/png",
+    "image/jpeg",
+    "image/svg+xml",
+    "image/webp",
+  ];
   if (!allowedTypes.includes(file.type)) {
     return json(400, { ok: false, code: "INVALID_FILE_TYPE" });
   }
@@ -42,6 +47,15 @@ export const POST = withApiHandler(async function POST(req: Request) {
   const ext = extMap[file.type] || "png";
   const storagePath = `${auth.tenantId}/logo.${ext}`;
 
+  // Delete any existing logo files (any extension) before uploading
+  const { data: existingFiles } = await auth.supabase.storage
+    .from("logos")
+    .list(auth.tenantId);
+  if (existingFiles && existingFiles.length > 0) {
+    const oldPaths = existingFiles.map((f) => `${auth.tenantId}/${f.name}`);
+    await auth.supabase.storage.from("logos").remove(oldPaths);
+  }
+
   // Upload to Supabase Storage (upsert to overwrite existing)
   const arrayBuffer = await file.arrayBuffer();
   const buffer = new Uint8Array(arrayBuffer);
@@ -54,7 +68,10 @@ export const POST = withApiHandler(async function POST(req: Request) {
     });
 
   if (uploadError) {
-    console.error("[POST /api/settings/branding/logo] Upload failed:", uploadError);
+    console.error(
+      "[POST /api/settings/branding/logo] Upload failed:",
+      uploadError,
+    );
     return json(500, { ok: false, code: "UPLOAD_FAILED" });
   }
 
@@ -63,7 +80,8 @@ export const POST = withApiHandler(async function POST(req: Request) {
     .from("logos")
     .getPublicUrl(storagePath);
 
-  const logoUrl = urlData.publicUrl;
+  // Append cache-buster so browser/CDN always fetches the new file
+  const logoUrl = `${urlData.publicUrl}?v=${Date.now()}`;
 
   // Update tenants.logo_url
   const { error: updateError } = await auth.supabase
@@ -72,7 +90,10 @@ export const POST = withApiHandler(async function POST(req: Request) {
     .eq("id", auth.tenantId);
 
   if (updateError) {
-    console.error("[POST /api/settings/branding/logo] DB update failed:", updateError);
+    console.error(
+      "[POST /api/settings/branding/logo] DB update failed:",
+      updateError,
+    );
     return json(500, { ok: false, code: "DB_UPDATE_FAILED" });
   }
 
@@ -102,7 +123,10 @@ export const DELETE = withApiHandler(async function DELETE() {
     .eq("id", auth.tenantId);
 
   if (error) {
-    console.error("[DELETE /api/settings/branding/logo] DB update failed:", error);
+    console.error(
+      "[DELETE /api/settings/branding/logo] DB update failed:",
+      error,
+    );
     return json(500, { ok: false, code: "DELETE_FAILED" });
   }
 
