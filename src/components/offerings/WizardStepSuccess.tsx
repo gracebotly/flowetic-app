@@ -48,10 +48,6 @@ export function WizardStepSuccess({
     typeof window !== "undefined" ? window.location.origin : "https://app.getflowetic.com";
   const path = magicLink || productUrl || null;
 
-  const defaultBase =
-    typeof window !== "undefined" ? window.location.origin : "https://app.getflowetic.com";
-  const path = magicLink || productUrl || null;
-
   const defaultUrl = path ? `${defaultBase}${path}` : null;
 
   // On custom domains, use /{customPath} instead of /client/{token} or /p/{slug}
