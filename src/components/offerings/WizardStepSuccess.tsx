@@ -18,6 +18,7 @@ type Props = {
   accessType: string;
   surfaceType: string;
   onCreateAnother: () => void;
+  portalBaseUrl?: string;
 };
 
 export function WizardStepSuccess({
@@ -27,12 +28,13 @@ export function WizardStepSuccess({
   accessType,
   surfaceType,
   onCreateAnother,
+  portalBaseUrl,
 }: Props) {
   const [copied, setCopied] = useState(false);
 
   void accessType;
 
-  const base = typeof window !== "undefined" ? window.location.origin : "";
+  const base = portalBaseUrl || (typeof window !== "undefined" ? window.location.origin : "");
   const primaryUrl = magicLink
     ? `${base}${magicLink}`
     : productUrl

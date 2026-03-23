@@ -22,6 +22,7 @@ interface ResultsDisplayProps {
   productName: string;
   productSlug: string;
   designTokens: Record<string, unknown> | null;
+  hideGetfloweticBranding?: boolean;
 }
 
 export function ResultsDisplay(props: ResultsDisplayProps) {
@@ -497,12 +498,14 @@ function ResultsContent({
       </main>
 
       {/* Footer */}
-      <footer
-        className="py-6 text-center text-xs"
-        style={{ color: colors.textMuted, opacity: 0.4 }}
-      >
-        Powered by AI
-      </footer>
+      {!props.hideGetfloweticBranding && (
+        <footer
+          className="py-6 text-center text-xs"
+          style={{ color: colors.textMuted, opacity: 0.4 }}
+        >
+          Powered by AI
+        </footer>
+      )}
     </div>
   );
 }

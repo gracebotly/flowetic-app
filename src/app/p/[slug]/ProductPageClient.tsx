@@ -29,6 +29,7 @@ interface ProductProps {
     primaryColor: string;
     secondaryColor: string;
   };
+  hideGetfloweticBranding?: boolean;
 }
 
 type ExecutionState = 'idle' | 'running' | 'success' | 'error';
@@ -39,7 +40,7 @@ interface ExecutionResult {
   executionId: string;
 }
 
-export function ProductPageClient({ product, branding }: ProductProps) {
+export function ProductPageClient({ product, branding, hideGetfloweticBranding }: ProductProps) {
   const [formData, setFormData] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [executionState, setExecutionState] = useState<ExecutionState>('idle');
@@ -507,17 +508,19 @@ export function ProductPageClient({ product, branding }: ProductProps) {
           </AnimatePresence>
         </motion.div>
 
-        <p className="mt-8 text-center text-xs text-gray-400">
-          Powered by{' '}
-          <a
-            href="https://getflowetic.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="transition-colors hover:text-gray-600"
-          >
-            Getflowetic
-          </a>
-        </p>
+        {!hideGetfloweticBranding && (
+          <p className="mt-8 text-center text-xs text-gray-400">
+            Powered by{' '}
+            <a
+              href="https://getflowetic.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="transition-colors hover:text-gray-600"
+            >
+              Getflowetic
+            </a>
+          </p>
+        )}
       </main>
     </div>
   );

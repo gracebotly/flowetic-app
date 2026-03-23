@@ -5,7 +5,7 @@ export const PLAN_LIMITS = {
     portal_limit: 5,
     team_limit: 1,
     platform_fee_percent: 5,
-    custom_domain: false,
+    custom_domain: true,
     api_access: false,
   },
   scale: {
