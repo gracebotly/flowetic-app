@@ -42,11 +42,6 @@ export function WizardStepSuccess({
   const [copiedCustom, setCopiedCustom] = useState(false);
 
   void accessType;
-  void portalBaseUrl;
-
-  const defaultBase =
-    typeof window !== "undefined" ? window.location.origin : "https://app.getflowetic.com";
-  const path = magicLink || productUrl || null;
 
   const defaultBase =
     typeof window !== "undefined" ? window.location.origin : "https://app.getflowetic.com";
