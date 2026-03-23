@@ -3,7 +3,7 @@ import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { getTenantAdmin } from "@/lib/settings/getTenantAdmin";
 import { validateDomain } from "@/lib/domains/validateDomain";
 import { planAllowsDomain } from "@/lib/domains/planAllowsDomain";
-import { addDomain, getDomain, removeDomain } from "@/lib/domains/vercelDomains";
+import { addDomain, removeDomain } from "@/lib/domains/vercelDomains";
 
 export const runtime = "nodejs";
 
@@ -167,16 +167,19 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  // 6. Store domain + verification data in tenants table
+  // 6. Store domain in tenants table.
+  // ALWAYS set domain_verified = false here. Vercel's "verified" flag only
+  // means ownership verification (no conflict), NOT that DNS is pointing to us.
+  // Real DNS verification happens via the /verify endpoint + getDomainConfig().
   const now = new Date().toISOString();
   const { error: updateError } = await supabaseAdmin
     .from("tenants")
     .update({
       custom_domain: domain,
-      domain_verified: vercelResult.verified,
+      domain_verified: false,
       domain_verification_data: vercelResult.verification ?? null,
       domain_added_at: now,
-      domain_verified_at: vercelResult.verified ? now : null,
+      domain_verified_at: null,
       updated_at: now,
     })
     .eq("id", auth.tenantId);
@@ -202,7 +205,7 @@ export async function POST(request: NextRequest) {
   return json(200, {
     ok: true,
     domain,
-    verified: vercelResult.verified,
+    verified: false,
     verification: vercelResult.verification ?? null,
     dns_instructions: dnsInstructions,
   });
