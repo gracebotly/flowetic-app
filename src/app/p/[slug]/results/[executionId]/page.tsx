@@ -5,6 +5,7 @@
 
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { notFound } from "next/navigation";
+import { headers } from "next/headers";
 import { ResultsDisplay } from "@/components/products/ResultsDisplay";
 
 export const dynamic = "force-dynamic";
@@ -39,6 +40,9 @@ export default async function ResultsPage({ params }: PageProps) {
 
   if (!execution) notFound();
 
+  const headersList = await headers();
+  const isCustomDomain = !!headersList.get('x-custom-domain');
+
   return (
     <ResultsDisplay
       executionId={execution.id}
@@ -48,7 +52,8 @@ export default async function ResultsPage({ params }: PageProps) {
       initialDuration={execution.duration_ms}
       productName={product.name}
       productSlug={product.slug}
-      designTokens={product.design_tokens as Record<string, any>}
+      designTokens={product.design_tokens as Record<string, unknown>}
+      hideGetfloweticBranding={isCustomDomain}
     />
   );
 }
