@@ -3,17 +3,12 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
 import {
   ArrowLeft,
   Copy,
   Check,
   ExternalLink,
-  BarChart3,
-  Play,
-  Layers,
   Link2,
-  CreditCard,
   RefreshCw,
   Trash2,
   Eye,
@@ -109,6 +104,12 @@ export default function OfferingDetailPage() {
   const [customTokenInput, setCustomTokenInput] = useState("");
   const [tokenModalError, setTokenModalError] = useState<string | null>(null);
 
+  // Inline token editing state
+  const [editingToken, setEditingToken] = useState(false);
+  const [tokenDraft, setTokenDraft] = useState("");
+  const [tokenSaving, setTokenSaving] = useState(false);
+  const [tokenError, setTokenError] = useState<string | null>(null);
+
   // Slug editing state (stripe_gate portals)
   const [editingSlug, setEditingSlug] = useState(false);
   const [slugDraft, setSlugDraft] = useState("");
@@ -117,6 +118,10 @@ export default function OfferingDetailPage() {
 
   // Domain state (for custom domain URL generation)
   const [portalBaseUrl, setPortalBaseUrl] = useState<string | null>(null);
+  const [customDomainInfo, setCustomDomainInfo] = useState<{
+    domain: string;
+    verified: boolean;
+  } | null>(null);
 
   // Delete state
   const [deleteConfirm, setDeleteConfirm] = useState(false);
@@ -142,8 +147,11 @@ export default function OfferingDetailPage() {
       try {
         const res = await fetch("/api/settings/domains");
         const json = await res.json();
-        if (json.ok && json.domain && json.verified) {
-          setPortalBaseUrl(`https://${json.domain}`);
+        if (json.ok && json.domain) {
+          setCustomDomainInfo({ domain: json.domain, verified: json.verified });
+          if (json.verified) {
+            setPortalBaseUrl(`https://${json.domain}`);
+          }
         }
       } catch {
         // Non-fatal — falls back to window.location.origin
@@ -251,6 +259,51 @@ export default function OfferingDetailPage() {
       }
     } finally {
       setTokenAction("idle");
+    }
+  };
+
+  // Inline token editing
+  const startEditToken = () => {
+    setTokenDraft(offering?.token || "");
+    setTokenError(null);
+    setEditingToken(true);
+  };
+
+  const cancelEditToken = () => {
+    setEditingToken(false);
+    setTokenError(null);
+  };
+
+  const saveInlineToken = async () => {
+    if (!offering) return;
+    const clean = tokenDraft.toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 60);
+    if (!clean || clean.length < 3) {
+      setTokenError("Link must be at least 3 characters (letters, numbers, hyphens only).");
+      return;
+    }
+    if (clean === offering.token) {
+      setEditingToken(false);
+      return;
+    }
+    setTokenSaving(true);
+    setTokenError(null);
+    try {
+      const res = await fetch(`/api/client-portals/${id}/token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customToken: clean }),
+      });
+      const json = await res.json();
+      if (json.ok) {
+        setOffering((prev) => (prev ? { ...prev, token: json.token } : prev));
+        setEditingToken(false);
+      } else {
+        setTokenError("That link is unavailable. Try another.");
+      }
+    } catch {
+      setTokenError("Could not save link. Please try again.");
+    } finally {
+      setTokenSaving(false);
     }
   };
 
@@ -687,58 +740,175 @@ export default function OfferingDetailPage() {
           {/* Client Link section */}
           {offering.access_type === "magic_link" && (
             <div className="rounded-xl border border-gray-200 bg-white p-5">
-              <h3 className="text-sm font-semibold text-gray-900">Client Link</h3>
+              <div className="flex items-baseline justify-between">
+                <h3 className="text-sm font-semibold text-gray-900">Client Link</h3>
+                {offering.token && !editingToken && (
+                  <button
+                    onClick={startEditToken}
+                    className="text-xs font-medium text-blue-600 transition-colors duration-200 hover:text-blue-700"
+                  >
+                    Edit
+                  </button>
+                )}
+              </div>
               <p className="mt-1 text-xs text-gray-500">
                 Share this link with your client — no login required.
               </p>
 
               {offering.token ? (
                 <>
-                  <div className="mt-4 rounded-lg border border-gray-100 bg-gray-50 px-4 py-3">
-                    <p className="break-all font-mono text-sm text-gray-700">
-                      {baseUrl}/client/{offering.token}
-                    </p>
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <button
-                      onClick={() => copyToClipboard(`${baseUrl}/client/${offering.token}`)}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50"
-                    >
-                      {copied ? (
-                        <Check className="h-4 w-4 text-emerald-500" />
-                      ) : (
-                        <Copy className="h-4 w-4" />
+                  {/* ── Inline editable URL ── */}
+                  {editingToken ? (
+                    <div className="mt-4">
+                      <div className="flex items-center rounded-lg border border-blue-300 bg-white text-sm ring-2 ring-blue-100">
+                        <span className="shrink-0 pl-3 pr-1 text-gray-400">/client/</span>
+                        <input
+                          type="text"
+                          value={tokenDraft}
+                          maxLength={60}
+                          onChange={(e) => {
+                            setTokenDraft(
+                              e.target.value
+                                .toLowerCase()
+                                .replace(/[^a-z0-9-]/g, "-")
+                                .replace(/-+/g, "-")
+                                .replace(/^-/, "")
+                            );
+                            setTokenError(null);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") void saveInlineToken();
+                            if (e.key === "Escape") cancelEditToken();
+                          }}
+                          autoFocus
+                          className="w-full border-0 bg-transparent py-2.5 pr-3 font-mono text-sm text-gray-900 outline-none"
+                        />
+                      </div>
+                      <div className="mt-1.5 flex items-center gap-2">
+                        <span className={`text-[11px] ${tokenDraft.length > 50 ? "text-amber-600" : "text-gray-400"}`}>
+                          {tokenDraft.length}/60
+                        </span>
+                      </div>
+                      {tokenError && (
+                        <p className="mt-1 text-xs text-red-600">{tokenError}</p>
                       )}
-                      {copied ? "Copied!" : "Copy Link"}
-                    </button>
-                    <a
-                      href={`${baseUrl}/client/${offering.token}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 transition hover:bg-blue-100"
-                    >
-                      <ExternalLink className="h-4 w-4" />
-                      Open
-                    </a>
-                    <button
-                      onClick={regenerateToken}
-                      disabled={tokenAction !== "idle"}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50"
-                    >
-                      <RefreshCw
-                        className={`h-4 w-4 ${tokenAction === "regenerating" ? "animate-spin" : ""}`}
-                      />
-                      {tokenAction === "regenerating" ? "Regenerating…" : "Regenerate"}
-                    </button>
-                    <button
-                      onClick={revokeToken}
-                      disabled={tokenAction !== "idle"}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      {tokenAction === "revoking" ? "Revoking…" : "Revoke"}
-                    </button>
-                  </div>
+                      <div className="mt-2 flex gap-2">
+                        <button
+                          onClick={saveInlineToken}
+                          disabled={tokenSaving}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors duration-200 hover:bg-blue-700 disabled:opacity-50"
+                        >
+                          <Save className="h-3 w-3" />
+                          {tokenSaving ? "Saving…" : "Save"}
+                        </button>
+                        <button
+                          onClick={cancelEditToken}
+                          disabled={tokenSaving}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors duration-200 hover:bg-gray-50"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {/* ── Default domain URL (always shown) ── */}
+                      <div className="mt-4">
+                        <div className="flex items-center gap-2">
+                          <p className="text-[11px] font-medium text-gray-400">Default URL</p>
+                          {customDomainInfo?.verified && (
+                            <span className="inline-flex items-center gap-1 rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">
+                              <span className="h-1 w-1 rounded-full bg-emerald-500" />
+                              Also on custom domain
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-1.5 rounded-lg border border-gray-100 bg-gray-50 px-4 py-3">
+                          <p className="break-all font-mono text-sm text-gray-700">
+                            {(typeof window !== "undefined" ? window.location.origin : "https://app.getflowetic.com")}/client/{offering.token}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* ── Custom domain URL (shown when domain is configured) ── */}
+                      {customDomainInfo && (
+                        <div className="mt-3">
+                          <div className="flex items-center gap-2">
+                            <p className="text-[11px] font-medium text-gray-400">Custom Domain URL</p>
+                            {customDomainInfo.verified ? (
+                              <span className="inline-flex items-center gap-1 rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">
+                                <span className="h-1 w-1 rounded-full bg-emerald-500" />
+                                Connected
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+                                <span className="h-1 w-1 rounded-full bg-amber-500" />
+                                Pending DNS
+                              </span>
+                            )}
+                          </div>
+                          <div className={`mt-1.5 rounded-lg border px-4 py-3 ${
+                            customDomainInfo.verified
+                              ? "border-emerald-100 bg-emerald-50/50"
+                              : "border-amber-100 bg-amber-50/30"
+                          }`}>
+                            <p className={`break-all font-mono text-sm ${
+                              customDomainInfo.verified ? "text-gray-700" : "text-gray-400"
+                            }`}>
+                              https://{customDomainInfo.domain}/client/{offering.token}
+                            </p>
+                          </div>
+                          {!customDomainInfo.verified && (
+                            <p className="mt-1 text-[11px] text-amber-600">
+                              This URL will work once your DNS is configured.{" "}
+                              <a
+                                href="/control-panel/settings?tab=branding"
+                                className="font-medium text-amber-700 hover:text-amber-800"
+                              >
+                                Check status →
+                              </a>
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      {/* ── Actions ── */}
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          onClick={() => copyToClipboard(
+                            customDomainInfo?.verified
+                              ? `https://${customDomainInfo.domain}/client/${offering.token}`
+                              : `${baseUrl}/client/${offering.token}`
+                          )}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm transition-colors duration-200 hover:bg-gray-50"
+                        >
+                          {copied ? (
+                            <Check className="h-4 w-4 text-emerald-500" />
+                          ) : (
+                            <Copy className="h-4 w-4" />
+                          )}
+                          {copied ? "Copied!" : "Copy Link"}
+                        </button>
+                        <a
+                          href={`${baseUrl}/client/${offering.token}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 transition-colors duration-200 hover:bg-blue-100"
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                          Open
+                        </a>
+                        <button
+                          onClick={revokeToken}
+                          disabled={tokenAction !== "idle"}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-600 transition-colors duration-200 hover:bg-red-50"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          {tokenAction === "revoking" ? "Revoking…" : "Revoke"}
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </>
               ) : (
                 <div className="mt-4">
@@ -748,7 +918,7 @@ export default function OfferingDetailPage() {
                   <button
                     onClick={regenerateToken}
                     disabled={tokenAction !== "idle"}
-                    className="mt-3 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
+                    className="mt-3 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors duration-200 hover:bg-blue-700"
                   >
                     <Link2 className="h-4 w-4" />
                     {tokenAction === "regenerating" ? "Generating…" : "Generate Client Link"}
