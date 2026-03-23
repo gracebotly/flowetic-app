@@ -182,6 +182,10 @@ export default function CreateOfferingPage() {
   const [dataLoading, setDataLoading] = useState(true);
   const [stripeConnected, setStripeConnected] = useState(false);
   const [portalBaseUrl, setPortalBaseUrl] = useState<string | null>(null);
+  const [customDomainInfo, setCustomDomainInfo] = useState<{
+    domain: string;
+    verified: boolean;
+  } | null>(null);
 
   // ── Plan limit gate ──────────────────────────────────────
   const [limitCheck, setLimitCheck] = useState<{
@@ -244,8 +248,11 @@ export default function CreateOfferingPage() {
         try {
           const domainRes = await fetch("/api/settings/domains");
           const domainJson = await domainRes.json();
-          if (domainJson.ok && domainJson.domain && domainJson.verified) {
-            setPortalBaseUrl(`https://${domainJson.domain}`);
+          if (domainJson.ok && domainJson.domain) {
+            setCustomDomainInfo({ domain: domainJson.domain, verified: domainJson.verified });
+            if (domainJson.verified) {
+              setPortalBaseUrl(`https://${domainJson.domain}`);
+            }
           }
         } catch {
           // Non-fatal — falls back to window.location.origin
@@ -766,6 +773,7 @@ export default function CreateOfferingPage() {
                     surfaceType={wizard.surfaceType}
                     onCreateAnother={handleCreateAnother}
                     portalBaseUrl={portalBaseUrl || undefined}
+                    customDomainInfo={customDomainInfo}
                   />
                 )}
               </>

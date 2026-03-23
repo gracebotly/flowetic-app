@@ -757,7 +757,6 @@ export default function OfferingDetailPage() {
 
               {offering.token ? (
                 <>
-                  {/* ── Inline editable URL ── */}
                   {editingToken ? (
                     <div className="mt-4">
                       <div className="flex items-center rounded-lg border border-blue-300 bg-white text-sm ring-2 ring-blue-100">
@@ -812,17 +811,11 @@ export default function OfferingDetailPage() {
                     </div>
                   ) : (
                     <>
-                      {/* ── Default domain URL (always shown) ── */}
+                      {/* Default domain URL — always shown */}
                       <div className="mt-4">
-                        <div className="flex items-center gap-2">
-                          <p className="text-[11px] font-medium text-gray-400">Default URL</p>
-                          {customDomainInfo?.verified && (
-                            <span className="inline-flex items-center gap-1 rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">
-                              <span className="h-1 w-1 rounded-full bg-emerald-500" />
-                              Also on custom domain
-                            </span>
-                          )}
-                        </div>
+                        <p className="text-[11px] font-medium text-gray-400">
+                          {customDomainInfo ? "Default link" : ""}
+                        </p>
                         <div className="mt-1.5 rounded-lg border border-gray-100 bg-gray-50 px-4 py-3">
                           <p className="break-all font-mono text-sm text-gray-700">
                             {(typeof window !== "undefined" ? window.location.origin : "https://app.getflowetic.com")}/client/{offering.token}
@@ -830,11 +823,11 @@ export default function OfferingDetailPage() {
                         </div>
                       </div>
 
-                      {/* ── Custom domain URL (shown when domain is configured) ── */}
+                      {/* Custom domain URL — when configured */}
                       {customDomainInfo && (
                         <div className="mt-3">
                           <div className="flex items-center gap-2">
-                            <p className="text-[11px] font-medium text-gray-400">Custom Domain URL</p>
+                            <p className="text-[11px] font-medium text-gray-400">Your domain</p>
                             {customDomainInfo.verified ? (
                               <span className="inline-flex items-center gap-1 rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">
                                 <span className="h-1 w-1 rounded-full bg-emerald-500" />
@@ -860,7 +853,7 @@ export default function OfferingDetailPage() {
                           </div>
                           {!customDomainInfo.verified && (
                             <p className="mt-1 text-[11px] text-amber-600">
-                              This URL will work once your DNS is configured.{" "}
+                              This URL will work once DNS is configured.{" "}
                               <a
                                 href="/control-panel/settings?tab=branding"
                                 className="font-medium text-amber-700 hover:text-amber-800"
@@ -872,7 +865,7 @@ export default function OfferingDetailPage() {
                         </div>
                       )}
 
-                      {/* ── Actions ── */}
+                      {/* Actions */}
                       <div className="mt-3 flex flex-wrap gap-2">
                         <button
                           onClick={() => copyToClipboard(
@@ -927,6 +920,7 @@ export default function OfferingDetailPage() {
               )}
             </div>
           )}
+
 
           {/* Stripe Gate section */}
           {offering.access_type === "stripe_gate" && (
