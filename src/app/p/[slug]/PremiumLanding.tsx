@@ -4,6 +4,7 @@ import { ArrowRight, Zap, Shield, Clock, CheckCircle, Users } from 'lucide-react
 import { motion } from 'framer-motion';
 
 interface PremiumLandingProps {
+  hideGetfloweticBranding?: boolean;
   product: {
     id: string;
     name: string;
@@ -28,7 +29,7 @@ interface PremiumLandingProps {
   };
 }
 
-export function PremiumLanding({ product, branding, stats }: PremiumLandingProps) {
+export function PremiumLanding({ product, branding, stats, hideGetfloweticBranding }: PremiumLandingProps) {
   const isFree = product.pricingModel === 'free';
   const priceDisplay =
     product.priceCents > 0
@@ -186,9 +187,11 @@ export function PremiumLanding({ product, branding, stats }: PremiumLandingProps
       </motion.section>
 
       {/* Footer */}
-      <footer className="py-6 text-center text-[11px] text-slate-300">
-        Powered by AI
-      </footer>
+      {!hideGetfloweticBranding && (
+        <footer className="py-6 text-center text-[11px] text-slate-300">
+          Powered by AI
+        </footer>
+      )}
     </div>
   );
 }

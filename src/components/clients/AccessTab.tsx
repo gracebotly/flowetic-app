@@ -25,14 +25,15 @@ interface AssignedOffering {
 
 interface AccessTabProps {
   assignedOfferings: AssignedOffering[];
+  portalBaseUrl?: string;
 }
 
-export function AccessTab({ assignedOfferings }: AccessTabProps) {
+export function AccessTab({ assignedOfferings, portalBaseUrl }: AccessTabProps) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [localTokens, setLocalTokens] = useState<Record<string, string | null>>({});
 
-  const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
+  const baseUrl = portalBaseUrl || (typeof window !== "undefined" ? window.location.origin : "");
 
   const getUrl = (o: AssignedOffering): string | null => {
     const token = localTokens[o.id] !== undefined ? localTokens[o.id] : o.token;

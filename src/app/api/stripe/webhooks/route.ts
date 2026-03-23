@@ -157,13 +157,16 @@ export async function POST(request: NextRequest) {
 
             const { data: tenantForEmail } = await supabaseAdmin
               .from("tenants")
-              .select("name, logo_url, primary_color")
+              .select("name, logo_url, primary_color, custom_domain, domain_verified")
               .eq("id", resolvedTenantId!)
               .maybeSingle();
 
             if (portalForEmail?.token && tenantForEmail) {
-              const baseUrl =
-                process.env.NEXT_PUBLIC_APP_URL || "https://app.getflowetic.com";
+              const { getPortalBaseUrl } = await import("@/lib/domains/getPortalBaseUrl");
+              const baseUrl = getPortalBaseUrl({
+                custom_domain: tenantForEmail.custom_domain ?? null,
+                domain_verified: tenantForEmail.domain_verified ?? false,
+              });
 
               // Also look up customer name from portal_customers
               const { data: custRow } = await supabaseAdmin
