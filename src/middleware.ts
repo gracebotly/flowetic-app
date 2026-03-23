@@ -62,15 +62,15 @@ export async function middleware(request: NextRequest) {
     }
 
     // Known custom domain → inject headers and continue
-    // These headers are read by server components and API routes
+    // Set on request FIRST (so NextResponse.next captures them),
+    // then also set on response (for server components via headers())
+    request.headers.set('x-tenant-id', tenantId);
+    request.headers.set('x-custom-domain', hostname);
+
     const response = NextResponse.next({ request });
     response.headers.set('x-tenant-id', tenantId);
     response.headers.set('x-custom-domain', hostname);
     response.headers.set('x-next-pathname', pathname);
-
-    // Mark the request so the Supabase middleware helper knows
-    // to skip auth redirect (custom domain serves only public content)
-    request.headers.set('x-custom-domain', hostname);
 
     return response;
   }

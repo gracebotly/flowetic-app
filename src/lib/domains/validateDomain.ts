@@ -70,9 +70,14 @@ export function validateDomain(domain: string): DomainValidationResult {
     }
   }
 
-  // Must have at least 2 labels (subdomain.tld or domain.tld)
-  if (labels.length < 2) {
-    return { valid: false, error: 'Domain must include a TLD (e.g., .com, .agency)' };
+  // Must have at least 3 labels (subdomain.domain.tld).
+  // Apex/root domains (e.g. "smith.agency") are rejected because they
+  // require A records, not CNAME. We only support subdomains via CNAME.
+  if (labels.length < 3) {
+    return {
+      valid: false,
+      error: 'Use a subdomain like portal.youragency.com — root domains (e.g. youragency.com) are not supported',
+    };
   }
 
   // Block self-referencing domains
