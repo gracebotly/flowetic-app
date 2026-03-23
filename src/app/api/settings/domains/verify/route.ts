@@ -85,41 +85,55 @@ export async function GET() {
     });
   }
 
-  // If Vercel now reports verified, update our DB
+  // Vercel's "verified" means ownership verification (no conflict with another project).
+  // But we need ACTUAL DNS connectivity before marking the domain as connected.
+  // Check getDomainConfig() — if misconfigured is false, DNS is pointing to Vercel.
   if (vercelResult.verified) {
-    const now = new Date().toISOString();
-    const { error: updateError } = await supabaseAdmin
-      .from("tenants")
-      .update({
-        domain_verified: true,
-        domain_verified_at: now,
-        updated_at: now,
-      })
-      .eq("id", auth.tenantId);
-
-    if (updateError) {
-      console.error("[GET /api/settings/domains/verify] DB update failed:", updateError.message);
-      // Don't fail the response — the verification succeeded even if DB update didn't
-    }
-
-    // Check SSL/DNS config
-    let sslActive = true;
+    let dnsConnected = false;
     try {
       const config = await getDomainConfig(tenant.custom_domain);
-      sslActive = !config.misconfigured;
+      dnsConnected = !config.misconfigured;
     } catch {
-      // Not critical
+      // getDomainConfig can fail for subdomains or if DNS hasn't propagated.
+      // Treat as not connected yet.
+      dnsConnected = false;
     }
 
+    if (dnsConnected) {
+      // DNS is actually pointing to Vercel — mark as verified
+      const now = new Date().toISOString();
+      const { error: updateError } = await supabaseAdmin
+        .from("tenants")
+        .update({
+          domain_verified: true,
+          domain_verified_at: now,
+          updated_at: now,
+        })
+        .eq("id", auth.tenantId);
+
+      if (updateError) {
+        console.error("[GET /api/settings/domains/verify] DB update failed:", updateError.message);
+      }
+
+      return json(200, {
+        ok: true,
+        domain: tenant.custom_domain,
+        verified: true,
+        ssl_active: true,
+      });
+    }
+
+    // Vercel accepted the domain but DNS isn't pointing to us yet
     return json(200, {
       ok: true,
       domain: tenant.custom_domain,
-      verified: true,
-      ssl_active: sslActive,
+      verified: false,
+      ssl_active: false,
     });
   }
 
-  // Still not verified
+  // Vercel hasn't even verified ownership yet (rare — usually for domains
+  // already claimed by another Vercel project)
   return json(200, {
     ok: true,
     domain: tenant.custom_domain,
