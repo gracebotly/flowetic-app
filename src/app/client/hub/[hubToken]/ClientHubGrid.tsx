@@ -7,6 +7,7 @@ interface Portal {
   id: string;
   name: string;
   token: string | null;
+  custom_path: string | null;
   platform_type: string | null;
   description: string | null;
   last_viewed_at: string | null;
@@ -15,6 +16,7 @@ interface Portal {
 interface Props {
   portals: Portal[];
   primaryColor: string;
+  useCleanUrls?: boolean;
 }
 
 const platformLabel: Record<string, string> = {
@@ -24,7 +26,7 @@ const platformLabel: Record<string, string> = {
   make: "Make Workflow",
 };
 
-export function ClientHubGrid({ portals, primaryColor }: Props) {
+export function ClientHubGrid({ portals, primaryColor, useCleanUrls = false }: Props) {
   if (portals.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-gray-200 bg-white p-12 text-center">
@@ -39,7 +41,7 @@ export function ClientHubGrid({ portals, primaryColor }: Props) {
       {portals.map((portal, i) => (
         <motion.a
           key={portal.id}
-          href={`/client/${portal.token}`}
+          href={useCleanUrls && portal.custom_path ? `/${portal.custom_path}` : `/client/${portal.token}`}
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.2, delay: i * 0.05 }}

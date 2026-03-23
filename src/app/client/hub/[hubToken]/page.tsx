@@ -26,7 +26,7 @@ export default async function ClientHubPage({ params }: PageProps) {
 
   const { data: tenant } = await supabaseAdmin
     .from('tenants')
-    .select('id, name, logo_url, primary_color, secondary_color, brand_footer, welcome_message')
+    .select('id, name, logo_url, primary_color, secondary_color, brand_footer, welcome_message, custom_domain, domain_verified')
     .eq('id', client.tenant_id)
     .single();
 
@@ -34,7 +34,7 @@ export default async function ClientHubPage({ params }: PageProps) {
 
   const { data: portals } = await supabaseAdmin
     .from('client_portals')
-    .select('id, name, token, platform_type, skeleton_id, status, last_viewed_at, description')
+    .select('id, name, token, custom_path, platform_type, skeleton_id, status, last_viewed_at, description')
     .eq('client_id', client.id)
     .eq('status', 'active')
     .eq('access_type', 'magic_link')
@@ -84,6 +84,7 @@ export default async function ClientHubPage({ params }: PageProps) {
         <ClientHubGrid
           portals={portals ?? []}
           primaryColor={brand.primaryColor}
+          useCleanUrls={Boolean(tenant?.custom_domain && tenant?.domain_verified)}
         />
       </main>
 

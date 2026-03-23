@@ -151,7 +151,7 @@ export async function POST(request: NextRequest) {
             // Resolve portal token + tenant branding for the email
             const { data: portalForEmail } = await supabaseAdmin
               .from("client_portals")
-              .select("name, token, slug")
+              .select("name, token, slug, custom_path")
               .eq("id", offeringId)
               .maybeSingle();
 
@@ -180,7 +180,9 @@ export async function POST(request: NextRequest) {
                 to: customerEmail,
                 customerName: custRow?.name ?? null,
                 portalName: portalForEmail.name,
-                dashboardUrl: `${baseUrl}/client/${portalForEmail.token}`,
+                dashboardUrl: tenantForEmail.domain_verified && tenantForEmail.custom_domain && portalForEmail.custom_path
+                  ? `${baseUrl}/${portalForEmail.custom_path}`
+                  : `${baseUrl}/client/${portalForEmail.token}`,
                 agencyName: tenantForEmail.name,
                 agencyLogoUrl: tenantForEmail.logo_url,
                 primaryColor: tenantForEmail.primary_color || "#374151",

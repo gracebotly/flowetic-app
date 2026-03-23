@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
     const { data: offering, error: offErr } = await supabaseAdmin
       .from('client_portals')
       .select(
-        'id, tenant_id, name, slug, pricing_type, price_cents, stripe_product_id, stripe_price_id, stripe_meter_event_name'
+        'id, tenant_id, name, slug, custom_path, pricing_type, price_cents, stripe_product_id, stripe_price_id, stripe_meter_event_name'
       )
       .eq('id', offeringId)
       .eq('status', 'active')
@@ -109,7 +109,19 @@ export async function POST(request: NextRequest) {
       tenant.stripe_application_fee_percent
     );
 
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
+    // Determine base URL — use custom domain if tenant has one
+    let baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
+
+    const { data: tenantDomain } = await supabaseAdmin
+      .from('tenants')
+      .select('custom_domain, domain_verified')
+      .eq('id', offering.tenant_id)
+      .single();
+
+    const hasCustomDomain = Boolean(tenantDomain?.custom_domain && tenantDomain?.domain_verified);
+    if (hasCustomDomain) {
+      baseUrl = `https://${tenantDomain!.custom_domain}`;
+    }
 
     // Resolve dashboard token for analytics portals
     const dashboardToken = bodyDashboardToken || null;
@@ -124,9 +136,22 @@ export async function POST(request: NextRequest) {
       resolvedToken = tokenRow?.token || null;
     }
 
-    const successBase = resolvedToken
-      ? `${baseUrl}/client/${resolvedToken}`
-      : `${baseUrl}/p/${offering.slug}/run`;
+    // On custom domains with clean URLs, use /{custom_path} instead of /client/{token} or /p/{slug}
+    let successBase: string;
+    if (hasCustomDomain && offering.custom_path) {
+      successBase = resolvedToken
+        ? `${baseUrl}/${offering.custom_path}`
+        : `${baseUrl}/${offering.custom_path}/run`;
+    } else {
+      successBase = resolvedToken
+        ? `${baseUrl}/client/${resolvedToken}`
+        : `${baseUrl}/p/${offering.slug}/run`;
+    }
+
+    // Cancel URL: clean path on custom domains, /p/slug on default domain
+    const cancelBase = hasCustomDomain && offering.custom_path
+      ? `${baseUrl}/${offering.custom_path}`
+      : `${baseUrl}/p/${offering.slug}`;
 
     // 5. Create Checkout Session based on pricing_type
     let session;
@@ -150,7 +175,7 @@ export async function POST(request: NextRequest) {
             ),
           },
           success_url: `${successBase}?session_id={CHECKOUT_SESSION_ID}&email=${encodeURIComponent(customerEmail)}`,
-          cancel_url: `${baseUrl}/p/${offering.slug}?cancelled=true`,
+          cancel_url: `${cancelBase}?cancelled=true`,
           metadata: {
             portal_id: offering.id,
             customer_email: customerEmail,
@@ -175,7 +200,7 @@ export async function POST(request: NextRequest) {
             metadata: { portal_id: offering.id },
           },
           success_url: `${successBase}?subscribed=true&email=${encodeURIComponent(customerEmail)}`,
-          cancel_url: `${baseUrl}/p/${offering.slug}?cancelled=true`,
+          cancel_url: `${cancelBase}?cancelled=true`,
           metadata: {
             portal_id: offering.id,
             customer_email: customerEmail,
@@ -202,7 +227,7 @@ export async function POST(request: NextRequest) {
             metadata: { portal_id: offering.id },
           },
           success_url: `${successBase}?subscribed=true&email=${encodeURIComponent(customerEmail)}`,
-          cancel_url: `${baseUrl}/p/${offering.slug}?cancelled=true`,
+          cancel_url: `${cancelBase}?cancelled=true`,
           metadata: {
             portal_id: offering.id,
             customer_email: customerEmail,
