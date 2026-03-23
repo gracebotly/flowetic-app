@@ -1,6 +1,9 @@
 import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { notFound } from 'next/navigation';
+import { headers } from 'next/headers';
 import { PremiumLanding } from './PremiumLanding';
+import { getPortalBaseUrl } from '@/lib/domains/getPortalBaseUrl';
+import type { Metadata } from 'next';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,9 +29,13 @@ export default async function ProductLandingPage({ params }: PageProps) {
 
   const { data: tenant } = await supabase
     .from('tenants')
-    .select('name, logo_url, primary_color, secondary_color')
+    .select('name, logo_url, primary_color, secondary_color, custom_domain, domain_verified')
     .eq('id', product.tenant_id)
     .single();
+
+  // Detect if this request is being served on a custom domain
+  const headersList = await headers();
+  const isCustomDomain = !!headersList.get('x-custom-domain');
 
   const { count: totalExecutions } = await supabase
     .from('workflow_executions')
@@ -38,6 +45,7 @@ export default async function ProductLandingPage({ params }: PageProps) {
 
   return (
     <PremiumLanding
+      hideGetfloweticBranding={isCustomDomain}
       product={{
         id: product.id,
         name: product.name,
@@ -62,4 +70,41 @@ export default async function ProductLandingPage({ params }: PageProps) {
       }}
     />
   );
+}
+
+
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { slug } = await params;
+  const supabase = createServiceClient(supabaseUrl, serviceKey);
+
+  const { data: product } = await supabase
+    .from('client_portals')
+    .select('name, description, tenant_id')
+    .eq('slug', slug)
+    .eq('status', 'active')
+    .maybeSingle();
+
+  if (!product) {
+    return { title: 'Product Not Found' };
+  }
+
+  const { data: tenant } = await supabase
+    .from('tenants')
+    .select('name, custom_domain, domain_verified')
+    .eq('id', product.tenant_id)
+    .single();
+
+  const baseUrl = getPortalBaseUrl({
+    custom_domain: tenant?.custom_domain ?? null,
+    domain_verified: tenant?.domain_verified ?? false,
+  });
+  const canonicalUrl = `${baseUrl}/p/${slug}`;
+
+  return {
+    title: `${product.name} — ${tenant?.name ?? 'Product'}`,
+    description: product.description || `AI-powered product by ${tenant?.name ?? 'Agency'}`,
+    alternates: {
+      canonical: canonicalUrl,
+    },
+  };
 }

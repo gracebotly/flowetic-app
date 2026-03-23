@@ -5,6 +5,7 @@ import { transformDataForSkeleton } from '@/lib/portals/transformData';
 import { createClient } from '@/lib/supabase/server';
 import { PortalClient } from './PortalClient';
 import type { Metadata } from 'next';
+import { getPortalBaseUrl } from '@/lib/domains/getPortalBaseUrl';
 
 interface PageProps {
   params: Promise<{ token: string }>;
@@ -63,10 +64,20 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
   const brand = resolveBranding(resolved.tenant, resolved.portal.branding as Record<string, unknown> | null);
 
+  // Canonical URL: use custom domain when verified, otherwise default domain
+  const baseUrl = getPortalBaseUrl({
+    custom_domain: resolved.tenant.custom_domain,
+    domain_verified: resolved.tenant.domain_verified,
+  });
+  const canonicalUrl = `${baseUrl}/client/${token}`;
+
   return {
     title: `${resolved.portal.name} — ${resolved.tenant.name}`,
     description: `Real-time analytics portal powered by ${resolved.tenant.name}`,
     robots: 'noindex, nofollow',
+    alternates: {
+      canonical: canonicalUrl,
+    },
     ...(brand.faviconUrl ? { icons: { icon: brand.faviconUrl } } : {}),
   };
 }
