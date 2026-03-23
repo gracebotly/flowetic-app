@@ -181,6 +181,7 @@ export default function CreateOfferingPage() {
   const [entities, setEntities] = useState<EntityItem[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
   const [stripeConnected, setStripeConnected] = useState(false);
+  const [portalBaseUrl, setPortalBaseUrl] = useState<string | null>(null);
 
   // ── Plan limit gate ──────────────────────────────────────
   const [limitCheck, setLimitCheck] = useState<{
@@ -238,6 +239,17 @@ export default function CreateOfferingPage() {
           .eq("user_id", session.user.id)
           .single();
         if (!membership) return;
+
+        // Fetch tenant domain info for URL generation
+        try {
+          const domainRes = await fetch("/api/settings/domains");
+          const domainJson = await domainRes.json();
+          if (domainJson.ok && domainJson.domain && domainJson.verified) {
+            setPortalBaseUrl(`https://${domainJson.domain}`);
+          }
+        } catch {
+          // Non-fatal — falls back to window.location.origin
+        }
 
         // Sources
         const { data: srcData } = await supabase
@@ -716,7 +728,7 @@ export default function CreateOfferingPage() {
                           <button
                             onClick={() =>
                               navigator.clipboard.writeText(
-                                `${window.location.origin}/client/${o.token}`
+                                `${portalBaseUrl || window.location.origin}/client/${o.token}`
                               )
                             }
                             className="cursor-pointer text-xs font-medium text-tremor-brand"
@@ -753,6 +765,7 @@ export default function CreateOfferingPage() {
                     accessType={wizard.accessType}
                     surfaceType={wizard.surfaceType}
                     onCreateAnother={handleCreateAnother}
+                    portalBaseUrl={portalBaseUrl || undefined}
                   />
                 )}
               </>

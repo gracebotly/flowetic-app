@@ -115,6 +115,9 @@ export default function OfferingDetailPage() {
   const [slugSaving, setSlugSaving] = useState(false);
   const [slugError, setSlugError] = useState<string | null>(null);
 
+  // Domain state (for custom domain URL generation)
+  const [portalBaseUrl, setPortalBaseUrl] = useState<string | null>(null);
+
   // Delete state
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -134,6 +137,18 @@ export default function OfferingDetailPage() {
 
   useEffect(() => {
     loadOffering();
+    // Fetch tenant domain info for URL generation
+    (async () => {
+      try {
+        const res = await fetch("/api/settings/domains");
+        const json = await res.json();
+        if (json.ok && json.domain && json.verified) {
+          setPortalBaseUrl(`https://${json.domain}`);
+        }
+      } catch {
+        // Non-fatal — falls back to window.location.origin
+      }
+    })();
   }, [loadOffering]);
 
   // ── Save changes (Overview) ───────────────────────────────
@@ -310,7 +325,7 @@ export default function OfferingDetailPage() {
   };
 
   // ── Client URL ────────────────────────────────────────────
-  const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
+  const baseUrl = portalBaseUrl || (typeof window !== "undefined" ? window.location.origin : "");
   const clientUrl = offering
     ? offering.access_type === "magic_link" && offering.token
       ? `${baseUrl}/client/${offering.token}`
