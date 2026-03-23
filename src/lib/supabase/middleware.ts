@@ -27,6 +27,13 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.next({ request });
   }
 
+  // Custom domain requests are always public — skip auth entirely.
+  // The parent middleware (src/middleware.ts) already resolved the tenant
+  // and set x-custom-domain header. We just pass through.
+  if (request.headers.get('x-custom-domain')) {
+    return NextResponse.next({ request });
+  }
+
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(
