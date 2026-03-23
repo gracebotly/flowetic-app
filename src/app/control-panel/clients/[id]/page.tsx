@@ -43,6 +43,7 @@ type AssignedOffering = {
   platform_type: string | null;
   token: string | null;
   slug: string | null;
+  custom_path: string | null;
   status: string;
   last_viewed_at: string | null;
 };
@@ -64,6 +65,7 @@ export default function ClientDetailPage() {
   const [totalOfferings, setTotalOfferings] = useState(0);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
+  const [portalBaseUrl, setPortalBaseUrl] = useState<string | undefined>(undefined);
 
   const loadClient = useCallback(async () => {
     const res = await fetch(`/api/clients/${id}`);
@@ -79,6 +81,16 @@ export default function ClientDetailPage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadClient();
+
+    // Fetch domain info for URL generation
+    fetch("/api/settings/domains")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.ok && data.domain && data.verified) {
+          setPortalBaseUrl(`https://${data.domain}`);
+        }
+      })
+      .catch(() => {});
   }, [loadClient]);
 
   if (loading) {
@@ -202,7 +214,7 @@ export default function ClientDetailPage() {
             onChanged={loadClient}
           />
         )}
-        {activeTab === "access" && <AccessTab assignedOfferings={assignedOfferings} />}
+        {activeTab === "access" && <AccessTab assignedOfferings={assignedOfferings} portalBaseUrl={portalBaseUrl} />}
         {activeTab === "activity" && <ActivityTab clientId={client.id} />}
       </div>
     </div>

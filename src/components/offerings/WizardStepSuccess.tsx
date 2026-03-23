@@ -20,6 +20,7 @@ type Props = {
   offering: { id?: string; name?: string } | null;
   magicLink: string | null;
   productUrl: string | null;
+  customPath?: string;
   accessType: string;
   surfaceType: string;
   onCreateAnother: () => void;
@@ -34,6 +35,7 @@ export function WizardStepSuccess({
   accessType,
   surfaceType,
   onCreateAnother,
+  customPath,
   customDomainInfo,
 }: Props) {
   const [copiedDefault, setCopiedDefault] = useState(false);
@@ -46,9 +48,12 @@ export function WizardStepSuccess({
   const path = magicLink || productUrl || null;
 
   const defaultUrl = path ? `${defaultBase}${path}` : null;
+
+  // On custom domains, use /{customPath} instead of /client/{token} or /p/{slug}
+  const cleanPath = customPath ? `/${customPath}` : path;
   const customUrl =
-    customDomainInfo?.domain && path
-      ? `https://${customDomainInfo.domain}${path}`
+    customDomainInfo?.domain && cleanPath
+      ? `https://${customDomainInfo.domain}${cleanPath}`
       : null;
 
   const hasVerifiedDomain = customDomainInfo?.verified === true;
@@ -295,7 +300,7 @@ export function WizardStepSuccess({
           Create Another
         </button>
         <Link
-          href="/control-panel/offerings"
+          href="/control-panel/client-portals"
           className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors duration-200 hover:bg-blue-700"
         >
           View All Portals

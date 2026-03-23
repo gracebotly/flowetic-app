@@ -49,7 +49,7 @@ export async function GET(
   // Get offerings assigned to this client
   const { data: assignedOfferings } = await supabase
     .from("client_portals")
-    .select("id, name, surface_type, access_type, platform_type, token, slug, status, last_viewed_at")
+    .select("id, name, surface_type, access_type, platform_type, token, slug, custom_path, status, last_viewed_at")
     .eq("tenant_id", tenantId)
     .eq("client_id", id)
     .neq("status", "archived");

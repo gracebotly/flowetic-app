@@ -19,6 +19,7 @@ interface AssignedOffering {
   platform_type: string | null;
   token: string | null;
   slug: string | null;
+  custom_path: string | null;
   status: string;
   last_viewed_at: string | null;
 }
@@ -34,8 +35,14 @@ export function AccessTab({ assignedOfferings, portalBaseUrl }: AccessTabProps) 
   const [localTokens, setLocalTokens] = useState<Record<string, string | null>>({});
 
   const baseUrl = portalBaseUrl || (typeof window !== "undefined" ? window.location.origin : "");
+  const isCustomDomain = portalBaseUrl && !portalBaseUrl.includes("getflowetic.com");
 
   const getUrl = (o: AssignedOffering): string | null => {
+    // Clean URL on custom domains
+    if (isCustomDomain && o.custom_path) {
+      return `${baseUrl}/${o.custom_path}`;
+    }
+    // Fallback to internal paths
     const token = localTokens[o.id] !== undefined ? localTokens[o.id] : o.token;
     if (o.access_type === "magic_link" && token) {
       return `${baseUrl}/client/${token}`;

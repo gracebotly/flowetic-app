@@ -3,17 +3,12 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
 import {
   ArrowLeft,
   Copy,
   Check,
   ExternalLink,
-  BarChart3,
-  Play,
-  Layers,
   Link2,
-  CreditCard,
   RefreshCw,
   Trash2,
   Eye,
@@ -42,6 +37,7 @@ type Offering = {
   status: string;
   token: string | null;
   slug: string | null;
+  custom_path: string | null;
   pricing_type: string | null;
   price_cents: number | null;
   client_id: string | null;
@@ -114,6 +110,12 @@ export default function OfferingDetailPage() {
   const [slugDraft, setSlugDraft] = useState("");
   const [slugSaving, setSlugSaving] = useState(false);
   const [slugError, setSlugError] = useState<string | null>(null);
+
+  // Custom path editing state (clean URLs)
+  const [editingPath, setEditingPath] = useState(false);
+  const [pathDraft, setPathDraft] = useState("");
+  const [pathSaving, setPathSaving] = useState(false);
+  const [pathError, setPathError] = useState<string | null>(null);
 
   // Domain state (for custom domain URL generation)
   const [portalBaseUrl, setPortalBaseUrl] = useState<string | null>(null);
@@ -303,6 +305,56 @@ export default function OfferingDetailPage() {
     setSlugError(null);
   };
 
+  // ── Custom path management (Clean URLs) ──────────────────
+  const startEditPath = () => {
+    setPathDraft(offering?.custom_path || "");
+    setEditingPath(true);
+    setPathError(null);
+  };
+
+  const cancelEditPath = () => {
+    setEditingPath(false);
+    setPathError(null);
+  };
+
+  const savePath = async () => {
+    const clean = pathDraft
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/(^-|-$)/g, "");
+
+    if (clean.length < 3) {
+      setPathError("Path must be at least 3 characters.");
+      return;
+    }
+
+    setPathSaving(true);
+    setPathError(null);
+
+    try {
+      const res = await fetch(`/api/client-portals/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ custom_path: clean }),
+      });
+      const json = await res.json();
+      if (res.ok && json.ok) {
+        setOffering((prev) => (prev ? { ...prev, custom_path: clean } : prev));
+        setEditingPath(false);
+      } else if (res.status === 409) {
+        setPathError("This URL path is already in use by another portal.");
+      } else {
+        setPathError(json.error || "Could not save path. Please try again.");
+      }
+    } catch {
+      setPathError("Could not save path. Please try again.");
+    } finally {
+      setPathSaving(false);
+    }
+  };
+
   // ── Delete ────────────────────────────────────────────────
   const handleDelete = async () => {
     setDeleting(true);
@@ -326,11 +378,26 @@ export default function OfferingDetailPage() {
 
   // ── Client URL ────────────────────────────────────────────
   const baseUrl = portalBaseUrl || (typeof window !== "undefined" ? window.location.origin : "");
+  const isCustomDomain = portalBaseUrl && !portalBaseUrl.includes("getflowetic.com");
+
+  // Clean URL: use /{custom_path} on custom domains
   const clientUrl = offering
+    ? isCustomDomain && offering.custom_path
+      ? `${baseUrl}/${offering.custom_path}`
+      : offering.access_type === "magic_link" && offering.token
+        ? `${baseUrl}/client/${offering.token}`
+        : offering.slug
+          ? `${baseUrl}/p/${offering.slug}`
+          : null
+    : null;
+
+  // Fallback URL (always uses default domain paths)
+  const defaultBase = typeof window !== "undefined" ? window.location.origin : "https://app.getflowetic.com";
+  const fallbackUrl = offering
     ? offering.access_type === "magic_link" && offering.token
-      ? `${baseUrl}/client/${offering.token}`
+      ? `${defaultBase}/client/${offering.token}`
       : offering.slug
-        ? `${baseUrl}/p/${offering.slug}`
+        ? `${defaultBase}/p/${offering.slug}`
         : null
     : null;
 
@@ -684,10 +751,125 @@ export default function OfferingDetailPage() {
       {/* ═══════════════════════════════════════════════════════ */}
       {activeTab === "access" && (
         <div className="mt-6 space-y-6">
+          {/* Clean URL section — shown when custom domain is active */}
+          {isCustomDomain && offering.custom_path && (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50/30 p-5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-semibold text-gray-900">Clean URL</h3>
+                  <span className="inline-flex items-center gap-1 rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">
+                    <span className="h-1 w-1 rounded-full bg-emerald-500" />
+                    Custom Domain
+                  </span>
+                </div>
+                {!editingPath && (
+                  <button
+                    onClick={startEditPath}
+                    className="text-xs font-medium text-blue-600 hover:text-blue-700 transition-colors duration-200"
+                  >
+                    Edit
+                  </button>
+                )}
+              </div>
+              <p className="mt-1 text-xs text-gray-500">
+                This is the URL your clients see — clean, branded, no platform internals.
+              </p>
+
+              {editingPath ? (
+                <div className="mt-3">
+                  <div className="flex items-center rounded-lg border border-blue-300 bg-white text-sm ring-2 ring-blue-100">
+                    <span className="flex-shrink-0 rounded-l-lg border-r border-gray-200 bg-gray-50 px-3 py-2 text-xs text-slate-500">
+                      {portalBaseUrl?.replace("https://", "")}/
+                    </span>
+                    <input
+                      type="text"
+                      value={pathDraft}
+                      maxLength={60}
+                      onChange={(e) => {
+                        setPathDraft(
+                          e.target.value
+                            .toLowerCase()
+                            .replace(/[^a-z0-9-]/g, "-")
+                            .replace(/-+/g, "-")
+                            .replace(/^-/, "")
+                        );
+                        setPathError(null);
+                      }}
+                      autoFocus
+                      className="w-full border-0 bg-transparent py-2 pr-3 text-sm outline-none"
+                    />
+                  </div>
+                  <div className="mt-1 flex items-center justify-between">
+                    <span className={`text-[11px] ${pathDraft.length > 50 ? "text-amber-600" : "text-gray-400"}`}>
+                      {pathDraft.length}/60
+                    </span>
+                  </div>
+                  {pathError && (
+                    <p className="mt-1 text-xs text-red-600">{pathError}</p>
+                  )}
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      onClick={savePath}
+                      disabled={pathSaving}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      {pathSaving ? "Saving…" : "Save"}
+                    </button>
+                    <button
+                      onClick={cancelEditPath}
+                      disabled={pathSaving}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 transition hover:bg-gray-50"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="mt-3 rounded-lg border border-gray-100 bg-white px-4 py-3">
+                    <p className="break-all font-mono text-sm text-gray-700">
+                      {clientUrl}
+                    </p>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      onClick={() => clientUrl && copyToClipboard(clientUrl)}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50"
+                    >
+                      {copied ? (
+                        <Check className="h-4 w-4 text-emerald-500" />
+                      ) : (
+                        <Copy className="h-4 w-4" />
+                      )}
+                      {copied ? "Copied!" : "Copy Link"}
+                    </button>
+                    <a
+                      href={clientUrl || "#"}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 transition hover:bg-blue-100"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                      Open
+                    </a>
+                  </div>
+                  {fallbackUrl && fallbackUrl !== clientUrl && (
+                    <div className="mt-3">
+                      <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Default fallback</p>
+                      <p className="mt-0.5 break-all font-mono text-xs text-gray-400">{fallbackUrl}</p>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
           {/* Client Link section */}
           {offering.access_type === "magic_link" && (
             <div className="rounded-xl border border-gray-200 bg-white p-5">
-              <h3 className="text-sm font-semibold text-gray-900">Client Link</h3>
+              <h3 className="text-sm font-semibold text-gray-900">
+                {isCustomDomain && offering.custom_path ? "Internal Link (Fallback)" : "Client Link"}
+              </h3>
               <p className="mt-1 text-xs text-gray-500">
                 Share this link with your client — no login required.
               </p>

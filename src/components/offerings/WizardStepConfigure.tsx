@@ -28,6 +28,9 @@ type Props = {
   pricingType: PricingType;
   priceCents: number;
   slug: string;
+  customPath: string;
+  onCustomPathChange: (value: string) => void;
+  customDomainInfo?: { domain: string; verified: boolean } | null;
   onAccessChange: (accessType: AccessType) => void;
   onPricingChange: (pricingType: PricingType, priceCents: number) => void;
   // Stripe status (fetched by parent)
@@ -105,6 +108,9 @@ export function WizardStepConfigure({
   pricingType,
   priceCents,
   slug,
+  customPath,
+  onCustomPathChange,
+  customDomainInfo,
   onAccessChange,
   onPricingChange,
   stripeConnected,
@@ -247,6 +253,7 @@ function validatePhone(raw: string): string | null {
 
   // Auto-generate slug from name — only if user hasn't manually edited slug
   const [slugManuallyEdited, setSlugManuallyEdited] = useState(false);
+  const [pathManuallyEdited, setPathManuallyEdited] = useState(false);
 
   useEffect(() => {
     if (accessType === "stripe_gate" && name.trim() && !slugManuallyEdited) {
@@ -258,6 +265,19 @@ function validatePhone(raw: string): string | null {
       onChange("slug", autoSlug);
     }
   }, [name, accessType, onChange, slugManuallyEdited]);
+
+  // Auto-generate customPath from name (for clean URLs on custom domains)
+  useEffect(() => {
+    if (name.trim() && !pathManuallyEdited) {
+      const autoPath = name
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/(^-|-$)/g, "")
+        .slice(0, 60);
+      onCustomPathChange(autoPath);
+    }
+  }, [name, onCustomPathChange, pathManuallyEdited]);
 
   return (
     <div>
@@ -611,42 +631,121 @@ function validatePhone(raw: string): string | null {
                       </div>
                     </div>
 
-                    {/* Slug input */}
+                    {/* URL Path input — domain-aware */}
                     <div className="mt-4">
                       <div className="flex items-baseline justify-between">
                         <label className="block text-xs font-medium text-slate-600">
-                          Product URL Slug
+                          {customDomainInfo?.verified ? "URL Path" : "Product URL Slug"}
                         </label>
-                        <span className={`text-[11px] ${slug.length > 50 ? "text-amber-600" : "text-slate-600"}`}>
-                          {slug.length}/60
+                        <span className={`text-[11px] ${(customDomainInfo?.verified ? customPath : slug).length > 50 ? "text-amber-600" : "text-slate-600"}`}>
+                          {(customDomainInfo?.verified ? customPath : slug).length}/60
                         </span>
                       </div>
-                      <div className="mt-1 flex items-center rounded-lg border border-gray-200 bg-white text-sm">
-                        <span className="flex-shrink-0 px-3 text-slate-600">/p/</span>
-                        <input
-                          type="text"
-                          value={slug}
-                          maxLength={60}
-                          onChange={(e) => {
-                            setSlugManuallyEdited(true);
-                            onChange(
-                              "slug",
-                              e.target.value
-                                .toLowerCase()
-                                .replace(/[^a-z0-9-]/g, "-")
-                                .replace(/-+/g, "-")
-                                .replace(/^-/, "")
-                            );
-                          }}
-                          placeholder="smith-dental-voice"
-                          className="w-full border-0 bg-transparent py-2 pr-3 text-sm text-slate-900 outline-none"
-                        />
-                      </div>
+                      {customDomainInfo?.verified ? (
+                        <>
+                          <div className="mt-1 flex items-center rounded-lg border border-gray-200 bg-white text-sm">
+                            <span className="flex-shrink-0 rounded-l-lg border-r border-gray-200 bg-gray-50 px-3 py-2 text-xs text-slate-500">
+                              {customDomainInfo.domain}/
+                            </span>
+                            <input
+                              type="text"
+                              value={customPath}
+                              maxLength={60}
+                              onChange={(e) => {
+                                setPathManuallyEdited(true);
+                                setSlugManuallyEdited(true);
+                                const cleaned = e.target.value
+                                  .toLowerCase()
+                                  .replace(/[^a-z0-9-]/g, "-")
+                                  .replace(/-+/g, "-")
+                                  .replace(/^-/, "");
+                                onCustomPathChange(cleaned);
+                                onChange("slug", cleaned);
+                              }}
+                              placeholder="lead-qualifier"
+                              className="w-full border-0 bg-transparent py-2 pr-3 text-sm text-slate-900 outline-none"
+                            />
+                          </div>
+                          <p className="mt-1 flex items-center gap-1 text-[11px] text-emerald-600">
+                            <span className="h-1 w-1 rounded-full bg-emerald-500" />
+                            Using your custom domain
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <div className="mt-1 flex items-center rounded-lg border border-gray-200 bg-white text-sm">
+                            <span className="flex-shrink-0 px-3 text-slate-600">/p/</span>
+                            <input
+                              type="text"
+                              value={slug}
+                              maxLength={60}
+                              onChange={(e) => {
+                                setSlugManuallyEdited(true);
+                                onChange(
+                                  "slug",
+                                  e.target.value
+                                    .toLowerCase()
+                                    .replace(/[^a-z0-9-]/g, "-")
+                                    .replace(/-+/g, "-")
+                                    .replace(/^-/, "")
+                                );
+                              }}
+                              placeholder="smith-dental-voice"
+                              className="w-full border-0 bg-transparent py-2 pr-3 text-sm text-slate-900 outline-none"
+                            />
+                          </div>
+                          {!customDomainInfo && (
+                            <p className="mt-1.5 text-[11px] text-slate-400">
+                              Add a custom domain in{" "}
+                              <a href="/control-panel/settings?tab=branding" className="text-blue-500 hover:text-blue-600">
+                                Settings → Branding
+                              </a>{" "}
+                              for cleaner URLs
+                            </p>
+                          )}
+                        </>
+                      )}
                     </div>
                   </div>
                 </motion.div>
               )}
             </AnimatePresence>
+
+            {/* URL Path for free portals (only when custom domain is verified) */}
+            {customDomainInfo?.verified && (
+              <div className="mt-4 rounded-xl border border-gray-200 bg-white p-5">
+                <label className="block text-xs font-medium text-slate-600">
+                  URL Path
+                </label>
+                <div className="mt-1 flex items-center rounded-lg border border-gray-200 bg-white text-sm">
+                  <span className="flex-shrink-0 rounded-l-lg border-r border-gray-200 bg-gray-50 px-3 py-2 text-xs text-slate-500">
+                    {customDomainInfo.domain}/
+                  </span>
+                  <input
+                    type="text"
+                    value={customPath}
+                    maxLength={60}
+                    onChange={(e) => {
+                      setPathManuallyEdited(true);
+                      onCustomPathChange(
+                        e.target.value
+                          .toLowerCase()
+                          .replace(/[^a-z0-9-]/g, "-")
+                          .replace(/-+/g, "-")
+                          .replace(/^-/, "")
+                      );
+                    }}
+                    placeholder="client-dashboard"
+                    className="w-full border-0 bg-transparent py-2 pr-3 text-sm text-slate-900 outline-none"
+                  />
+                </div>
+                <p className="mt-1 flex items-center gap-1 text-[11px] text-emerald-600">
+                  <span className="h-1 w-1 rounded-full bg-emerald-500" />
+                  Using your custom domain
+                </p>
+              </div>
+            )}
+
           </>
         ) : (
           <>
@@ -664,6 +763,41 @@ function validatePhone(raw: string): string | null {
                 }}
               />
             </div>
+
+            {/* URL Path for free portals (only when custom domain is verified) */}
+            {customDomainInfo?.verified && (
+              <div className="mt-4 rounded-xl border border-gray-200 bg-white p-5">
+                <label className="block text-xs font-medium text-slate-600">
+                  URL Path
+                </label>
+                <div className="mt-1 flex items-center rounded-lg border border-gray-200 bg-white text-sm">
+                  <span className="flex-shrink-0 rounded-l-lg border-r border-gray-200 bg-gray-50 px-3 py-2 text-xs text-slate-500">
+                    {customDomainInfo.domain}/
+                  </span>
+                  <input
+                    type="text"
+                    value={customPath}
+                    maxLength={60}
+                    onChange={(e) => {
+                      setPathManuallyEdited(true);
+                      onCustomPathChange(
+                        e.target.value
+                          .toLowerCase()
+                          .replace(/[^a-z0-9-]/g, "-")
+                          .replace(/-+/g, "-")
+                          .replace(/^-/, "")
+                      );
+                    }}
+                    placeholder="client-dashboard"
+                    className="w-full border-0 bg-transparent py-2 pr-3 text-sm text-slate-900 outline-none"
+                  />
+                </div>
+                <p className="mt-1 flex items-center gap-1 text-[11px] text-emerald-600">
+                  <span className="h-1 w-1 rounded-full bg-emerald-500" />
+                  Using your custom domain
+                </p>
+              </div>
+            )}
 
             <div className="mt-3 flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-3">
               <CreditCard className="h-4 w-4 shrink-0 text-slate-600" />
