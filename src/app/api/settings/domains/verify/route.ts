@@ -95,7 +95,6 @@ export async function GET() {
       dnsConnected = !config.misconfigured;
     } catch {
       // getDomainConfig can fail for subdomains or if DNS hasn't propagated.
-      // Treat as not connected yet.
       dnsConnected = false;
     }
 
@@ -132,8 +131,7 @@ export async function GET() {
     });
   }
 
-  // Vercel hasn't even verified ownership yet (rare — usually for domains
-  // already claimed by another Vercel project)
+  // Vercel hasn't even verified ownership yet
   return json(200, {
     ok: true,
     domain: tenant.custom_domain,

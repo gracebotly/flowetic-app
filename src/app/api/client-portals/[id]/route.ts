@@ -78,6 +78,7 @@ export async function PATCH(
     'pricing_type',
     'price_cents',
     'slug',
+    'custom_path',
     'input_schema',
     'execution_config',
     'branding',
@@ -95,6 +96,33 @@ export async function PATCH(
 
   if (Object.keys(updates).length === 0) {
     return json(400, { ok: false, code: 'NO_UPDATES' });
+  }
+
+  // ── Validate custom_path if being updated ──────────────────
+  if ('custom_path' in updates) {
+    const rawPath = updates.custom_path;
+    if (rawPath === null || rawPath === '') {
+      updates.custom_path = null; // Allow clearing
+    } else if (typeof rawPath === 'string') {
+      const { validateCustomPath } = await import('@/lib/domains/validateCustomPath');
+      const pathValidation = validateCustomPath(rawPath);
+      if (!pathValidation.valid) {
+        return json(400, { ok: false, code: 'INVALID_CUSTOM_PATH', error: pathValidation.error });
+      }
+      // Check uniqueness within tenant (exclude self)
+      const { data: pathConflict } = await supabase
+        .from('client_portals')
+        .select('id')
+        .eq('tenant_id', tenantId)
+        .eq('custom_path', pathValidation.cleaned!)
+        .neq('id', id)
+        .maybeSingle();
+
+      if (pathConflict) {
+        return json(409, { ok: false, code: 'CUSTOM_PATH_IN_USE', error: 'This URL path is already in use by another portal' });
+      }
+      updates.custom_path = pathValidation.cleaned;
+    }
   }
 
   const { data: existingOffering, error: existingError } = await supabase

@@ -33,6 +33,7 @@ export type WizardState = {
   pricingType: PricingType;
   priceCents: number;
   slug: string;
+  customPath: string;
   name: string;
   description: string;
   clientId: string;
@@ -54,6 +55,7 @@ const INITIAL_STATE: WizardState = {
   pricingType: "free",
   priceCents: 0,
   slug: "",
+  customPath: "",
   name: "",
   description: "",
   clientId: "",
@@ -436,6 +438,11 @@ export default function CreateOfferingPage() {
         body.slug = wizard.slug;
       }
 
+      // Send custom_path if the agency edited it
+      if (wizard.customPath.trim()) {
+        body.customPath = wizard.customPath.trim();
+      }
+
       const res = await fetch("/api/client-portals/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -456,6 +463,7 @@ export default function CreateOfferingPage() {
         creationErrors: [],
         magicLink: json.magicLink ?? null,
         productUrl: json.productUrl ?? null,
+        customPath: json.customPath ?? wizard.customPath,
       });
       clearDraftFromServer();
       setCurrentStep(4);
@@ -700,6 +708,8 @@ export default function CreateOfferingPage() {
                   pricingType={wizard.pricingType}
                   priceCents={wizard.priceCents}
                   slug={wizard.slug}
+                  customPath={wizard.customPath}
+                  onCustomPathChange={(customPath) => update({ customPath })}
                   onAccessChange={(accessType) => update({ accessType })}
                   onPricingChange={(pricingType, priceCents) =>
                     update({ pricingType, priceCents })
@@ -708,6 +718,7 @@ export default function CreateOfferingPage() {
                   platform={wizard.selectedPlatform}
                   surfaceType={wizard.surfaceType}
                   submitError={submitError}
+                  customDomainInfo={customDomainInfo}
                 />
                 {wizard.selectedEntities.length > 1 && (
                   <p className="mt-1 text-xs text-tremor-content dark:text-dark-tremor-content">
@@ -769,6 +780,7 @@ export default function CreateOfferingPage() {
                     offering={wizard.createdOffering}
                     magicLink={wizard.magicLink}
                     productUrl={wizard.productUrl}
+                    customPath={wizard.customPath || undefined}
                     accessType={wizard.accessType}
                     surfaceType={wizard.surfaceType}
                     onCreateAnother={handleCreateAnother}

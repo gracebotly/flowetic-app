@@ -61,9 +61,73 @@ export async function middleware(request: NextRequest) {
       return NextResponse.rewrite(url);
     }
 
-    // Known custom domain → inject headers and continue
-    // Set on request FIRST (so NextResponse.next captures them),
-    // then also set on response (for server components via headers())
+    // ─── Clean URL Resolution ────────────────────────────────────
+    // If the path doesn't match an existing internal route, try resolving
+    // the first segment as a custom_path → rewrite to internal route.
+    //
+    // Example: /invoice-tracker/run
+    //   → custom_path = "invoice-tracker"
+    //   → resolves to portal with slug "invoice-tracker-ai"
+    //   → rewrite to /p/invoice-tracker-ai/run
+
+    // Paths that should NOT be resolved as custom_path — they map to real routes
+    const PASSTHROUGH_PREFIXES = [
+      '/client/', '/p/', '/hub/', '/api/', '/auth/',
+      '/_next/', '/domain-not-found', '/favicon.ico',
+      '/portal-preview',
+    ];
+
+    const shouldTryCleanPath = !PASSTHROUGH_PREFIXES.some(
+      (prefix) => pathname === prefix.replace(/\/$/, '') || pathname.startsWith(prefix)
+    );
+
+    if (shouldTryCleanPath && pathname !== '/') {
+      const { resolvePathOnDomain } = await import(
+        '@/lib/domains/edgePathLookup'
+      );
+
+      // Extract the first path segment as potential custom_path
+      // e.g., "/invoice-tracker/run" → customPath = "invoice-tracker", rest = "/run"
+      const segments = pathname.split('/').filter(Boolean);
+      const customPath = segments[0];
+      const restOfPath = segments.length > 1 ? '/' + segments.slice(1).join('/') : '';
+
+      if (customPath) {
+        const resolved = await resolvePathOnDomain(tenantId, customPath);
+
+        if (resolved) {
+          const url = request.nextUrl.clone();
+
+          if (resolved.access_type === 'magic_link' && resolved.token) {
+            // Analytics portal → rewrite to /client/[token]
+            url.pathname = `/client/${resolved.token}${restOfPath}`;
+          } else if (resolved.access_type === 'stripe_gate' && resolved.slug) {
+            // Product page → rewrite to /p/[slug]
+            url.pathname = `/p/${resolved.slug}${restOfPath}`;
+          } else if (resolved.token) {
+            // Fallback: if it has a token, use /client/
+            url.pathname = `/client/${resolved.token}${restOfPath}`;
+          }
+
+          // Preserve query string
+          url.search = request.nextUrl.search;
+
+          // Inject tenant headers on the rewritten request
+          request.headers.set('x-tenant-id', tenantId);
+          request.headers.set('x-custom-domain', hostname);
+
+          const rewriteResponse = NextResponse.rewrite(url, { request });
+          rewriteResponse.headers.set('x-tenant-id', tenantId);
+          rewriteResponse.headers.set('x-custom-domain', hostname);
+          rewriteResponse.headers.set('x-next-pathname', pathname);
+
+          return rewriteResponse;
+        }
+      }
+    }
+
+    // Known custom domain, no clean path match → inject headers and continue
+    // (handles /client/token, /p/slug, /hub/hubToken which still work as-is)
     request.headers.set('x-tenant-id', tenantId);
     request.headers.set('x-custom-domain', hostname);
 

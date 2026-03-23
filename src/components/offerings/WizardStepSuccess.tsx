@@ -20,6 +20,7 @@ type Props = {
   offering: { id?: string; name?: string } | null;
   magicLink: string | null;
   productUrl: string | null;
+  customPath?: string;
   accessType: string;
   surfaceType: string;
   onCreateAnother: () => void;
@@ -34,7 +35,7 @@ export function WizardStepSuccess({
   accessType,
   surfaceType,
   onCreateAnother,
-  portalBaseUrl,
+  customPath,
   customDomainInfo,
 }: Props) {
   const [copiedDefault, setCopiedDefault] = useState(false);
@@ -47,15 +48,21 @@ export function WizardStepSuccess({
     typeof window !== "undefined" ? window.location.origin : "https://app.getflowetic.com";
   const path = magicLink || productUrl || null;
 
+  const defaultBase =
+    typeof window !== "undefined" ? window.location.origin : "https://app.getflowetic.com";
+  const path = magicLink || productUrl || null;
+
   const defaultUrl = path ? `${defaultBase}${path}` : null;
+
+  // On custom domains, use /{customPath} instead of /client/{token} or /p/{slug}
+  const cleanPath = customPath ? `/${customPath}` : path;
   const customUrl =
-    customDomainInfo?.domain && path
-      ? `https://${customDomainInfo.domain}${path}`
+    customDomainInfo?.domain && cleanPath
+      ? `https://${customDomainInfo.domain}${cleanPath}`
       : null;
 
-  // Which URL to show as primary
   const hasVerifiedDomain = customDomainInfo?.verified === true;
-  const hasPendingDomain = customDomainInfo?.domain && !customDomainInfo.verified;
+  const hasPendingDomain = !!customDomainInfo?.domain && !customDomainInfo.verified;
 
   const urlLabel =
     surfaceType === "runner"
@@ -101,7 +108,7 @@ export function WizardStepSuccess({
       {/* ── URL Section ── */}
       {defaultUrl && (
         <div className="mt-7 w-full max-w-lg text-left">
-          {/* ── Scenario C: Custom domain verified — show as primary ── */}
+          {/* ── Scenario C: Domain verified — custom URL primary ── */}
           {hasVerifiedDomain && customUrl && (
             <>
               <div className="flex items-center gap-2">
@@ -142,7 +149,7 @@ export function WizardStepSuccess({
                 </button>
               </div>
 
-              {/* Default fallback — de-emphasized */}
+              {/* Default fallback */}
               <label className="mt-4 block text-xs font-medium uppercase tracking-wide text-gray-400">
                 Default fallback
               </label>
@@ -171,7 +178,7 @@ export function WizardStepSuccess({
             </>
           )}
 
-          {/* ── Scenario B: Custom domain pending — default primary, custom grayed ── */}
+          {/* ── Scenario B: Domain pending — default URL primary ── */}
           {hasPendingDomain && customUrl && (
             <>
               <label className="text-xs font-medium uppercase tracking-wide text-gray-400">
@@ -206,7 +213,6 @@ export function WizardStepSuccess({
                 </button>
               </div>
 
-              {/* Pending custom domain */}
               <div className="mt-4 flex items-center gap-2">
                 <label className="text-xs font-medium uppercase tracking-wide text-gray-400">
                   Your domain
@@ -231,7 +237,7 @@ export function WizardStepSuccess({
             </>
           )}
 
-          {/* ── Scenario A: No custom domain — single URL + nudge ── */}
+          {/* ── Scenario A: No custom domain — single URL ── */}
           {!customDomainInfo && (
             <>
               <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-gray-400">
@@ -270,7 +276,7 @@ export function WizardStepSuccess({
         </div>
       )}
 
-      {/* ── Domain nudge (replaces old branding nudge) ── */}
+      {/* ── Domain nudge (only when no domain configured) ── */}
       {!customDomainInfo && (
         <div className="mt-5 flex w-full max-w-lg items-center justify-between gap-3 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3">
           <div className="flex items-center gap-2.5 text-left">
@@ -299,7 +305,7 @@ export function WizardStepSuccess({
           Create Another
         </button>
         <Link
-          href="/control-panel/offerings"
+          href="/control-panel/client-portals"
           className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors duration-200 hover:bg-blue-700"
         >
           View All Portals

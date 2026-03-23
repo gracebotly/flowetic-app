@@ -1,5 +1,5 @@
 import { createClient as createServiceClient } from '@supabase/supabase-js';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
 import { PricingGate } from '@/components/products/PricingGate';
 
@@ -24,13 +24,23 @@ export default async function SubscribePage({
   const { data: product } = await supabase
     .from('client_portals')
     .select(
-      'id, name, slug, token, surface_type, access_type, pricing_type, price_cents, tenant_id'
+      'id, name, slug, token, custom_path, surface_type, access_type, pricing_type, price_cents, tenant_id'
     )
     .eq('slug', slug)
     .eq('status', 'active')
     .maybeSingle();
 
   if (!product) notFound();
+
+  // Detect if we're on a custom domain (set by middleware)
+  const headerStore = await headers();
+  const customDomain = headerStore.get('x-custom-domain');
+  const isCustomDomain = Boolean(customDomain);
+
+  // On custom domains, redirect to clean path instead of /client/token
+  const dashboardRedirect = isCustomDomain && product.custom_path
+    ? `/${product.custom_path}`
+    : `/client/${product.token}`;
 
   // Load branding
   const { data: tenant } = await supabase
@@ -41,12 +51,12 @@ export default async function SubscribePage({
 
   // ── Free portals: redirect straight to dashboard ──
   if (product.pricing_type === 'free' && product.token) {
-    redirect(`/client/${product.token}`);
+    redirect(dashboardRedirect);
   }
 
   // ── Post-Stripe redirect: ?subscribed=true means they just paid ──
   if (query.subscribed === 'true' && product.token) {
-    redirect(`/client/${product.token}`);
+    redirect(dashboardRedirect);
   }
 
   // ── Check session cookie for returning subscribers ──
@@ -63,7 +73,7 @@ export default async function SubscribePage({
       .maybeSingle();
 
     if (cookieCustomer?.subscription_status === 'active' && product.token) {
-      redirect(`/client/${product.token}`);
+      redirect(dashboardRedirect);
     }
   }
 
@@ -82,7 +92,7 @@ export default async function SubscribePage({
     existingSubStatus = customer?.subscription_status ?? null;
 
     if (existingSubStatus === 'active' && product.token) {
-      redirect(`/client/${product.token}`);
+      redirect(dashboardRedirect);
     }
   }
 

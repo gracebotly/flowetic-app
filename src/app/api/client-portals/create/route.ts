@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { getSkeletonForPlatform, getSkeletonForPlatformMix } from '@/lib/portals/platformToSkeleton';
 import { logActivity } from '@/lib/activity/logActivity';
 import { checkPortalLimit } from '@/lib/plans/checkLimits';
+import { generateCustomPath, validateCustomPath } from '@/lib/domains/validateCustomPath';
 
 const VALID_SKELETONS = [
   'voice-performance',
@@ -188,6 +189,46 @@ export async function POST(request: Request) {
 
   const finalStatus = status === 'draft' ? 'draft' : 'active';
 
+  // ── Generate custom_path for clean URLs on custom domains ──
+  let finalCustomPath: string | null = null;
+  const rawCustomPath = body.customPath;
+  if (rawCustomPath && typeof rawCustomPath === 'string') {
+    // Agency provided an explicit custom_path
+    const pathValidation = validateCustomPath(rawCustomPath);
+    if (pathValidation.valid && pathValidation.cleaned) {
+      finalCustomPath = pathValidation.cleaned;
+    }
+    // If invalid, silently fall back to auto-generated (don't block portal creation)
+  }
+
+  if (!finalCustomPath) {
+    // Auto-generate from portal name
+    const generated = generateCustomPath(name.trim());
+    if (generated.length >= 3) {
+      finalCustomPath = generated;
+    }
+  }
+
+  // Check for custom_path uniqueness within tenant (DB index catches this too,
+  // but pre-check avoids a cryptic Postgres error)
+  if (finalCustomPath) {
+    const { data: existing } = await supabase
+      .from('client_portals')
+      .select('id')
+      .eq('tenant_id', membership.tenant_id)
+      .eq('custom_path', finalCustomPath)
+      .maybeSingle();
+
+    if (existing) {
+      // Append a short random suffix to avoid collision
+      const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+      const rand = Array.from({ length: 4 }, () =>
+        chars[Math.floor(Math.random() * chars.length)]
+      ).join('');
+      finalCustomPath = `${finalCustomPath}-${rand}`.slice(0, 60);
+    }
+  }
+
   // ── Insert ────────────────────────────────────────────────
   const { data: offering, error: insertError } = await supabase
     .from('client_portals')
@@ -202,6 +243,7 @@ export async function POST(request: Request) {
       skeleton_id: finalSkeleton,
       token,
       slug: finalSlug,
+      custom_path: finalCustomPath,
       description: description?.trim() || null,
       pricing_type: pricingType || 'free',
       price_cents: priceCents || 0,
@@ -316,5 +358,6 @@ export async function POST(request: Request) {
     offering,
     ...(token ? { magicLink: `/client/${token}` } : {}),
     ...(finalSlug ? { productUrl: `/p/${finalSlug}` } : {}),
+    ...(offering?.custom_path ? { customPath: offering.custom_path } : {}),
   });
 }
