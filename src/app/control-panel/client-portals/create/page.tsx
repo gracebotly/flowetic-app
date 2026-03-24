@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ArrowLeft, Check, AlertTriangle } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { trackPortalCreated, trackPortalShared } from "@/lib/analytics/events";
 
 import AgentPicker from "@/components/portals/wizard/AgentPicker";
 import type { SelectedEntity, EntityItem } from "@/components/portals/wizard/AgentPicker";
@@ -466,6 +467,12 @@ export default function CreateOfferingPage() {
         customPath: json.customPath ?? wizard.customPath,
       });
       clearDraftFromServer();
+      trackPortalCreated({
+        surfaceType: wizard.surfaceType,
+        accessType: stripeConnected ? wizard.accessType : "magic_link",
+        platform: primaryEntity.platform || "unknown",
+        pricingType: stripeConnected ? wizard.pricingType : "free",
+      });
       setCurrentStep(4);
     } catch (err: unknown) {
       setSubmitError(err instanceof Error ? err.message : "Network error");
@@ -744,11 +751,12 @@ export default function CreateOfferingPage() {
                         </span>
                         {o.token && (
                           <button
-                            onClick={() =>
+                            onClick={() => {
                               navigator.clipboard.writeText(
                                 `${portalBaseUrl || window.location.origin}/client/${o.token}`
-                              )
-                            }
+                              );
+                              trackPortalShared("magic_link");
+                            }}
                             className="cursor-pointer text-xs font-medium text-tremor-brand"
                           >
                             Copy Link

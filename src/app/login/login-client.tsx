@@ -1,6 +1,7 @@
 "use client";
 
 import { createClient } from "@/lib/supabase/client";
+import { trackSignUp, trackSignIn } from "@/lib/analytics/events";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -330,6 +331,7 @@ export default function AuthShell() {
       }
     }
 
+    trackSignIn(data.user?.id || "", siEmail);
     router.push(next);
     router.refresh();
   };
@@ -463,6 +465,11 @@ export default function AuthShell() {
         } catch {
           console.warn("[signup] ensure-tenant call failed");
         }
+        trackSignUp(
+          body.userId || suEmail,
+          suEmail,
+          isPayNow ? selectedPlan : "agency-trial"
+        );
 
         if (isPayNow) {
           // Redirect to Stripe Checkout directly — don't show the app first.

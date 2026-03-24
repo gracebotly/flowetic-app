@@ -10,6 +10,7 @@ import {
   RotateCcw,
   Globe,
 } from "lucide-react";
+import { trackPortalShared } from "@/lib/analytics/events";
 
 type DomainInfo = {
   domain: string;
@@ -76,6 +77,7 @@ export function WizardStepSuccess({
   const handleCopyDefault = async () => {
     if (!defaultUrl) return;
     await navigator.clipboard.writeText(defaultUrl);
+    if (magicLink) trackPortalShared("magic_link");
     setCopiedDefault(true);
     setTimeout(() => setCopiedDefault(false), 2000);
   };
@@ -83,6 +85,7 @@ export function WizardStepSuccess({
   const handleCopyCustom = async () => {
     if (!customUrl) return;
     await navigator.clipboard.writeText(customUrl);
+    if (magicLink) trackPortalShared("magic_link");
     setCopiedCustom(true);
     setTimeout(() => setCopiedCustom(false), 2000);
   };

@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { PlatformBadge } from "@/components/shared/PlatformBadge";
+import { trackConnectionCreated, trackConnectionFailed } from "@/lib/analytics/events";
 import {
   CredentialsLoadingSkeleton,
   EntitiesLoadingSkeleton,
@@ -1088,6 +1089,7 @@ export default function ConnectionsPage() {
       const code = typeof json?.code === "string" && json.code.trim() ? ` (${json.code})` : "";
 
       setErrMsg(`${message}${code}`);
+      trackConnectionFailed(selectedPlatform, json?.code);
 
       setLastConnectError({
         ts: new Date().toISOString(),
@@ -1101,6 +1103,7 @@ export default function ConnectionsPage() {
       });
       return;
     }
+    trackConnectionCreated(selectedPlatform);
 
     // Store any warnings from successful backend response
     const warnings = Array.isArray(json?.warnings) ? json.warnings : [];

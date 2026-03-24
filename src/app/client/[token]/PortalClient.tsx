@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Activity as ActivityIcon, LayoutDashboard } from 'lucide-react';
 import { PortalShell, type PortalTab } from '@/components/portals/PortalShell';
 import { PortalSessionSetter } from '@/components/portals/PortalSessionSetter';
+import { trackClientPortalViewed } from '@/lib/analytics/events';
 import { VoicePerformanceSkeleton } from '@/components/portals/skeletons/VoicePerformanceSkeleton';
 import { WorkflowOperationsSkeleton } from '@/components/portals/skeletons/WorkflowOperationsSkeleton';
 import { ROISummarySkeleton } from '@/components/portals/skeletons/ROISummarySkeleton';
@@ -51,6 +52,11 @@ function getTabs(surfaceType: string): PortalTab[] {
 export function PortalClient({ portal, tenant, brand, data, events }: PortalClientProps) {
   const tabs = getTabs(portal.surface_type);
   const [activeTab, setActiveTab] = useState(tabs[0]?.id ?? 'dashboard');
+
+  useEffect(() => {
+    trackClientPortalViewed(portal.id, portal.platform_type || "unknown");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const branding = {
     primary_color: tenant.primary_color,
