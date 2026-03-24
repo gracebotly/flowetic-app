@@ -711,38 +711,73 @@ function validatePhone(raw: string): string | null {
               )}
             </AnimatePresence>
 
-            {/* URL Path for free portals (only when custom domain is verified) */}
-            {customDomainInfo?.verified && (
+            {/* URL Path input — always visible for all portal types */}
+            {accessType === "magic_link" && (
               <div className="mt-4 rounded-xl border border-gray-200 bg-white p-5">
-                <label className="block text-xs font-medium text-slate-600">
-                  URL Path
-                </label>
-                <div className="mt-1 flex items-center rounded-lg border border-gray-200 bg-white text-sm">
-                  <span className="flex-shrink-0 rounded-l-lg border-r border-gray-200 bg-gray-50 px-3 py-2 text-xs text-slate-500">
-                    {customDomainInfo.domain}/
+                <div className="flex items-baseline justify-between">
+                  <label className="block text-xs font-medium text-slate-600">
+                    {customDomainInfo?.verified ? "URL Path" : "Portal URL Path"}
+                  </label>
+                  <span className={`text-[11px] ${customPath.length > 50 ? "text-amber-600" : "text-slate-600"}`}>
+                    {customPath.length}/60
                   </span>
-                  <input
-                    type="text"
-                    value={customPath}
-                    maxLength={60}
-                    onChange={(e) => {
-                      setPathManuallyEdited(true);
-                      onCustomPathChange(
-                        e.target.value
-                          .toLowerCase()
-                          .replace(/[^a-z0-9-]/g, "-")
-                          .replace(/-+/g, "-")
-                          .replace(/^-/, "")
-                      );
-                    }}
-                    placeholder="client-dashboard"
-                    className="w-full border-0 bg-transparent py-2 pr-3 text-sm text-slate-900 outline-none"
-                  />
                 </div>
-                <p className="mt-1 flex items-center gap-1 text-[11px] text-emerald-600">
-                  <span className="h-1 w-1 rounded-full bg-emerald-500" />
-                  Using your custom domain
-                </p>
+                {customDomainInfo?.verified ? (
+                  <>
+                    <div className="mt-1 flex items-center rounded-lg border border-gray-200 bg-white text-sm">
+                      <span className="flex-shrink-0 rounded-l-lg border-r border-gray-200 bg-gray-50 px-3 py-2 text-xs text-slate-500">
+                        {customDomainInfo.domain}/
+                      </span>
+                      <input
+                        type="text"
+                        value={customPath}
+                        maxLength={60}
+                        onChange={(e) => {
+                          setPathManuallyEdited(true);
+                          onCustomPathChange(
+                            e.target.value
+                              .toLowerCase()
+                              .replace(/[^a-z0-9-]/g, "-")
+                              .replace(/-+/g, "-")
+                              .replace(/^-/, "")
+                          );
+                        }}
+                        placeholder="client-dashboard"
+                        className="w-full border-0 bg-transparent py-2 pr-3 text-sm text-slate-900 outline-none"
+                      />
+                    </div>
+                    <p className="mt-1 flex items-center gap-1 text-[11px] text-emerald-600">
+                      <span className="h-1 w-1 rounded-full bg-emerald-500" />
+                      Using your custom domain
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <div className="mt-1 flex items-center rounded-lg border border-gray-200 bg-white text-sm">
+                      <span className="flex-shrink-0 px-3 text-slate-600">/client/</span>
+                      <input
+                        type="text"
+                        value={customPath}
+                        maxLength={60}
+                        onChange={(e) => {
+                          setPathManuallyEdited(true);
+                          onCustomPathChange(
+                            e.target.value
+                              .toLowerCase()
+                              .replace(/[^a-z0-9-]/g, "-")
+                              .replace(/-+/g, "-")
+                              .replace(/^-/, "")
+                          );
+                        }}
+                        placeholder="smith-dental-dashboard"
+                        className="w-full border-0 bg-transparent py-2 pr-3 text-sm text-slate-900 outline-none"
+                      />
+                    </div>
+                    <p className="mt-1.5 text-[11px] text-slate-400">
+                      This path is auto-generated from the portal name. You can customize it.
+                    </p>
+                  </>
+                )}
               </div>
             )}
 
@@ -764,38 +799,73 @@ function validatePhone(raw: string): string | null {
               />
             </div>
 
-            {/* URL Path for free portals (only when custom domain is verified) */}
-            {customDomainInfo?.verified && (
+            {/* URL Path input — visible for free portals */}
+            {accessType === "magic_link" && (
               <div className="mt-4 rounded-xl border border-gray-200 bg-white p-5">
-                <label className="block text-xs font-medium text-slate-600">
-                  URL Path
-                </label>
-                <div className="mt-1 flex items-center rounded-lg border border-gray-200 bg-white text-sm">
-                  <span className="flex-shrink-0 rounded-l-lg border-r border-gray-200 bg-gray-50 px-3 py-2 text-xs text-slate-500">
-                    {customDomainInfo.domain}/
+                <div className="flex items-baseline justify-between">
+                  <label className="block text-xs font-medium text-slate-600">
+                    {customDomainInfo?.verified ? "URL Path" : "Portal URL Path"}
+                  </label>
+                  <span className={`text-[11px] ${customPath.length > 50 ? "text-amber-600" : "text-slate-600"}`}>
+                    {customPath.length}/60
                   </span>
-                  <input
-                    type="text"
-                    value={customPath}
-                    maxLength={60}
-                    onChange={(e) => {
-                      setPathManuallyEdited(true);
-                      onCustomPathChange(
-                        e.target.value
-                          .toLowerCase()
-                          .replace(/[^a-z0-9-]/g, "-")
-                          .replace(/-+/g, "-")
-                          .replace(/^-/, "")
-                      );
-                    }}
-                    placeholder="client-dashboard"
-                    className="w-full border-0 bg-transparent py-2 pr-3 text-sm text-slate-900 outline-none"
-                  />
                 </div>
-                <p className="mt-1 flex items-center gap-1 text-[11px] text-emerald-600">
-                  <span className="h-1 w-1 rounded-full bg-emerald-500" />
-                  Using your custom domain
-                </p>
+                {customDomainInfo?.verified ? (
+                  <>
+                    <div className="mt-1 flex items-center rounded-lg border border-gray-200 bg-white text-sm">
+                      <span className="flex-shrink-0 rounded-l-lg border-r border-gray-200 bg-gray-50 px-3 py-2 text-xs text-slate-500">
+                        {customDomainInfo.domain}/
+                      </span>
+                      <input
+                        type="text"
+                        value={customPath}
+                        maxLength={60}
+                        onChange={(e) => {
+                          setPathManuallyEdited(true);
+                          onCustomPathChange(
+                            e.target.value
+                              .toLowerCase()
+                              .replace(/[^a-z0-9-]/g, "-")
+                              .replace(/-+/g, "-")
+                              .replace(/^-/, "")
+                          );
+                        }}
+                        placeholder="client-dashboard"
+                        className="w-full border-0 bg-transparent py-2 pr-3 text-sm text-slate-900 outline-none"
+                      />
+                    </div>
+                    <p className="mt-1 flex items-center gap-1 text-[11px] text-emerald-600">
+                      <span className="h-1 w-1 rounded-full bg-emerald-500" />
+                      Using your custom domain
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <div className="mt-1 flex items-center rounded-lg border border-gray-200 bg-white text-sm">
+                      <span className="flex-shrink-0 px-3 text-slate-600">/client/</span>
+                      <input
+                        type="text"
+                        value={customPath}
+                        maxLength={60}
+                        onChange={(e) => {
+                          setPathManuallyEdited(true);
+                          onCustomPathChange(
+                            e.target.value
+                              .toLowerCase()
+                              .replace(/[^a-z0-9-]/g, "-")
+                              .replace(/-+/g, "-")
+                              .replace(/^-/, "")
+                          );
+                        }}
+                        placeholder="smith-dental-dashboard"
+                        className="w-full border-0 bg-transparent py-2 pr-3 text-sm text-slate-900 outline-none"
+                      />
+                    </div>
+                    <p className="mt-1.5 text-[11px] text-slate-400">
+                      This path is auto-generated from the portal name. You can customize it.
+                    </p>
+                  </>
+                )}
               </div>
             )}
 
