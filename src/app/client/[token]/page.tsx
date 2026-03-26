@@ -1,4 +1,5 @@
-import { notFound } from 'next/navigation';
+import { cookies } from 'next/headers';
+import { notFound, redirect } from 'next/navigation';
 import { resolvePortal } from '@/lib/portals/resolvePortal';
 import { resolveBranding } from '@/lib/portals/resolveBranding';
 import { transformDataForSkeleton } from '@/lib/portals/transformData';
@@ -6,10 +7,16 @@ import { createClient } from '@/lib/supabase/server';
 import { PortalClient } from './PortalClient';
 import type { Metadata } from 'next';
 import { getPortalBaseUrl } from '@/lib/domains/getPortalBaseUrl';
+import { createClient as createServiceClient } from '@supabase/supabase-js';
 
 interface PageProps {
   params: Promise<{ token: string }>;
 }
+
+const supabaseAdmin = createServiceClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 export default async function ClientPortalPage({ params }: PageProps) {
   const { token } = await params;
@@ -19,6 +26,52 @@ export default async function ClientPortalPage({ params }: PageProps) {
 
   const { portal, tenant, events } = resolved;
 
+  // ── Payment gate enforcement ──────────────────────────────
+  // If this portal requires payment, verify the visitor has a valid session.
+  // The session cookie is set by POST /api/portal-session after successful
+  // Stripe checkout. Without it, redirect to the subscribe page.
+  const isPaid =
+    portal.access_type === 'stripe_gate' &&
+    (portal as Record<string, unknown>).pricing_type !== 'free';
+
+  if (isPaid) {
+    const portalSlug = (portal as Record<string, unknown>).slug as string | null;
+
+    // If no slug exists, this is a misconfigured paid portal — can't redirect
+    if (!portalSlug) {
+      console.error(
+        '[client/[token]] Paid portal missing slug — cannot redirect to subscribe:',
+        portal.id
+      );
+      notFound();
+    }
+
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get(`portal_session_${portal.id}`);
+    const emailCookie = cookieStore.get(`portal_email_${portal.id}`);
+
+    let hasValidSubscription = false;
+
+    if (sessionCookie?.value && emailCookie?.value) {
+      // Verify the email actually has an active subscription
+      const { data: customer } = await supabaseAdmin
+        .from('portal_customers')
+        .select('subscription_status')
+        .eq('portal_id', portal.id)
+        .eq('email', emailCookie.value)
+        .maybeSingle();
+
+      if (customer?.subscription_status === 'active') {
+        hasValidSubscription = true;
+      }
+    }
+
+    if (!hasValidSubscription) {
+      redirect(`/p/${portalSlug}/subscribe`);
+    }
+  }
+
+  // ── Render dashboard (free portals, or paid with valid session) ──
   // Fire-and-forget view count
   const supabase = await createClient();
   void supabase.rpc('increment_view_count', { p_offering_id: portal.id });
