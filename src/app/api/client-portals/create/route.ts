@@ -180,12 +180,29 @@ export async function POST(request: Request) {
     (finalAccess === 'stripe_gate' && finalSurface === 'analytics');
   const token = needsToken ? generateShortToken(name.trim()) : null;
 
-  const finalSlug =
+  let finalSlug =
     finalAccess === 'stripe_gate' && slug
       ? slug
       : finalAccess === 'stripe_gate'
         ? generateCleanSlug(name)
         : null;
+
+  // ── Slug uniqueness check (mirrors custom_path collision logic below) ──
+  if (finalSlug) {
+    const { data: existingSlug } = await supabase
+      .from('client_portals')
+      .select('id')
+      .eq('slug', finalSlug)
+      .maybeSingle();
+
+    if (existingSlug) {
+      const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+      const rand = Array.from({ length: 4 }, () =>
+        chars[Math.floor(Math.random() * chars.length)]
+      ).join('');
+      finalSlug = `${finalSlug}-${rand}`.slice(0, 60);
+    }
+  }
 
   const finalStatus = status === 'draft' ? 'draft' : 'active';
 

@@ -23,6 +23,9 @@ export interface ResolvedPortal {
     // V4 additions
     surface_type: string;
     access_type: string;
+    // V5 additions — payment gate support
+    pricing_type: string | null;
+    slug: string | null;
   };
   tenant: {
     id: string;

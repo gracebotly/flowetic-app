@@ -23,6 +23,7 @@ interface ResultsDisplayProps {
   productSlug: string;
   designTokens: Record<string, unknown> | null;
   hideGetfloweticBranding?: boolean;
+  footerText?: string;
 }
 
 export function ResultsDisplay(props: ResultsDisplayProps) {
@@ -504,7 +505,7 @@ function ResultsContent(props: ResultsDisplayProps) {
           className="py-6 text-center text-xs"
           style={{ color: colors.textMuted, opacity: 0.4 }}
         >
-          Powered by AI
+          {props.footerText || 'Powered by Getflowetic'}
         </footer>
       )}
     </div>
