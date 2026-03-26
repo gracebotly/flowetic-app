@@ -73,7 +73,27 @@ export async function POST(request: NextRequest) {
   }
 
   // Create tenant + membership (only for signup intent)
-  const workspaceName = "My Workspace";
+  // Derive workspace name from email domain when possible.
+  // Generic providers get the email prefix instead.
+  const genericDomains = new Set([
+    'gmail.com', 'googlemail.com', 'outlook.com', 'hotmail.com', 'live.com',
+    'yahoo.com', 'yahoo.co.uk', 'aol.com', 'icloud.com', 'me.com',
+    'mail.com', 'protonmail.com', 'proton.me', 'zoho.com', 'yandex.com',
+  ]);
+
+  let workspaceName = "My Workspace";
+  if (user.email) {
+    const [localPart, domain] = user.email.split("@");
+    if (domain && !genericDomains.has(domain.toLowerCase())) {
+      // Business domain — use domain name without TLD, title-cased
+      // e.g. grace@apexai.com → "Apexai"
+      const domainName = domain.split(".")[0];
+      workspaceName = domainName.charAt(0).toUpperCase() + domainName.slice(1);
+    } else if (localPart) {
+      // Generic provider — use email prefix
+      workspaceName = `${localPart}'s Workspace`;
+    }
+  }
 
   const { data: tenant, error: tErr } = await supabaseAdmin
     .from("tenants")

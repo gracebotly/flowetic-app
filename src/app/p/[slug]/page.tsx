@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { headers } from 'next/headers';
 import { PremiumLanding } from './PremiumLanding';
 import { getPortalBaseUrl } from '@/lib/domains/getPortalBaseUrl';
+import { resolveBranding } from '@/lib/portals/resolveBranding';
 import type { Metadata } from 'next';
 
 export const dynamic = 'force-dynamic';
@@ -29,7 +30,7 @@ export default async function ProductLandingPage({ params }: PageProps) {
 
   const { data: tenant } = await supabase
     .from('tenants')
-    .select('name, logo_url, primary_color, secondary_color, custom_domain, domain_verified')
+    .select('name, logo_url, primary_color, secondary_color, custom_domain, domain_verified, brand_footer, welcome_message, favicon_url, default_theme')
     .eq('id', product.tenant_id)
     .single();
 
@@ -42,6 +43,12 @@ export default async function ProductLandingPage({ params }: PageProps) {
     .select('id', { count: 'exact', head: true })
     .eq('portal_id', product.id)
     .eq('status', 'success');
+
+  // Resolve branding through 3-tier cascade (platform defaults → tenant → portal override)
+  const brand = resolveBranding(
+    tenant ?? {},
+    product.branding as Record<string, unknown> | null
+  );
 
   return (
     <PremiumLanding
@@ -61,9 +68,10 @@ export default async function ProductLandingPage({ params }: PageProps) {
       }}
       branding={{
         agencyName: tenant?.name ?? 'Agency',
-        logoUrl: tenant?.logo_url ?? null,
-        primaryColor: tenant?.primary_color ?? '#374151',
-        secondaryColor: tenant?.secondary_color ?? '#1f2937',
+        logoUrl: brand.logoUrl,
+        primaryColor: brand.primaryColor,
+        secondaryColor: brand.secondaryColor,
+        footerText: brand.footerText,
       }}
       stats={{
         totalExecutions: totalExecutions ?? 0,

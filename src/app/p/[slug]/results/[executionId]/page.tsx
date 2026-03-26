@@ -7,6 +7,7 @@ import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import { ResultsDisplay } from "@/components/products/ResultsDisplay";
+import { resolveBranding } from "@/lib/portals/resolveBranding";
 
 export const dynamic = "force-dynamic";
 
@@ -24,11 +25,23 @@ export default async function ResultsPage({ params }: PageProps) {
   // Load product for design tokens
   const { data: product } = await supabase
     .from("client_portals")
-    .select("id, name, slug, design_tokens")
+    .select("id, name, slug, design_tokens, tenant_id, branding")
     .eq("slug", slug)
     .maybeSingle();
 
   if (!product) notFound();
+
+  // Resolve branding for footer text
+  const { data: tenant } = await supabase
+    .from("tenants")
+    .select("name, logo_url, primary_color, secondary_color, brand_footer, welcome_message, favicon_url, default_theme")
+    .eq("id", product.tenant_id)
+    .single();
+
+  const brand = resolveBranding(
+    tenant ?? {},
+    product.branding as Record<string, unknown> | null
+  );
 
   // Load execution
   const { data: execution } = await supabase
@@ -54,6 +67,7 @@ export default async function ResultsPage({ params }: PageProps) {
       productSlug={product.slug}
       designTokens={product.design_tokens as Record<string, unknown>}
       hideGetfloweticBranding={isCustomDomain}
+      footerText={brand.footerText}
     />
   );
 }

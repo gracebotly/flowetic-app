@@ -23,6 +23,7 @@ interface PremiumLandingProps {
     logoUrl: string | null;
     primaryColor: string;
     secondaryColor: string;
+    footerText: string;
   };
   stats: {
     totalExecutions: number;
@@ -189,7 +190,7 @@ export function PremiumLanding({ product, branding, stats, hideGetfloweticBrandi
       {/* Footer */}
       {!hideGetfloweticBranding && (
         <footer className="py-6 text-center text-[11px] text-slate-300">
-          Powered by AI
+          {branding.footerText}
         </footer>
       )}
     </div>
